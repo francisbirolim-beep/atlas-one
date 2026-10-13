@@ -38,7 +38,7 @@ export function validarRegistroInstalacao(args:{
   if(novo>disponibilidade.prontas)return 'Produção insuficiente: apenas '+disponibilidade.prontas+' de '+quantidadePlanejada+' peça(s) concluída(s) e liberada(s).'
   if(status==='instalado'&&(novo!==quantidadePlanejada||quantidadePlanejada<=0))return 'Para marcar como instalado, a quantidade total da peça deve estar instalada.'
   if(status==='pendente'&&novo!==0)return 'Peça pendente não pode possuir quantidade instalada.'
-  if(status==='em_instalacao'&&(novo<=0||novo>=quantidadePlanejada))return 'Em instalação exige quantidade parcial maior que zero.'
+  if(status==='em_instalacao'&&novo>=quantidadePlanejada)return 'A etapa Em instalação exige quantidade ainda não integralmente instalada.'
   if(novo>existente&&!disponibilidade.ordens)return 'Nenhuma ordem de esquadria vinculada à peça.'
   return null
 }

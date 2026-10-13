@@ -165,3 +165,11 @@ A aba **Instalação da venda** acompanha exatamente as tipologias do snapshot d
 - Fazer preparação idempotente a partir do snapshot com chave única (empresa, venda, item_ref), usando `ignoreDuplicates`. Nunca recriar nem zerar peças, histórico, quantidades ou checklists existentes ao abrir o cliente ou vincular obra.
 - Aumentar quantidade instalada continua limitado às unidades efetivamente liberadas pela Produção; OPs legadas concluídas mantêm compatibilidade. Controle de instalações/pendências sem obra não bypassa os gates de fabricação/encerramento.
 - Avanços em etapas gerais da obra dependem de todos os itens finalizados, produção, compras, financeiro e regras de segurança já existentes. Não alterar os módulos de Produção nesta entrega inicial; tratar implementação mais profunda da Produção em tarefa separada.
+
+### 2026-10-13 — Kanban de instalação, pendências com foto (aprovado)
+- Preservar as quatro colunas aprovadas: A instalar, Em instalação, Pendência / falta finalizar e Finalizadas.
+- Permitir arrastar a tipologia entre etapas, mantendo as validações de quantidade produzida, obra vinculada, checklist e finalização.
+- Ao mover para Pendência, abrir formulário com descrição livre obrigatória e foto opcional, vinculados à venda + item_ref. Fotos podem ser anexadas antes do vínculo da obra.
+- Em instalação pode iniciar com zero peças instaladas; registrar quantidade física continua exigindo disponibilidade de produção.
+- Instalação fisicamente completa não equivale a serviço finalizado enquanto houver pendência. Nunca mudar automaticamente para Finalizadas.
+- Alterar apenas os pontos necessários; preservar fluxos e registros operacionais existentes, com testes e publicação sem indisponibilizar o ambiente.

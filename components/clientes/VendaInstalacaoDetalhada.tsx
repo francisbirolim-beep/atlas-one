@@ -58,6 +58,11 @@ export default function VendaInstalacaoDetalhada({
   const [filtro,setFiltro]=useState<'todos'|'a_instalar'|'em_instalacao'|'com_pendencia'|'finalizados'>('todos')
   const [erro,setErro]=useState('')
   const [msg,setMsg]=useState('')
+  const [arrastandoId,setArrastandoId]=useState<string|null>(null)
+  const [colunaDestino,setColunaDestino]=useState<string|null>(null)
+  const [pendenciaItem,setPendenciaItem]=useState<InstalacaoItem|null>(null)
+  const [textoPendencia,setTextoPendencia]=useState('')
+  const [fotoPendencia,setFotoPendencia]=useState<File|null>(null)
   const inputFoto=useRef<Record<string,HTMLInputElement|null>>({})
 
   async function carregar(){
@@ -65,7 +70,7 @@ export default function VendaInstalacaoDetalhada({
     setCarregando(true);setErro('')
     const [ir,dr,pr]=await Promise.all([
       supabase.from('venda_instalacao_itens').select('*').eq('venda_obra_id',vendaId).order('created_at'),
-      obraId?supabase.from('cliente_documentos').select('id,titulo,url,tipo,observacoes,created_at').eq('cliente_id',clienteId).eq('obra_id',obraId).order('created_at',{ascending:false}):Promise.resolve({data:[],error:null} as any),
+      supabase.from('cliente_documentos').select('id,titulo,url,tipo,observacoes,created_at').eq('cliente_id',clienteId).eq('tipo','instalacao_foto').order('created_at',{ascending:false}),
       supabase.from('ordens_producao').select('id,item_ref,tipo_producao,status,bloqueada,quantidade,quantidade_produzida').eq('venda_obra_id',vendaId),
     ])
     if(ir.error||pr.error){setErro('Instalação indisponível: '+(ir.error?.message||pr.error?.message));setCarregando(false);return}
@@ -125,13 +130,10 @@ export default function VendaInstalacaoDetalhada({
 
   async function mudarStatus(item:InstalacaoItem,status:'pendente'|'em_instalacao'|'instalado'|'pendencia'){
     if(status==='pendencia'){
-      const motivo=window.prompt('O que falta instalar ou finalizar nesta tipologia? Ex.: cantoneira, arremate, vedação.',item.pendencia||'')
-      if(motivo===null)return
-      if(!motivo.trim()){setErro('Descreva o que falta concluir antes de marcar uma pendência.');return}
-      const ok=await patch(item.id,'pendencia',{pendencia:motivo.trim()})
-      if(ok)setMsg('Pendência registrada sem finalizar a tipologia.')
+      abrirPendencia(item)
       return
     }
+    if(String(item.pendencia||'').trim()){setErro('Resolva a pendência na ficha antes de alterar esta tipologia para outra etapa.');return}
     if(status==='instalado'&&!window.confirm('Finalizar esta tipologia? Confirme que todas as unidades foram instaladas, não há pendências e o checklist está completo.'))return
     if(status==='pendente'&&Number(item.quantidade_instalada||0)>0&&!window.confirm('Voltar esta tipologia a pendente também zera a quantidade instalada. Confirma a correção?'))return
     const ok=await patch(item.id,'status',{status})
@@ -149,23 +151,52 @@ export default function VendaInstalacaoDetalhada({
     const ok=await patch(item.id,'checklist',{chave,marcado:!atual[chave]})
     if(ok)setMsg('Checklist atualizado.')
   }
-  async function editarPendencia(item:InstalacaoItem){
-    const valor=window.prompt('Descreva a pendência desta peça:',item.pendencia||'')
-    if(valor==null)return
-    const ok=await patch(item.id,'pendencia',{pendencia:valor.trim()})
-    if(ok)setMsg(valor.trim()?'Pendência registrada.':'Pendência removida.')
+  function abrirPendencia(item:InstalacaoItem){
+    setPendenciaItem(item)
+    setTextoPendencia(item.pendencia||'')
+    setFotoPendencia(null)
+    setErro('')
   }
-  async function anexarFoto(item:InstalacaoItem,file:File|null){
-    if(!file||!obraId)return
+  async function editarPendencia(item:InstalacaoItem){abrirPendencia(item)}
+  async function salvarPendencia(){
+    if(!pendenciaItem)return
+    const texto=textoPendencia.trim()
+    if(!texto&&!(pendenciaItem.pendencia||'').trim()){setErro('Descreva a pendência antes de salvar.');return}
+    const ok=await patch(pendenciaItem.id,'pendencia',{pendencia:texto})
+    if(!ok)return
+    // A descrição é persistida primeiro. Uma falha no anexo não perde o registro.
+    if(fotoPendencia){
+      const fotoOk=await anexarFoto(pendenciaItem,fotoPendencia)
+      if(!fotoOk)return
+    }
+    setPendenciaItem(null)
+    setFotoPendencia(null)
+    setMsg(texto?'Pendência registrada; a tipologia não foi finalizada.':'Pendência removida. Confira o checklist para finalizar.')
+  }
+  async function soltarCard(destino:string,id:string){
+    const item=lista.find(x=>x.id===id)
+    if(!item||statusItem(item)===destino)return
+    if(destino==='com_pendencia'){abrirPendencia(item);return}
+    if(destino==='finalizados'){await mudarStatus(item,'instalado');return}
+    if(destino==='em_instalacao'){await mudarStatus(item,'em_instalacao');return}
+    if(destino==='a_instalar'){
+      if(item.pendencia){setErro('Remova ou resolva a pendência na ficha da tipologia antes de retornar para A instalar.');return}
+      await mudarStatus(item,'pendente')
+    }
+  }
+  async function anexarFoto(item:InstalacaoItem,file:File|null):Promise<boolean>{
+    if(!file)return false
+    if(!file.type.startsWith('image/')){setErro('Selecione uma imagem válida para a pendência.');return false}
     setSalvandoId(item.id);setErro('');setMsg('')
     const r=await adicionarDocumentoCliente({
       clienteId,obraId,titulo:`Instalação · ${item.ambiente||item.descricao||item.item_ref}`,
       arquivo:file,tipo:'instalacao_foto',observacoes:`venda=${vendaId}; item_ref=${item.item_ref}`,
     })
     setSalvandoId(null)
-    if(!r.ok){setErro(r.error||'Não foi possível anexar a foto.');return}
+    if(!r.ok){setErro(r.error||'Não foi possível anexar a foto. A descrição da pendência foi salva.');return false}
     setMsg('Foto anexada à instalação.')
     await carregar()
+    return true
   }
 
   const total=lista.reduce((s,x)=>s+Number(x.quantidade||0),0)
@@ -184,7 +215,7 @@ export default function VendaInstalacaoDetalhada({
     const qtd=Number(item.quantidade||0),inst=Number(item.quantidade_instalada||0)
     if(concluiu(item))return 'finalizados' as const
     if(inst>=qtd&&qtd>0||item.status==='pendencia'||Boolean(item.pendencia))return 'com_pendencia' as const
-    if(inst>0)return 'em_instalacao' as const
+    if(item.status==='em_instalacao'||inst>0)return 'em_instalacao' as const
     return 'a_instalar' as const
   }
   const kanbanEtapas=[
@@ -203,7 +234,7 @@ export default function VendaInstalacaoDetalhada({
   }
   const fotosPorRef=useMemo(()=>{
     const m:Record<string,Doc[]>={}
-    docs.filter(d=>d.tipo==='instalacao_foto').forEach(d=>{
+    docs.filter(d=>d.tipo==='instalacao_foto'&&String(d.observacoes||'').includes('venda='+vendaId+';')).forEach(d=>{
       const match=String(d.observacoes||'').match(/item_ref=([^;]+)/)
       if(match){const ref=match[1].trim();(m[ref]||(m[ref]=[])).push(d)}
     })
@@ -215,7 +246,7 @@ export default function VendaInstalacaoDetalhada({
   return <div className="space-y-4">
     {!obraId&&<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
       <b>Obra ainda sem vínculo.</b> As tipologias do orçamento vendido aparecem abaixo e podem receber checklists e registros de pendências.
-      Para anexar fotos e concluir definitivamente, vincule a obra pelo botão no início da venda. Não serão criadas ordens de produção ou baixas de estoque automaticamente.
+      Fotos e pendências podem ser registradas nesta venda. Para concluir definitivamente, vincule a obra pelo botão no início da venda. Não serão criadas ordens de produção ou baixas de estoque automaticamente.
     </div>}
     {erro&&<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
     {msg&&<div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{msg}</div>}
@@ -235,8 +266,13 @@ export default function VendaInstalacaoDetalhada({
         <div><h3 className="font-bold text-slate-900">Kanban de instalação por tipologia</h3><p className="text-xs text-slate-500">{lista.length} tipologia(s) do orçamento vendido · {finalizadas} finalizada(s). Clique em um card para conferir a instalação.</p></div>
         {filtro!=='todos'&&<button type="button" onClick={()=>setFiltro('todos')} className="rounded-lg border px-3 py-1.5 text-xs font-semibold">Mostrar todas as tipologias</button>}
       </div>
+      <p className="text-[11px] text-slate-500">Arraste cada card para a etapa desejada. Em Pendência, informe o motivo e, se quiser, anexe uma foto. O encerramento segue as conferências obrigatórias.</p>
       <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {kanbanEtapas.map(etapa=><div key={etapa.id} className={'rounded-xl border-t-4 bg-slate-50 p-3 '+etapa.cor}>
+        {kanbanEtapas.map(etapa=><div key={etapa.id}
+          onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='move';setColunaDestino(etapa.id)}}
+          onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node))setColunaDestino(null)}}
+          onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('text/plain')||arrastandoId||'';setArrastandoId(null);setColunaDestino(null);void soltarCard(etapa.id,id)}}
+          className={'rounded-xl border-t-4 bg-slate-50 p-3 transition-colors '+etapa.cor+(colunaDestino===etapa.id?' ring-2 ring-blue-400 bg-blue-50':'')}>
           <button type="button" onClick={()=>setFiltro(filtro===etapa.id?'todos':etapa.id)} className="mb-3 flex w-full items-center justify-between text-left">
             <b className="text-xs text-slate-800">{etapa.titulo}</b>
             <span className="rounded-full bg-white px-2 py-1 text-xs font-bold">{lista.filter(x=>statusItem(x)===etapa.id).length}</span>
@@ -244,7 +280,11 @@ export default function VendaInstalacaoDetalhada({
           <div className="space-y-2">{lista.filter(x=>statusItem(x)===etapa.id).map(x=>{
             const original=itensOriginais.get(x.item_ref)
             const imagem=fotoTipologia(original)
-            return <button type="button" key={x.id} onClick={()=>{setFiltro('todos');setTimeout(()=>document.getElementById('instalar-'+x.id)?.scrollIntoView({behavior:'smooth',block:'center'}),20)}}
+            return <button type="button" key={x.id} draggable={salvandoId===null}
+              onDragStart={e=>{e.dataTransfer.setData('text/plain',x.id);e.dataTransfer.effectAllowed='move';setArrastandoId(x.id)}}
+              onDragEnd={()=>{setArrastandoId(null);setColunaDestino(null)}}
+              aria-label={'Arrastar '+(x.ambiente||x.descricao||'tipologia')+' para outra etapa ou clicar para ver detalhes'}
+              onClick={()=>{setFiltro('todos');setTimeout(()=>document.getElementById('instalar-'+x.id)?.scrollIntoView({behavior:'smooth',block:'center'}),20)}}
               className="flex w-full items-center gap-2 rounded-lg border bg-white p-2.5 text-left shadow-sm hover:border-blue-300">
               {imagem?<img src={imagem} alt={'Tipologia '+x.descricao} className="h-12 w-12 rounded border object-contain"/>:<span className="flex h-12 w-12 items-center justify-center rounded border text-slate-400"><ImageIcon size={18}/></span>}
               <span className="min-w-0 flex-1"><b className="block text-xs text-slate-900">{x.ambiente||'Ambiente não informado'}</b><span className="block truncate text-[11px] text-slate-600">{x.descricao}</span>
@@ -282,7 +322,7 @@ export default function VendaInstalacaoDetalhada({
             <label className="text-xs text-slate-500">Instaladas <input type="number" min={0} max={producao.prontas} step={1} value={qtdEditando[item.id]??String(Number(item.quantidade_instalada||0))} disabled={salvandoId===item.id||(!producao.prontas&&!Number(item.quantidade_instalada||0))} onChange={e=>setQtdEditando(prev=>({...prev,[item.id]:e.target.value}))} onBlur={e=>void mudarQtd(item,e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur()}} className="ml-1 w-20 rounded-lg border px-2 py-1.5 text-sm font-bold text-slate-800 disabled:bg-slate-100"/></label><span className="text-xs text-slate-500">de <b>{Number(item.quantidade||0)}</b></span>
             <select disabled={salvandoId===item.id} value={item.status} onChange={e=>void mudarStatus(item,e.target.value as any)} className="rounded-lg border px-2 py-1.5 text-xs font-semibold">
               <option value="pendente">A instalar</option>
-              <option value="em_instalacao" disabled={producao.prontas<=0||producao.planejadas<=1||Number(item.quantidade_instalada||0)<=0||Number(item.quantidade_instalada||0)>=Number(item.quantidade||0)}>Instalação parcial</option>
+              <option value="em_instalacao" disabled={Number(item.quantidade_instalada||0)>=Number(item.quantidade||0)}>Em instalação</option>
               <option value="pendencia">Com pendência / falta finalizar</option>
               <option value="instalado" disabled={producao.prontas<producao.planejadas||!obraId}>Finalizado e conferido</option>
             </select>
@@ -298,7 +338,7 @@ export default function VendaInstalacaoDetalhada({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button type="button" onClick={()=>void editarPendencia(item)} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">{item.pendencia?'Editar pendência':'Registrar pendência'}</button>
           <input ref={el=>{inputFoto.current[item.id]=el}} type="file" accept="image/*" className="hidden" onChange={e=>void anexarFoto(item,e.target.files?.[0]||null)}/>
-          <button type="button" disabled={salvandoId===item.id||!obraId} title={!obraId?'Vincule a obra para anexar fotos':undefined} onClick={()=>inputFoto.current[item.id]?.click()} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Camera size={13}/>Adicionar foto</button>
+          <button type="button" disabled={salvandoId===item.id} onClick={()=>inputFoto.current[item.id]?.click()} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50"><Camera size={13}/>Adicionar foto</button>
           {fisicamenteInstalada&&!concluiu(item)&&<button type="button" disabled={salvandoId===item.id||!obraId||!!item.pendencia||!CHECKS.every(([key])=>checks[key]===true)} onClick={()=>void mudarStatus(item,'instalado')} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><CheckCircle2 size={13}/>Finalizar esta tipologia</button>}
           {fotos.length>0&&<span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600"><ImageIcon size={11}/>{fotos.length} foto(s)</span>}
           {salvandoId===item.id&&<Loader2 size={14} className="animate-spin text-slate-400"/>}
@@ -308,6 +348,23 @@ export default function VendaInstalacaoDetalhada({
       </section>
     })}</div>
 
+    {pendenciaItem&&<div role="presentation" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4" onMouseDown={e=>{if(e.target===e.currentTarget&&!salvandoId)setPendenciaItem(null)}}>
+      <div role="dialog" aria-modal="true" aria-labelledby="titulo-pendencia-instalacao" className="w-full max-w-lg rounded-xl bg-white p-5 shadow-2xl">
+        <h3 id="titulo-pendencia-instalacao" className="text-base font-bold text-slate-900">Registrar pendência de instalação</h3>
+        <p className="mt-1 text-xs text-slate-600">{pendenciaItem.ambiente||pendenciaItem.descricao} · {pendenciaItem.quantidade_instalada}/{pendenciaItem.quantidade} instalada(s). A tipologia continuará pendente até ser conferida e finalizada.</p>
+        <label className="mt-4 block text-xs font-semibold text-slate-700">O que está faltando? <span className="text-red-500">*</span>
+          <textarea rows={4} maxLength={1000} autoFocus value={textoPendencia} onChange={e=>setTextoPendencia(e.target.value)} placeholder="Ex.: Porta instalada, mas falta colocar a cantoneira, fazer o arremate e conferir a vedação." className="mt-1 block w-full resize-y rounded-lg border p-3 text-sm font-normal text-slate-800"/>
+        </label>
+        <label className="mt-3 block text-xs font-semibold text-slate-700">Foto da pendência (opcional)
+          <input type="file" accept="image/*" onChange={e=>setFotoPendencia(e.target.files?.[0]||null)} className="mt-1 block w-full rounded-lg border p-2 text-xs font-normal"/>
+        </label>
+        {erro&&<p className="mt-3 text-xs text-red-700" role="alert">{erro}</p>}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" disabled={!!salvandoId} onClick={()=>{setPendenciaItem(null);setErro('')}} className="rounded-lg border px-4 py-2 text-sm font-semibold">Cancelar</button>
+          <button type="button" disabled={!!salvandoId||(!textoPendencia.trim()&&!pendenciaItem.pendencia)} onClick={()=>void salvarPendencia()} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{salvandoId?'Salvando...':textoPendencia.trim()?'Salvar pendência':'Remover pendência'}</button>
+        </div>
+      </div>
+    </div>}
     {!lista.length&&<div className="rounded-xl border border-dashed p-8 text-center"><RefreshCw className="mx-auto text-slate-300"/><p className="mt-2 text-sm text-slate-500">Não há tipologias para preparar a instalação desta venda.</p></div>}
   </div>
 }
