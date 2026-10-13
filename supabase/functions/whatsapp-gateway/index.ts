@@ -2106,7 +2106,7 @@ Deno.serve(async (req) => {
     if (req.method === "GET" && url.searchParams.get("mode") === "channels") {
       const { data, error } = await db
         .from("atendimento_whatsapp_canais")
-        .select("id,nome,numero_declarado,numero_conectado,tipo_conta,principal,usuario_id,usuario_nome,ativo,session_slug,gateway_status,conexao_pausada,nivel_hierarquia,criado_por,criado_por_nome")
+        .select("id,nome,numero_declarado,numero_conectado,tipo_conta,principal,usuario_id,usuario_nome,ativo,session_slug,gateway_status,conexao_pausada,gateway_reconnect_requested_at,nivel_hierarquia,criado_por,criado_por_nome")
         .eq("empresa_id", config.empresa_id)
         .eq("ativo", true)
         .order("principal", { ascending: false })
