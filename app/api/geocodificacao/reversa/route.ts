@@ -15,6 +15,7 @@ type NominatimAddress = {
   pedestrian?: string
   residential?: string
   house_number?: string
+  postcode?: string
 }
 
 export async function GET(request: NextRequest) {
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
       bairro: address.suburb || address.neighbourhood || address.quarter || '',
       rua: address.road || address.pedestrian || address.residential || '',
       numero: address.house_number || '',
+      cep: address.postcode || '',
     })
   } catch {
     return NextResponse.json({ error: 'Falha ao consultar o endereço da localização.' }, { status: 500 })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Calculator, Camera, CheckCircle, Keyboard, Paperclip, Pencil, Plus, Send, Trash2, WifiOff, X } from 'lucide-react'
+import { ArrowLeft, Calculator, Camera, CheckCircle, Keyboard, Paperclip, Pencil, Plus, Send, Trash2, WifiOff, X, MapPin, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { v4 as uuidv4 } from 'uuid'
 import { Acabamento, Cliente, Contramarco, OrigemCliente, TemperaturaLead, TipoEsquadria } from '@/lib/tipos'
@@ -9,6 +9,7 @@ import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
+import { formatarEnderecoObra, coordenadasDaObra } from '@/lib/enderecoObra'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
 
 const RASCUNHO_ID = 'orcamento-rapido-layout-restaurado-v1'
@@ -230,6 +231,12 @@ interface RascunhoOrcamentoRapido {
   clienteNome: string
   clienteWhatsapp: string
   cidade: string
+  obraNome?: string
+  obraRua?: string
+  obraNumero?: string
+  obraBairro?: string
+  obraCep?: string
+  obraLocalizacao?: string
   origem: OrigemCliente
   temperatura: TemperaturaLead | ''
   acabamento: Acabamento | ''
@@ -246,6 +253,14 @@ export default function OrcamentoRapido() {
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
+  const [obraNome, setObraNome] = useState('')
+  const [obraRua, setObraRua] = useState('')
+  const [obraNumero, setObraNumero] = useState('')
+  const [obraBairro, setObraBairro] = useState('')
+  const [obraCep, setObraCep] = useState('')
+  const [obraLocalizacao, setObraLocalizacao] = useState('')
+  const [capturandoLocalizacao, setCapturandoLocalizacao] = useState(false)
+  const [avisoLocalizacao, setAvisoLocalizacao] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [temperatura, setTemperatura] = useState<TemperaturaLead | ''>('')
   const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
@@ -296,6 +311,12 @@ export default function OrcamentoRapido() {
         setClienteNome(d.clienteNome || '')
         setClienteWhatsapp(d.clienteWhatsapp || '')
         setCidade(d.cidade || '')
+        setObraNome(d.obraNome || '')
+        setObraRua(d.obraRua || '')
+        setObraNumero(d.obraNumero || '')
+        setObraBairro(d.obraBairro || '')
+        setObraCep(d.obraCep || '')
+        setObraLocalizacao(d.obraLocalizacao || '')
         if (d.origem) setOrigem(d.origem)
         setTemperatura(d.temperatura || '')
         setAcabamento(d.acabamento || '')
@@ -342,14 +363,14 @@ export default function OrcamentoRapido() {
     const timer = window.setTimeout(() => {
       const dados: RascunhoOrcamentoRapido = {
         itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura,
+        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, origem, temperatura,
         acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
         arquivos: arquivos.map(arquivoParaRascunho),
       }
       salvarRascunho(RASCUNHO_ID, dados).then(() => setRascunhoSalvoEm(new Date().toISOString())).catch(() => {})
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
@@ -371,6 +392,52 @@ export default function OrcamentoRapido() {
       }
     })()
   }, [rascunhoCarregado, rascunhoRestaurado])
+
+  function capturarEnderecoDaObra() {
+    if (capturandoLocalizacao) return
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setAvisoLocalizacao('Localização indisponível neste aparelho. Digite o endereço manualmente.')
+      return
+    }
+    if (!window.isSecureContext) {
+      setAvisoLocalizacao('O GPS exige conexão segura (HTTPS). Digite o endereço manualmente.')
+      return
+    }
+    setCapturandoLocalizacao(true)
+    setAvisoLocalizacao('Buscando sua localização. Aguarde...')
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const coordenadas = coordenadasDaObra(pos.coords.latitude, pos.coords.longitude)
+      if (!coordenadas) {
+        setAvisoLocalizacao('Coordenadas inválidas. Digite o endereço manualmente.')
+        setCapturandoLocalizacao(false)
+        return
+      }
+      setObraLocalizacao(coordenadas)
+      setAvisoLocalizacao('Localização capturada. Buscando rua e bairro...')
+      try {
+        // Reutiliza a geocodificação já usada na prospecção, sem expor token de serviço.
+        const resp = await fetch('/api/geocodificacao/reversa?lat='
+          + encodeURIComponent(pos.coords.latitude) + '&lon='
+          + encodeURIComponent(pos.coords.longitude), { cache: 'no-store' })
+        if (!resp.ok) throw new Error('Endereço não localizado.')
+        const dados = await resp.json() as { rua?: string; bairro?: string; cidade?: string; cep?: string }
+        if (dados.rua) setObraRua(dados.rua)
+        if (dados.bairro) setObraBairro(dados.bairro)
+        if (dados.cidade) setCidade(dados.cidade)
+        if (dados.cep) setObraCep(dados.cep)
+        setAvisoLocalizacao(dados.rua
+          ? 'Endereço identificado. Confira os dados e informe apenas o número do imóvel.'
+          : 'GPS salvo, mas a rua não foi identificada. Digite o endereço e o número.')
+      } catch {
+        setAvisoLocalizacao('GPS salvo, mas não foi possível identificar a rua. Complete o endereço manualmente.')
+      } finally {
+        setCapturandoLocalizacao(false)
+      }
+    }, () => {
+      setAvisoLocalizacao('Não foi possível obter a localização. Autorize o GPS ou digite o endereço.')
+      setCapturandoLocalizacao(false)
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
+  }
 
   function limparErroValidacaoAoEditar() {
     // Qualquer edição após um erro de preenchimento precisa liberar uma nova tentativa.
@@ -468,7 +535,11 @@ export default function OrcamentoRapido() {
     setSalvando(true)
     const tipoMedida = itens.every(item => item.tipoMedida === 'final') ? 'final' : 'comum'
     const dadosForm: DadosOrcamentoForm = {
-      clienteId: clienteIdOrigem, orcamentoIdDestino: new URLSearchParams(window.location.search).get('adicionarAo'), itens: itens.map(item => ({ ...item, itemTipo: item.itemTipo || 'sob_medida' })), clienteNome, clienteWhatsapp, cidade, origem,
+      clienteId: clienteIdOrigem,
+      obraNome: obraNome.trim(),
+      obraEndereco: formatarEnderecoObra(obraRua, obraNumero, obraCep),
+      obraBairro: obraBairro.trim(), obraCidade: cidade.trim(), obraLocalizacao,
+      orcamentoIdDestino: new URLSearchParams(window.location.search).get('adicionarAo'), itens: itens.map(item => ({ ...item, itemTipo: item.itemTipo || 'sob_medida' })), clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
     }
@@ -523,6 +594,10 @@ export default function OrcamentoRapido() {
 
     if (!clienteNome.trim()) return falharValidacao('Informe o nome do cliente')
     if (!cidade.trim()) return falharValidacao('Informe a cidade da obra')
+    if ((obraRua.trim() || obraNumero.trim() || obraBairro.trim() || obraCep.trim() || obraLocalizacao) && !obraNome.trim()) return falharValidacao('Informe o nome da obra para vincular o endereço.')
+    if (obraNumero.trim() && !obraRua.trim()) return falharValidacao('Informe a rua ou avenida da obra antes do número.')
+    if (obraRua.trim() && !obraNumero.trim()) return falharValidacao('Informe o número da obra (ou S/N).')
+    if (obraCep.trim() && !/^\d{5}-?\d{3}$/.test(obraCep.trim())) return falharValidacao('Confira o CEP da obra: são 8 dígitos.')
     if (!temperatura) return falharValidacao('Selecione a temperatura do orçamento (quente, morno ou frio)')
     if (!acabamento) return falharValidacao('Selecione a cor/acabamento')
     if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) return falharValidacao('Escreva qual é a cor')
@@ -568,7 +643,7 @@ export default function OrcamentoRapido() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
-    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setTemperatura('')
+    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setAvisoLocalizacao(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
 
@@ -589,6 +664,60 @@ export default function OrcamentoRapido() {
       {fluxoSobMedida && <div className="border-b border-slate-200 bg-white"><div className="mx-auto max-w-7xl overflow-x-auto px-4 py-3"><div className="flex min-w-[980px] items-center gap-2">{[['1','Cliente / Obra'],['2','Medidas'],['3','O que precisa'],['4','Linha / Tipologia'],['5','Variáveis'],['6','Acabamento'],['7','Composição'],['8','Custos'],['9','Impressão']].map(([n,label],i)=><div key={n} className="flex flex-1 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i<2?'bg-blue-600 text-white':'bg-slate-100 text-slate-500'}`}>{n}</span><span className={`whitespace-nowrap text-xs font-semibold ${i<2?'text-slate-800':'text-slate-500'}`}>{label}</span>{i<8&&<span className="h-px flex-1 bg-slate-200"/>}</div>)}</div></div></div>}
       <main className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-8 space-y-6`}>{rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value) }} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
+
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800">Dados da obra</h3>
+            <p className="mt-1 text-xs text-slate-500">Informe o nome da obra. O endereço será associado à obra e não altera o endereço do cliente.</p>
+          </div>
+          <label className="block text-xs font-medium text-slate-600">
+            Obra
+            <input data-preserve-case="true" value={obraNome}
+              onChange={e => { limparErroValidacaoAoEditar(); setObraNome(e.target.value) }}
+              placeholder="Ex.: Residência Silva, Reforma centro..."
+              className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={capturarEnderecoDaObra} disabled={capturandoLocalizacao}
+              className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-blue-800 disabled:opacity-60">
+              {capturandoLocalizacao ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
+              {capturandoLocalizacao ? 'Localizando...' : 'Usar localização atual'}
+            </button>
+            <span className="text-xs text-slate-500">Ou digite o endereço abaixo. Use o GPS estando na obra.</span>
+          </div>
+          {avisoLocalizacao && <p role="status" className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">{avisoLocalizacao}</p>}
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
+            <label className="block text-xs font-medium text-slate-600">
+              Rua / avenida da obra
+              <input data-preserve-case="true" value={obraRua}
+                onChange={e => { limparErroValidacaoAoEditar(); setObraRua(e.target.value) }}
+                placeholder="Rua, avenida ou estrada" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+              Número
+              <input data-preserve-case="true" value={obraNumero}
+                onChange={e => { limparErroValidacaoAoEditar(); setObraNumero(e.target.value) }}
+                placeholder="123 / S/N" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+            </label>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs font-medium text-slate-600">
+              Bairro
+              <input data-preserve-case="true" value={obraBairro}
+                onChange={e => setObraBairro(e.target.value)}
+                placeholder="Bairro da obra" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+              CEP
+              <input data-preserve-case="true" value={obraCep} maxLength={9} inputMode="numeric"
+                onChange={e => { limparErroValidacaoAoEditar(); setObraCep(e.target.value) }}
+                placeholder="00000-000" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+            </label>
+          </div>
+          <p className="text-xs text-slate-500">Cidade da obra: <strong className="text-slate-700">{cidade || 'preencha no bloco acima'}</strong>. É atualizada também pelo GPS, quando encontrada.</p>
+          {obraLocalizacao && <p className="text-xs text-emerald-700">Localização GPS vinculada à obra. Confira o endereço antes de enviar.</p>}
+          <p className="text-[11px] text-slate-400">Endereço automático com dados do OpenStreetMap. O GPS só é solicitado quando você toca no botão.</p>
+        </section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label><p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p><div className="grid grid-cols-3 gap-2">{(['quente','morno','frio'] as const).map(t => <button key={t} onClick={() => { limparErroValidacaoAoEditar(); setTemperatura(t) }} className={`p-3 rounded-xl text-sm border ${temperatura === t ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{t === 'quente' ? '🔥 Quente' : t === 'morno' ? '🌤️ Morno' : '❄️ Frio'}</button>)}</div></section>
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{acabamentos.map(a => <button key={a.value} onClick={() => { limparErroValidacaoAoEditar(); setAcabamento(a.value) }} className={`p-3 rounded-xl text-sm border ${acabamento === a.value ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{a.label}</button>)}</div>{acabamento === 'outro' && <input data-preserve-case="true" value={acabamentoOutroTexto} onChange={e => { limparErroValidacaoAoEditar(); setAcabamentoOutroTexto(e.target.value) }} placeholder="Qual cor?" className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3" />}</section>
@@ -660,6 +789,9 @@ export default function OrcamentoRapido() {
                 <div><p className="text-[11px] uppercase text-slate-400">Cidade</p><p className="font-semibold">{cidade}</p></div>
                 <div><p className="text-[11px] uppercase text-slate-400">Resumo</p><p className="font-semibold">{itens.length} {itens.length===1?'item':'itens'} • {totalEsquadrias} esquadria(s)</p></div>
               </div>
+              {(obraNome || obraRua) && <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                <b>Obra:</b> {obraNome || 'Não informada'}{(obraRua || obraNumero) && <p className="mt-1"><b>Endereço:</b> {formatarEnderecoObra(obraRua, obraNumero, obraCep)}{obraBairro ? ' · ' + obraBairro : ''}</p>}
+              </div>}
               <div className="space-y-3">
                 {itens.map((item,idx) => (
                   <div key={item.id} className="rounded-xl border-2 border-slate-200 p-4">
