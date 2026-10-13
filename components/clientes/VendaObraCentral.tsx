@@ -1,5 +1,7 @@
 'use client'
 
+import VendaBarrasWVetro from '@/components/clientes/VendaBarrasWVetro'
+import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
 import VendaTipologiasMateriais from '@/components/clientes/VendaTipologiasMateriais'
@@ -703,6 +705,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   async function emitirCotacaoCategoria(){
     if(!venda||!pacoteTecnicoId)return
     const categoria=categoriaMaterialAberta
+    if(categoria==='perfil'&&orcamento?.wvetro_fluxo?.numero){
+      setMensagemMateriais('Perfis cortados pertencem à Produção. Gere a cotação de compra a partir das barras comerciais do relatório Barras Utilizadas na aba Compras.')
+      return
+    }
     const existentes=lotesAtivos.find(l=>l.categoria===categoria)
     if(existentes&&!window.confirm('Já existe uma lista de cotação de '+rotuloCategoria(categoria).toLowerCase()+'. Gerar nova versão preservando a anterior no histórico?'))return
     if(!existentes&&!window.confirm('Validou os materiais de '+rotuloCategoria(categoria).toLowerCase()+'? A lista será enviada para a coluna Em cotação de Compras, sem confirmar pedido ou recebimento.'))return
@@ -1069,7 +1075,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   const abas:{id:Aba;label:string}[]=[
     {id:'visao',label:'Visão geral'},{id:'financeiro',label:'Financeiro'},{id:'custos',label:'Custos / CMV'},
-    {id:'compras',label:'Compras'},{id:'materiais',label:'Materiais'},{id:'tipologias',label:'Tipologias'},{id:'producao',label:'Produção'},
+    {id:'compras',label:'Compras'},{id:'materiais',label:'Editar cortes'},{id:'tipologias',label:'Tipologias'},{id:'producao',label:'Produção'},
     {id:'instalacao',label:'Instalação'},{id:'notas',label:'Notas / Recibos'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'}
   ]
 
@@ -1292,7 +1298,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           outros:custosPorCategoria.outros.realizado,
         }} onMudanca={setRealizadoCmvManual}/>}
 
-        {aba==='compras'&&<Box titulo="Compras e cotações desta venda">
+        {aba==='compras'&&<>
+          <VendaBarrasWVetro vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>setAba('producao')}/>
+          <Box titulo="Compras de acessórios, vidros e histórico de cotações anteriores">
+            <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"><b>Perfis cortados não são barras para comprar.</b> As cotações de perfis criadas anteriormente continuam acessíveis abaixo para consulta e acompanhamento, mas a nova lista de barras comerciais fica acima. Não gere compras de barras por esta lista técnica.</p>
           {!venda.obra_id&&<div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Esta venda ainda não tem obra vinculada. Você pode validar materiais e gerar a lista de cotação, mas os pedidos e recebimentos só poderão ser vinculados à obra depois do cadastro/vínculo.</div>}
           {mensagemMateriais&&<div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-800">{mensagemMateriais}</div>}
           <div className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1445,11 +1454,13 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             </table>
           </div>
           <p className="mt-3 text-[11px] text-slate-500">Regra: Perfis e Acessórios devem exibir código, descrição e imagem técnica. Quando a imagem estiver ausente, o Atlas sinaliza o cadastro pendente sem bloquear o acompanhamento da compra.</p>
-        </Box>}
+          </Box>
+        </>}
         {aba==='materiais'&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
           const rotulo=rotuloCategoria(categoriaMaterialAberta)
-          return <Box titulo="Materiais técnicos desta venda">
+          return <Box titulo="Editor da lista técnica de corte · Produção">
+            <p className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Estes registros são <b>peças e medidas de corte</b>. Confira-os na aba Produção. Para comprar perfis inteiros do WVetro, abra Compras → Barras comerciais.</p>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
               <div>
                 <b className="text-sm text-slate-800">Gerencie os materiais por categoria</b>
@@ -1480,7 +1491,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               <div className="flex flex-wrap gap-2">
                 {obra?.id&&grupoPdf&&<Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=${grupoPdf}`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileDown size={13}/>Gerar lista de {rotulo.toLowerCase()}</Link>}
                 <button type="button" disabled={ocupadoMateriais||!pacoteTecnicoId} onClick={()=>void adicionarMaterialCentral()} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{ocupadoMateriais?<Loader2 size={13} className="animate-spin"/>:<Plus size={13}/>}Adicionar material</button>
-                <button type="button" disabled={emitindoCotacao||ocupadoMateriais||!pacoteTecnicoId||materiaisCategoria.length===0||totalComprarCategoria<=0} onClick={()=>void emitirCotacaoCategoria()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{emitindoCotacao?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}Validar e gerar cotação</button>
+                <button type="button" disabled={Boolean(orcamento?.wvetro_fluxo?.numero)&&categoriaMaterialAberta==='perfil'||emitindoCotacao||ocupadoMateriais||!pacoteTecnicoId||materiaisCategoria.length===0||totalComprarCategoria<=0} title={orcamento?.wvetro_fluxo?.numero&&categoriaMaterialAberta==='perfil'?'A cotação dos perfis deve usar o relatório Barras Utilizadas no setor Compras.':undefined} onClick={()=>void emitirCotacaoCategoria()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{emitindoCotacao?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}{orcamento?.wvetro_fluxo?.numero&&categoriaMaterialAberta==='perfil'?'Use Barras Utilizadas em Compras':'Validar e gerar cotação'}</button>
               </div>
             </div>
 
@@ -1535,6 +1546,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         />}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
+          <VendaListaCorteWVetro
+            materiais={materiaisTecnicos} obraId={obra?.id||null} pacoteId={pacoteTecnicoId}
+            orcamentoId={venda.orcamento_id} onEditar={()=>setAba('materiais')}/>
           <VendaLiberacaoOrdens vendaId={venda.id} onAtualizar={carregar}/>
           <VendaProducaoDetalhada ordens={ordens} itens={itens} statusGeral={setorPorNome.producao?.nome||null}/>
         </Box>}
