@@ -325,7 +325,8 @@ async function garantirOrcamentoFallback(usuario: any, cliente: any, h: Historic
     .select('id,cliente_id,wvetro_fluxo')
     .eq('empresa_id', usuario.empresa_id)
     .contains('wvetro_fluxo', { numero })
-    .neq('modo_entrada', 'wvetro_api_vinculado')
+    // Um card oculto por vínculo continua representando este número W.Vetro.
+    // Não criar um novo orçamento apenas porque a fonte foi vinculada.
     .limit(10)
   if (erroExistentes) throw erroExistentes
 
