@@ -74,6 +74,11 @@ export default function Producao() {
   const [pecasAprovadas, setPecasAprovadas] = useState<Array<{id: string; descricao: string; ambiente: string; status: string; motivo: string}>>([])
   const [carregandoPecas, setCarregandoPecas] = useState(false)
   const [erroPecas, setErroPecas] = useState('')
+  const [unidades, setUnidades] = useState<Array<{ordem_id:string;indice:number;status:string;produzido_em?:string|null;produzido_por_nome?:string|null}>>([])
+  const [selecionadasUnidades, setSelecionadasUnidades] = useState<Record<string,number[]>>({})
+  const [carregandoUnidades, setCarregandoUnidades] = useState(false)
+  const [salvandoUnidades, setSalvandoUnidades] = useState<string|null>(null)
+  const [erroUnidades, setErroUnidades] = useState('')
   const [liberandoId, setLiberandoId] = useState<string | null>(null)
   const [editandoCard, setEditandoCard] = useState(false)
   const [tituloCard, setTituloCard] = useState('')
@@ -184,12 +189,63 @@ export default function Producao() {
 
   function abrirCard(card: SetorKanbanItem) {
     setSelecionado(card)
+    setUnidades([])
+    setSelecionadasUnidades({})
+    setErroUnidades('')
+    void carregarUnidades(card.id)
     setEditandoCard(false)
     setTituloCard(card.titulo)
     setDescricaoCard(descricaoVisivel(card))
     setPecasAprovadas([])
     const medicao = medicaoDoCard(card)
     if (medicao) void carregarPecasAprovadas(medicao.id)
+  }
+
+  async function carregarUnidades(cardId:string){
+    setCarregandoUnidades(true)
+    setErroUnidades('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada.')
+      const resposta=await fetch('/api/producao/ordens/unidades?cardId='+encodeURIComponent(cardId),{
+        headers:{Authorization:'Bearer '+token},cache:'no-store',
+      })
+      const json=await resposta.json().catch(()=>({}))
+      if(!resposta.ok)throw new Error(json.error||'Falha ao consultar unidades.')
+      setUnidades(Array.isArray(json.unidades)?json.unidades:[])
+    }catch(e){
+      setErroUnidades(e instanceof Error?e.message:'Falha ao consultar unidades.')
+    }finally{setCarregandoUnidades(false)}
+  }
+  function alternarUnidade(ordemId:string,indice:number){
+    setSelecionadasUnidades(prev=>{
+      const lista=prev[ordemId]||[]
+      return {...prev,[ordemId]:lista.includes(indice)?lista.filter(x=>x!==indice):[...lista,indice]}
+    })
+  }
+  async function marcarUnidadesProduzidas(ordem:OrdemProducao){
+    const indices=selecionadasUnidades[ordem.id]||[]
+    if(!indices.length||salvandoUnidades)return
+    if(!window.confirm('Confirmar '+indices.length+' unidade(s) produzida(s) e conferida(s) da OP #'+ordem.numero+'? As demais continuarão pendentes.'))return
+    setSalvandoUnidades(ordem.id);setErroUnidades('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada.')
+      const resposta=await fetch('/api/producao/ordens/unidades',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({ordemId:ordem.id,indices}),
+      })
+      const json=await resposta.json().catch(()=>({}))
+      if(!resposta.ok)throw new Error(json.error||'Não foi possível confirmar as unidades.')
+      const registros=json.unidades||[]
+      const produzidas=registros.filter((x:any)=>x.status==='produzida').length
+      const statusOrdem=registros.length&&produzidas===registros.length?'concluida':'conferencia'
+      setOrdens(prev=>prev.map(o=>o.id===ordem.id?{...o,quantidade_produzida:produzidas,status:statusOrdem}:o))
+      setUnidades(prev=>[...prev.filter(u=>u.ordem_id!==ordem.id),...registros])
+      setSelecionadasUnidades(prev=>({...prev,[ordem.id]:[]}))
+      setMensagem(produzidas+' de '+ordem.quantidade+' unidade(s) concluída(s); pendentes preservadas.')
+    }catch(e){setErroUnidades(e instanceof Error?e.message:'Falha ao registrar produção.')}
+    finally{setSalvandoUnidades(null)}
   }
 
   function abrirNovaEtapa() {
@@ -275,6 +331,18 @@ export default function Producao() {
     const destinoNome = String(destino.nome || '').toLowerCase()
     const destinoEhLiberacao = destinoNome.includes('liberad') && destinoNome.includes('produ')
     const medicao = medicaoDoCard(card)
+    // Arrastar o card da obra não equivale a concluir as unidades pendentes.
+    if (/(conclu|finaliz|pront|instala)/.test(destinoNome)) {
+      const ordensCard=ordensPorCard.get(card.id)||[]
+      const pendentes=ordensCard.filter(o=>o.status!=='cancelada' && (
+        o.status!=='concluida' ||
+        (o.quantidade_produzida!=null&&Number(o.quantidade_produzida)<Number(o.quantidade))
+      ))
+      if(pendentes.length){
+        setErro('Ainda existem '+pendentes.length+' ordem(ns) com peças não concluídas. Abra o card, selecione as unidades produzidas e mantenha as demais pendentes.')
+        return
+      }
+    }
     if (destinoEhLiberacao && temMarcadorMedicaoDoCard(card) && !medicao) {
       setErro('A medição vinculada a este card não foi encontrada. Confira o identificador antes de liberar a Produção.')
       return
@@ -382,6 +450,10 @@ export default function Producao() {
 
   async function avancarOrdem(ordem: OrdemProducao) {
     if (ordem.bloqueada || ordem.status === 'concluida' || ordem.status === 'cancelada') return
+    if(ordem.status==='conferencia'){
+      setErro('Conclua as unidades individualmente dentro da ordem. A ordem só termina quando todas estiverem prontas.')
+      return
+    }
     const proximo: OrdemProducao['status'] = ordem.status === 'liberada' || ordem.status === 'aguardando'
       ? 'em_producao' : ordem.status === 'em_producao' ? 'conferencia' : 'concluida'
     const r = await atualizarOrdemProducao(ordem.id, { status: proximo })
@@ -478,6 +550,7 @@ export default function Producao() {
                         {medicao && <div className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${medicao.status_operacional === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}><Ruler size={11}/>{medicao.status_operacional === 'aprovado' ? 'Medição final liberada' : 'Medição final enviada'}</div>}
                         {bloqueadas > 0 && <div className="ml-1 mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-700"><LockKeyhole size={11}/>{bloqueadas} bloqueada(s)</div>}
                         {prontas > 0 && <p className="mt-1.5 text-[9px] text-slate-400">{prontas} ordem(ns) concluída(s)</p>}
+                        {ops.some(o=>o.quantidade_produzida!=null&&Number(o.quantidade_produzida)>0)&&<p className="mt-1 text-[9px] font-semibold text-emerald-700">{ops.reduce((sum,o)=>sum+Number(o.quantidade_produzida!=null?o.quantidade_produzida:o.status==='concluida'?o.quantidade:0),0)} peça(s) produzida(s) no total</p>}
                       </button>
                     )
                   })}
@@ -624,6 +697,8 @@ export default function Producao() {
                   ))}</div>
                 </div>
               )}
+              {carregandoUnidades&&<p className="text-xs text-blue-700">Conferindo unidades produzidas...</p>}
+              {erroUnidades&&<p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{erroUnidades}</p>}
               {ordensVisiveis.length === 0 && <p className="text-sm text-slate-400">Ordens operacionais aparecem após a liberação técnica correspondente. Peças sem Medição Final aprovada ficam ocultas nesta etapa.</p>}
               {ordensVisiveis.map(o => (
                 <div key={o.id} className="rounded-2xl border border-slate-200 p-4">
@@ -637,9 +712,45 @@ export default function Producao() {
                     <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${o.bloqueada ? 'bg-amber-50 text-amber-700' : o.status === 'concluida' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>{o.bloqueada ? 'Bloqueada' : statusLabel(o.status)}</span>
                   </div>
                   {o.bloqueio_motivo && <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800"><b>Bloqueio:</b> {o.bloqueio_motivo}</div>}
+                  {o.tipo_producao==='esquadria'&&!o.bloqueada&&Number.isInteger(Number(o.quantidade))&&Number(o.quantidade)>0&&Number(o.quantidade)<=300&&(
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      {(()=>{
+                        const individuais=unidades.filter(u=>u.ordem_id===o.id)
+                        const qtd=Number(o.quantidade)
+                        const feitas=o.quantidade_produzida!=null?Number(o.quantidade_produzida):o.status==='concluida'?qtd:0
+                        const habilitado=o.status==='conferencia'&&!carregandoUnidades&&!Boolean(erroUnidades)
+                        const selecao=selecionadasUnidades[o.id]||[]
+                        return <>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <b className="text-xs text-slate-800">Conferência por unidade</b>
+                            <span className="text-xs font-semibold text-slate-700">{feitas} produzida(s) · {Math.max(0,qtd-feitas)} pendente(s)</span>
+                          </div>
+                          <div className="mt-3 grid max-h-40 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-4">
+                            {Array.from({length:qtd},(_,index)=>{
+                              const indice=index+1
+                              const pronta=individuais.some(u=>u.indice===indice&&u.status==='produzida')||
+                                (o.status==='concluida'&&!individuais.length)
+                              return <label key={indice} className={'flex items-center gap-2 rounded-lg border p-2 text-[11px] '+(pronta?'border-emerald-200 bg-emerald-50 text-emerald-700':'bg-white text-slate-700')}>
+                                <input type="checkbox" checked={pronta||selecao.includes(indice)}
+                                  disabled={!habilitado||pronta||Boolean(salvandoUnidades)}
+                                  onChange={()=>alternarUnidade(o.id,indice)}/>
+                                Unidade {indice} · {pronta?'Produzida':'Pendente'}
+                              </label>
+                            })}
+                          </div>
+                          {habilitado&&selecao.length>0&&<button type="button" onClick={()=>void marcarUnidadesProduzidas(o)}
+                            disabled={Boolean(salvandoUnidades)}
+                            className="mt-3 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                            {salvandoUnidades===o.id?'Salvando...':'Confirmar '+selecao.length+' unidade(s) produzida(s)'}
+                          </button>}
+                          {o.status==='em_producao'&&<p className="mt-2 text-[11px] text-slate-600">Envie a ordem para Conferência antes de liberar unidades concluídas.</p>}
+                        </>
+                      })()}
+                    </div>
+                  )}
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Link href={`/producao/plano-corte?ordem=${o.id}`} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700"><Ruler size={14}/> Abrir plano de corte</Link>
-                    {!o.bloqueada && !['concluida','cancelada'].includes(o.status) && <button onClick={() => avancarOrdem(o)} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-navy px-3 py-2 text-xs font-medium text-white">{o.status === 'em_producao' ? <ClipboardCheck size={14}/> : o.status === 'conferencia' ? <CheckCircle2 size={14}/> : <Play size={14}/>} {o.status === 'em_producao' ? 'Enviar para conferência' : o.status === 'conferencia' ? 'Concluir ordem' : 'Iniciar produção'}</button>}
+                    {!o.bloqueada && !['concluida','cancelada','conferencia'].includes(o.status) && <button onClick={() => avancarOrdem(o)} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-navy px-3 py-2 text-xs font-medium text-white">{o.status === 'em_producao' ? <ClipboardCheck size={14}/> : o.status === 'conferencia' ? <CheckCircle2 size={14}/> : <Play size={14}/>} {o.status === 'em_producao' ? 'Enviar para conferência' : o.status === 'conferencia' ? 'Concluir ordem' : 'Iniciar produção'}</button>}
                     {o.cliente_id && <Link href={`/clientes/${o.cliente_id}/central?aba=andamento`} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700"><UserRound size={14}/> Cliente 360</Link>}
                   </div>
                 </div>
