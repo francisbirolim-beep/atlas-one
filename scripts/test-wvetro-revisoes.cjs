@@ -44,4 +44,7 @@ assert.equal(preco[0].campo, 'Valor total')
 const reordenado = comparar({ ...original, Itens: [janela(101, 1500), janela(102, 2000)] },
   { ...original, Itens: [janela(102, 2000), janela(101, 1500)] })
 assert.equal(reordenado.length, 0, 'Reordenação sem mudança não cria alerta')
-console.log('OK: 8 cenários de revisão de orçamento W.Vetro')
+const acessorio = diff({ ...original, Itens: [{ ...janela(101, 1500), Acessorios: [{ Codigo: 'F001', Nome: 'Fechadura', Qtde: 1 }] }] })
+assert.equal(acessorio.length, 1, 'Acessório novo também é uma alteração técnica')
+assert.equal(acessorio[0].campo, 'Acessórios')
+console.log('OK: 9 cenários de revisão de orçamento W.Vetro')
