@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CheckSquare, FileDown, ImageOff, Loader2, Square, X } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
-import { ETAPAS_COTACAO, etapaItemCotacao, type EtapaCotacao } from '@/lib/cotacaoEtapas'
+import { ETAPAS_COTACAO, etapaItemCotacao, urlPdfCardCotacao, type EtapaCotacao } from '@/lib/cotacaoEtapas'
 
 export type CotacaoItemDetalhe={
  material_id:string;codigo:string|null;descricao:string;unidade:string;quantidade_cotar:number;
@@ -15,8 +15,8 @@ const nomes:Record<EtapaCotacao,string>={
  necessidade:'Falta comprar',cotacao:'Em cotação',comprado:'Comprado',
  entrega:'Aguardando chegar',recebido:'Recebido'
 }
-export default function VendaCotacaoItensModal({lote,etapa,vendaId,onFechar,onMover,ocupado}:{
- lote:CotacaoLoteDetalhe;etapa:EtapaCotacao;vendaId:string;ocupado:boolean;
+export default function VendaCotacaoItensModal({lote,etapa,grupoId,vendaId,onFechar,onMover,ocupado}:{
+ lote:CotacaoLoteDetalhe;etapa:EtapaCotacao;grupoId:string;vendaId:string;ocupado:boolean;
  onFechar:()=>void;onMover:(ids:string[],origem:EtapaCotacao,destino:EtapaCotacao)=>Promise<boolean>
 }){
  const [itensDesenho,setItensDesenho]=useState<Record<string,string|null>>({})
@@ -71,7 +71,7 @@ export default function VendaCotacaoItensModal({lote,etapa,vendaId,onFechar,onMo
       <span className="text-xs text-slate-600">{selecionados.length} de {itens.length} selecionados</span>
       {carregando&&<Loader2 size={16} className="animate-spin text-blue-600"/>}
     </div>
-    <a href={`/compras/cotacoes/lote/${lote.id}?vendaId=${vendaId}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-blue-700"><FileDown size={15}/>Abrir PDF original</a>
+    <a href={urlPdfCardCotacao(lote.id,vendaId,etapa,grupoId)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-blue-700"><FileDown size={15}/>Abrir PDF deste card</a>
    </div>
    {erro&&<p role="alert" className="m-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{erro}</p>}
    <div className="min-h-0 flex-1 overflow-auto">
