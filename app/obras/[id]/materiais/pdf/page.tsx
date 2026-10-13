@@ -16,7 +16,7 @@ type DadosCabecalho = {
   versao: number
 }
 const grupos: Record<Grupo,{titulo:string;categorias:MaterialPacote['categoria'][]}> = {
-  perfis:{titulo:'Lista de Perfis',categorias:['perfil','contramarco']},
+  perfis:{titulo:'Lista de Corte de Perfis',categorias:['perfil','contramarco']},
   acessorios:{titulo:'Lista de Acessórios',categorias:['acessorio']},
   vidros:{titulo:'Lista de Vidros',categorias:['vidro']},
 }
