@@ -65,7 +65,7 @@ export default function VendaInstalacaoDetalhada({
     const [ir,dr,pr]=await Promise.all([
       supabase.from('venda_instalacao_itens').select('*').eq('venda_obra_id',vendaId).order('created_at'),
       obraId?supabase.from('cliente_documentos').select('id,titulo,url,tipo,observacoes,created_at').eq('cliente_id',clienteId).eq('obra_id',obraId).order('created_at',{ascending:false}):Promise.resolve({data:[],error:null} as any),
-      supabase.from('ordens_producao').select('id,item_ref,tipo_producao,status,bloqueada,quantidade').eq('venda_obra_id',vendaId),
+      supabase.from('ordens_producao').select('id,item_ref,tipo_producao,status,bloqueada,quantidade,quantidade_produzida').eq('venda_obra_id',vendaId),
     ])
     if(ir.error||pr.error){setErro('Instalação indisponível: '+(ir.error?.message||pr.error?.message));setCarregando(false);return}
     setLista((ir.data||[]) as InstalacaoItem[])
@@ -164,6 +164,15 @@ export default function VendaInstalacaoDetalhada({
   const instaladas=lista.reduce((s,x)=>s+Math.min(Number(x.quantidade_instalada||0),Number(x.quantidade||0)),0)
   const pendentes=Math.max(0,total-instaladas)
   const comPendencia=lista.filter(x=>x.status==='pendencia'||Boolean(x.pendencia)).length
+  // Visão Kanban derivada dos registros reais, não cria duplicatas no banco.
+  // A mesma tipologia pode aparecer em 'Instalado' e 'Em instalação': são
+  // subconjuntos diferentes, sem que o saldo pendente seja marcado como pronto.
+  const kanbanInstalacao=[
+    {id:'pendente',titulo:'A instalar',cor:'border-slate-300',linhas:lista.filter(x=>!x.pendencia&&x.status!=='pendencia'&&Number(x.quantidade_instalada||0)===0).map(item=>({item,quantidade:Math.max(0,Number(item.quantidade||0)),rotulo:'Falta instalar'})).filter(x=>x.quantidade>0)},
+    {id:'parcial',titulo:'Em instalação',cor:'border-blue-300',linhas:lista.filter(x=>!x.pendencia&&x.status!=='pendencia'&&Number(x.quantidade_instalada||0)>0).map(item=>({item,quantidade:Math.max(0,Number(item.quantidade||0)-Number(item.quantidade_instalada||0)),rotulo:'Ainda falta'})).filter(x=>x.quantidade>0)},
+    {id:'instalado',titulo:'Instalado',cor:'border-emerald-300',linhas:lista.map(item=>({item,quantidade:Math.min(Number(item.quantidade||0),Number(item.quantidade_instalada||0)),rotulo:'Instalado'})).filter(x=>x.quantidade>0)},
+    {id:'pendencia',titulo:'Com pendência',cor:'border-amber-300',linhas:lista.filter(x=>x.status==='pendencia'||Boolean(x.pendencia)).map(item=>({item,quantidade:Math.max(0,Number(item.quantidade||0)-Number(item.quantidade_instalada||0)),rotulo:'A conferir'}))},
+  ]
   const fotosPorRef=useMemo(()=>{
     const m:Record<string,Doc[]>={}
     docs.filter(d=>d.tipo==='instalacao_foto').forEach(d=>{
@@ -190,11 +199,27 @@ export default function VendaInstalacaoDetalhada({
       <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-[11px] font-bold uppercase text-blue-600">Progresso</p><p className="mt-1 text-2xl font-bold text-blue-700">{total?Math.round((instaladas/total)*100):0}%</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full bg-blue-600" style={{width:`${total?Math.round((instaladas/total)*100):0}%`}}/></div></div>
     </div>
 
+    <section aria-label="Kanban de Instalação por peça" className="space-y-3">
+      <div><h3 className="text-sm font-bold text-slate-900">Kanban de instalação por peça</h3><p className="text-xs text-slate-500">Toque no card para conferir ou atualizar a quantidade. Uma tipologia parcialmente instalada aparece também na coluna Instalado, somente com as unidades concluídas.</p></div>
+      <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {kanbanInstalacao.map(coluna=><div key={coluna.id} className={'rounded-xl border-t-4 bg-slate-50 p-3 '+coluna.cor}>
+          <div className="mb-3 flex items-center justify-between"><b className="text-xs text-slate-800">{coluna.titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-600">{coluna.linhas.reduce((sum,x)=>sum+x.quantidade,0)} peça(s)</span></div>
+          <div className="space-y-2">{coluna.linhas.map(({item,quantidade,rotulo})=><button type="button" key={item.id} onClick={()=>document.getElementById('instalacao-item-'+item.id)?.scrollIntoView({behavior:'smooth',block:'center'})}
+            className="block w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm hover:border-blue-300">
+            <b className="block text-xs text-slate-800">{item.ambiente||item.descricao||item.item_ref}</b>
+            <p className="mt-1 text-[11px] text-slate-600">{item.descricao||'Peça'}</p>
+            <p className="mt-2 text-xs font-bold text-blue-700">{quantidade} unidade(s) · {rotulo}</p>
+            {item.pendencia&&coluna.id==='pendencia'&&<p className="mt-1 text-[10px] text-amber-700">{item.pendencia}</p>}
+          </button>)}{!coluna.linhas.length&&<p className="rounded-lg border border-dashed p-4 text-center text-[11px] text-slate-400">Nenhuma peça</p>}</div>
+        </div>)}
+      </div>
+    </section>
+
     <div className="space-y-3">{lista.map(item=>{
       const checks={nivelamento:false,vedacao:false,acabamento:false,limpeza:false,...(item.checklist||{})}
       const producao=disponibilidadePeca(ordens,item.item_ref,Number(item.quantidade||0))
       const fotos=fotosPorRef[item.item_ref]||[]
-      return <section key={item.id} className="rounded-xl border bg-white p-4">
+      return <section key={item.id} id={'instalacao-item-'+item.id} className="rounded-xl border bg-white p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><b className="text-sm text-slate-900">{item.ambiente||'Sem ambiente'}</b><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${badge(item.status)}`}>{statusLabel(item.status)}</span>{item.pendencia&&<span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700"><AlertTriangle size={11}/>Pendência</span>}</div><p className="mt-1 text-xs text-slate-500">{item.descricao||'Peça'} · Item {item.item_ref}</p></div>
           <div className="flex flex-wrap items-center gap-2">
