@@ -97,6 +97,12 @@ export default function CamposConfiguraveisPage() {
       lista = marcado ? Array.from(new Set([...lista, contexto])) : lista.filter((item) => item !== contexto)
 
       const patch: Partial<CampoConfiguravel> = { [chave]: lista }
+      if (tipo === 'obrigatorio' && marcado && !campo.mostrarEm.includes(contexto)) {
+        patch.mostrarEm = Array.from(new Set([...campo.mostrarEm, contexto]))
+      }
+      if (tipo === 'mostrar' && !marcado && campo.obrigatorioEm.includes(contexto)) {
+        patch.obrigatorioEm = campo.obrigatorioEm.filter((item) => item !== contexto)
+      }
       return { ...campo, ...patch }
     }))
   }
