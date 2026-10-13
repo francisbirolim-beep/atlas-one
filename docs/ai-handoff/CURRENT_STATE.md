@@ -674,3 +674,10 @@ Branch `fix/wvetro-corte-barras-setores-20261013` — preview não publicado em 
 - Cotação de perfis a partir de cortes bloqueada somente para vendas ligadas ao W.Vetro; fluxo Atlas nativo e cotações já existentes são preservados.
 - Correções podem gerar sugestões reutilizáveis no próximo relatório, sem replicar quantidades automaticamente.
 - Próximo passo: validar visualmente o preview autenticado; conferir 31 barras, cores, lista de 40 cortes, cards legados, correção/validação e PDF antes do merge.
+
+## 2026-10-13 — Correção de localização da lista (feedback visual do Samuel)
+
+- A aba **Materiais** (não "Editar cortes") mostra a tabela de **Barras Utilizadas do WVetro** destinada à compra, com códigos, acabamentos, quantidades BR, tamanhos, peso/sobra e validação/correção.
+- **Produção** mostra a lista de peças cortadas e, ao clicar Editar cortes, expande o editor técnico nessa própria aba; não usa Materiais para exibir 40 cortes.
+- **Compras** exibe o Kanban das barras, preservando cotações históricas já movimentadas sem consolidá-las ou reescrevê-las.
+- Mudança visual solicitada pelo usuário após testar PR #811; preview original não atendia à posição correta. Validar esta revisão antes de publicar em produção.
