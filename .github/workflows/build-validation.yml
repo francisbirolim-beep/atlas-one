@@ -47,6 +47,9 @@ jobs:
       - name: Venda CMV review and IA feedback
         run: npm run test:venda-cmv-revisao
 
+      - name: CMV W.Vetro original totals and leftovers
+        run: npm run test:cmv-wvetro-valores
+
       - name: Venda operational flow regression
         run: npm run test:venda-fluxo
 

@@ -32,4 +32,13 @@ assert.equal(custoRevisado(outra,{perfil:valida},'total'),1266.78)
 const corrigiu={...corrigida,valor_origem:575.89,valor_revisado:600}
 assert.equal(custoRevisado(outra,{perfil:corrigiu},'total'),1290.89,'Corrige total pela diferença sem duplicar sobra')
 assert.equal(custoRevisado(outra,{perfil:corrigiu,total:{...valida,categoria:'total',valor_origem:1266.78,valor_revisado:1300}},'total'),1300,'Revisão explícita do total tem precedência')
+const completo={categorias:{perfil:525.9,acessorio:289.09,vidro:401.8,sobra:570.28,perda:3.77},
+ total:1790.84,perfil_previsao:1096.18,perfil_previsao_fonte:'uso_mais_sobra_wvetro'}
+assert.equal(custoPrevistoOriginal(completo,'perfil'),1096.18,'Não somar perda à categoria perfis')
+assert.equal(custoRevisado(completo,{},'total'),1790.84)
+const corrigirSobra={...corrigida,categoria:'sobra',valor_origem:570.28,valor_revisado:580.28,registrado_em:'2026-10-13T20:12:00Z'}
+assert.equal(custoRevisado(completo,{sobra:corrigirSobra},'perfil'),1106.18,'Corrigir sobra corrige subtotal de perfis')
+assert.equal(custoRevisado(completo,{sobra:corrigirSobra},'total'),1800.84,'Sobra entra uma vez no total, não duas')
+const corrigirPerda={...corrigida,categoria:'perda',valor_origem:3.77,valor_revisado:4.77}
+assert.equal(custoRevisado(completo,{perda:corrigirPerda},'total'),1791.84,'Perda corrigida somada uma vez')
 console.log('PASS: revisão CMV preserva original, custo ausente, soma perfil+sobra, total e validade após nova importação.')
