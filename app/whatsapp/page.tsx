@@ -703,7 +703,7 @@ export default function WhatsAppAtendimentoPage() {
     // oscilar ou o navegador suspender a aba por alguns segundos.
     const timer = setInterval(() => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') atualizar()
-    }, 2000)
+    }, 15000)
 
     const aoVoltar = () => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') atualizar()
@@ -953,7 +953,7 @@ export default function WhatsAppAtendimentoPage() {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') atualizarTela()
     }
 
-    const timer = setInterval(atualizarTela, 2000)
+    const timer = setInterval(atualizarTela, 10000)
     window.addEventListener('focus', atualizarTela)
     document.addEventListener('visibilitychange', aoVoltarParaTela)
 
