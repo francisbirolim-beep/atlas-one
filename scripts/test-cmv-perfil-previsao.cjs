@@ -1,0 +1,23 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');const ts=require('typescript');const Module=require('node:module');
+function carregar(arquivo){const m=new Module(arquivo,module);m.filename=arquivo;m.paths=module.paths;m._compile(ts.transpileModule(fs.readFileSync(arquivo,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,arquivo);return m.exports;}
+const {extrairPrevisaoWVetro}=carregar('lib/wvetroCmvResumo.ts');
+const {custoPrevistoOriginal,custoRevisado}=carregar('lib/vendaCmvRevisao.ts');
+const base={payload_bruto:{CustoSemSobra:'1790.84',CustoComSobra:'1220.56',CustoMaoObraVlr:'0.00',ResumoObra:{OrcamentoValorVlrCustoPerfil:'525.90',OrcamentoValorVlrCustoAcessorio:'289.09',OrcamentoValorVlrCustoVidro:'401.80',OrcamentoValorSobraCusto:'0.00',OrcamentoValorCustoPerdaCorte:'0.00',OrcamentoValorCustoServicos:'0.00'}}};
+const o1176=extrairPrevisaoWVetro(base);
+assert.equal(o1176.total,1790.84,'Total vem do payload_bruto quando não há linha histórica');
+assert.equal(o1176.categorias.perfil,525.90,'Não alterar uso técnico original');
+assert.equal(o1176.categorias.acessorio,289.09);
+assert.equal(o1176.categorias.vidro,401.80);
+assert.equal(o1176.perfil_previsao,1099.95,'Conciliação 1790,84 - 289,09 - 401,80');
+assert.equal(o1176.perfil_previsao_fonte,'conciliacao_wvetro');
+assert.equal(custoPrevistoOriginal(o1176,'perfil'),1099.95);
+assert.equal(custoRevisado(o1176,{},'perfil'),1099.95);
+const direto=extrairPrevisaoWVetro({...base,payload_bruto:{...base.payload_bruto,DespesasExtrasPrevisao:[{CentroCusto:'MATÉRIA PRIMA - PERFIL',Valor:'1.099,95',Descricao:'PERFIL'},{CentroCusto:'MATÉRIA PRIMA - ACESSORIOS',Valor:289.09}]}});
+assert.equal(direto.perfil_previsao,1099.95);assert.equal(direto.perfil_previsao_fonte,'despesas_extras_wvetro');
+const outrosCustos=extrairPrevisaoWVetro({...base,payload_bruto:{...base.payload_bruto,CustoMaoObraVlr:'100.00'}});
+assert.equal(outrosCustos.perfil_previsao,null,'Sem fonte direta, não atribuir custo residual ao perfil quando há outros custos');
+const soResumo=extrairPrevisaoWVetro({payload_bruto:{ResumoObra:base.payload_bruto.ResumoObra}});
+assert.equal(soResumo.perfil_previsao,null,'Sem total não inventar previsão');
+assert.equal(soResumo.categorias.perfil,525.90);
+console.log('PASS: #1176, despesas diretas, proteção de outros custos e sem histórico.');
