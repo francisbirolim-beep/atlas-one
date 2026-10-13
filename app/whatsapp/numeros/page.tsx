@@ -79,6 +79,8 @@ export default function NumerosWhatsAppPage() {
   const [carregando,setCarregando]=useState(true)
   const [novo,setNovo]=useState({nome:'',tipoConta:'business',usuarioId:'',nivelHierarquia:100})
   const [criando,setCriando]=useState(false)
+  const [executando,setExecutando]=useState<Record<string,boolean>>({})
+  const [resultadoAcao,setResultadoAcao]=useState<Record<string,string>>({})
   const [editando,setEditando]=useState<Record<string,{nome:string;tipoConta:string;usuarioId:string;nivelHierarquia:number}>>({})
 
   async function carregar(silencioso=false) {
@@ -157,20 +159,33 @@ export default function NumerosWhatsAppPage() {
   }
 
   async function atualizar(canal:Canal, acao='editar') {
-    setErro('')
-    const form=editando[canal.id]||{
-      nome:canal.nome,tipoConta:canal.tipo_conta,usuarioId:canal.usuario_id||'',
-      nivelHierarquia:Number(canal.nivel_hierarquia||100),
-    }
+    if(executando[canal.id])return
     if(acao==='desconectar'&&!window.confirm('Desconectar este WhatsApp do Atlas? A sessão e as conversas serão preservadas.'))return
-    const headers=await headersJson()
-    const resp=await fetch('/api/integracoes/whatsapp/canais',{
-      method:'PATCH',headers,
-      body:JSON.stringify({id:canal.id,acao,...form}),
-    })
-    const json=await resp.json()
-    if(!resp.ok){setErro(json.error||'Falha ao atualizar.');return}
-    await carregar(true)
+    setErro('')
+    setExecutando(v=>({...v,[canal.id]:true}))
+    setResultadoAcao(v=>({...v,[canal.id]:''}))
+    try {
+      const form=editando[canal.id]||{
+        nome:canal.nome,tipoConta:canal.tipo_conta,usuarioId:canal.usuario_id||'',
+        nivelHierarquia:Number(canal.nivel_hierarquia||100),
+      }
+      const headers=await headersJson()
+      const resp=await fetch('/api/integracoes/whatsapp/canais',{
+        method:'PATCH',headers,
+        body:JSON.stringify({id:canal.id,acao,...form}),
+      })
+      const json=await resp.json()
+      if(!resp.ok)throw new Error(json.error||'Não foi possível executar a ação no canal.')
+      setResultadoAcao(v=>({...v,[canal.id]:json.mensagem||
+        (acao==='editar'?'Canal atualizado.':'Solicitação recebida.')}))
+      await carregar(true)
+    } catch (e) {
+      const mensagem=e instanceof Error?e.message:'Falha de comunicação com o Atlas.'
+      setResultadoAcao(v=>({...v,[canal.id]:mensagem}))
+      setErro(mensagem)
+    } finally {
+      setExecutando(v=>({...v,[canal.id]:false}))
+    }
   }
 
   async function remover(canal:Canal) {
@@ -323,6 +338,8 @@ export default function NumerosWhatsAppPage() {
                 }
                 const conectado=!canal.conexao_pausada&&canal.gateway_status==='connected'
                 const qr=canal.pode_gerenciar_conexao&&!canal.conexao_pausada&&canal.gateway_status==='qr'&&canal.gateway_qr_data_url
+                const ultimoSinal=Date.parse(String(canal.gateway_last_seen_at||''))
+                const semSinalRecente=!Number.isFinite(ultimoSinal)||Date.now()-ultimoSinal>10*60_000
                 return (
                   <article key={canal.id} className={`rounded-2xl border p-4 ${canal.principal?'border-emerald-300 bg-emerald-50/30':'bg-white'}`}>
                     <div className="flex items-start gap-3">
@@ -469,13 +486,14 @@ export default function NumerosWhatsAppPage() {
                       </button>
                       {canal.pode_gerenciar_conexao&&(
                         <>
-                          <button onClick={()=>void atualizar(canal,'conectar')}
-                            disabled={!canal.conexao_pausada&&(conectado||canal.gateway_status==='connecting'||canal.gateway_status==='qr')}
+                          <button type="button" onClick={()=>void atualizar(canal,'conectar')}
+                            disabled={Boolean(executando[canal.id])||(conectado&&!semSinalRecente)||Boolean(qr)}
                             className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 disabled:opacity-40">
-                            <RefreshCw size={14}/> {canal.conexao_pausada?'Conectar':'Conectar / recuperar QR'}
+                            <RefreshCw size={14} className={executando[canal.id]?'animate-spin':''}/>
+                            {executando[canal.id]?'Solicitando...':canal.conexao_pausada?'Conectar':'Conectar / recuperar QR'}
                           </button>
-                          <button onClick={()=>void atualizar(canal,'desconectar')}
-                            disabled={Boolean(canal.conexao_pausada)}
+                          <button type="button" onClick={()=>void atualizar(canal,'desconectar')}
+                            disabled={Boolean(canal.conexao_pausada)||Boolean(executando[canal.id])}
                             className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-40">
                             <WifiOff size={14}/> Desconectar
                           </button>
@@ -489,6 +507,16 @@ export default function NumerosWhatsAppPage() {
                       )}
                     </div>
 
+                    {resultadoAcao[canal.id]&&(
+                      <p role="status" aria-live="polite" className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                        {resultadoAcao[canal.id]}
+                      </p>
+                    )}
+                    {semSinalRecente&&!conectado&&canal.pode_gerenciar_conexao&&(
+                      <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        Gateway sem comunicação recente. O QR só aparece quando o serviço do WhatsApp estiver funcionando.
+                      </p>
+                    )}
                     {canal.gateway_last_seen_at&&(
                       <p className="mt-3 text-[10px] text-slate-400">
                         Último sinal: {new Date(canal.gateway_last_seen_at).toLocaleString('pt-BR')}
