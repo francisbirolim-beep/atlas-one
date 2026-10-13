@@ -1,5 +1,5 @@
 // Revisão humana do custo previsto W.Vetro. Nunca altera o CMV realizado ou o dado de origem.
-export const CATEGORIAS_CMV_REVISAO = ['total','perfil','acessorio','vidro','perda','mao_obra','instalacao','frete','outros'] as const
+export const CATEGORIAS_CMV_REVISAO = ['total','perfil','perfil_uso','sobra','acessorio','vidro','perda','mao_obra','instalacao','frete','outros'] as const
 export type CategoriaCmvRevisao = (typeof CATEGORIAS_CMV_REVISAO)[number]
 export type PrevisaoCmvBase = {categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null}
 export type RevisaoCmv = {
@@ -10,6 +10,8 @@ export type RevisaoCmv = {
 export const centavos=(valor:number)=>Math.round((valor+Number.EPSILON)*100)/100
 export function custoPrevistoOriginal(p:PrevisaoCmvBase,c:CategoriaCmvRevisao):number|null{
  if(c==='total')return p.total
+ if(c==='perfil_uso')return p.categorias.perfil
+ if(c==='sobra')return p.categorias.sobra
  if(c==='perfil')return p.categorias.perfil===null||p.categorias.sobra===null?null:centavos(p.categorias.perfil+p.categorias.sobra)
  if(c==='acessorio'||c==='vidro'||c==='perda')return p.categorias[c]
  return null
@@ -20,17 +22,33 @@ export function revisaoAtual(r:RevisaoCmv|undefined,origem:number|null):boolean{
 export function custoRevisado(p:PrevisaoCmvBase,revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>,categoria:CategoriaCmvRevisao):number|null{
  const origem=custoPrevistoOriginal(p,categoria)
  const revisao=revisoes[categoria]
- if(revisaoAtual(revisao,origem))return revisao!.valor_revisado
+ if(revisaoAtual(revisao,origem)){
+  if(categoria!=='perfil')return revisao!.valor_revisado
+  // Uma correção posterior do uso ou da sobra invalida a revisão anterior do subtotal.
+  const versaoSubtotal=Date.parse(revisao!.registrado_em)||0
+  const partePosterior=(['perfil_uso','sobra'] as const).some(c=>{
+   const r=revisoes[c];return r&&revisaoAtual(r,custoPrevistoOriginal(p,c))&&(Date.parse(r.registrado_em)||0)>versaoSubtotal
+  })
+  if(!partePosterior)return revisao!.valor_revisado
+ }
+ if(categoria==='perfil'){
+  const uso=custoRevisado(p,revisoes,'perfil_uso')
+  const sobra=custoRevisado(p,revisoes,'sobra')
+  return uso===null||sobra===null?origem:centavos(uso+sobra)
+ }
  if(categoria!=='total')return origem
  if(origem===null)return null
  // Mantém o total histórico W.Vetro, aplicando apenas diferenças revisadas de categorias
  // conhecidas. Correções de categorias sem base não entram aqui: exigem validar o total.
  let delta=0
  for(const c of CATEGORIAS_CMV_REVISAO){
-  if(c==='total')continue
+  if(c==='total'||c==='perfil_uso'||c==='sobra')continue
   const original=custoPrevistoOriginal(p,c)
   const ajuste=revisoes[c]
-  if(original!==null&&revisaoAtual(ajuste,original))delta+=ajuste!.valor_revisado-original
+  if(original!==null){
+   const novo=custoRevisado(p,revisoes,c)
+   if(novo!==null)delta+=novo-original
+  }
  }
  return centavos(origem+delta)
 }

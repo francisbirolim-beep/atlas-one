@@ -151,7 +151,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
      {botoesRevisao('total')}
     </div>
     {formularioRevisao('total')}
-    {dados.historicoRevisoes?.length>0&&<details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer font-semibold">Histórico de validações e correções ({dados.historicoRevisoes.length} mais recentes)</summary><div className="mt-2 space-y-1">{dados.historicoRevisoes.map((r,i)=><div key={r.registrado_em+'-'+r.categoria+'-'+i} className="rounded-md border bg-white p-2"><b>{r.categoria==='total'?'Total':labels[r.categoria as Categoria]||r.categoria}</b> · {r.acao==='corrigido'?'Corrigido':'Validado'} · {r.usuario_nome} · {new Date(r.registrado_em).toLocaleString('pt-BR')}<span className="ml-2">W.Vetro: {previstoFmt(r.valor_origem)} → conferido: {moedas(r.valor_revisado)}</span>{r.acao==='corrigido'&&<div className="mt-1 text-slate-500">{r.justificativa}</div>}</div>)}</div></details>}
+    {dados.historicoRevisoes?.length>0&&<details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer font-semibold">Histórico de validações e correções ({dados.historicoRevisoes.length} mais recentes)</summary><div className="mt-2 space-y-1">{dados.historicoRevisoes.map((r,i)=><div key={r.registrado_em+'-'+r.categoria+'-'+i} className="rounded-md border bg-white p-2"><b>{r.categoria==='total'?'Total':r.categoria==='perfil_uso'?'Uso do perfil':r.categoria==='sobra'?'Sobra do perfil':labels[r.categoria as Categoria]||r.categoria}</b> · {r.acao==='corrigido'?'Corrigido':'Validado'} · {r.usuario_nome} · {new Date(r.registrado_em).toLocaleString('pt-BR')}<span className="ml-2">W.Vetro: {previstoFmt(r.valor_origem)} → conferido: {moedas(r.valor_revisado)}</span>{r.acao==='corrigido'&&<div className="mt-1 text-slate-500">{r.justificativa}</div>}</div>)}</div></details>}
    </div>
    {p?.aviso&&<div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{p.aviso}</div>}
    <div className="overflow-x-auto rounded-xl border">
@@ -170,10 +170,14 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
        </tr>
        {corrigindo===c&&<tr className="border-b"><td colSpan={4} className="px-4 py-3">{formularioRevisao(c)}</td></tr>}
        {aberto===c&&<tr className="border-b bg-slate-50/70"><td colSpan={4} className="px-6 py-4">
-        {c==='perfil'&&<div className="grid gap-2 sm:grid-cols-3">
-         <Card titulo="Uso na obra · W.Vetro original" valor={previstoFmt(p?.categorias.perfil??null)}/>
-         <Card titulo="Sobra do perfil · W.Vetro original" valor={previstoFmt(p?.categorias.sobra??null)} nota="Custo da sobra, mesmo não cobrada ao cliente"/>
-         <Card titulo="Perfis · W.Vetro original" valor={previstoFmt(perfis)} nota="Uso + sobra"/>
+        {c==='perfil'&&<div className="space-y-2">
+         <div className="grid gap-2 sm:grid-cols-3">
+          <div className="rounded-xl border bg-white p-3"><Card titulo="Uso na obra · W.Vetro original" valor={previstoFmt(p?.categorias.perfil??null)}/>{botoesRevisao('perfil_uso')}</div>
+          <div className="rounded-xl border bg-white p-3"><Card titulo="Sobra do perfil · W.Vetro original" valor={previstoFmt(p?.categorias.sobra??null)} nota="Custo da sobra, mesmo não cobrada ao cliente"/>{botoesRevisao('sobra')}</div>
+          <Card titulo="Perfis · W.Vetro original" valor={previstoFmt(perfis)} nota="Uso + sobra (corrigidos separadamente quando necessário)"/>
+         </div>
+         {formularioRevisao('perfil_uso')}
+         {formularioRevisao('sobra')}
         </div>}
         <div className="mt-3 space-y-2">{Number(comprasExistentes[c]||0)>0&&<p className="text-xs text-slate-600">Compras vinculadas anteriormente: {moedas(Number(comprasExistentes[c]))}</p>}{dados.lancamentos.filter(l=>l.categoria===c).map(l=><div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white p-3">
          <div className="text-xs"><b>{l.descricao}</b><p className="mt-1 text-slate-500">{l.origem==='estoque'?'Retirado do estoque':'Compra / custo'} · {l.data_lancamento}{l.fornecedor?' · '+l.fornecedor:''}{l.documento?' · Doc. '+l.documento:''}</p>{l.anexo_url&&<a href={l.anexo_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-blue-700 underline"><FileText size={12}/> {l.anexo_nome||'Comprovante'}</a>}</div>

@@ -14,6 +14,11 @@ const corrigida={versao:1,categoria:'perfil',acao:'corrigido',valor_origem:null,
  venda_id:'v',orcamento_id:'o',numero_wvetro:'1176',justificativa:'Sobra incluída',usuario_nome:'Francis',registrado_em:'2026-10-13'}
 assert.equal(custoRevisado(bruto,{perfil:corrigida},'perfil'),565.9)
 assert.equal(custoRevisado(bruto,{perfil:corrigida},'total'),null,'Categoria corrigida não inventa total histórico')
+const usoValida={...corrigida,categoria:'perfil_uso',valor_origem:525.9,valor_revisado:525.9,acao:'validado'}
+const sobraCorrigida={...corrigida,categoria:'sobra',valor_origem:null,valor_revisado:42.25}
+assert.equal(custoRevisado(bruto,{perfil_uso:usoValida,sobra:sobraCorrigida},'perfil'),568.15,'Subtotal perfil soma uso validado e sobra corrigida')
+assert.equal(custoRevisado(bruto,{perfil_uso:usoValida,sobra:sobraCorrigida},'total'),null,'Total de obra não é inventado')
+
 assert.equal(revisaoAtual(corrigida,null),true)
 assert.equal(revisaoAtual(corrigida,0),false,'Não confundir nulo com custo zero')
 assert.deepEqual(lerRevisaoCmv(JSON.stringify(corrigida)),corrigida)
