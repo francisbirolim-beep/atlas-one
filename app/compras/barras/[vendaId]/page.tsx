@@ -2,12 +2,12 @@
 
 import {useEffect,useState} from 'react'
 import {useParams} from 'next/navigation'
-import {FileDown,Loader2} from 'lucide-react'
+import {FileDown,ImageOff,Loader2} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 
 type Barra={
  id:string;codigo:string;descricao:string;tipo:string;tratamento:string;
- quantidade_barras:number;tamanho_barra_mm:number;
+ quantidade_barras:number;tamanho_barra_mm:number;imagem_url?:string|null;
  numero_wvetro:string;status_validacao:string;status_compra:string
 }
 const q=(v:number)=>Number(v||0).toLocaleString('pt-BR')
@@ -61,8 +61,9 @@ export default function ListaCompraBarrasPage(){
    <p className="mt-2 text-xs text-slate-600">Data da emissão: {new Date().toLocaleDateString('pt-BR')} · Itens: {barras.length} · Barras: {q(barras.reduce((s,x)=>s+x.quantidade_barras,0))}</p>
   </header>
   <table className="mt-5 w-full border-collapse text-left text-xs">
-   <thead><tr className="bg-slate-100"><th className="border p-2">Código</th><th className="border p-2">Descrição</th><th className="border p-2">Acabamento</th><th className="border p-2">Tipo</th><th className="border p-2">Comprimento</th><th className="border p-2 text-right">Qtd. BR</th></tr></thead>
+   <thead><tr className="bg-slate-100"><th className="border p-2">Imagem</th><th className="border p-2">Código</th><th className="border p-2">Descrição</th><th className="border p-2">Acabamento</th><th className="border p-2">Tipo</th><th className="border p-2">Comprimento</th><th className="border p-2 text-right">Qtd. BR</th></tr></thead>
    <tbody>{barras.map(row=><tr key={row.id} className="break-inside-avoid">
+    <td className="border p-2">{row.imagem_url?<img src={row.imagem_url} alt={'Perfil '+row.codigo} className="h-12 w-12 object-contain"/>:<span className="text-[10px] font-semibold text-amber-700"><ImageOff size={12} className="inline"/> Imagem pendente</span>}</td>
     <td className="border p-2 font-bold">{row.codigo}</td>
     <td className="border p-2">{row.descricao}</td>
     <td className="border p-2">{row.tratamento}</td>
