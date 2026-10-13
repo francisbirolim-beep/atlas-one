@@ -64,7 +64,25 @@ export async function GET(req:NextRequest){
    .eq('empresa_id',ctx.usuario.empresa_id).eq('venda_obra_id',vendaId).order('created_at',{ascending:false}).limit(100),
  ])
  if(rows.error||events.error)return erro('Falha ao carregar barras e histórico.',500)
- return NextResponse.json({ok:true,numeroWvetro:ctx.numeroWvetro,barras:rows.data||[],aprendizados:events.data||[]},{headers:{'Cache-Control':'private,no-store'}})
+ const barras=rows.data||[]
+ // Relaciona desenhos/fotos SOMENTE pelo código exato dentro da mesma empresa.
+ // Nunca associa imagem de perfil/acessório semelhante ou de outro tenant.
+ const codigos=[...new Set(barras.map(row=>String(row.codigo||'').trim()).filter(Boolean))]
+ const imagens=new Map<string,string>()
+ if(codigos.length){
+  const variantes=[...new Set(codigos.flatMap(code=>[code,code.toUpperCase(),code.toLowerCase()]))]
+  const {data:produtos,error:pe}=await supabaseAdmin.from('produtos')
+   .select('codigo,foto_url').eq('empresa_id',ctx.usuario.empresa_id).in('codigo',variantes.slice(0,400))
+   .not('foto_url','is',null).limit(400)
+  if(pe)console.warn('[WVetro barras][Imagem produto]',pe.message)
+  for(const prod of produtos||[]){
+   const foto=String(prod.foto_url||'').trim()
+   const codigo=normalizar(prod.codigo)
+   if(foto&&!imagens.has(codigo))imagens.set(codigo,foto)
+  }
+ }
+ const linhas=barras.map(row=>({...row,imagem_url:imagens.get(normalizar(row.codigo))||null,imagem_pendente:!imagens.has(normalizar(row.codigo))}))
+ return NextResponse.json({ok:true,numeroWvetro:ctx.numeroWvetro,barras:linhas,aprendizados:events.data||[]},{headers:{'Cache-Control':'private,no-store'}})
 }
 
 export async function POST(req:NextRequest){
