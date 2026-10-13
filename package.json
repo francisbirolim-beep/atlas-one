@@ -15,6 +15,7 @@
     "test:wvetro-comparador": "npx -y tsx scripts/test-wvetro-comparador.ts",
     "test:cotacao-ia": "node scripts/test-cotacao-analise.cjs",
     "test:venda-cmv": "node scripts/test-venda-cmv-regras.cjs",
+    "test:venda-cmv-revisao": "node scripts/test-venda-cmv-revisao.cjs",
     "test:venda-fluxo": "node scripts/test-venda-fluxo-resumo.cjs",
     "test:kanban-conciliacao": "node scripts/test-kanban-conciliacao.cjs",
     "test:producao-medicao": "node scripts/test-producao-vinculo-medicao.cjs && node scripts/test-producao-medicao-elegibilidade.cjs",

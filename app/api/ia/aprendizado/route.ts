@@ -146,10 +146,13 @@ export async function GET(req: NextRequest) {
       .from('agente_memorias')
       .select('valor,created_at')
       .eq('empresa_id', usuario.empresa_id)
-      .eq('usuario_id', usuario.id)
+      // Revisões de custo validadas devem alimentar a IA de toda a empresa; demais memórias seguem pessoais.
       .eq('chave', `${PREFIXO}${dominio}`)
+
       .order('created_at', { ascending: false })
       .limit(1500)
+
+    if (dominio !== 'cmv_wvetro') query = query.eq('usuario_id', usuario.id)
 
     const { data, error } = await query
     if (error) throw new Error(error.message)
