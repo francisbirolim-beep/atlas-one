@@ -3,7 +3,7 @@
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
 import VendaTipologiasMateriais from '@/components/clientes/VendaTipologiasMateriais'
-import {itensEmEtapa, progressoLotesCotacao, ETAPAS_COTACAO, type EtapaCotacao} from '@/lib/cotacaoEtapas'
+import {gruposItensEmEtapa, progressoLotesCotacao, ETAPAS_COTACAO, type EtapaCotacao} from '@/lib/cotacaoEtapas'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -78,7 +78,7 @@ type AnalisePdfCompra = {
 
 type LoteCotacao = {
   id:string;venda_obra_id:string;pacote_id:string;categoria:'perfil'|'acessorios'|'vidro'|'outros'
-  status:string;quantidade_itens:number;versao:number;itens:Array<{material_id:string;codigo:string|null;descricao:string;unidade:string;quantidade_cotar:number;cor?:string|null;comprimento_corte_mm?:number|null;status_etapa?:string|null}>
+  status:string;quantidade_itens:number;versao:number;itens:Array<{material_id:string;codigo:string|null;descricao:string;unidade:string;quantidade_cotar:number;cor?:string|null;comprimento_corte_mm?:number|null;status_etapa?:string|null;grupo_card_id?:string|null}>
   gerado_por_nome?:string|null;created_at:string;updated_at:string
 }
 type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
@@ -195,7 +195,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [compras,setCompras]=useState<Compra[]>([])
   const [lotesCotacao,setLotesCotacao]=useState<LoteCotacao[]>([])
   const [movendoLoteId,setMovendoLoteId]=useState<string|null>(null)
-  const [cardCotacaoAberto,setCardCotacaoAberto]=useState<{loteId:string;etapa:EtapaCotacao}|null>(null)
+  const [cardCotacaoAberto,setCardCotacaoAberto]=useState<{loteId:string;etapa:EtapaCotacao;grupoId:string}|null>(null)
   const [emitindoCotacao,setEmitindoCotacao]=useState(false)
   const [produtosCompras,setProdutosCompras]=useState<Record<string,ProdutoCompra>>({})
   const [cotacoesCompras,setCotacoesCompras]=useState<CotacaoCompra[]>([])
@@ -496,7 +496,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   },[compras])
   const listaCategoria=comprasPorCategoria[categoriaAberta]
   const loteCategoria=lotesCotacao.find(l=>l.categoria===categoriaAberta&&l.pacote_id===pacoteTecnicoId)
-  const itensLoteNaEtapa=(id:string)=>loteCategoria?itensEmEtapa(loteCategoria,id==='faltas'?'necessidade':id as EtapaCotacao):[]
+  const gruposLoteNaEtapa=(id:string)=>loteCategoria?gruposItensEmEtapa(loteCategoria,id==='faltas'?'necessidade':id as EtapaCotacao):[]
   const lotesAtivos=lotesCotacao.filter(l=>l.pacote_id===pacoteTecnicoId&&l.status!=='cancelado')
   const materiaisPorProduto=useMemo(()=>{
     const mapa:Record<string,MaterialTecnico>={}
@@ -659,13 +659,15 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   async function moverLoteCotacao(e:React.DragEvent<HTMLDivElement>,destinoId:string){
     e.preventDefault()
     const dados=e.dataTransfer.getData('application/x-atlas-cotacao')
-    const [id,origemTexto]=dados.split('|')
+    const [id,origemTexto,grupoId]=dados.split('|')
     const lote=lotesCotacao.find(l=>l.id===id)
     const destino=(destinoId==='faltas'?'necessidade':destinoId) as EtapaCotacao
     if(!lote||!ETAPAS_COTACAO.includes(destino)||!ETAPAS_COTACAO.includes(origemTexto as EtapaCotacao))return
     const origem=origemTexto as EtapaCotacao
-    const ids=itensEmEtapa(lote,origem).map(item=>item.material_id)
-    await moverItensCotacao(lote,origem,destino,ids)
+    // Arrastar um card movimenta só o grupo de compra, jamais os demais da coluna.
+    const grupo=gruposItensEmEtapa(lote,origem).find(g=>g.id===grupoId)
+    if(!grupo)return
+    await moverItensCotacao(lote,origem,destino,grupo.itens.map(item=>item.material_id))
   }
 
   async function receberArrastoCompra(e:React.DragEvent<HTMLDivElement>,destinoId:string){
@@ -1369,18 +1371,18 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 ['entrega','Aguardando chegar','border-amber-300','bg-amber-50/50',comprasKanban.entrega],
                 ['recebido','Recebido','border-emerald-300','bg-emerald-50/50',comprasKanban.recebido],
               ] as const).map(([id,titulo,borda,fundo,itensColuna])=><div key={id} onDragOver={e=>e.preventDefault()} onDrop={e=>void receberArrastoCompra(e,id)} className={'rounded-xl border-t-4 p-3 '+borda+' '+fundo}>
-                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length+(itensLoteNaEtapa(id).length>0?1:0)}</span></div>
+                <div className="mb-2 flex items-center justify-between gap-2"><b className="text-xs text-slate-800">{titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600">{itensColuna.length+gruposLoteNaEtapa(id).length}</span></div>
                 <div className="space-y-2">
-                  {itensLoteNaEtapa(id).length>0&&loteCategoria&&<div draggable
-                    onDragStart={e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-atlas-cotacao',loteCategoria.id+'|'+(id==='faltas'?'necessidade':id))}}
+                  {loteCategoria&&gruposLoteNaEtapa(id).map(grupo=><div key={grupo.id} draggable
+                    onDragStart={e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-atlas-cotacao',loteCategoria.id+'|'+(id==='faltas'?'necessidade':id)+'|'+grupo.id)}}
                     className={'cursor-grab rounded-lg border border-blue-200 bg-white p-2.5 shadow-sm active:cursor-grabbing '+(movendoLoteId===loteCategoria.id?'opacity-50':'')}>
-                    <button type="button" onClick={()=>setCardCotacaoAberto({loteId:loteCategoria.id,etapa:id==='faltas'?'necessidade':id as EtapaCotacao})} className="block w-full text-left">
+                    <button type="button" onClick={()=>setCardCotacaoAberto({loteId:loteCategoria.id,etapa:id==='faltas'?'necessidade':id as EtapaCotacao,grupoId:grupo.id})} className="block w-full text-left">
                       <div className="flex items-center gap-2"><FileText size={15} className="text-blue-600"/><b className="text-xs text-slate-800">Cotação · {rotuloCategoria(loteCategoria.categoria)}</b></div>
-                      <p className="mt-1 text-[11px] text-slate-600">{itensLoteNaEtapa(id).length} de {loteCategoria.itens.length} materiais · versão {loteCategoria.versao}</p>
+                      <p className="mt-1 text-[11px] text-slate-600">{grupo.itens.length} de {loteCategoria.itens.length} materiais · versão {loteCategoria.versao}</p>
                       <p className="mt-1 text-[10px] font-semibold text-blue-700">Clique para abrir, selecionar e mover itens</p>
                     </button>
-                    <Link target="_blank" href={'/compras/cotacoes/lote/'+loteCategoria.id+'?vendaId='+venda.id} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-bold text-blue-700"><FileDown size={12}/>Abrir / imprimir PDF</Link>
-                  </div>}
+                    <Link target="_blank" href={'/compras/cotacoes/lote/'+loteCategoria.id+'?vendaId='+venda.id} className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-bold text-blue-700"><FileDown size={12}/>PDF da cotação original</Link>
+                  </div>)}
                   {itensColuna.slice(0,comprasColunasExpandidas.includes(categoriaAberta+'-'+id)?itensColuna.length:4).map(item=>{const visual=visualCompra(item);return <div key={item.id} draggable onDragStart={e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-atlas-compra-item',item.id)}} className="flex cursor-grab items-center gap-2 rounded-lg border border-white/80 bg-white p-2 shadow-sm active:cursor-grabbing">
                     <div className={'grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-lg border '+(!visual.imagem&&visual.imagemObrigatoria?'border-amber-300':'border-slate-200')}>
                       {visual.imagem?<img src={visual.imagem} alt={visual.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className={!visual.imagem&&visual.imagemObrigatoria?'text-amber-400':'text-slate-300'}/>}
@@ -1388,7 +1390,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <div className="min-w-0"><div className="font-mono text-[9px] font-bold text-slate-500">{visual.codigo||'Sem código'}</div><div className="truncate text-[11px] font-semibold text-slate-700">{visual.descricao}</div></div>
                   </div>})}
                   {itensColuna.length>4&&<button type="button" onClick={()=>setComprasColunasExpandidas(prev=>prev.includes(categoriaAberta+'-'+id)?prev.filter(x=>x!==categoriaAberta+'-'+id):[...prev,categoriaAberta+'-'+id])} className="w-full rounded-lg border border-dashed border-slate-300 bg-white/70 px-2 py-2 text-center text-[10px] font-semibold text-blue-700">{comprasColunasExpandidas.includes(categoriaAberta+'-'+id)?'Recolher itens':'Ver todos os '+itensColuna.length+' itens'}</button>}
-                  {!itensColuna.length&&!itensLoteNaEtapa(id).length&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
+                  {!itensColuna.length&&!gruposLoteNaEtapa(id).length&&<div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Nenhum item</div>}
                 </div>
               </div>)}
             </div>
@@ -1397,8 +1399,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           {loteCategoria&&<VendaCotacoesIA key={loteCategoria.id+':'+loteCategoria.versao} vendaId={venda.id} loteId={loteCategoria.id}/>}
           {cardCotacaoAberto&&venda&&(()=>{
             const aberto=lotesCotacao.find(l=>l.id===cardCotacaoAberto.loteId)
-            return aberto?<VendaCotacaoItensModal key={aberto.id+':'+cardCotacaoAberto.etapa}
-              lote={aberto} etapa={cardCotacaoAberto.etapa} vendaId={venda.id}
+            const grupo=aberto&&gruposItensEmEtapa(aberto,cardCotacaoAberto.etapa).find(g=>g.id===cardCotacaoAberto.grupoId)
+            return aberto&&grupo?<VendaCotacaoItensModal key={aberto.id+':'+cardCotacaoAberto.etapa+':'+grupo.id}
+              lote={{...aberto,itens:grupo.itens}} etapa={cardCotacaoAberto.etapa} vendaId={venda.id}
               ocupado={movendoLoteId===aberto.id} onFechar={()=>setCardCotacaoAberto(null)}
               onMover={(ids,origem,destino)=>moverItensCotacao(aberto,origem,destino,ids)}/>:null
           })()}
