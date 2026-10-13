@@ -1494,14 +1494,22 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             </div>
 
             <div className="mt-3 overflow-x-auto rounded-xl border">
-              <table className="w-full min-w-[1560px] text-sm">
-                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5"><input type="checkbox" aria-label="Selecionar todos os materiais visíveis" checked={todosMateriaisTabelaSelecionados} onChange={alternarSelecionarTodos} className="h-4 w-4"/></th><th>Imagem</th><th>Código</th><th>Descrição</th><th>Quantidade</th><th>Sobra usada</th><th>A comprar</th><th>Unidade</th><th>Medida / corte</th><th>Cor</th><th>Lista técnica</th><th>Ações</th></tr></thead>
+              <table className="w-full min-w-[1160px] text-sm">
+                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5"><input type="checkbox" aria-label="Selecionar todos os materiais visíveis" checked={todosMateriaisTabelaSelecionados} onChange={alternarSelecionarTodos} className="h-4 w-4"/></th><th>Imagem</th><th>Código</th><th>Descrição / ações</th><th>Quantidade</th><th>Sobra usada</th><th>A comprar</th><th>Unidade</th><th>Medida / corte</th><th>Cor</th><th>Lista técnica</th></tr></thead>
                 <tbody>
                   {materiaisTabela.map(m=>{const img=imagemMaterial(m);const sobra=quantidadeSobraMaterial(m);const comprar=quantidadeComprarMaterial(m);const itemCotado=lotesAtivos.find(l=>l.categoria===categoriaMaterialAberta)?.itens.find(item=>item.material_id===m.id);const enviado=Boolean(itemCotado&&Math.abs(Number(itemCotado.quantidade_cotar)-comprar)<0.001&&itemCotado.descricao===m.descricao&&itemCotado.codigo===(m.codigo||null));const cotacaoDesatualizada=Boolean(itemCotado&&!enviado);return <tr key={m.id} className="border-t align-middle">
                     <td className="px-3 py-3"><input type="checkbox" aria-label={`Selecionar ${m.codigo||m.descricao}`} checked={selecionadosMateriais.includes(m.id)} onChange={()=>alternarSelecaoMaterial(m.id)} className="h-4 w-4 cursor-pointer"/></td>
                     <td className="px-3 py-2"><div className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg border bg-slate-50">{img?<img src={img} alt={m.descricao} className="h-full w-full object-contain p-1"/>:<ImageIcon size={17} className="text-slate-300"/>}</div></td>
                     <td className="px-3 py-3 font-mono text-xs font-bold text-slate-800">{m.codigo||'—'}</td>
-                    <td className="px-3 py-3"><b className="text-slate-800">{m.descricao}</b>{m.justificativa_ajuste&&<div className="mt-1 max-w-[330px] text-[10px] text-slate-400">{m.justificativa_ajuste}</div>}</td>
+                    <td className="min-w-[265px] px-3 py-3">
+                      <b className="text-slate-800">{m.descricao}</b>
+                      {m.justificativa_ajuste&&<div className="mt-1 max-w-[330px] text-[10px] text-slate-400">{m.justificativa_ajuste}</div>}
+                      <div role="group" aria-label={`Ações do material ${m.codigo||m.descricao}`} className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <button type="button" disabled={ocupadoMateriais} onClick={()=>void editarMaterialCentral(m)} title="Editar quantidade, descrição ou medida" className="inline-flex h-8 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-40"><Pencil size={12}/>Editar</button>
+                        <button type="button" disabled={ocupadoMateriais} onClick={()=>void substituirMaterialCentral(m)} title="Substituir material" className="inline-flex h-8 items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-40"><Replace size={12}/>Substituir</button>
+                        <button type="button" disabled={ocupadoMateriais} onClick={()=>void excluirMaterialCentral(m)} title="Excluir material desta venda" className="inline-flex h-8 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-40"><Trash2 size={12}/>Excluir</button>
+                      </div>
+                    </td>
                     <td className="px-3 py-3 font-bold text-slate-800">{Number(m.quantidade_ajustada??m.quantidade_tecnica??0).toLocaleString('pt-BR')}</td>
                     <td className="px-3 py-3 font-bold text-emerald-700">{sobra>0?sobra.toLocaleString('pt-BR'):'—'}</td>
                     <td className={'px-3 py-3 font-bold '+(comprar>0?'text-amber-700':'text-emerald-700')}>{comprar.toLocaleString('pt-BR')}</td>
@@ -1509,9 +1517,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                     <td className="px-3 py-3 text-slate-600">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:m.comprimento_barra_mm?`Barra ${Math.round(Number(m.comprimento_barra_mm))} mm`:'—'}</td>
                     <td className="px-3 py-3 text-slate-600">{m.cor_ref||'—'}</td>
                     <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${comprar<=0?'bg-slate-100 text-slate-500':enviado?'bg-blue-100 text-blue-700':'bg-amber-100 text-amber-700'}`}>{comprar<=0?'Sem necessidade':cotacaoDesatualizada?'Reemitir cotação':enviado?'Enviado para cotação':'A validar'}</span></td>
-                    <td className="px-3 py-3"><div className="flex items-center gap-1.5"><button disabled={ocupadoMateriais} onClick={()=>void editarMaterialCentral(m)} title="Editar quantidade, descrição ou medida" className="grid h-8 w-8 place-items-center rounded-lg border text-blue-700 hover:bg-blue-50 disabled:opacity-40"><Pencil size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void substituirMaterialCentral(m)} title="Substituir material" className="grid h-8 w-8 place-items-center rounded-lg border text-violet-700 hover:bg-violet-50 disabled:opacity-40"><Replace size={13}/></button><button disabled={ocupadoMateriais} onClick={()=>void excluirMaterialCentral(m)} title="Excluir material desta venda" className="grid h-8 w-8 place-items-center rounded-lg border text-red-600 hover:bg-red-50 disabled:opacity-40"><Trash2 size={13}/></button></div></td>
                   </tr>})}
-                  {!materiaisTabela.length&&<tr><td colSpan={12} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotulo.toLowerCase()} neste filtro. Use “Adicionar material”, sincronize com o W.Vetro ou mostre todos os status.</td></tr>}
+                  {!materiaisTabela.length&&<tr><td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotulo.toLowerCase()} neste filtro. Use “Adicionar material”, sincronize com o W.Vetro ou mostre todos os status.</td></tr>}
                 </tbody>
               </table>
             </div>
