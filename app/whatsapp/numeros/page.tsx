@@ -35,6 +35,7 @@ type Canal = {
   ativo: boolean
   gateway_status: string
   pode_gerenciar_conexao?: boolean
+  conexao_pausada?: boolean
   gateway_qr_data_url?: string | null
   gateway_qr_updated_at?: string | null
   gateway_connected_jid?: string | null
@@ -320,8 +321,8 @@ export default function NumerosWhatsAppPage() {
                   usuarioId:canal.usuario_id||'',
                   nivelHierarquia:Number(canal.nivel_hierarquia||100),
                 }
-                const conectado=canal.gateway_status==='connected'
-                const qr=canal.pode_gerenciar_conexao&&canal.gateway_status==='qr'&&canal.gateway_qr_data_url
+                const conectado=!canal.conexao_pausada&&canal.gateway_status==='connected'
+                const qr=canal.pode_gerenciar_conexao&&!canal.conexao_pausada&&canal.gateway_status==='qr'&&canal.gateway_qr_data_url
                 return (
                   <article key={canal.id} className={`rounded-2xl border p-4 ${canal.principal?'border-emerald-300 bg-emerald-50/30':'bg-white'}`}>
                     <div className="flex items-start gap-3">
@@ -342,7 +343,7 @@ export default function NumerosWhatsAppPage() {
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                           <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold ${conectado?'bg-emerald-100 text-emerald-700':canal.gateway_status==='qr'?'bg-blue-100 text-blue-700':canal.gateway_status==='mismatch'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-700'}`}>
                             {conectado?<Wifi size={12}/>:canal.gateway_status==='qr'?<QrCode size={12}/>:<WifiOff size={12}/>}
-                            {statusLabel(canal.gateway_status)}
+                            {canal.conexao_pausada?'Desconectado manualmente':statusLabel(canal.gateway_status)}
                           </span>
                           {canal.usuario_nome&&<span className="inline-flex items-center gap-1 text-slate-500"><UserRound size={12}/>{canal.usuario_nome}</span>}
                         </div>
@@ -469,12 +470,12 @@ export default function NumerosWhatsAppPage() {
                       {canal.pode_gerenciar_conexao&&(
                         <>
                           <button onClick={()=>void atualizar(canal,'conectar')}
-                            disabled={conectado||canal.gateway_status==='connecting'||canal.gateway_status==='qr'}
+                            disabled={!canal.conexao_pausada&&(conectado||canal.gateway_status==='connecting'||canal.gateway_status==='qr')}
                             className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-700 disabled:opacity-40">
-                            <RefreshCw size={14}/> {canal.gateway_status==='paused'?'Conectar':'Conectar / recuperar QR'}
+                            <RefreshCw size={14}/> {canal.conexao_pausada?'Conectar':'Conectar / recuperar QR'}
                           </button>
                           <button onClick={()=>void atualizar(canal,'desconectar')}
-                            disabled={canal.gateway_status==='paused'}
+                            disabled={Boolean(canal.conexao_pausada)}
                             className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-40">
                             <WifiOff size={14}/> Desconectar
                           </button>
