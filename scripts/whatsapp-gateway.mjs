@@ -932,7 +932,7 @@ async function connectChannel(channel) {
 
     const sock = makeWASocket({
       auth: state,
-      browser: Browsers.macOS('Desktop'),
+      browser: Browsers.macOS('Chrome'),
       markOnlineOnConnect: false,
       // O Atlas precisa reconstruir o histórico também após troca/reconexão de computador.
       // O backend deduplica pelo whatsapp_message_id, então reprocessar é seguro.
