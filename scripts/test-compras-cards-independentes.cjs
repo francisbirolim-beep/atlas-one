@@ -9,7 +9,7 @@ const mod=new Module(file,module)
 mod.filename=file
 mod.paths=Module._nodeModulePaths(path.dirname(file))
 mod._compile(js,file)
-const {gruposItensEmEtapa,progressoLotesCotacao}=mod.exports
+const {gruposItensEmEtapa,itensDoCardCotacao,urlPdfCardCotacao,progressoLotesCotacao}=mod.exports
 const criar=(n,etapa,grupo,deslocamento=0)=>Array.from({length:n},(_,i)=>({
   material_id:'material-'+(deslocamento+i),status_etapa:etapa,quantidade_cotar:1,...(grupo?{grupo_card_id:grupo}:{})
 }))
@@ -51,4 +51,37 @@ assert.match(sql,/v_itens_no_grupo\s*>\s*v_total/)
 assert.match(sql,/gen_random_uuid\(\)::text/)
 assert.match(sql,/jsonb_set\(v_item,'\{grupo_card_id\}'/)
 assert.match(sql,/v_grupos_selecionados<>1/)
-console.log('OK: compras independentes por grupo, chegada/recebimento parcial, legado, categoria e progresso.')
+// PDF de um card usa exatamente o mesmo grupo e etapa que o Kanban.
+// Samuel: 38 no grupo 1, 2 no grupo 2, ambos em Aguardando chegar.
+const samuel={status:'cotacao',itens:[...criar(38,'entrega','compra-38'),...criar(2,'entrega','compra-2',38)]}
+const pdf38=itensDoCardCotacao(samuel,'entrega','compra-38')
+const pdf2=itensDoCardCotacao(samuel,'entrega','compra-2')
+assert.equal(pdf38.length,38)
+assert.equal(pdf2.length,2)
+assert.deepEqual(pdf2.map(i=>i.material_id),['material-38','material-39'])
+assert.equal(pdf2.some(i=>pdf38.includes(i)),false)
+const caminho=urlPdfCardCotacao('lote-uuid','venda-uuid','entrega','compra-2')
+const params=new URL(caminho,'https://atlas.local').searchParams
+assert.equal(params.get('vendaId'),'venda-uuid')
+assert.equal(params.get('etapaCard'),'entrega')
+assert.equal(params.get('grupoCardId'),'compra-2')
+assert.equal(itensDoCardCotacao(samuel,params.get('etapaCard'),params.get('grupoCardId')).length,2)
+// Link de etapa antiga: nada selecionado, deve acusar card movimentado.
+for(const i of samuel.itens.slice(38))i.status_etapa='recebido'
+assert.equal(itensDoCardCotacao(samuel,'entrega','compra-2').length,0)
+assert.equal(itensDoCardCotacao(samuel,'recebido','compra-2').length,2)
+// Card legado sem ID próprio deve gerar PDF somente dos itens daquela etapa.
+const legadoPdf={status:'cotacao',itens:[...criar(38,'entrega',null),...criar(2,'cotacao',null,38)]}
+assert.equal(itensDoCardCotacao(legadoPdf,'cotacao','legado').length,2)
+assert.equal(itensDoCardCotacao(legadoPdf,'entrega','legado').length,38)
+// A URL geral permanece sem qualquer filtro, deliberadamente.
+assert.equal(legadoPdf.itens.length,40)
+const central=fs.readFileSync(path.join(__dirname,'../components/clientes/VendaObraCentral.tsx'),'utf8')
+const modal=fs.readFileSync(path.join(__dirname,'../components/clientes/VendaCotacaoItensModal.tsx'),'utf8')
+const pagina=fs.readFileSync(path.join(__dirname,'../app/compras/cotacoes/lote/[id]/page.tsx'),'utf8')
+assert.match(central,/urlPdfCardCotacao\(loteCategoria\.id,venda\.id/)
+assert.match(modal,/urlPdfCardCotacao\(lote\.id,vendaId,etapa,grupoId\)/)
+assert.match(pagina,/itensDoCardCotacao\(completo,etapa,grupoId\)/)
+assert.match(pagina,/quantidade_itens:itens\.length/)
+assert.match(pagina,/Volte ao Kanban e abra o PDF novamente/)
+console.log('OK: compras independentes por grupo, chegada/recebimento parcial, legado, categoria e progresso e PDF individual.')
