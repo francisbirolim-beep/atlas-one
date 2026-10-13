@@ -2,12 +2,12 @@
 
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import Link from 'next/link'
-import {CheckCircle2,FileDown,FileText,Loader2,Pencil,RefreshCw,ShieldCheck} from 'lucide-react'
+import {CheckCircle2,FileDown,FileText,ImageOff,Loader2,Pencil,RefreshCw,ShieldCheck} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 
 type Linha={
  id:string;codigo:string;descricao:string;tipo:string;tratamento:string;
- quantidade_barras:number;tamanho_barra_mm:number;peso_kg?:number|null;sobra_kg?:number|null;status_validacao:string;status_compra:string;
+ quantidade_barras:number;tamanho_barra_mm:number;peso_kg?:number|null;sobra_kg?:number|null;imagem_url?:string|null;imagem_pendente?:boolean;status_validacao:string;status_compra:string;
  codigo_origem:string;descricao_origem:string;tipo_origem:string;tratamento_origem:string;
  quantidade_origem:number;tamanho_origem_mm:number;observacao_correcao?:string|null
 }
@@ -192,7 +192,7 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
    <div className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">Relação de barras comerciais da obra · {lista.length} linhas · {qtd(total)} barras</div>
    <table className="w-full min-w-[1100px] text-left text-xs">
     <thead className="bg-slate-100 text-slate-700"><tr>
-     <th className="p-2">Código</th><th className="p-2">Descrição</th>
+     <th className="p-2">Imagem do perfil</th><th className="p-2">Código</th><th className="p-2">Descrição</th>
      <th className="p-2">Acabamento / cor</th><th className="p-2">Tipo</th>
      <th className="p-2 text-right">Qtd. de barras (BR)</th>
      <th className="p-2 text-right">Comprimento barra</th>
@@ -200,6 +200,10 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
      <th className="p-2">Conferência</th><th className="p-2">Ações</th>
     </tr></thead>
     <tbody>{lista.map(row=><tr key={row.id} className="border-t align-top">
+     <td className="p-2"><div className={'flex w-[92px] flex-col items-center gap-1 rounded-lg border p-1 '+(!row.imagem_url?'border-amber-300 bg-amber-50':'border-slate-200')}>
+      {row.imagem_url?<img src={row.imagem_url} alt={'Imagem técnica do perfil '+row.codigo} className="h-12 w-12 object-contain"/>:<ImageOff size={18} className="text-amber-500"/>}
+      {!row.imagem_url&&<span className="text-center text-[10px] font-semibold text-amber-700">Imagem pendente</span>}
+     </div></td>
      <td className="p-2 font-mono font-bold text-slate-900">{row.codigo}</td>
      <td className="p-2 text-slate-800">{row.descricao}</td>
      <td className="p-2">{row.tratamento}</td><td className="p-2">{row.tipo}</td>
@@ -218,7 +222,7 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
       </div>}
      </td>
     </tr>)}</tbody>
-    <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={4} className="p-3">Total para compra</td><td className="p-3 text-right">{qtd(total)} BR</td><td colSpan={5} className="p-3 text-right">{lista.filter(x=>x.status_validacao==='pendente').length} linha(s) aguardando validação</td></tr></tfoot>
+    <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={5} className="p-3">Total para compra</td><td className="p-3 text-right">{qtd(total)} BR</td><td colSpan={5} className="p-3 text-right">{lista.filter(x=>x.status_validacao==='pendente').length} linha(s) aguardando validação</td></tr></tfoot>
    </table>
   </div>}
   {modo==='kanban'&&!lista.length&&<div className="rounded-xl border border-dashed bg-white p-4 text-xs text-slate-600">A lista de barras para compra ainda não foi importada. Abra Materiais e importe o relatório Barras Utilizadas do WVetro.</div>}
@@ -226,7 +230,13 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
    {etapas.map((e,indice)=><div key={e.id} className="min-h-32 rounded-xl border-t-4 border-emerald-300 bg-white/70 p-2">
     <div className="mb-2 flex items-center justify-between"><b className="text-xs text-slate-800">{e.titulo}</b><span className="rounded-full bg-white px-2 py-0.5 text-[10px]">{grupo[e.id]?.length||0}</span></div>
     <div className="space-y-2">{(grupo[e.id]||[]).map(row=><div key={row.id} className="rounded-lg border bg-white p-2.5 shadow-sm">
-     <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-xs text-slate-900">{row.codigo}</b><span className="text-[11px] font-black text-blue-800">{qtd(row.quantidade_barras)} BR</span></div>
+     <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+       {row.imagem_url?<img src={row.imagem_url} alt={'Perfil '+row.codigo} className="h-10 w-10 rounded border object-contain"/>:<span className="flex h-10 w-10 flex-col items-center justify-center rounded border border-amber-300 bg-amber-50 text-[8px] text-amber-700"><ImageOff size={14}/>Pendente</span>}
+       <b className="text-xs text-slate-900">{row.codigo}</b>
+      </div>
+      <span className="text-[11px] font-black text-blue-800">{qtd(row.quantidade_barras)} BR</span>
+     </div>
      <p className="mt-1 text-[10px] text-slate-600">{row.descricao}</p>
      <p className="mt-1 text-[10px] text-slate-600">{row.tratamento} · {row.tipo}</p>
      <p className="mt-1 text-[10px] font-semibold text-slate-700">Barra {qtd(row.tamanho_barra_mm)} mm</p>
