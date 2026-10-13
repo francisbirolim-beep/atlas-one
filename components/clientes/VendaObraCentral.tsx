@@ -228,6 +228,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const tentouMaterializarVenda=useRef<string|null>(null)
   const [aba,setAba]=useState<Aba>('visao')
   const [editorCortesAberto,setEditorCortesAberto]=useState(false)
+  const [modoMateriais,setModoMateriais]=useState<'lista'|'kanban'>('lista')
   const [painelEtapa,setPainelEtapa]=useState<'financeiro'|'compras'|'mercadoria'|'producao'|'instalacao'|'venda'|null>(null)
   const [categoriaAberta,setCategoriaAberta]=useState<'perfil'|'vidro'|'acessorios'|'outros'>('perfil')
   const [comprasColunasExpandidas,setComprasColunasExpandidas]=useState<string[]>([])
@@ -1459,10 +1460,6 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <p className="mt-3 text-[11px] text-slate-500">Regra: Perfis e Acessórios devem exibir código, descrição e imagem técnica. Quando a imagem estiver ausente, o Atlas sinaliza o cadastro pendente sem bloquear o acompanhamento da compra.</p>
           </Box>
         </>}
-        {aba==='materiais'&&<Box titulo="Lista de materiais para comprar · Barras Utilizadas WVetro">
-          <VendaBarrasWVetro modo="lista" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>{setEditorCortesAberto(false);setAba('producao')}}/>
-          <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Esta é a relação de barras inteiras para comprar, obtida do relatório Barras Utilizadas. Os cortes e suas medidas permanecem em Produção; o acompanhamento dos pedidos e fornecedores permanece no Kanban de Compras.</p>
-        </Box>}
 
 
         {aba==='tipologias'&&<VendaTipologiasMateriais
