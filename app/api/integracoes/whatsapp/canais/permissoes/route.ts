@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('atendimento_whatsapp_permissoes')
-    .select('id,canal_id,usuario_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
+    .select('id,canal_id,usuario_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar,pode_gerenciar_conexao')
     .eq('empresa_id', usuario.empresa_id)
     .order('created_at')
 
@@ -55,6 +55,7 @@ export async function PUT(req: NextRequest) {
     const podeAtender = body?.podeAtender === true
     const podeTransferir = body?.podeTransferir === true
     const podeSupervisionar = body?.podeSupervisionar === true
+    const podeGerenciarConexao = body?.podeGerenciarConexao === true
     const podeVisualizar = body?.podeVisualizar !== false || podeAtender || podeTransferir || podeSupervisionar
 
     const { data, error } = await supabaseAdmin
@@ -67,9 +68,10 @@ export async function PUT(req: NextRequest) {
         pode_atender: podeAtender,
         pode_transferir: podeTransferir,
         pode_supervisionar: podeSupervisionar,
+        pode_gerenciar_conexao: podeGerenciarConexao,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'canal_id,usuario_id' })
-      .select('id,canal_id,usuario_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
+      .select('id,canal_id,usuario_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar,pode_gerenciar_conexao')
       .single()
     if (error) throw error
     return NextResponse.json({ ok: true, permissao: data })
