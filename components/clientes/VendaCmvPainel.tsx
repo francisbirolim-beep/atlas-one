@@ -44,12 +44,15 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  const porCategoria=useMemo(()=>Object.fromEntries(categories.map(c=>[c,Number(comprasExistentes[c]||0)+(dados?.lancamentos.filter(l=>l.categoria===c).reduce((s,l)=>s+Number(l.valor||0),0)||0)])) as Record<Categoria,number>,[dados,comprasExistentes])
  async function enviar(e:FormEvent<HTMLFormElement>){
   e.preventDefault();if(enviandoRef.current)return
+  // Capturar o elemento e o arquivo ANTES de qualquer await: o evento React
+  // pode perder currentTarget após a primeira suspensão assíncrona.
+  const form=e.currentTarget
+  const dadosEnvio=new FormData(form)
+  dadosEnvio.set('vendaId',vendaId)
   enviandoRef.current=true
   setErro('');setSucesso('');setSalvando(true)
   try{
    const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.')
-   const form=e.currentTarget
-   const dadosEnvio=new FormData(form);dadosEnvio.append('vendaId',vendaId)
    const resp=await fetch('/api/vendas/cmv',{method:'POST',headers:{Authorization:'Bearer '+token},body:dadosEnvio})
    const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Erro ao salvar custo.')
    form.reset();setAdicionar(null);setSucesso('Registro realizado com sucesso.');await buscar()
@@ -120,15 +123,16 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   {carregando&&!dados?<p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin"/> Carregando CMV...</p>:null}
   {adicionar&&<form onSubmit={enviar} className="rounded-xl border bg-slate-50 p-4">
    <h4 className="mb-3 font-bold">{adicionar==='compra'?'Registrar compra / material realizado':'Registrar custo adicional não previsto'}</h4>
+   <p className="mb-3 text-xs text-slate-600">Obrigatórios: categoria, origem, valor, data e fornecedor. Os demais campos são opcionais.</p>
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
     <label className="text-xs font-semibold">Categoria<select required name="categoria" key={adicionar} defaultValue={adicionar==='compra'?'perfil':'outros'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{(adicionar==='compra'?(['perfil','acessorio','vidro','outros'] as Categoria[]):categories).map(c=><option key={c} value={c}>{labels[c]}</option>)}</select></label>
     <label className="text-xs font-semibold">Origem<select required name="origem" key={adicionar} defaultValue={adicionar==='compra'?'compra':'outro'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option><option value="estoque">Material / sobra do estoque</option></>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
     <label className="text-xs font-semibold">Valor total (R$)<input required name="valor" inputMode="decimal" placeholder="Ex.: 1250,50" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold lg:col-span-2">Descrição<input required name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Data<input name="data" type="date" defaultValue={dataLocal()} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold lg:col-span-2">Descrição (opcional)<input name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Data *<input required name="data" type="date" defaultValue={dataLocal()} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Quantidade (opcional)<input name="quantidade" type="number" min="0.001" step="any" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Unidade (opcional)<input name="unidade" placeholder="UN, barra, M², KG" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Fornecedor (opcional)<input name="fornecedor" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Fornecedor *<input required name="fornecedor" maxLength={150} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Nº nota/documento (opcional)<input name="documento" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold lg:col-span-2">Comprovante (PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
     <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">Observações<input name="observacoes" maxLength={1000} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
