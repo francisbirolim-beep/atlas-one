@@ -5,7 +5,7 @@ export function refItemProducaoInstalacao(item:Record<string,unknown>|null|undef
 
 export type OrdemParaInstalacao={
   id?:string;item_ref?:string|null;tipo_producao?:string|null;
-  status?:string|null;bloqueada?:boolean|null;quantidade?:number|null
+  status?:string|null;bloqueada?:boolean|null;quantidade?:number|null;quantidade_produzida?:number|null
 }
 export type DisponibilidadePeca={
   planejadas:number;produzidas:number;ordens:number;
@@ -15,8 +15,15 @@ const n=(v:unknown)=>Number(v)
 export function disponibilidadePeca(ordens:readonly OrdemParaInstalacao[],itemRef:string,quantidadePlanejada:number):DisponibilidadePeca{
   const planejadas=Math.max(0,n(quantidadePlanejada)||0)
   const elegiveis=ordens.filter(o=>o.item_ref===itemRef&&o.tipo_producao==='esquadria'&&o.status!=='cancelada')
-  const produzidas=elegiveis.filter(o=>o.status==='concluida'&&!o.bloqueada)
-    .reduce((sum,o)=>sum+Math.max(0,n(o.quantidade)||0),0)
+  // Unidades individualizadas conferidas na Produção podem avançar separadas;
+  // OPs legadas sem valor parcial continuam dependendo do status concluída.
+  const produzidas=elegiveis.filter(o=>!o.bloqueada).reduce((sum,o)=>{
+    const qtd=Math.max(0,n(o.quantidade)||0)
+    if(o.quantidade_produzida!==null&&o.quantidade_produzida!==undefined)
+      return sum+(['conferencia','concluida'].includes(String(o.status||''))?
+        Math.min(qtd,Math.max(0,n(o.quantidade_produzida)||0)):0)
+    return sum+(o.status==='concluida'?qtd:0)
+  },0)
   const prontas=Math.min(planejadas,produzidas)
   const faltantes=Math.max(0,planejadas-prontas)
   const estado=!elegiveis.length?'sem_ordem':prontas<=0?'aguardando':faltantes>0?'parcial':'pronta'
