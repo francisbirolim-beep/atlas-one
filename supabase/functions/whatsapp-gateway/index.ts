@@ -2106,7 +2106,7 @@ Deno.serve(async (req) => {
     if (req.method === "GET" && url.searchParams.get("mode") === "channels") {
       const { data, error } = await db
         .from("atendimento_whatsapp_canais")
-        .select("id,nome,numero_declarado,numero_conectado,tipo_conta,principal,usuario_id,usuario_nome,ativo,session_slug,gateway_status,nivel_hierarquia,criado_por,criado_por_nome")
+        .select("id,nome,numero_declarado,numero_conectado,tipo_conta,principal,usuario_id,usuario_nome,ativo,session_slug,gateway_status,conexao_pausada,nivel_hierarquia,criado_por,criado_por_nome")
         .eq("empresa_id", config.empresa_id)
         .eq("ativo", true)
         .order("principal", { ascending: false })
@@ -2119,6 +2119,7 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const channel = await getChannel(config.empresa_id, channelId);
       if (!channel) return reply({ error: "Canal nao encontrado." }, 404);
+      if (channel.conexao_pausada === true) return reply({ ok: true, item: null, paused: true });
 
       const staleBefore = new Date(Date.now() - 5 * 60_000).toISOString();
       await db.from("atendimento_fila_saida").update({
@@ -2185,6 +2186,11 @@ Deno.serve(async (req) => {
     const bodyChannelId = String(body?.channelId || "");
     const channel = await getChannel(config.empresa_id, bodyChannelId);
     if (!channel) return reply({ error: "Canal nao encontrado." }, 404);
+    if (channel.conexao_pausada === true) {
+      // Respeitar desconexão manual mesmo se um gateway antigo ainda estiver ativo.
+      if (type === "state") return reply({ ok: true, accepted: false, paused: true, status: "paused" });
+      return reply({ error: "Canal desconectado manualmente no Atlas." }, 409);
+    }
 
     if (type === "contacts_sync") {
       const result = await syncContacts(config, channel, body.contacts || []);

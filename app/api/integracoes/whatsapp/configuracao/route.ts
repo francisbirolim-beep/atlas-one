@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       .eq('ativo', true),
     supabaseAdmin
       .from('atendimento_whatsapp_permissoes')
-      .select('id,canal_id,usuario_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar')
+      .select('id,canal_id,usuario_id,pode_visualizar,pode_atender,pode_transferir,pode_supervisionar,pode_gerenciar_conexao')
       .eq('empresa_id', usuario.empresa_id)
       .order('created_at'),
     supabaseAdmin

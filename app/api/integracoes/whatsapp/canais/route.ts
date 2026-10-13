@@ -18,6 +18,22 @@ async function podeGerenciarCanal(
   return canal.criado_por === usuario.id
 }
 
+async function podeOperarConexao(
+  usuario: Awaited<ReturnType<typeof autenticarTenant>>,
+  canalId: string,
+) {
+  if (!usuario) return false
+  if (usuario.role === 'master') return true
+  const { data, error } = await supabaseAdmin
+    .from('atendimento_whatsapp_permissoes')
+    .select('pode_gerenciar_conexao')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('usuario_id', usuario.id)
+    .eq('canal_id', canalId)
+    .maybeSingle()
+  return !error && data?.pode_gerenciar_conexao === true
+}
+
 export async function GET(req: NextRequest) {
   const usuario = await usuarioAtual(req)
   if (!usuario) {
@@ -43,13 +59,29 @@ export async function GET(req: NextRequest) {
   const erro = canaisResp.error || usuariosResp.error
   if (erro) return NextResponse.json({ error: erro.message }, { status: 500 })
 
-  const canais = usuario.role === 'master'
-    ? (canaisResp.data || [])
-    : (canaisResp.data || []).filter((canal: any) =>
-        canal.principal ||
-        canal.usuario_id === usuario.id ||
-        canal.criado_por === usuario.id
-      )
+  const { data: delegacoes, error: delegacoesError } = usuario.role === 'master'
+    ? { data: [] as any[], error: null }
+    : await supabaseAdmin.from('atendimento_whatsapp_permissoes')
+        .select('canal_id,pode_gerenciar_conexao')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('usuario_id', usuario.id)
+        .eq('pode_gerenciar_conexao', true)
+  if (delegacoesError) return NextResponse.json({ error: delegacoesError.message }, { status: 500 })
+  const autorizados = new Set((delegacoes || []).map((p: any) => p.canal_id))
+  const canais = (canaisResp.data || [])
+    .filter((canal: any) =>
+      usuario.role === 'master' || canal.principal ||
+      canal.usuario_id === usuario.id || canal.criado_por === usuario.id ||
+      autorizados.has(canal.id))
+    .map((canal: any) => {
+      const podeConectar = usuario.role === 'master' || autorizados.has(canal.id)
+      return {
+        ...canal,
+        pode_gerenciar_conexao: podeConectar,
+        // O QR permite vincular um aparelho. Nunca enviá-lo a usuários sem autorização.
+        gateway_qr_data_url: podeConectar ? canal.gateway_qr_data_url : null,
+      }
+    })
 
   return NextResponse.json({
     ok: true,
@@ -65,6 +97,9 @@ export async function POST(req: NextRequest) {
   const usuario = await usuarioAtual(req)
   if (!usuario) {
     return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
+  }
+  if (usuario.role !== 'master') {
+    return NextResponse.json({ error: 'Somente Master pode cadastrar novos aparelhos.' }, { status: 403 })
   }
 
   try {
@@ -142,28 +177,35 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle()
 
     if (!canal) return NextResponse.json({ error: 'Canal nao encontrado.' }, { status: 404 })
-    if (!(await podeGerenciarCanal(usuario, canal))) {
-      return NextResponse.json({ error: 'Voce nao pode alterar este canal.' }, { status: 403 })
-    }
 
-    if (acao === 'reconectar') {
+    if (['conectar','reconectar','desconectar'].includes(acao)) {
+      if (!(await podeOperarConexao(usuario, canal.id))) {
+        return NextResponse.json({ error: 'Somente Master ou usuário autorizado pode conectar/desconectar este WhatsApp.' }, { status: 403 })
+      }
+      // Não mudar session_slug, número, credenciais ou conversas.
+      // O gateway reconecta com a sessão persistida; mostra QR apenas se precisar.
+      const status = acao === 'desconectar' ? 'paused' : 'disconnected'
       const { data, error } = await supabaseAdmin
         .from('atendimento_whatsapp_canais')
         .update({
-          session_slug: crypto.randomUUID(),
-          gateway_status: 'offline',
+          gateway_status: status,
+          conexao_pausada: acao === 'desconectar',
           gateway_qr_data_url: null,
-          gateway_qr_updated_at: null,
-          gateway_connected_jid: null,
-          numero_conectado: null,
-          numero_declarado: canal.principal ? canal.numero_declarado : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', id)
+        .eq('empresa_id', usuario.empresa_id)
         .select('*')
         .single()
       if (error) throw error
       return NextResponse.json({ ok: true, canal: data })
+    }
+
+    if (acao !== 'editar') {
+      return NextResponse.json({ error: 'Operação inválida.' }, { status: 400 })
+    }
+    if (!(await podeGerenciarCanal(usuario, canal))) {
+      return NextResponse.json({ error: 'Voce nao pode alterar este canal.' }, { status: 403 })
     }
 
     let usuarioId = body?.usuarioId ? String(body.usuarioId) : null
@@ -228,6 +270,9 @@ export async function DELETE(req: NextRequest) {
     if (!canal) return NextResponse.json({ error: 'Canal nao encontrado.' }, { status: 404 })
     if (canal.principal) {
       return NextResponse.json({ error: 'O canal principal nao pode ser removido.' }, { status: 400 })
+    }
+    if (usuario.role !== 'master') {
+      return NextResponse.json({ error: 'Somente Master pode remover canais.' }, { status: 403 })
     }
     if (!(await podeGerenciarCanal(usuario, canal))) {
       return NextResponse.json({ error: 'Voce nao pode remover este canal.' }, { status: 403 })
