@@ -21,6 +21,7 @@ type PermissaoCanal = {
   pode_atender: boolean
   pode_transferir: boolean
   pode_supervisionar: boolean
+  pode_gerenciar_conexao: boolean
 }
 type GrupoWhatsApp = {
   id: string
@@ -173,20 +174,21 @@ export default function ConfiguracaoWhatsAppPage() {
       pode_atender:false,
       pode_transferir:false,
       pode_supervisionar:false,
+      pode_gerenciar_conexao:false,
     }
   }
 
   async function salvarPermissao(
     canalId:string,
     usuarioId:string,
-    campo:'pode_visualizar'|'pode_atender'|'pode_transferir'|'pode_supervisionar',
+    campo:'pode_visualizar'|'pode_atender'|'pode_transferir'|'pode_supervisionar'|'pode_gerenciar_conexao',
     valor:boolean,
   ){
     setErro('')
     try{
       const atual=permissaoDoUsuario(canalId,usuarioId)
       const proxima={...atual,[campo]:valor}
-      if(campo!=='pode_visualizar'&&valor)proxima.pode_visualizar=true
+      if(campo!=='pode_visualizar'&&campo!=='pode_gerenciar_conexao'&&valor)proxima.pode_visualizar=true
       const headers=await authHeaders()
       const resp=await fetch('/api/integracoes/whatsapp/canais/permissoes',{
         method:'PUT',headers,
@@ -196,6 +198,7 @@ export default function ConfiguracaoWhatsAppPage() {
           podeAtender:proxima.pode_atender,
           podeTransferir:proxima.pode_transferir,
           podeSupervisionar:proxima.pode_supervisionar,
+          podeGerenciarConexao:proxima.pode_gerenciar_conexao,
         }),
       })
       const json=await resp.json()
@@ -330,17 +333,17 @@ export default function ConfiguracaoWhatsAppPage() {
                       {canal.gateway_status==='connected'?'Conectado':'Desconectado'}
                     </p>
                   </div>
-                  <p className="text-[11px] text-slate-500">Ver · Atender · Transferir · Supervisionar</p>
+                  <p className="text-[11px] text-slate-500">Ver · Atender · Transferir · Supervisionar · Conectar</p>
                 </div>
 
                 <div className="divide-y">
                   {usuarios.filter(u=>u.role!=='master').map(u=>{
                     const p=permissaoDoUsuario(canal.id,u.id)
                     const ativa=Boolean(
-                      p.id||p.pode_visualizar||p.pode_atender||p.pode_transferir||p.pode_supervisionar
+                      p.id||p.pode_visualizar||p.pode_atender||p.pode_transferir||p.pode_supervisionar||p.pode_gerenciar_conexao
                     )
                     return (
-                      <div key={u.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(140px,1fr)_repeat(4,110px)_70px] md:items-center">
+                      <div key={u.id} className="grid gap-3 px-4 py-3 md:grid-cols-[minmax(140px,1fr)_repeat(5,110px)_70px] md:items-center">
                         <div className="min-w-0">
                           <b className="block truncate text-sm text-slate-800">{u.nome}</b>
                           <span className="text-[10px] uppercase tracking-wide text-slate-400">{u.role||'usuario'}</span>
@@ -350,6 +353,7 @@ export default function ConfiguracaoWhatsAppPage() {
                           ['pode_atender','Atender'],
                           ['pode_transferir','Transferir'],
                           ['pode_supervisionar','Supervisionar'],
+                          ['pode_gerenciar_conexao','Conectar / desconectar'],
                         ] as const).map(([campo,rotulo])=>(
                           <label key={campo} className="flex cursor-pointer items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
                             <input type="checkbox" checked={Boolean(p[campo])}
