@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { extrairPrevisaoWVetro } from '@/lib/wvetroCmvResumo'
+import { lerRevisaoCmv, type RevisaoCmv, type CategoriaCmvRevisao } from '@/lib/vendaCmvRevisao'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -45,6 +46,24 @@ export async function GET(req:NextRequest){
    if(data)extra=data
   }
   const previsto=extrairPrevisaoWVetro({...extra,...fluxo})
+  const {data:memorias,error:erroMemorias}=await supabaseAdmin.from('agente_memorias')
+   .select('valor').eq('empresa_id',usuario.empresa_id)
+   .eq('chave','atlas_cmv_revisao:v1:'+vendaId)
+   .order('created_at',{ascending:false}).limit(300)
+  if(erroMemorias)throw erroMemorias
+  const revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>={}
+  const historicoRevisoes:RevisaoCmv[]=[]
+  for(const linha of memorias||[]){
+   const r=lerRevisaoCmv(linha.valor)
+   if(!r||r.venda_id!==vendaId||r.orcamento_id!==venda.orcamento_id)continue
+   if(!revisoes[r.categoria])revisoes[r.categoria]=r
+   if(historicoRevisoes.length<10)historicoRevisoes.push(r)
+  }
+  // O modelo de IA pode consultar o feedback validado em /api/ia/aprendizado?dominio=cmv_wvetro.
+  // Não aplica correções de outras obras automaticamente.
+  const {count:totalFeedback}=await supabaseAdmin.from('agente_memorias')
+   .select('id',{head:true,count:'exact'}).eq('empresa_id',usuario.empresa_id)
+   .eq('chave','atlas_operacional:v1:cmv_wvetro')
   const linhas=await Promise.all((lancamentos||[]).map(async linha=>{
    let anexo_url:string|null=null
    if(linha.anexo_path){
@@ -53,7 +72,7 @@ export async function GET(req:NextRequest){
    }
    return {...linha,anexo_url}
   }))
-  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:linhas})
+  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:linhas,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0})
  }catch(e){
   console.error('Falha ao carregar CMV da venda:',e)
   return erro('Não foi possível carregar o CMV. Confira se a migração de lançamentos foi aplicada.',500)
