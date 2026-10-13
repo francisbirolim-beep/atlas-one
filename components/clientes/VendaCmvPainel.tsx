@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plu
 import { tokenAtual } from '@/lib/auth'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
-type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null}
+type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null;perfil_previsao?:number|null;perfil_previsao_fonte?:'despesas_extras_wvetro'|'conciliacao_wvetro'|null}
 type Lancamento={id:string;categoria:Categoria;origem:string;descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_nome?:string|null}
 type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>;historicoRevisoes:RevisaoCmv[];feedbackIA:number}
 const labels:Record<Categoria,string>={perfil:'Perfis',acessorio:'Acessórios',vidro:'Vidros',perda:'Perda de corte',mao_obra:'Mão de obra',instalacao:'Instalação',frete:'Frete',outros:'Outros'}
@@ -94,8 +94,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   </form>
  }
  const p=dados?.previsto
- const perfis=p&&(p.categorias.perfil!==null&&p.categorias.sobra!==null)
-  ?p.categorias.perfil+p.categorias.sobra:null
+ const perfis=p?(p.perfil_previsao??(p.categorias.perfil!==null&&p.categorias.sobra!==null?p.categorias.perfil+p.categorias.sobra:null)):null
  const revisoes=dados?.revisoes||{}
  const esperado=Object.fromEntries(categories.map(c=>[c,p?custoRevisado(p,revisoes,c):null])) as Record<Categoria,number|null>
  const totalRevisado=p?custoRevisado(p,revisoes,'total'):null
@@ -172,9 +171,9 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
        {aberto===c&&<tr className="border-b bg-slate-50/70"><td colSpan={4} className="px-6 py-4">
         {c==='perfil'&&<div className="space-y-2">
          <div className="grid gap-2 sm:grid-cols-3">
-          <div className="rounded-xl border bg-white p-3"><Card titulo="Uso na obra · W.Vetro original" valor={previstoFmt(p?.categorias.perfil??null)}/>{botoesRevisao('perfil_uso')}</div>
+          <div className="rounded-xl border bg-white p-3"><Card titulo="Uso técnico · ResumoObra W.Vetro" valor={previstoFmt(p?.categorias.perfil??null)}/>{botoesRevisao('perfil_uso')}</div>
           <div className="rounded-xl border bg-white p-3"><Card titulo="Sobra do perfil · W.Vetro original" valor={previstoFmt(p?.categorias.sobra??null)} nota="Custo da sobra, mesmo não cobrada ao cliente"/>{botoesRevisao('sobra')}</div>
-          <Card titulo="Perfis · W.Vetro original" valor={previstoFmt(perfis)} nota="Uso + sobra (corrigidos separadamente quando necessário)"/>
+          <Card titulo="Previsão de perfis" valor={previstoFmt(perfis)} nota={p?.perfil_previsao_fonte==='despesas_extras_wvetro'?'Despesas Extras/Previsão · MATÉRIA PRIMA - PERFIL':p?.perfil_previsao_fonte==='conciliacao_wvetro'?'Conciliado pelo total do W.Vetro, acessórios e vidros: conferir antes de validar':'Uso + sobra (quando disponíveis)'}/>
          </div>
          {formularioRevisao('perfil_uso')}
          {formularioRevisao('sobra')}
