@@ -124,6 +124,12 @@ export async function POST(req:NextRequest) {
 
     const venda=await carregarVenda(usuario.empresa_id,vendaId)
     if(!venda)return erro('Venda não encontrada nesta empresa.',404)
+    if(categoria==='perfil'){
+      const {data:orcamento,error:oe}=await supabaseAdmin.from('orcamentos')
+        .select('wvetro_fluxo').eq('id',venda.orcamento_id).eq('empresa_id',usuario.empresa_id).maybeSingle()
+      if(oe)throw oe
+      if(orcamento?.wvetro_fluxo?.numero)return erro('Perfis cortados do WVetro são da Produção. Importe e valide Barras Utilizadas em Compras para comprar barras inteiras.',409)
+    }
     const {data:pacote,error:pacoteErr}=await supabaseAdmin.from('pacotes_tecnicos')
       .select('id,status')
       .eq('empresa_id',usuario.empresa_id).eq('orcamento_id',venda.orcamento_id)
