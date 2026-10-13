@@ -93,8 +93,7 @@ export async function registrarRecebimentoVendaComDesconto(
   }
 
   const desconto = Number.isFinite(dados.desconto) ? Math.max(0, Number(dados.desconto || 0)) : 0
-  const usuario = await usuarioAtual()
-  const { data, error } = await supabase.rpc('registrar_recebimento_venda_com_desconto', {
+  const { data, error } = await supabase.rpc('registrar_recebimento_venda_autorizado', {
     p_venda_obra_id: dados.vendaObraId,
     p_cliente_id: dados.clienteId,
     p_valor_recebido: Number(dados.valorRecebido.toFixed(2)),
@@ -103,8 +102,6 @@ export async function registrarRecebimentoVendaComDesconto(
     p_forma: dados.forma || 'pix',
     p_referencia: dados.referencia?.trim() || null,
     p_observacoes: dados.observacoes?.trim() || null,
-    p_usuario_id: usuario?.id || null,
-    p_usuario_nome: usuario?.nome || null,
   })
 
   if (error) return { ok: false, error: error.message }

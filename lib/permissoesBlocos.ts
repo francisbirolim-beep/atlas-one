@@ -103,6 +103,9 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('comercial.balcao.historico','Consultar histórico','Consultar vendas e atendimentos anteriores.'),
   ]),
 
+  m('recebimento-vendas','recebimento-vendas','Recebimentos de vendas','Registrar baixas e descontos de vendas vinculadas no Cliente 360.','financeiro',[
+    a('financeiro.recebimento_vendas.registrar','Registrar recebimento de venda','Permite receber e conceder desconto autorizado sem acesso irrestrito a outros recursos financeiros.'),
+  ]),
   m('financeiro-geral','financeiro','Financeiro geral','Visão financeira consolidada e IA financeira.','financeiro',[
     a('financeiro.geral.consultar','Consulta financeira geral','Ver resumo e posição financeira.'),
     a('financeiro.ia.consultar','Acesso financeiro pela IA Atlas','Permitir que a IA consulte dados financeiros internos.'),
