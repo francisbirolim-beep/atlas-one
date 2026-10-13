@@ -16,6 +16,7 @@ import { gerarBasePrecificacao } from '@/lib/orcamentoPrecificacao'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import type { Usuario } from '@/lib/tipos'
 import VendasCliente360 from '@/components/clientes/VendasCliente360'
+import CadastroCliente360 from '@/components/clientes/CadastroCliente360'
 import {
   adicionarDocumentoCliente,
   alocarRecebimentoEmObra,
@@ -35,7 +36,7 @@ import {
 } from '@/lib/cliente360'
 
 interface Props { clienteId: string }
-type Aba = 'visao'|'orcamentos'|'vendas'|'obras'|'financeiro'|'medicoes'|'assistencias'|'compras'|'documentos'|'historico'|'observacoes'
+type Aba = 'cadastro'|'visao'|'orcamentos'|'vendas'|'obras'|'financeiro'|'medicoes'|'assistencias'|'compras'|'documentos'|'historico'|'observacoes'
 
 type Orcamento = {
   id:string
@@ -162,7 +163,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   const [recebimentos,setRecebimentos]=useState<RecebimentoCliente360[]>([])
   const [alocacoes,setAlocacoes]=useState<AlocacaoRecebimento360[]>([])
   const [documentos,setDocumentos]=useState<DocumentoCliente360[]>([])
-  const [aba,setAba]=useState<Aba>('visao')
+  const [aba,setAba]=useState<Aba>('cadastro')
   const [carregando,setCarregando]=useState(true)
   const [erro,setErro]=useState('')
   const [menu,setMenu]=useState(false)
@@ -201,6 +202,21 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     const r=rec||[]; const alo=await listarAlocacoesCliente(r.map(x=>x.id))
     const historicoWVetroSeguro=((wvh.data||[]) as HistoricoWVetroComercial[]).filter(h=>nomesClientesCompativeis(h.cliente_nome_origem,c.data.nome))
     setCliente(c.data as Cliente);setObs(c.data.observacoes||'');setObras(os);setOrcamentos((orc.data||[]).filter((o:any)=>o.modo_entrada!=='wvetro_api_vinculado') as Orcamento[]);setWvetroHistorico(historicoWVetroSeguro);setWvetroFinanceiro((wvf.data||[]) as HistoricoWVetroFinanceiro[]);setWvetroOperacional((wvo.data||[]) as HistoricoWVetroOperacional[]);setAssistencias((ass.data||[]) as Assistencia[]);setMedicoes((med.data||[]) as Medicao[]);setCompras((comp.data||[]) as Compra[]);setInteracoes((int.data||[]) as Interacao[]);setContas(cr);setRecebimentos(r);setAlocacoes(alo);setDocumentos(docs);setCarregando(false)
+  }
+
+  async function atualizarCadastrosCliente360() {
+    // Atualização pontual: preservar o contexto atual de abas, orçamentos,
+    // vendas, financeiro, medições e modais existentes.
+    const [resposta, obrasResp] = await Promise.all([
+      supabase.from('clientes').select('*').eq('id', clienteId).maybeSingle(),
+      supabase.from('obras').select('*').eq('cliente_id', clienteId).order('created_at', { ascending: false }),
+    ])
+    if (resposta.error || !resposta.data || obrasResp.error) throw new Error(
+      resposta.error?.message || obrasResp.error?.message || 'Não foi possível atualizar o cadastro.'
+    )
+    setCliente(resposta.data as Cliente)
+    setObras((obrasResp.data || []) as ObraCliente360[])
+    setObs(resposta.data.observacoes || '')
   }
 
   async function sincronizarWVetroAgora(){
@@ -319,7 +335,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   if(carregando)return <div className="min-h-screen bg-slate-50 p-8 text-slate-400">Carregando Cliente 360...</div>
   if(!cliente)return <div className="min-h-screen bg-slate-50 p-8 text-red-500">{erro||'Cliente não encontrado.'}</div>
 
-  const abas:{id:Aba;label:string}[]=[{id:'visao',label:'Visão geral'},{id:'orcamentos',label:'Orçamentos'},{id:'vendas',label:'Vendas'},{id:'obras',label:'Obras'},{id:'financeiro',label:'Financeiro'},{id:'medicoes',label:'Medições'},{id:'assistencias',label:'Assistências'},{id:'compras',label:'Compras'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'},{id:'observacoes',label:'Observações'}]
+  const abas:{id:Aba;label:string}[]=[{id:'cadastro',label:'Cadastro'},{id:'visao',label:'Visão geral'},{id:'orcamentos',label:'Orçamentos'},{id:'vendas',label:'Vendas'},{id:'obras',label:'Obras'},{id:'financeiro',label:'Financeiro'},{id:'medicoes',label:'Medições'},{id:'assistencias',label:'Assistências'},{id:'compras',label:'Compras'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'},{id:'observacoes',label:'Observações'}]
 
   return <div className="min-h-screen bg-slate-50">
     <header className="border-b bg-white"><div className="mx-auto max-w-7xl px-4 py-5">
@@ -335,6 +351,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
       <div className="mt-5 overflow-x-auto border-b"><div className="flex min-w-max">{abas.map(a=><button key={a.id} onClick={()=>setAba(a.id)} className={`border-b-2 px-3 py-3 text-sm font-semibold ${aba===a.id?'border-brand-navy text-brand-navy':'border-transparent text-slate-500'}`}>{a.label}</button>)}</div></div>
 
       <div className="mt-5 space-y-5">
+        {aba==='cadastro'&&<CadastroCliente360 cliente={cliente} obras={obras} onAtualizado={atualizarCadastrosCliente360}/>}
         {aba==='visao'&&<><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Link href={`/orcamento-rapido?cliente=${cliente.id}`} className="rounded-2xl border bg-white p-4 font-bold text-slate-800 shadow-sm"><FileText className="mb-2 text-blue-600"/>Pedido de orçamento</Link><Link href={`/orcamento-rapido?cliente=${cliente.id}&modo=sob-medida&novo=1`} className="rounded-2xl border bg-white p-4 font-bold text-slate-800 shadow-sm"><Building2 className="mb-2 text-indigo-600"/>Orçamento sob medida</Link><Link href={`/balcao/orcamentos/novo?cliente=${cliente.id}`} className="rounded-2xl border bg-white p-4 font-bold text-slate-800 shadow-sm"><ShoppingCart className="mb-2 text-amber-600"/>Balcão</Link><Link href={`/assistencia?cliente=${cliente.id}`} className="rounded-2xl border bg-white p-4 font-bold text-slate-800 shadow-sm"><Wrench className="mb-2 text-rose-600"/>Assistência</Link><button onClick={()=>setAba('compras')} className="rounded-2xl border bg-white p-4 text-left font-bold text-slate-800 shadow-sm"><Receipt className="mb-2 text-emerald-600"/>Pedido de compra</button></div>
           <div className="grid gap-5 xl:grid-cols-2"><Box titulo="Financeiro do cliente" acao={<div className="flex flex-wrap gap-2"><button onClick={()=>abrirRecebimento('recebimento')} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Registrar recebimento</button><button onClick={()=>abrirRecebimento('haver')} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Gerar haver</button></div>}><div className="mb-3 flex justify-between text-sm"><span>Recebido {moeda(totalRecebido)}</span><span>A receber {moeda(aReceber)}</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-500" style={{width:`${pct}%`}}/></div><button onClick={()=>setAba('financeiro')} className="mt-4 text-sm font-bold text-brand-navy">Ver parcelas</button></Box><Box titulo="Últimos orçamentos"><div className="space-y-2">{versoesAtuais.slice(0,5).map(o=><Link href={`/orcamento/${o.id}/composicao`} key={o.id} className="flex items-center justify-between gap-3 rounded-xl border p-3 hover:border-brand-navy"><div className="min-w-0"><div className="flex items-center gap-2"><b>Orçamento #{numeroOrcamento(o)}</b>{ehWVetro(o)&&<span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-bold text-violet-700">W.VETRO</span>}</div><p className="truncate text-xs text-slate-500">{descricaoOrcamento(o)||`${dataBR(o.created_at)} · ${status(o.status)}`}</p></div><b className="whitespace-nowrap">{moeda(valorOrcamento(o))}</b></Link>)}{!versoesAtuais.length&&<p className="text-sm text-slate-400">Nenhum orçamento.</p>}</div></Box></div></>}
 
