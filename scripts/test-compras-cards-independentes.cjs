@@ -46,7 +46,7 @@ const legado={status:'cotacao',itens:criar(3,'cotacao')}
 assert.equal(gruposItensEmEtapa(legado,'cotacao').length,1)
 assert.equal(gruposItensEmEtapa(legado,'cotacao')[0].id,'legado')
 // Persistência SQL precisa registrar grupo único por movimentação, mas não reescrever tudo.
-const sql=fs.readFileSync(path.join(__dirname,'../supabase/migrations/20261013113500_cotacao_cards_independentes_v1.sql'),'utf8')
+const sql=fs.readFileSync(path.join(__dirname,'../supabase/migrations/20261013144705_cotacao_cards_independentes_v1_20261013.sql'),'utf8')
 assert.match(sql,/v_itens_no_grupo\s*>\s*v_total/)
 assert.match(sql,/gen_random_uuid\(\)::text/)
 assert.match(sql,/jsonb_set\(v_item,'\{grupo_card_id\}'/)
