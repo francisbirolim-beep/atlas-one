@@ -609,6 +609,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   const colunaInstalacao=setorPorNome.instalacao
   const itens=(Array.isArray(orcamento?.itens)?orcamento?.itens:Array.isArray(venda?.itens_snapshot)?venda?.itens_snapshot:[])||[]
+  // Instalação deve seguir a fotografia do orçamento efetivamente VENDIDO.
+  const itensInstalacao=(Array.isArray(venda?.itens_snapshot)&&venda.itens_snapshot.length?venda.itens_snapshot:itens)||[]
   const fluxoVenda=avaliarFluxoVenda({
     valorVenda,contas,compras,ordens,instalacoes,
     materiaisPlanejados:materiaisTecnicos.length,
@@ -1122,7 +1124,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Progresso titulo="Compras" valor={progressoCompras} detalhe={totalAcompanhar?`${comprasEfetivadas} de ${totalAcompanhar} itens no Kanban comprados` : 'Sem lista de compras'} ativo={painelEtapa==='compras'} onClick={()=>setPainelEtapa(painelEtapa==='compras'?null:'compras')}/>
         <Progresso titulo="Mercadoria recebida" valor={progressoMercadoria} detalhe={totalAcompanhar?`${comprasRecebidas} de ${totalAcompanhar} itens no Kanban Recebido (não atesta NF/estoque)` : 'Sem lista de compras'} ativo={painelEtapa==='mercadoria'} onClick={()=>setPainelEtapa(painelEtapa==='mercadoria'?null:'mercadoria')}/>
         <Progresso titulo="Produção" valor={progressoProducao} detalhe={ordens.length?`${ordensConcluidas} de ${ordens.length} ordem(ns) concluídas`:(setorPorNome.producao?.nome||'Ainda não liberada')} ativo={painelEtapa==='producao'} onClick={()=>setPainelEtapa(painelEtapa==='producao'?null:'producao')}/>
-        <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={fluxoVenda.totalPecas?String(fluxoVenda.quantidadeInstalada)+' de '+String(fluxoVenda.totalPecas)+' peça(s) instaladas':'Aguardando itens de instalação'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
+        <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={fluxoVenda.totalPecas?String(fluxoVenda.quantidadeFinalizada)+' de '+String(fluxoVenda.totalPecas)+' peça(s) finalizadas; '+String(fluxoVenda.quantidadeInstalada)+' instaladas fisicamente':'Aguardando conferência das tipologias'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
       </div>
 
       {painelEtapa&&<section className="mt-4 overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
@@ -1217,7 +1219,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             <div><b className="text-slate-800">{colunaInstalacao?.nome||'Instalação'}</b>
               <p className="text-xs text-slate-500">{fluxoVenda.quantidadeInstalada} de {fluxoVenda.totalPecas} peça(s) instaladas; checklist e pendências conferidos individualmente na aba Instalação.</p>
             </div></div></div>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">{itens.map((item:any,idx:number)=>{
+          <div className="mt-3 grid gap-2 md:grid-cols-2">{itensInstalacao.map((item:any,idx:number)=>{
             const ref=refItemProducaoInstalacao(item,idx)
             const reg=instalacoes.find(i=>i.item_ref===ref)
             return <div key={ref} className="flex items-center justify-between rounded-xl border p-3">
@@ -1563,7 +1565,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
 
         {aba==='instalacao'&&<Box titulo="Instalação desta venda">
-          <VendaInstalacaoDetalhada vendaId={venda.id} obraId={obra?.id||null} clienteId={clienteId} orcamentoId={venda.orcamento_id} itens={itens} statusGeral={colunaInstalacao?.nome||null} onAtualizar={()=>void atualizarStatusInstalacao()}/>
+          <VendaInstalacaoDetalhada vendaId={venda.id} obraId={obra?.id||null} clienteId={clienteId} orcamentoId={venda.orcamento_id} itens={itensInstalacao} statusGeral={colunaInstalacao?.nome||null} onAtualizar={()=>void atualizarStatusInstalacao()}/>
         </Box>}
 
         {aba==='notas'&&<Box titulo="Notas / Recibos desta venda">
