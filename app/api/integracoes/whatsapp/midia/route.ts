@@ -1,12 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import {
+  assinarDownloadMidiaAtendimento,
   enviarMidiaWhatsApp,
   prepararUploadMidiaAtendimento,
 } from '@/lib/whatsappServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+export async function GET(req: NextRequest) {
+  const usuario = await autenticarTenant(req)
+  if (!usuario) return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 })
+  const conversaId = req.nextUrl.searchParams.get('conversaId') || ''
+  const mensagemId = req.nextUrl.searchParams.get('mensagemId') || ''
+  if (!conversaId || !mensagemId) {
+    return NextResponse.json({ error: 'Conversa e mensagem são obrigatórias.' }, { status: 400 })
+  }
+  try {
+    const arquivo = await assinarDownloadMidiaAtendimento(conversaId, mensagemId, usuario)
+    return NextResponse.json({ ok: true, ...arquivo }, {
+      headers: { 'Cache-Control': 'no-store' },
+    })
+  } catch (error) {
+    const mensagem = error instanceof Error ? error.message : 'Falha ao preparar o download.'
+    return NextResponse.json({ error: mensagem }, { status: 400 })
+  }
+}
 
 export async function POST(req: NextRequest) {
   const usuario = await autenticarTenant(req)

@@ -1763,6 +1763,47 @@ export async function listarMensagensAtendimento(conversaId: string, usuario: Us
   })) as AtendimentoMensagem[]
 }
 
+/**
+ * Gera URL de download curta somente após conferir o acesso à conversa e
+ * a mensagem dentro do tenant. Nunca aceita path ou URL enviado pelo browser.
+ */
+export async function assinarDownloadMidiaAtendimento(
+  conversaId: string,
+  mensagemId: string,
+  usuario: UsuarioTenant,
+) {
+  const conversa = await conversaAcessivel(conversaId, usuario, true)
+  if (!conversa) throw new Error('Conversa não disponível para este usuário.')
+  const ids = await idsHistoricoConversa(conversa)
+  const { data: mensagem, error } = await supabaseAdmin
+    .from('atendimento_mensagens')
+    .select('id,media_url,tipo,mime_type,payload')
+    .eq('id', mensagemId)
+    .eq('empresa_id', usuario.empresa_id)
+    .in('conversa_id', ids.length ? ids : [conversaId])
+    .maybeSingle()
+  if (error) throw error
+  if (!mensagem || !['imagem','documento','video','audio'].includes(String(mensagem.tipo))) {
+    throw new Error('Anexo não encontrado nesta conversa.')
+  }
+  const caminho = String(mensagem.media_url || '')
+  if (!caminho.startsWith(`${usuario.empresa_id}/entrada/`) &&
+      !caminho.startsWith(`${usuario.empresa_id}/saida/`)) {
+    throw new Error('O anexo antigo não está disponível para download seguro.')
+  }
+  const payload = mensagem.payload && typeof mensagem.payload === 'object'
+    ? mensagem.payload as Record<string, unknown> : {}
+  const ultimoSegmento = caminho.split('/').pop() || 'arquivo'
+  const nome = nomeArquivoSeguro(String(payload.fileName || ultimoSegmento))
+  const { data, error: erroUrl } = await supabaseAdmin.storage
+    .from(WHATSAPP_MEDIA_BUCKET)
+    .createSignedUrl(caminho, 10 * 60, { download: nome })
+  if (erroUrl || !data?.signedUrl) {
+    throw new Error('Não foi possível preparar o download. Tente novamente.')
+  }
+  return { url: data.signedUrl, nome }
+}
+
 export async function prepararUploadMidiaAtendimento(
   conversaId: string,
   arquivo: { nome?: string | null; mimeType?: string | null; tamanho?: number | null },
