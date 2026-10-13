@@ -244,6 +244,23 @@ async function carregarContexto(empresaId: string) {
   return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, colunaFazer, existentes }
 }
 
+// Identidade de importação: número original W.Vetro dentro da empresa.
+ // A consulta é feita direto no banco (e sem filtrar cards ocultos/vinculados):
+ // o contexto em memória pode ser parcial ou desatualizado.
+async function localizarOrcamentoWVetroExistente(empresaId: string, numero: string) {
+  for (const campo of ['numero', 'numero_wvetro'] as const) {
+    const { data, error } = await supabaseAdmin
+      .from('orcamentos')
+      .select('id,modo_entrada,wvetro_fluxo')
+      .eq('empresa_id', empresaId)
+      .contains('wvetro_fluxo', { [campo]: numero })
+      .limit(1)
+    if (error) throw error
+    if (data?.length) return data[0]
+  }
+  return null
+}
+
 function enderecoClienteWVetro(p: Record<string, any>) {
   const e = obj(p.Endereco) || obj(p.endereco) || {}
   const rua = txt(p.PessoaEndereco, p.ClienteEndereco, e.Rua, e.Logradouro)
@@ -503,6 +520,29 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       const p = registro.payload
       const numeroW = txt(p.Nro, p.OrcamentoId, p.Orcamentoid)
       if (!numeroW) continue
+
+      // REGRA DEFINITIVA: sincronização automática é SOMENTE DE NOVOS NÚMEROS.
+      // Um orçamento já conhecido no Atlas não deve ser importado outra vez,
+      // atualizado, sobrescrito ou recriado, mesmo com forcar/corrigir_tudo.
+      // A única exceção mantém o fluxo explícito "Vincular no Kanban": o
+      // card já existente pode ser preenchido após a vinculação manual,
+      // sem criar um segundo card para o mesmo número.
+      const jaExiste = await localizarOrcamentoWVetroExistente(usuario.empresa_id, numeroW)
+      const fluxoExistente = obj(jaExiste?.wvetro_fluxo)
+      const vinculoManualPendente =
+        txt(body.modo).toLowerCase() === 'vincular_kanban' &&
+        txt(fluxoExistente?.origem).toLowerCase() === 'wvetro_vinculo_pendente' &&
+        ctx.existentes.get(numeroW)?.id === jaExiste?.id
+      if (jaExiste && !vinculoManualPendente) {
+        semAlteracao += 1
+        resultados.push({
+          id: jaExiste.id,
+          numeroWvetro: numeroW,
+          acao: 'ignorado_numero_existente',
+        })
+        continue
+      }
+
       const nome = nomeCliente(p)
       if (clienteAlvo && !nomesClientesCompativeis(nome, clienteAlvo.nome) && !vinculoManualValidado) {
         ignoradosClienteDivergente += 1
