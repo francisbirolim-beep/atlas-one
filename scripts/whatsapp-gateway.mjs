@@ -63,6 +63,7 @@ const groupSyncTimers = new Map()
 const groupSyncLastAt = new Map()
 const groupSyncInFlight = new Set()
 const reconnectAttempts = new Map()
+const reconnectAfter = new Map()
 let shuttingDown = false
 let refreshTimer = null
 let queueTimer = null
@@ -103,7 +104,14 @@ function backoffDelay(baseDelay, errorStreak) {
 function reconnectDelay(channelId) {
   const attempts = Number(reconnectAttempts.get(channelId) || 0) + 1
   reconnectAttempts.set(channelId, attempts)
-  return Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** Math.min(attempts - 1, 6)))
+  const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** Math.min(attempts - 1, 6)))
+  reconnectAfter.set(channelId, Date.now() + delay)
+  return delay
+}
+
+function canReconnect(channelId) {
+  const nextAt = Number(reconnectAfter.get(channelId) || 0)
+  return !nextAt || Date.now() >= nextAt
 }
 
 const localPanel = http.createServer((req, res) => {
@@ -889,7 +897,7 @@ async function disconnectChannel(channelId, markOffline = true) {
 }
 
 async function connectChannel(channel) {
-  if (shuttingDown || sessions.has(channel.id)) return
+  if (shuttingDown || sessions.has(channel.id) || !canReconnect(channel.id)) return
 
   const sessionDir = path.join(SESSIONS_DIR, channel.session_slug || channel.id)
   fs.mkdirSync(sessionDir, { recursive: true })
@@ -970,6 +978,7 @@ async function connectChannel(channel) {
           updatedAt: new Date().toISOString(),
         })
         reconnectAttempts.delete(channel.id)
+        reconnectAfter.delete(channel.id)
         console.log(
           `[gateway] conectado: ${channel.nome} -> ${result?.connectedNumber || connectedJid || 'ok'}`,
         )
@@ -1091,7 +1100,7 @@ async function refreshChannels() {
     }
 
     for (const channel of channels) {
-      if (!sessions.has(channel.id)) void connectChannel(channel)
+      if (!sessions.has(channel.id) && canReconnect(channel.id)) void connectChannel(channel)
     }
     refreshErrorStreak = 0
   } catch (error) {
