@@ -8,6 +8,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { nomeCadastroIncompleto, registrarPendenciaCadastro } from '@/lib/cadastroPendenciasServer'
 import { normalizarCidadeMargem, resolverMargemOrcamentoPorCidade } from '@/lib/orcamentoMargensCidadeServer'
 import { nomesClientesCompativeis, normalizarNomeClienteWVetro } from '@/lib/wvetroClienteIdentidade'
+import { compararVersoesOrcamentoWVetro } from '@/lib/wvetroOrcamentoDiff'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -254,9 +255,9 @@ async function localizarOrcamentoWVetroExistente(empresaId: string, numero: stri
       .select('id,modo_entrada,wvetro_fluxo')
       .eq('empresa_id', empresaId)
       .contains('wvetro_fluxo', { [campo]: numero })
-      .limit(1)
+      .limit(100)
     if (error) throw error
-    if (data?.length) return data[0]
+    if (data?.length) return data.find((o: any) => o.modo_entrada !== 'wvetro_api_vinculado') || data[0]
   }
   return null
 }
@@ -511,7 +512,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
     const clienteAlvo = clienteAlvoId ? ctx.clientes.find((c: any) => String(c.id) === clienteAlvoId) || null : null
     if (clienteAlvoId && !clienteAlvo) return NextResponse.json({ error: 'Cliente alvo não encontrado nesta empresa.' }, { status: 404 })
     const margensCidade = new Map<string, Awaited<ReturnType<typeof resolverMargemOrcamentoPorCidade>>>()
-    let criados = 0, atualizados = 0, semAlteracao = 0, clientesVinculados = 0, clientesCriados = 0, itensMapeados = 0, itensPendentes = 0, pendenciasCadastro = 0, ignoradosClienteDivergente = 0
+    let criados = 0, atualizados = 0, semAlteracao = 0, atualizacoesDetectadas = 0, clientesVinculados = 0, clientesCriados = 0, itensMapeados = 0, itensPendentes = 0, pendenciasCadastro = 0, ignoradosClienteDivergente = 0
     const resultados: any[] = []
 
     for (const entrada of registros) {
@@ -534,11 +535,51 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         txt(fluxoExistente?.origem).toLowerCase() === 'wvetro_vinculo_pendente' &&
         ctx.existentes.get(numeroW)?.id === jaExiste?.id
       if (jaExiste && !vinculoManualPendente) {
+        const anterior = obj(fluxoExistente?.payload_bruto)
+        const pendente = obj(fluxoExistente?.atualizacao_pendente)
+        // Mesmo orçamento, mesmo conteúdo: nunca criar uma segunda ficha.
+        // Uma alteração real vira revisão pendente vinculada ao mesmo ID Atlas.
+        const mudouHash = txt(fluxoExistente?.payload_hash) !== registro.payloadHash
+        const jaRecebido = txt(pendente?.payload_hash) === registro.payloadHash
+        if (mudouHash && !jaRecebido && anterior) {
+          const diferencas = compararVersoesOrcamentoWVetro(anterior, p)
+          if (diferencas.length > 0) {
+            const agora = new Date().toISOString()
+            const { error: revisaoErro } = await supabaseAdmin
+              .from('orcamentos')
+              .update({
+                wvetro_fluxo: {
+                  ...fluxoExistente,
+                  atualizacao_pendente: {
+                    payload: p,
+                    payload_hash: registro.payloadHash,
+                    fonte_registro: fonteRegistro,
+                    detectada_em: agora,
+                    diferencas,
+                  },
+                },
+              })
+              .eq('empresa_id', usuario.empresa_id)
+              .eq('id', jaExiste.id)
+            if (revisaoErro) throw revisaoErro
+            const { error: historicoErro } = await supabaseAdmin.from('historico').insert({
+              orcamento_id: jaExiste.id,
+              usuario_id: usuario.id,
+              usuario_nome: usuario.nome || 'Integração W.Vetro',
+              acao: 'W.Vetro: revisão de orçamento detectada',
+              detalhes: `W.Vetro #${numeroW}: ${diferencas.map(d => `${d.tipo} — ${d.item} / ${d.campo}: ${d.antes || '—'} → ${d.depois || '—'}`).join('; ')}`.slice(0, 3500),
+            })
+            if (historicoErro) throw historicoErro
+            atualizacoesDetectadas += 1
+            resultados.push({ id: jaExiste.id, numeroWvetro: numeroW, acao: 'atualizacao_pendente', diferencas })
+            continue
+          }
+        }
         semAlteracao += 1
         resultados.push({
           id: jaExiste.id,
           numeroWvetro: numeroW,
-          acao: 'ignorado_numero_existente',
+          acao: jaRecebido ? 'atualizacao_ja_recebida' : 'ignorado_sem_mudanca',
         })
         continue
       }
@@ -730,7 +771,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       ok: true, inicio, fim,
       lidos: registros.length,
       semChave: stagingOrcamentos.semChave.length + stagingPedidos.semChave.length,
-      criados, atualizados, semAlteracao,
+      criados, atualizados, semAlteracao, atualizacoesDetectadas,
       clientesVinculados, clientesCriados, itensMapeados, itensPendentes, pendenciasCadastro,
       ignoradosClienteDivergente,
       clienteAlvoId: clienteAlvo?.id || null,
