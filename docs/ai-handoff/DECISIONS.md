@@ -133,3 +133,24 @@ Regra obrigatória para qualquer alteração no Atlas:
 - antes do merge, conferir regressão do fluxo imediatamente vizinho ao que foi alterado.
 
 Exemplo canônico: sincronizar um orçamento W.Vetro pode atualizar itens, valores e metadados da integração, mas não pode apagar anexos, fotos, observações, histórico ou outros dados preenchidos manualmente no card.
+
+## WVetro: peças cortadas não são barras para comprar (2026-10-13)
+
+- `wvetro_composicao.perfis` de `orcamentos.itens` origina linhas de corte (`pacote_tecnico_materiais`, com `comprimento_corte_mm` por peça). Essa fonte pertence à Produção e à Lista de Corte; não determina quantidade de barras comerciais.
+- As barras inteiras são obtidas do relatório separado **BARRAS UTILIZADAS / Relatório de Cotação de Barras**, agrupadas por código, acabamento/tratamento, tipo e comprimento de barra.
+- Um pedido deve usar apenas barras validadas e sempre manter os cortes originais, as cotações históricas e os grupos de card anteriores. Não recalcular arbitrariamente barras como ceil(soma dos cortes / 6000) porque sobra, usinagem, perdas e otimização mudam o resultado.
+- Importação deve conferir número WVetro original da venda, quantidade de barras (BR), peso/sobra como indicadores e manter hash e campos originais do documento. Correções precisam de motivo e registro `antes/depois`, usuário e data.
+- Aprendizado supervisionado de correções pode sugerir mapeamento em novos relatórios da mesma empresa e mesma chave; nunca corrigir automaticamente quantidades de outras obras, nem inferir uma compra realizada.
+- Fonte PDF autenticada no WVetro depende do acesso do usuário; a API operacional atualmente não fornece diretamente `relbarrasutilizadasnovo`. Para importar futuros relatórios usar PDF exportado do WVetro, sem simular uma integração automática inexistente.
+
+## Regra obrigatória: imagens de perfis e acessórios em TODAS as listas (13/10/2026)
+
+**Escopo geral do Atlas One (todas as obras, clientes, empresas e setores):**
+1. Qualquer linha ou card que represente **perfil** (inclusive contramarco, trilho, montante e baguete) ou **acessório** deve ter área visível de **imagem real do produto/desenho técnico**: cadastro, busca, catálogo, materiais de compra, barras WVetro, listas de corte, separação, orçamento, cotação, produção, estoque, relatórios e PDFs.
+2. Fonte da imagem, nesta prioridade: (a) foto/desenho já vinculado ao cadastro do produto por **ID**; (b) catálogo técnico por **código EXATO**, com escopo de empresa; (c) imagem técnica de origem WVetro vinculada ao próprio item. Não associar foto por similaridade textual, não buscar imagem genérica enganosa.
+3. Falta de imagem deve ser **explicitamente identificada** como `Imagem pendente` em cada linha/card e tratada como pendência do cadastro, com ação para anexar/corrigir imagem no cadastro do produto quando disponível. **Não inventar imagens** e não ocultar a linha. O processo operacional já em andamento não deve ser interrompido automaticamente.
+4. Nova tela/lista/PDF envolvendo perfis/acessórios só é considerada concluída após validar: (a) imagens existentes aparecem corretas, (b) ausência mostra pendência claramente, (c) vínculo por ID/código exato e isolamento de empresa, (d) regressão de cards parciais e PDFs individuais, (e) nenhuma alteração destrutiva no que funciona.
+5. Resolver imagem na apresentação ou no cadastro, sem alterar quantidade de compra, cor do acabamento, custo ou dimensão do produto.
+6. Publicações são incrementalmente testadas em branch isolada, build/preflight e preview; fazer backup/snapshot e evitar mudanças fora do escopo. Não modificar funcionalidades prontas sem solicitação expressa.
+
+**Origem:** aprovação do usuário para publicar a correção Materiais=lista de compra, Produção=lista de corte e Compras=Kanban, com regra adicional obrigatória de imagem para todo perfil e acessório (13/10/2026).

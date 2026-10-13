@@ -488,3 +488,12 @@ Branch: `fix/kanban-wvetro-sync-preservacao-v1`
 5. conferir que o card W.Vetro duplicado deixa de aparecer no Kanban e no Cliente 360;
 6. validar com usuário Keila, não apenas Master;
 7. rodar `npm run release:check` antes do PR/merge.
+
+## PRÓXIMO TESTE — conferir barras comerciais de compra x cortes WVetro #872
+
+1. Abrir a venda do Samuel no preview; na aba Produção confirmar 40 linhas de cortes por medida e a lista/PDF da categoria.
+2. Em Compras validar 18 linhas de barras e total de 31 BR (código, cor/acabamento, tipo, 6000 mm), sem mover cotações legadas.
+3. Validar o lote; corrigir uma linha de teste com justificativa, verificar histórico e sugestão de aprendizado; desfazer a correção pela ação de corrigir, sem apagar o registro histórico.
+4. Conferir PDF geral de barras e PDF de um card com apenas uma barra/código.
+5. Repetir com usuário autorizado sem nível Master. Verificar isolamento de empresa e impedimento de upload de PDF com orçamento WVetro divergente.
+6. Só após aprovação funcional, fazer merge manual e deploy de produção.

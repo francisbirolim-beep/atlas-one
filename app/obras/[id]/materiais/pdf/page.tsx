@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Printer } from 'lucide-react'
+import { ImageOff, Printer } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { MaterialPacote, PacoteTecnico } from '@/lib/materialPlanejamento'
 
@@ -16,7 +16,7 @@ type DadosCabecalho = {
   versao: number
 }
 const grupos: Record<Grupo,{titulo:string;categorias:MaterialPacote['categoria'][]}> = {
-  perfis:{titulo:'Lista de Perfis',categorias:['perfil','contramarco']},
+  perfis:{titulo:'Lista de Corte de Perfis',categorias:['perfil','contramarco']},
   acessorios:{titulo:'Lista de Acessórios',categorias:['acessorio']},
   vidros:{titulo:'Lista de Vidros',categorias:['vidro']},
 }
@@ -43,6 +43,7 @@ export default function MateriaisPdfPage(){
   const [materiais,setMateriais]=useState<MaterialPacote[]>([])
   const [cab,setCab]=useState<DadosCabecalho|null>(null)
   const [labels,setLabels]=useState<Record<string,string>>({})
+  const [imagens,setImagens]=useState<Record<string,string>>({})
   const [erro,setErro]=useState('')
   const [loading,setLoading]=useState(true)
 
@@ -84,7 +85,23 @@ export default function MateriaisPdfPage(){
       supabase.from('obras').select('id,numero,nome').eq('id',obraId).maybeSingle(),
     ])
     if(mr.error||or.error||ob.error){setErro(mr.error?.message||or.error?.message||ob.error?.message||'Falha ao carregar materiais.');setLoading(false);return}
-    setMateriais((mr.data||[]) as MaterialPacote[])
+    const linhas=(mr.data||[]) as MaterialPacote[]
+    setMateriais(linhas)
+    // Sempre tentar primeiro a foto vinculada ao produto, depois o desenho WVetro
+    // do próprio material. Nunca preencher por semelhança de descrição.
+    const produtoIds=[...new Set(linhas.map(m=>(m as any).produto_id).filter(Boolean))] as string[]
+    const codigos=[...new Set(linhas.map(m=>String(m.codigo||'').trim()).filter(Boolean))]
+    const fotos:Record<string,string>={}
+    const buscas=[]
+    if(produtoIds.length)buscas.push(supabase.from('produtos').select('id,codigo,foto_url').in('id',produtoIds))
+    if(codigos.length)buscas.push(supabase.from('produtos').select('id,codigo,foto_url').in('codigo',codigos))
+    const resultados=await Promise.all(buscas)
+    for(const busca of resultados)for(const produto of busca.data||[]){
+      if(!produto.foto_url)continue
+      fotos['id:'+produto.id]=produto.foto_url
+      if(produto.codigo)fotos['codigo:'+String(produto.codigo).trim().toUpperCase()]=produto.foto_url
+    }
+    setImagens(fotos)
     const cliente:any=Array.isArray((or.data as any)?.clientes)?(or.data as any).clientes[0]:(or.data as any)?.clientes
     setCab({
       cliente:cliente?.nome||(or.data as any)?.cliente_nome||'—',
@@ -97,6 +114,11 @@ export default function MateriaisPdfPage(){
     setLoading(false)
   }
 
+  function imagemDaPeca(material:MaterialPacote){
+    const extra=((material as any).wvetro_dados||{}) as Record<string,unknown>
+    const wvetro=([extra.imagem_atlas_url,extra.imagemAtlasUrl,extra.imagem_url,extra.image_url,extra.foto_url,extra.fotoUrl]).find(v=>typeof v==='string'&&v.trim()) as string|undefined
+    return ((material as any).produto_id&&imagens['id:'+(material as any).produto_id])||imagens['codigo:'+String(material.codigo||'').trim().toUpperCase()]||wvetro||null
+  }
   const total=useMemo(()=>materiais.reduce((s,m)=>s+n(m.quantidade_ajustada),0),[materiais])
   if(loading)return <main className="estado">Carregando lista de materiais…</main>
   if(erro||!cab)return <main className="estado">{erro||'Não foi possível gerar a lista.'}</main>
@@ -114,8 +136,9 @@ export default function MateriaisPdfPage(){
     </section>
     <div className="resumo"><b>{materiais.length}</b> linha(s) · quantidade ajustada total <b>{qtd(total)}</b></div>
     <table>
-      <thead><tr><th>Código</th><th>Descrição</th><th>Tipologia / ambiente</th><th>Qtd. técnica</th><th>Qtd. final</th><th>Corte / barra</th><th>Origem</th></tr></thead>
+      <thead><tr><th>Imagem</th><th>Código</th><th>Descrição</th><th>Tipologia / ambiente</th><th>Qtd. técnica</th><th>Qtd. final</th><th>Corte / barra</th><th>Origem</th></tr></thead>
       <tbody>{materiais.map(m=><tr key={m.id}>
+        <td>{imagemDaPeca(m)?<img src={imagemDaPeca(m)!} alt={'Desenho '+(m.codigo||m.descricao)} style={{width:44,height:44,objectFit:'contain'}}/>:<span className="imagem-pendente"><ImageOff size={14}/> Imagem pendente</span>}</td>
         <td><b>{m.codigo||'—'}</b></td>
         <td>{m.descricao}{m.cor_ref?<div className="sub">Cor: {m.cor_ref}</div>:null}{m.justificativa_ajuste?<div className="ajuste">Ajuste: {m.justificativa_ajuste}</div>:null}</td>
         <td>{labels[String(m.item_ref||'sem-tipologia')]||'Material geral da obra'}</td>
@@ -124,11 +147,11 @@ export default function MateriaisPdfPage(){
         <td>{m.comprimento_corte_mm?`${Math.round(n(m.comprimento_corte_mm))} mm corte`:'—'}{m.comprimento_barra_mm?<div className="sub">Barra {Math.round(n(m.comprimento_barra_mm))} mm</div>:null}</td>
         <td>{origem(m)}</td>
       </tr>)}
-      {!materiais.length&&<tr><td colSpan={7} className="vazio">Nenhum material desta categoria no pacote técnico selecionado.</td></tr>}</tbody>
+      {!materiais.length&&<tr><td colSpan={8} className="vazio">Nenhum material desta categoria no pacote técnico selecionado.</td></tr>}</tbody>
     </table>
     <footer><p>Pacote: {cab.pacote}</p><p>Este documento reflete a quantidade ajustada vigente no Atlas. Inclusões, trocas e retiradas permanecem registradas na conferência técnica da obra.</p></footer>
   </main>
   <style jsx global>{`
-    *{box-sizing:border-box}body{margin:0;background:#eef1f4;color:#111;font-family:Arial,sans-serif}.folha{width:210mm;min-height:297mm;margin:16px auto;background:#fff;padding:12mm;font-size:9.5pt}header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid #111;padding-bottom:8px}h1{margin:0;font-size:18pt}header p{margin:4px 0 0;color:#666}.no-print{display:inline-flex;align-items:center;gap:6px;border:1px solid #aaa;background:#fff;padding:8px 11px;border-radius:8px}.grade{display:grid;grid-template-columns:repeat(4,1fr);margin:10px 0;border:1px solid #aaa}.grade div{padding:7px;border:1px solid #ddd}.grade b,.grade span{display:block}.grade span{margin-top:3px}.resumo{margin:10px 0;padding:8px;background:#f5f5f5;border:1px solid #ddd}table{width:100%;border-collapse:collapse;font-size:8.8pt}th,td{border:1px solid #888;padding:5px;text-align:left;vertical-align:top}th{background:#eee}.sub{margin-top:3px;color:#555}.ajuste{margin-top:4px;font-size:8pt;color:#8a5a00}.vazio{text-align:center;padding:18px;color:#777}footer{margin-top:12px;padding-top:8px;border-top:1px solid #aaa;font-size:8pt;color:#666}footer p{margin:3px 0}@page{size:A4;margin:9mm}@media print{body{background:#fff}.folha{width:auto;min-height:auto;margin:0;padding:0}.no-print{display:none}header,.grade,.resumo{break-inside:avoid}tr{break-inside:avoid}}@media(max-width:800px){.folha{width:100%;margin:0;padding:14px}.grade{grid-template-columns:1fr 1fr}header{flex-direction:column}}
+    *{box-sizing:border-box}body{margin:0;background:#eef1f4;color:#111;font-family:Arial,sans-serif}.folha{width:210mm;min-height:297mm;margin:16px auto;background:#fff;padding:12mm;font-size:9.5pt}header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:2px solid #111;padding-bottom:8px}h1{margin:0;font-size:18pt}header p{margin:4px 0 0;color:#666}.no-print{display:inline-flex;align-items:center;gap:6px;border:1px solid #aaa;background:#fff;padding:8px 11px;border-radius:8px}.grade{display:grid;grid-template-columns:repeat(4,1fr);margin:10px 0;border:1px solid #aaa}.grade div{padding:7px;border:1px solid #ddd}.grade b,.grade span{display:block}.grade span{margin-top:3px}.resumo{margin:10px 0;padding:8px;background:#f5f5f5;border:1px solid #ddd}table{width:100%;border-collapse:collapse;font-size:8.8pt}th,td{border:1px solid #888;padding:5px;text-align:left;vertical-align:top}th{background:#eee}.sub{margin-top:3px;color:#555}.ajuste{margin-top:4px;font-size:8pt;color:#8a5a00}.vazio{text-align:center;padding:18px;color:#777}.imagem-pendente{display:inline-flex;align-items:center;gap:4px;color:#a16207;font-size:7pt}footer{margin-top:12px;padding-top:8px;border-top:1px solid #aaa;font-size:8pt;color:#666}footer p{margin:3px 0}@page{size:A4;margin:9mm}@media print{body{background:#fff}.folha{width:auto;min-height:auto;margin:0;padding:0}.no-print{display:none}header,.grade,.resumo{break-inside:avoid}tr{break-inside:avoid}}@media(max-width:800px){.folha{width:100%;margin:0;padding:14px}.grade{grid-template-columns:1fr 1fr}header{flex-direction:column}}
   `}</style></>
 }
