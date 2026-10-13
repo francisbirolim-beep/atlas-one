@@ -1477,7 +1477,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
           <VendaProducaoTipologiasA4
-            itens={itens} materiais={materiaisTecnicos} ordens={ordens}
+            itens={itensInstalacao} materiais={materiaisTecnicos} ordens={ordens}
             cliente={cliente?.nome||'Cliente não informado'} numeroOrcamento={String(numeroOrcamento(orcamento))}
             imagensPorProduto={Object.fromEntries(Object.entries(produtosMateriais).filter(([,p])=>Boolean(p.foto_url)).map(([id,p])=>[id,String(p.foto_url)]))}
             imagensPorCodigo={Object.fromEntries(Object.values(produtosMateriais).filter(p=>Boolean(p.codigo&&p.foto_url)).map(p=>[String(p.codigo).trim().toUpperCase(),String(p.foto_url)]))}
