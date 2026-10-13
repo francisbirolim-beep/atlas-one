@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   BellRing, ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
-  Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
+  Download, Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
   UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus, Camera, Square,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -1210,6 +1210,29 @@ export default function WhatsAppAtendimentoPage() {
     return ext ? (mapa[ext] || 'application/octet-stream') : 'application/octet-stream'
   }
 
+  async function baixarAnexo(m: Mensagem) {
+    if (!ativa || !m.media_url) return
+    setErro('')
+    try {
+      const headers = await headersJson()
+      const url = `/api/integracoes/whatsapp/midia?conversaId=${encodeURIComponent(ativa.id)}&mensagemId=${encodeURIComponent(m.id)}`
+      const resposta = await fetch(url, { headers, cache: 'no-store' })
+      const arquivo = await resposta.json()
+      if (!resposta.ok || !arquivo.url) {
+        throw new Error(arquivo.error || 'Não foi possível baixar o anexo.')
+      }
+      const link = document.createElement('a')
+      link.href = arquivo.url
+      link.download = arquivo.nome || m.arquivo_nome || 'anexo'
+      link.rel = 'noopener noreferrer'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (erro) {
+      setErro(erro instanceof Error ? erro.message : 'Não foi possível baixar o anexo.')
+    }
+  }
+
   async function enviarArquivo(file: File, opcoes: { ptt?: boolean } = {}) {
     if (!ativa || enviandoMidia) return
     setErro('')
@@ -1278,10 +1301,9 @@ export default function WhatsAppAtendimentoPage() {
       setErro('')
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       partesAudioRef.current = []
-      const preferido = typeof MediaRecorder !== 'undefined' &&
-        MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : ''
+      // Safari grava AAC/MP4; não rotular esses bytes como WebM.
+      const preferido = ['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus']
+        .find(mime => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mime))
       const gravador = preferido
         ? new MediaRecorder(stream, { mimeType: preferido })
         : new MediaRecorder(stream)
@@ -1297,9 +1319,18 @@ export default function WhatsAppAtendimentoPage() {
         setGravando(false)
         setSegundosGravacao(0)
 
-        const blob = new Blob(partesAudioRef.current, { type: 'audio/webm' })
+        const formato = (gravador.mimeType || partesAudioRef.current[0]?.type || '').split(';')[0].toLowerCase()
+        const extensoes: Record<string,string> = {
+          'audio/webm':'webm', 'audio/mp4':'m4a', 'audio/ogg':'ogg',
+          'audio/mpeg':'mp3', 'audio/aac':'aac', 'audio/opus':'opus',
+        }
+        if (!extensoes[formato]) {
+          setErro('Formato de áudio não suportado neste navegador. Use Chrome ou envie um arquivo de áudio.')
+          return
+        }
+        const blob = new Blob(partesAudioRef.current, { type: formato })
         if (blob.size) {
-          const arquivo = new File([blob], `audio-${Date.now()}.webm`, { type: 'audio/webm' })
+          const arquivo = new File([blob], `audio-${Date.now()}.${extensoes[formato]}`, { type: formato })
           void enviarArquivo(arquivo, { ptt: true })
         }
       }
@@ -2161,15 +2192,19 @@ export default function WhatsAppAtendimentoPage() {
                     <div key={m.id} className={`group/msg flex min-w-0 w-full ${saida?'justify-end':'justify-start'}`}>
                       <div className={`relative min-w-0 max-w-[88%] overflow-visible rounded-xl px-3 py-2 shadow-sm sm:max-w-[82%] ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
                         {podeResponder && (
-                          <div className={`absolute -top-3 z-10 hidden items-center gap-1 rounded-full border bg-white p-1 shadow-md group-hover/msg:flex ${saida?'right-2':'left-2'}`}>
+                          <div className={`absolute -top-3 z-10 flex items-center gap-1 rounded-full border bg-white p-1 shadow-md sm:opacity-0 sm:transition-opacity sm:group-hover/msg:opacity-100 sm:group-focus-within/msg:opacity-100 ${saida?'right-2':'left-2'}`}>
                             <button type="button" onClick={()=>setMensagemRespondendo(m)}
-                              className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
-                              title="Responder esta mensagem">
+                              disabled={!m.whatsapp_message_id}
+                              aria-label="Responder à mensagem"
+                              className="grid h-8 w-8 place-items-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                              title={m.whatsapp_message_id?'Responder esta mensagem':'Mensagem antiga sem identificador de resposta'}>
                               <Reply size={14}/>
                             </button>
                             <button type="button" onClick={()=>setEmojiMensagemId(atual=>atual===m.id?null:m.id)}
-                              className="grid h-7 w-7 place-items-center rounded-full text-slate-500 hover:bg-slate-100"
-                              title="Reagir com emoji">
+                              disabled={!m.whatsapp_message_id}
+                              aria-label="Reagir à mensagem com emoji"
+                              className="grid h-8 w-8 place-items-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                              title={m.whatsapp_message_id?'Reagir com emoji':'Mensagem antiga sem identificador de reação'}>
                               <SmilePlus size={14}/>
                             </button>
                           </div>
@@ -2208,6 +2243,12 @@ export default function WhatsAppAtendimentoPage() {
                         {m.tipo === 'audio' && midia && (
                           <audio controls preload="metadata" src={m.media_url || undefined} className="max-w-full"/>
                         )}
+                        {m.tipo === 'audio' && midia && (
+                          <button type="button" onClick={()=>void baixarAnexo(m)}
+                            className="mt-1 inline-flex items-center gap-1.5 rounded-lg border bg-white/80 px-2.5 py-1 text-xs text-slate-600 hover:bg-white">
+                            <Download size={13}/> Baixar áudio
+                          </button>
+                        )}
                         {m.tipo === 'audio' && !midia && (
                           <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
                             🎤 Áudio indisponível — recebido antes da captura de mídia ser ativada.
@@ -2220,6 +2261,13 @@ export default function WhatsAppAtendimentoPage() {
                               className="max-h-80 max-w-full rounded-lg object-contain"/>
                           </a>
                         )}
+                        {m.tipo === 'imagem' && midia && (
+                          <button type="button" onClick={()=>void baixarAnexo(m)}
+                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-white"
+                            title="Baixar imagem no dispositivo">
+                            <Download size={14}/> Baixar imagem
+                          </button>
+                        )}
                         {m.tipo === 'imagem' && !midia && texto && (
                           <p className="text-sm text-slate-700">{texto}</p>
                         )}
@@ -2227,6 +2275,12 @@ export default function WhatsAppAtendimentoPage() {
                         {m.tipo === 'video' && midia && (
                           <video controls preload="metadata" src={m.media_url || undefined}
                             className="max-h-80 max-w-full rounded-lg"/>
+                        )}
+                        {m.tipo === 'video' && midia && (
+                          <button type="button" onClick={()=>void baixarAnexo(m)}
+                            className="mt-1 inline-flex items-center gap-1.5 rounded-lg border bg-white/80 px-2.5 py-1 text-xs text-slate-600 hover:bg-white">
+                            <Download size={13}/> Baixar vídeo
+                          </button>
                         )}
                         {m.tipo === 'video' && !midia && (
                           <p className="text-sm text-slate-500">🎥 Vídeo indisponível nesta mensagem antiga.</p>
@@ -2239,6 +2293,13 @@ export default function WhatsAppAtendimentoPage() {
                             <span className="min-w-0 truncate">{m.arquivo_nome || texto || 'Abrir documento'}</span>
                             <ExternalLink size={13} className="ml-auto shrink-0"/>
                           </a>
+                        )}
+                        {m.tipo === 'documento' && midia && (
+                          <button type="button" onClick={()=>void baixarAnexo(m)}
+                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-blue-800 hover:bg-white"
+                            title="Baixar documento ou PDF">
+                            <Download size={14}/> Baixar {String(m.mime_type||'').toLowerCase()==='application/pdf'?'PDF':'documento'}
+                          </button>
                         )}
                         {m.tipo === 'documento' && !midia && (
                           <p className="text-sm text-slate-500">{texto || '📎 Documento indisponível nesta mensagem antiga.'}</p>
