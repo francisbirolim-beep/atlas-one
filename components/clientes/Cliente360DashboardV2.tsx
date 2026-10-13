@@ -223,6 +223,8 @@ export default function Cliente360DashboardV2({clienteId}:Props){
       const lidos=Number(json.sincronizados||0)
       const criados=Number(json.criados||0)
       const atualizados=Number(json.atualizados||0)
+      const revisoes=Number(json.atualizacoesDetectadas||0)
+      const idsNovos=new Set<string>((Array.isArray(json.idsCriados)?json.idsCriados:[]).map((x:unknown)=>String(x)))
       const ignorados=Number(json.ignoradosClienteDivergente||0)+Number(json.historicosIgnoradosNomeDivergente||0)
       const numerosWvetro=(Array.isArray(json.numerosWvetro)?json.numerosWvetro:[]).map((n:unknown)=>String(n)).filter(Boolean)
 
@@ -234,7 +236,10 @@ export default function Cliente360DashboardV2({clienteId}:Props){
       const listaJson=await listaResp.json().catch(()=>({}))
       if(!listaResp.ok)throw new Error(listaJson?.error||'Falha ao listar os orçamentos W.Vetro deste cliente.')
 
-      const alvos=Array.isArray(listaJson.orcamentos)?listaJson.orcamentos:[]
+      // Recalcular apenas os orçamentos recém-criados. Nunca mexer no custo
+      // de um orçamento antigo só porque a sincronização foi executada.
+      const alvos=(Array.isArray(listaJson.orcamentos)?listaJson.orcamentos:[])
+        .filter((o:any)=>idsNovos.has(String(o.id)))
       let corrigidos=0, falhas=0
       for(let i=0;i<alvos.length;i+=1){
         setMensagemSyncWVetro(`Recalculando orçamento W.Vetro deste cliente: ${i+1}/${alvos.length}...`)
@@ -246,7 +251,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
       await carregar()
       const numerosTexto=numerosWvetro.length?` · Orçamentos W.Vetro: ${numerosWvetro.map((n:string)=>`#${n}`).join(', ')}`:''
       const ignoradosTexto=ignorados?` · ${ignorados} registro(s) ignorado(s) por nome incompatível.`:''
-      setMensagemSyncWVetro(`Conferência de ${cliente?.nome||'cliente'} concluída: ${lidos} lido(s), ${criados} novo(s), ${atualizados} atualizado(s) · ${corrigidos} recalculado(s), ${falhas} com pendência${numerosTexto}${ignoradosTexto}`)
+      setMensagemSyncWVetro(`Conferência de ${cliente?.nome||'cliente'}: ${lidos} lido(s), ${criados} novo(s), ${revisoes} revisão(ões) detectada(s) para conferência, ${corrigidos} orçamento(s) novo(s) calculado(s), ${falhas} falha(s)${numerosTexto}${ignoradosTexto}`)
     }catch(e){setErro(e instanceof Error?e.message:'Não foi possível sincronizar o W.Vetro.')}
     finally{setSincronizandoWVetro(false)}
   }
