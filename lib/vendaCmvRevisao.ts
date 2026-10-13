@@ -26,13 +26,13 @@ export function custoRevisado(p:PrevisaoCmvBase,revisoes:Partial<Record<Categori
   if(categoria!=='perfil')return revisao!.valor_revisado
   // Uma correção posterior do uso ou da sobra invalida a revisão anterior do subtotal.
   const versaoSubtotal=Date.parse(revisao!.registrado_em)||0
-  const partePosterior=p.perfil_previsao==null&&(['perfil_uso','sobra'] as const).some(c=>{
+  const partePosterior=p.perfil_previsao_fonte!=='despesas_extras_wvetro'&&(['perfil_uso','sobra'] as const).some(c=>{
    const r=revisoes[c];return r&&revisaoAtual(r,custoPrevistoOriginal(p,c))&&(Date.parse(r.registrado_em)||0)>versaoSubtotal
   })
   if(!partePosterior)return revisao!.valor_revisado
  }
  if(categoria==='perfil'){
-  if(p.perfil_previsao!=null)return origem
+  if(p.perfil_previsao_fonte==='despesas_extras_wvetro')return origem
   const uso=custoRevisado(p,revisoes,'perfil_uso')
   const sobra=custoRevisado(p,revisoes,'sobra')
   return uso===null||sobra===null?origem:centavos(uso+sobra)
