@@ -84,6 +84,8 @@ export async function POST(req: NextRequest) {
   let lidos = 0
   let criados = 0
   let atualizados = 0
+  let atualizacoesDetectadas = 0
+  const idsCriados = new Set<string>()
   let semAlteracao = 0
   let ignoradosClienteDivergente = 0
   const falhas: Array<{ periodo: string; erro: string }> = []
@@ -110,6 +112,10 @@ export async function POST(req: NextRequest) {
     lidos += Number(json.lidos || 0)
     criados += Number(json.criados || 0)
     atualizados += Number(json.atualizados || 0)
+    atualizacoesDetectadas += Number(json.atualizacoesDetectadas || 0)
+    for (const item of Array.isArray(json.resultados) ? json.resultados : []) {
+      if (item?.acao === 'criado' && item.id) idsCriados.add(String(item.id))
+    }
     semAlteracao += Number(json.semAlteracao || 0)
     ignoradosClienteDivergente += Number(json.ignoradosClienteDivergente || 0)
   }
@@ -140,6 +146,8 @@ export async function POST(req: NextRequest) {
     sincronizados: lidos,
     criados,
     atualizados,
+    atualizacoesDetectadas,
+    idsCriados: Array.from(idsCriados),
     semAlteracao,
     ignoradosClienteDivergente,
     orcamentosDisponiveis: (orcamentos || []).length,
