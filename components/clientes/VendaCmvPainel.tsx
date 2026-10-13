@@ -1,13 +1,14 @@
 'use client'
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plus, RefreshCw, X } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
 type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null;perfil_previsao?:number|null;perfil_previsao_fonte?:'despesas_extras_wvetro'|'uso_mais_sobra_wvetro'|null;total_uso?:number|null;total_com_sobra?:number|null;perfil_centro_custo?:number|null;perda_fonte?:'wvetro'|'conciliacao_wvetro'|null}
 type Lancamento={id:string;categoria:Categoria;origem:string;descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;observacoes?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_nome?:string|null;versao?:number;atualizado_em?:string|null;atualizado_por_nome?:string|null}
 type HistoricoLancamento={id:string;lancamento_id:string;antes:Record<string,any>;depois:Record<string,any>;alterado_por_nome?:string|null;alterado_em:string;anexo_anterior_url?:string|null}
-type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];historicoLancamentos?:HistoricoLancamento[];revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>;historicoRevisoes:RevisaoCmv[];feedbackIA:number}
+type LancamentoCancelado={id:string;categoria:Categoria;descricao:string;valor:number;fornecedor?:string|null;created_at:string;cancelado_em:string;cancelado_por_nome:string;motivo_cancelamento:string}
+type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];lancamentosCancelados?:LancamentoCancelado[];historicoLancamentos?:HistoricoLancamento[];revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>;historicoRevisoes:RevisaoCmv[];feedbackIA:number}
 
 const labels:Record<Categoria,string>={perfil:'Perfis',acessorio:'Acessórios',vidro:'Vidros',perda:'Perda de corte',mao_obra:'Mão de obra',instalacao:'Instalação',frete:'Frete',outros:'Outros'}
 const moedas=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
@@ -29,6 +30,10 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  const [editandoLancamento,setEditandoLancamento]=useState<string|null>(null)
  const [salvandoEdicao,setSalvandoEdicao]=useState(false)
  const enviandoEdicao=useRef(false)
+ const [excluindoLancamento,setExcluindoLancamento]=useState<string|null>(null)
+ const [motivoExclusao,setMotivoExclusao]=useState('')
+ const [salvandoExclusao,setSalvandoExclusao]=useState(false)
+ const enviandoExclusao=useRef(false)
  const [corrigindo,setCorrigindo]=useState<CategoriaCmvRevisao|null>(null)
  const [valorConferido,setValorConferido]=useState('')
  const [justificativa,setJustificativa]=useState('')
@@ -83,6 +88,22 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    setSucesso('Correção salva no mesmo lançamento. Histórico atualizado.')
   }catch(err){setErro(err instanceof Error?err.message:'Erro ao editar lançamento.')}
   finally{enviandoEdicao.current=false;setSalvandoEdicao(false)}
+ }
+ async function excluirLancamento(l:Lancamento){
+  if(enviandoExclusao.current||motivoExclusao.trim().length<8)return
+  enviandoExclusao.current=true;setSalvandoExclusao(true);setErro('');setSucesso('')
+  try{
+   const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.')
+   const resposta=await fetch('/api/vendas/cmv',{method:'DELETE',headers:{
+    Authorization:'Bearer '+token,'Content-Type':'application/json'
+   },body:JSON.stringify({vendaId,lancamentoId:l.id,versao:l.versao||1,motivo:motivoExclusao.trim()})})
+   const json=await resposta.json()
+   if(!resposta.ok)throw new Error(json.error||'Falha ao excluir lançamento.')
+   setExcluindoLancamento(null);setMotivoExclusao('')
+   await buscar()
+   setSucesso('Custo excluído dos totais do CMV, com histórico e comprovante preservados.')
+  }catch(err){setErro(err instanceof Error?err.message:'Falha ao excluir lançamento.')}
+  finally{enviandoExclusao.current=false;setSalvandoExclusao(false)}
  }
  async function revisarCusto(categoria:CategoriaCmvRevisao,acao:'validado'|'corrigido'){
   if(salvandoRevisao)return
@@ -250,8 +271,31 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
               className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">
               <Pencil size={13}/>{editandoLancamento===l.id?'Fechar edição':'Editar lançamento'}
              </button>
+             <button type="button" disabled={salvandoEdicao||salvandoExclusao}
+              onClick={()=>{setExcluindoLancamento(excluindoLancamento===l.id?null:l.id);setMotivoExclusao('');setEditandoLancamento(null);setErro('');setSucesso('')}}
+              className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50">
+              <Trash2 size={13}/>Excluir
+             </button>
             </div>
            </div>
+           {excluindoLancamento===l.id&&<div role="group" aria-label="Confirmar exclusão do custo"
+            className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs">
+            <b className="text-red-800">Excluir este custo de {moedas(Number(l.valor))}?</b>
+            <p className="mt-1 text-red-800">A compra deixará de contar no CMV e nos relatórios. O comprovante e o histórico permanecerão guardados. Nenhum outro lançamento será afetado.</p>
+            <label className="mt-2 block font-semibold text-slate-700">Motivo da exclusão (obrigatório)
+             <input name="motivoExclusao" type="text" value={motivoExclusao}
+              onChange={e=>setMotivoExclusao(e.target.value)} maxLength={500}
+              placeholder="Ex.: lançamento duplicado" className="mt-1 block w-full rounded-lg border bg-white p-2"/>
+            </label>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+             <button type="button" disabled={salvandoExclusao} onClick={()=>setExcluindoLancamento(null)}
+              className="rounded-lg border bg-white px-3 py-2 font-bold">Manter lançamento</button>
+             <button type="button" disabled={salvandoExclusao||motivoExclusao.trim().length<8}
+              onClick={()=>void excluirLancamento(l)}
+              className="rounded-lg bg-red-700 px-3 py-2 font-bold text-white disabled:opacity-40">
+              {salvandoExclusao?'Excluindo...':'Confirmar exclusão'}</button>
+            </div>
+           </div>}
            {historico.length>0&&<details className="mt-3 border-t pt-2 text-xs text-slate-600">
             <summary className="cursor-pointer font-semibold">Histórico de correções ({historico.length})</summary>
             <div className="mt-2 space-y-2">{historico.map(h=><div key={h.id} className="rounded-lg bg-slate-50 p-2">
@@ -296,6 +340,14 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
      })}
     </table>
    </div>
+   {(dados.lancamentosCancelados?.length||0)>0&&<details className="rounded-lg border p-3 text-xs text-slate-600">
+    <summary className="cursor-pointer font-semibold">Lançamentos excluídos (histórico): {dados.lancamentosCancelados?.length}</summary>
+    <div className="mt-3 space-y-2">{dados.lancamentosCancelados?.map(l=><div key={l.id} className="rounded-lg border bg-slate-50 p-2">
+     <b>{l.descricao} · {moedas(Number(l.valor))}</b>
+     <p className="mt-1">Fornecedor: {l.fornecedor||'—'} · Excluído por {l.cancelado_por_nome||'usuário autorizado'} em {new Date(l.cancelado_em).toLocaleString('pt-BR')}</p>
+     <p>Motivo: {l.motivo_cancelamento}</p>
+    </div>)}</div>
+   </details>}
   </div>}
 
  </div>
