@@ -170,6 +170,7 @@ export default function WhatsAppAtendimentoPage() {
   const [mensagemRespondendo, setMensagemRespondendo] = useState<Mensagem | null>(null)
   const [emojiMensagemId, setEmojiMensagemId] = useState<string | null>(null)
   const [emojiCustom, setEmojiCustom] = useState('')
+  const [emojiComposerAberto, setEmojiComposerAberto] = useState(false)
   const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
@@ -2191,26 +2192,33 @@ export default function WhatsAppAtendimentoPage() {
                   return (
                     <div key={m.id} className={`group/msg flex min-w-0 w-full ${saida?'justify-end':'justify-start'}`}>
                       <div className={`relative min-w-0 max-w-[88%] overflow-visible rounded-xl px-3 py-2 shadow-sm sm:max-w-[82%] ${saida?'bg-[#d9fdd3]':'bg-white'}`}>
-                        {podeResponder && (
-                          <div className={`absolute -top-3 z-10 flex items-center gap-1 rounded-full border bg-white p-1 shadow-md sm:opacity-0 sm:transition-opacity sm:group-hover/msg:opacity-100 sm:group-focus-within/msg:opacity-100 ${saida?'right-2':'left-2'}`}>
-                            <button type="button" onClick={()=>setMensagemRespondendo(m)}
-                              disabled={!m.whatsapp_message_id}
-                              aria-label="Responder à mensagem"
-                              className="grid h-8 w-8 place-items-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-                              title={m.whatsapp_message_id?'Responder esta mensagem':'Mensagem antiga sem identificador de resposta'}>
-                              <Reply size={14}/>
+                        {/* Ações sempre visíveis: no celular não existe hover.
+                            Não alterar a regra de autorização do atendimento. */}
+                        <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-slate-200/70 pb-1.5">
+                          <button type="button" onClick={()=>setMensagemRespondendo(m)}
+                            disabled={!podeResponder||!m.whatsapp_message_id}
+                            aria-label="Responder à mensagem"
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-white/80 disabled:opacity-40"
+                            title={!podeResponder?'Assuma o atendimento para responder':m.whatsapp_message_id?'Responder esta mensagem':'Mensagem antiga sem identificador de resposta'}>
+                            <Reply size={14}/> Responder
+                          </button>
+                          <button type="button" onClick={()=>setEmojiMensagemId(atual=>atual===m.id?null:m.id)}
+                            disabled={!podeResponder||!m.whatsapp_message_id}
+                            aria-label="Reagir à mensagem com emoji"
+                            aria-expanded={emojiMensagemId===m.id}
+                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-white/80 disabled:opacity-40"
+                            title={!podeResponder?'Assuma o atendimento para reagir':m.whatsapp_message_id?'Reagir com emoji':'Mensagem antiga sem identificador de reação'}>
+                            <SmilePlus size={14}/> Reagir
+                          </button>
+                          {!podeResponder&&podeAssumirAtiva&&(
+                            <button type="button" onClick={()=>void acaoConversa('assumir')}
+                              className="rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+                              Assumir atendimento
                             </button>
-                            <button type="button" onClick={()=>setEmojiMensagemId(atual=>atual===m.id?null:m.id)}
-                              disabled={!m.whatsapp_message_id}
-                              aria-label="Reagir à mensagem com emoji"
-                              className="grid h-8 w-8 place-items-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-                              title={m.whatsapp_message_id?'Reagir com emoji':'Mensagem antiga sem identificador de reação'}>
-                              <SmilePlus size={14}/>
-                            </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                         {emojiMensagemId===m.id && podeResponder && (
-                          <div className={`absolute top-7 z-20 flex flex-wrap items-center gap-1 rounded-xl border bg-white p-2 shadow-xl ${saida?'right-0':'left-0'}`}>
+                          <div className="mb-2 flex flex-wrap items-center gap-1 rounded-xl border bg-white p-2 shadow-sm">
                             {['👍','✅','❤️','😂','👏','🙏','🔥','👀'].map(emoji=>(
                               <button key={emoji} type="button" onClick={()=>void reagirMensagem(m.id,emoji)}
                                 className="grid h-8 w-8 place-items-center rounded-lg text-lg hover:bg-slate-100">
@@ -2435,7 +2443,7 @@ export default function WhatsAppAtendimentoPage() {
                     {!sugestaoIA && modoIA === 'observando' && eu?.role === 'master' && (
                       <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold text-blue-600"><Sparkles size={12}/>IA observando e aprendendo · sem responder</div>
                     )}
-                    <div className="mb-2 flex items-center gap-1 text-slate-500">
+                    <div className="mb-2 flex flex-wrap items-center gap-1 text-slate-500">
                       <input ref={arquivoInputRef} type="file" className="hidden"
                         accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/quicktime,audio/*,.pdf,.txt,.doc,.docx,.xls,.xlsx"
                         onChange={e=>{
@@ -2446,6 +2454,13 @@ export default function WhatsAppAtendimentoPage() {
                         onClick={()=>arquivoInputRef.current?.click()}
                         className="rounded-lg p-2 hover:bg-slate-100 disabled:opacity-40" title="Enviar foto, vídeo, áudio ou documento">
                         <Paperclip size={18}/>
+                      </button>
+                      <button type="button" onClick={()=>setEmojiComposerAberto(v=>!v)}
+                        aria-label="Inserir emoji na mensagem"
+                        aria-expanded={emojiComposerAberto}
+                        title="Inserir emoji no texto"
+                        className={`inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold hover:bg-slate-100 ${emojiComposerAberto?'bg-emerald-50 text-emerald-700':''}`}>
+                        <SmilePlus size={18}/> Emoji
                       </button>
                       <button onClick={()=>setApoioAberto(apoioAberto==='etiquetas'?null:'etiquetas')}
                         className={`rounded-lg p-2 hover:bg-slate-100 ${apoioAberto==='etiquetas'?'bg-slate-100 text-emerald-700':''}`}
@@ -2459,6 +2474,24 @@ export default function WhatsAppAtendimentoPage() {
                       </button>
                       <span className="ml-auto text-[10px] text-slate-400">Enter envia · Shift+Enter quebra linha</span>
                     </div>
+
+                    {emojiComposerAberto && (
+                      <div className="mb-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-700">Escolha um emoji para a mensagem</span>
+                          <button type="button" onClick={()=>setEmojiComposerAberto(false)}
+                            aria-label="Fechar emojis" className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"><X size={15}/></button>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {['😀','😊','😂','😍','🥰','😘','👍','👏','🙏','❤️','💚','✅','🎉','🔥','👀','🤝','😉','😎','😢','👋'].map(emoji=>(
+                            <button key={emoji} type="button"
+                              onClick={()=>{setTexto(valor=>valor+emoji);setEmojiComposerAberto(false)}}
+                              aria-label={`Inserir ${emoji} no texto`}
+                              className="grid h-9 w-9 place-items-center rounded-lg text-xl hover:bg-emerald-50">{emoji}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {apoioAberto === 'rapidas' && (
                       <div className="mb-2 max-h-64 overflow-y-auto rounded-xl border bg-white p-3 shadow-sm">
