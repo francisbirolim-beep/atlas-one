@@ -1,7 +1,7 @@
 // Revisão humana do custo previsto W.Vetro. Nunca altera o CMV realizado ou o dado de origem.
 export const CATEGORIAS_CMV_REVISAO = ['total','perfil','perfil_uso','sobra','acessorio','vidro','perda','mao_obra','instalacao','frete','outros'] as const
 export type CategoriaCmvRevisao = (typeof CATEGORIAS_CMV_REVISAO)[number]
-export type PrevisaoCmvBase = {categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null}
+export type PrevisaoCmvBase = {categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;perfil_previsao?:number|null;perfil_previsao_fonte?:string|null}
 export type RevisaoCmv = {
  versao:1;venda_id:string;orcamento_id:string;numero_wvetro:string;categoria:CategoriaCmvRevisao
  acao:'validado'|'corrigido';valor_origem:number|null;valor_revisado:number
@@ -12,7 +12,7 @@ export function custoPrevistoOriginal(p:PrevisaoCmvBase,c:CategoriaCmvRevisao):n
  if(c==='total')return p.total
  if(c==='perfil_uso')return p.categorias.perfil
  if(c==='sobra')return p.categorias.sobra
- if(c==='perfil')return p.categorias.perfil===null||p.categorias.sobra===null?null:centavos(p.categorias.perfil+p.categorias.sobra)
+ if(c==='perfil')return p.perfil_previsao??(p.categorias.perfil===null||p.categorias.sobra===null?null:centavos(p.categorias.perfil+p.categorias.sobra))
  if(c==='acessorio'||c==='vidro'||c==='perda')return p.categorias[c]
  return null
 }
@@ -26,12 +26,13 @@ export function custoRevisado(p:PrevisaoCmvBase,revisoes:Partial<Record<Categori
   if(categoria!=='perfil')return revisao!.valor_revisado
   // Uma correção posterior do uso ou da sobra invalida a revisão anterior do subtotal.
   const versaoSubtotal=Date.parse(revisao!.registrado_em)||0
-  const partePosterior=(['perfil_uso','sobra'] as const).some(c=>{
+  const partePosterior=p.perfil_previsao==null&&(['perfil_uso','sobra'] as const).some(c=>{
    const r=revisoes[c];return r&&revisaoAtual(r,custoPrevistoOriginal(p,c))&&(Date.parse(r.registrado_em)||0)>versaoSubtotal
   })
   if(!partePosterior)return revisao!.valor_revisado
  }
  if(categoria==='perfil'){
+  if(p.perfil_previsao!=null)return origem
   const uso=custoRevisado(p,revisoes,'perfil_uso')
   const sobra=custoRevisado(p,revisoes,'sobra')
   return uso===null||sobra===null?origem:centavos(uso+sobra)

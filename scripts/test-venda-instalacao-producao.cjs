@@ -22,9 +22,8 @@ assert.equal(validar(2,'em_instalacao'),null)
 assert.match(validar(3,'instalado'),/Produção insuficiente/)
 assert.equal(validar(3,'instalado',completa),null)
 assert.match(validar(2,'instalado'),/quantidade total/)
-// A etapa Em instalação agora pode começar com 0 unidades fisicamente instaladas.
-assert.equal(validar(0,'em_instalacao'),null)
-assert.match(validar(3,'em_instalacao',completa),/quantidade ainda não integralmente instalada/)
+assert.equal(validar(0,'em_instalacao'),null) // obra iniciada, mas primeira peça ainda não instalada
+assert.match(validar(0,'em_instalacao',sem),/produzidas disponíveis/)
 assert.match(validar(2,'pendente'),/não pode possuir/)
 assert.match(validar(4,'instalado'),/inválida/)
 assert.match(validar(1.5,'em_instalacao'),/inválida/)

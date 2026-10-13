@@ -263,6 +263,7 @@ export async function listarDocumentosCliente(clienteId: string): Promise<Docume
 export async function adicionarDocumentoCliente(dados: {
   clienteId: string
   obraId?: string | null
+  vendaObraId?: string | null
   titulo: string
   arquivo: File
   tipo?: string
@@ -277,6 +278,7 @@ export async function adicionarDocumentoCliente(dados: {
     .insert({
       cliente_id: dados.clienteId,
       obra_id: dados.obraId || null,
+      ...(dados.vendaObraId?{venda_obra_id:dados.vendaObraId}:{}),
       titulo: dados.titulo.trim(),
       nome_arquivo: dados.arquivo.name,
       url,
