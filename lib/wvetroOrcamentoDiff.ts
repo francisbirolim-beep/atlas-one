@@ -36,6 +36,16 @@ function ambiente(i: Objeto) { return txt(i.Ambiente, i.Local) }
 function descricao(i: Objeto) {
   return [modelo(i), linha(i), ambiente(i)].filter(Boolean).join(' · ') || 'Item sem descrição'
 }
+function composicao(i: Objeto, chaves: string[]) {
+  const dados = chaves.map(k => i[k]).find(x => Array.isArray(x))
+  if (!Array.isArray(dados)) return ''
+  return dados.map((x: unknown) => {
+    const c = obj(x)
+    return [txt(c.Codigo, c.ProdutoCodigo, c.Id), txt(c.Nome, c.Descricao, c.ProdutoNome),
+      valor(c.Qtde ?? c.Quantidade ?? c.Qtd),
+      valor(c.ValorUnitario ?? c.Valor ?? c.Custo)].join(':')
+  }).sort().join(' | ')
+}
 function assinatura(i: Objeto) {
   return [norm(modelo(i)), norm(linha(i)), norm(ambiente(i)),
     medida(i.Largura ?? i.LarguraMM ?? i.LarguraMm),
@@ -93,6 +103,10 @@ export function compararVersoesOrcamentoWVetro(anteriorInput: unknown, atualInpu
     ['Altura (mm)', i => medida(i.Altura ?? i.AlturaMM ?? i.AlturaMm)],
     ['Quantidade', i => valor(i.Qtde ?? i.Quantidade ?? 1)],
     ['Cor', i => txt(i.Cor, i.CorNome, i.Acabamento)],
+    ['Valor do item', i => valor(i.ValorTotalAlterado ?? i.ValorTotal ?? i.Total)],
+    ['Perfis', i => composicao(i, ['Perfil','Perfis'])],
+    ['Acessórios', i => composicao(i, ['Acessorios','Acessórios'])],
+    ['Vidros', i => composicao(i, ['Vidros'])],
   ]
   for (let a = 0; a < antigos.length; a++) {
     const b = pares.get(a), velho = antigos[a]
@@ -121,10 +135,12 @@ export function compararVersoesOrcamentoWVetro(anteriorInput: unknown, atualInpu
     ['Valor total', anterior.ValorTotal ?? anterior.Total ?? anterior.ValorBruto,
       atual.ValorTotal ?? atual.Total ?? atual.ValorBruto],
     ['Situação', anterior.Situacao ?? anterior.Status, atual.Situacao ?? atual.Status],
+    ['Desconto', anterior.DescontoVlr, atual.DescontoVlr],
+    ['Custo com sobra', anterior.CustoComSobra, atual.CustoComSobra],
   ]
   for (const [campo, v1, v2] of gerais) {
-    const antes = campo === 'Valor total' ? valor(v1) : txt(v1)
-    const depois = campo === 'Valor total' ? valor(v2) : txt(v2)
+    const antes = ['Valor total', 'Desconto', 'Custo com sobra'].includes(campo) ? valor(v1) : txt(v1)
+    const depois = ['Valor total', 'Desconto', 'Custo com sobra'].includes(campo) ? valor(v2) : txt(v2)
     if (norm(antes) !== norm(depois)) muda(result, 'alterado', 'Orçamento', campo, antes || null, depois || null)
   }
   return result
