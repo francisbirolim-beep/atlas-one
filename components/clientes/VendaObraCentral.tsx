@@ -707,6 +707,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   async function emitirCotacaoCategoria(){
     if(!venda||!pacoteTecnicoId)return
+    if(!selecionadosMateriais.some(id=>materiaisCategoria.some(m=>m.id===id))){
+      setMensagemMateriais('Selecione os materiais individualmente ou use Selecionar todos antes de validar e enviar para Compras.')
+      return
+    }
     const categoria=categoriaMaterialAberta
     if(categoria==='perfil'&&orcamento?.wvetro_fluxo?.numero){
       setMensagemMateriais('Perfis cortados pertencem à Produção. Gere a cotação de compra a partir das barras comerciais do relatório Barras Utilizadas na aba Compras.')
@@ -901,7 +905,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   }
 
   async function substituirMaterialCentral(m:MaterialTecnico){
-    const codigo=window.prompt(`Código do material que substituirá ${m.codigo||m.descricao}:`,'')?.trim()
+    const escopo=window.prompt('Substituição de perfil/acessório: digite OBRA para alterar somente esta venda ou GERAL para solicitar alteração da receita técnica de futuras obras.','OBRA')?.trim().toUpperCase()
+    if(!escopo)return
+    if(escopo==='GERAL'){
+      setErro('Substituição geral não aplicada: é necessário identificar a receita técnica, linha e tipologia na Engenharia e aprovar uma nova versão. Nenhum material foi alterado.')
+      return
+    }
+    if(escopo!=='OBRA'){setErro('Escolha OBRA ou GERAL. Nenhuma substituição foi feita.');return}
+    const codigo=window.prompt(`Código do material que substituirá ${m.codigo||m.descricao} SOMENTE NESTA OBRA:`,'')?.trim()
     if(!codigo)return
     const pr=await supabase.from('produtos').select('id,codigo,nome,unidade,tamanho_barra_mm,foto_url,categoria').ilike('codigo',codigo).limit(5)
     const produto=((pr.data||[]) as ProdutoMaterial[]).find(p=>String(p.codigo||'').toLocaleLowerCase('pt-BR')===codigo.toLocaleLowerCase('pt-BR'))
@@ -1461,21 +1472,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </>}
         {aba==='materiais'&&<Box titulo="Lista de materiais para comprar · Barras Utilizadas WVetro">
           <VendaBarrasWVetro modo="lista" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>{setEditorCortesAberto(false);setAba('producao')}}/>
-          <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Esta é a relação de barras inteiras para comprar, obtida do relatório Barras Utilizadas. Os cortes e suas medidas permanecem em Produção; o acompanhamento dos pedidos e fornecedores permanece no Kanban de Compras.</p>
+          <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Perfis desta obra em barras inteiras, não peças do plano de corte. Imprima a conferência do estoque, corrija a quantidade, selecione todos ou individualmente e clique em Validar para que apareçam em Falta comprar na aba Compras. O plano de corte continua em Produção.</p>
         </Box>}
 
         {aba==='materiais'&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
-          const colunas=[
-            ['faltas','Falta comprar','border-red-200','bg-red-50/60','text-red-700',kanbanMateriais.faltas],
-            ['cotacao','Em cotação','border-blue-200','bg-blue-50/60','text-blue-700',kanbanMateriais.cotacao],
-            ['comprado','Comprado','border-emerald-200','bg-emerald-50/60','text-emerald-700',kanbanMateriais.comprado],
-            ['entrega','Aguardando chegar','border-amber-200','bg-amber-50/70','text-amber-700',kanbanMateriais.entrega],
-            ['recebido','Recebido','border-teal-200','bg-teal-50/60','text-teal-700',kanbanMateriais.recebido],
-          ] as const
           const rotulo=rotuloCategoria(categoriaMaterialAberta)
           const cotacaoPerfilWVetroBloqueada=Boolean(orcamento?.wvetro_fluxo?.numero)&&categoriaMaterialAberta==='perfil'
-          return <Box titulo="Materiais técnicos desta venda · Kanban de separação">
+          return <Box titulo="Materiais da obra · Conferência e separação">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
               <div>
                 <b className="text-sm text-slate-800">Gerencie os materiais por categoria</b>
@@ -1501,27 +1505,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               </button>)}
             </div>
 
-            <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">Kanban de separação e acompanhamento dos materiais técnicos por item. As barras comerciais do WVetro são validadas acima; movimentar um material técnico não importa nem calcula barras para compra.</p>
-            <div className="mt-4 grid items-start gap-3 md:grid-cols-2 xl:grid-cols-5">
-              {colunas.map(([id,titulo,borda,fundo,texto,itensColuna])=><div key={id} onDragOver={e=>{e.preventDefault();if(materialArrastandoId)setColunaArrasteSobre(id)}} onDragLeave={e=>{if(e.currentTarget===e.target)setColunaArrasteSobre(null)}} onDrop={e=>{e.preventDefault();void soltarMaterialNoKanban(id)}} className={`overflow-hidden rounded-xl border transition ${borda} ${fundo} ${colunaArrasteSobre===id?'ring-2 ring-blue-400 shadow-md':''}`}>
-                <div className="flex items-center justify-between border-b border-white/80 px-3 py-2.5"><b className={`text-xs ${texto}`}>{titulo} ({itensColuna.length})</b><ChevronRight size={13} className={texto}/></div>
-                <div className="space-y-2 p-2.5">
-                  {itensColuna.slice(0,4).map(m=>{const img=imagemMaterial(m);return <div key={m.id} draggable={!ocupadoMateriais} onDragStart={e=>{setMaterialArrastandoId(m.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',m.id)}} onDragEnd={()=>{setMaterialArrastandoId(null);setColunaArrasteSobre(null)}} className={`flex cursor-grab items-center gap-2 rounded-lg border border-white bg-white p-2 shadow-sm active:cursor-grabbing ${materialArrastandoId===m.id?'opacity-50 ring-2 ring-blue-300':''}`} title="Arraste para outra coluna para mudar a situação">
-                    <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border bg-slate-50">{img?<img src={img} alt={m.descricao} className="h-full w-full object-contain p-0.5"/>:<ImageIcon size={14} className="text-slate-300"/>}</div>
-                    <div className="min-w-0"><div className="font-mono text-[10px] font-bold text-slate-700">{m.codigo||'Sem código'}</div><div className="truncate text-[11px] text-slate-600">{m.descricao}</div><div className="text-[10px] text-slate-400">Qtd. {Number(m.quantidade_ajustada??m.quantidade_tecnica??0).toLocaleString('pt-BR')} {m.unidade}</div></div>
-                  </div>})}
-                  {itensColuna.length>4&&<button type="button" onClick={()=>abrirListaSituacao(id)} className="w-full rounded-lg border border-dashed bg-white/70 px-2 py-2 text-center text-[10px] font-bold text-blue-600 hover:bg-white">Ver todos ({itensColuna.length})</button>}
-                  {!itensColuna.length&&<div className="rounded-lg border border-dashed bg-white/60 px-2 py-5 text-center text-[10px] text-slate-400">Solte um item aqui</div>}
-                </div>
-              </div>)}
+            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-950">
+              <b>Sequência: conferir → corrigir → separar estoque → validar → Compras.</b>
+              <p className="mt-1">Esta aba não movimenta pedidos. O Kanban de compras está somente na aba Compras, para a mesma venda.</p>
             </div>
-
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <div><h3 className="font-bold text-slate-900">Lista completa de materiais - {rotulo}</h3><p className="text-xs text-slate-500">Confira cada item, faça a separação pelo Kanban e ajuste a lista técnica. Os pedidos e as barras comerciais continuam controlados na aba Compras.</p></div>
+              <div><h3 className="font-bold text-slate-900">Lista de materiais para conferência - {rotulo}</h3><p className="text-xs text-slate-500">Confira os itens que a obra precisa; edite, inclua, substitua, exclua e separe o que existe no estoque antes de liberar para Compras.</p></div>
               <div className="flex flex-wrap gap-2">
-                {obra?.id&&grupoPdf&&<Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=${grupoPdf}`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileDown size={13}/>Gerar lista de {rotulo.toLowerCase()}</Link>}
+                {obra?.id&&grupoPdf&&<Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=${grupoPdf}`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileDown size={13}/>Conferir estoque / PDF de {rotulo.toLowerCase()}</Link>}
                 <button type="button" disabled={ocupadoMateriais||!pacoteTecnicoId} onClick={()=>void adicionarMaterialCentral()} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{ocupadoMateriais?<Loader2 size={13} className="animate-spin"/>:<Plus size={13}/>}Adicionar material</button>
-                <button type="button" disabled={cotacaoPerfilWVetroBloqueada||emitindoCotacao||ocupadoMateriais||!pacoteTecnicoId||materiaisCategoria.length===0||totalComprarCategoria<=0} title={cotacaoPerfilWVetroBloqueada?'Para comprar perfis comerciais WVetro, utilize o relatório Barras Utilizadas na aba Compras.':undefined} onClick={()=>void emitirCotacaoCategoria()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{emitindoCotacao?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}{cotacaoPerfilWVetroBloqueada?'Use Barras Utilizadas em Compras':'Validar e gerar cotação'}</button>
+                <button type="button" disabled={cotacaoPerfilWVetroBloqueada||emitindoCotacao||ocupadoMateriais||!pacoteTecnicoId||materiaisCategoria.length===0||totalComprarCategoria<=0||selecionadosMateriais.length===0} title={cotacaoPerfilWVetroBloqueada?'Para comprar perfis comerciais WVetro, utilize o relatório Barras Utilizadas na aba Compras.':undefined} onClick={()=>void emitirCotacaoCategoria()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{emitindoCotacao?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}{cotacaoPerfilWVetroBloqueada?'Enviar barras acima':'Validar selecionados para Compras'}</button>
               </div>
             </div>
 
@@ -1531,13 +1524,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 <span className="text-xs font-semibold text-slate-600">{selecionadosMateriais.length} selecionado(s)</span>
                 {filtroSituacaoMaterial!=='todos'&&<button type="button" onClick={()=>setFiltroSituacaoMaterial('todos')} className="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold text-blue-700">Filtro: {filtroSituacaoMaterial==='faltas'?'Falta comprar':filtroSituacaoMaterial==='cotacao'?'Em cotação':filtroSituacaoMaterial==='comprado'?'Comprado':filtroSituacaoMaterial==='entrega'?'Aguardando chegar':'Recebido'} · mostrar todos</button>}
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('cotacao')} className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-[11px] font-bold text-blue-700 disabled:opacity-40">Em cotação</button>
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('comprado')} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-[11px] font-bold text-emerald-700 disabled:opacity-40">Comprado</button>
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('entrega')} className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-bold text-amber-700 disabled:opacity-40">Aguardando chegar</button>
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('recebido')} className="rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-2 text-[11px] font-bold text-teal-700 disabled:opacity-40">Recebido</button>
-                <button type="button" disabled={ocupadoMateriais||!selecionadosMateriais.length} onClick={()=>void moverMateriaisEmLote('necessidade')} className="rounded-lg border bg-white px-2.5 py-2 text-[11px] font-bold text-slate-600 disabled:opacity-40">Voltar para falta comprar</button>
-              </div>
+              <div className="text-[11px] font-medium text-slate-600">Selecione os itens que precisam ser comprados e use “Validar selecionados para Compras” acima.</div>
             </div>
 
             <div className="mt-3 overflow-x-auto rounded-xl border">
