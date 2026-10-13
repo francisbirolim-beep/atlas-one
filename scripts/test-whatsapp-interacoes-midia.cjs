@@ -12,7 +12,7 @@ for(const msg of ['Baixar imagem','Baixar PDF','Baixar documento','Baixar áudio
 }
 assert.match(ui,/setMensagemRespondendo\(m\)/,'Responder continua selecionando a mensagem')
 assert.match(ui,/setEmojiMensagemId\(atual=>atual===m\.id\?null:m\.id\)/,'Emojis continuam selecionando a mensagem')
-assert.match(ui,/flex items-center gap-1 rounded-full border bg-white p-1 shadow-md/,'Ações ficam acessíveis no celular')
+assert.match(ui,/mb-2 flex flex-wrap items-center gap-1 border-b/,'Ações visíveis em todas as resoluções sem hover')
 assert.match(ui,/!m\.whatsapp_message_id/,'Não oferece resposta a mensagens antigas sem ID remoto')
 assert.match(ui,/respostaMensagemId: mensagemRespondendo\?\.id \|\| null/)
 assert.match(messaging,/reagirMensagemWhatsApp/,'Reagir passa pela autorização de atendimento')
