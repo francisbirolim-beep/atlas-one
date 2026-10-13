@@ -3,7 +3,7 @@ import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { consultarRecursoOperacionalWVetro } from '@/lib/wvetroOperacionalConsultaServer'
 import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacionalServer'
-import { sincronizar } from '../sincronizar/route'
+import { sincronizar, aplicarAtualizacaoPendenteWVetro } from '../sincronizar/route'
 import type { UsuarioWVetro } from '@/lib/wvetroAcessoServer'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import { materializarPacoteTecnicoWVetro } from '@/lib/wvetroPacoteTecnicoServer'
@@ -384,6 +384,16 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
     if (alvoErro) throw alvoErro
     if (!alvo) return NextResponse.json({ error: 'Orçamento do Kanban não encontrado.' }, { status: 404 })
+
+    if (acao === 'aplicar_atualizacao') {
+      const resultado = await aplicarAtualizacaoPendenteWVetro(usuario.empresa_id, alvo.id, usuario as UsuarioWVetro)
+      return NextResponse.json({
+        ok: true,
+        orcamento: resultado.atualizado,
+        diferencas: resultado.diferencas,
+        mensagem: 'Nova versão W.Vetro aplicada ao mesmo orçamento. Confira e valide novamente antes de continuar.',
+      })
+    }
 
     if (acao === 'buscar') {
       let recentes: Awaited<ReturnType<typeof listarRecentes>> | null = null
