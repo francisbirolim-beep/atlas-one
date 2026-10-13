@@ -62,6 +62,7 @@ const qrStates = new Map()
 const groupSyncTimers = new Map()
 const groupSyncLastAt = new Map()
 const groupSyncInFlight = new Set()
+const reconnectAttempts = new Map()
 let shuttingDown = false
 let refreshTimer = null
 let queueTimer = null
@@ -86,6 +87,8 @@ const QUEUE_IDLE_MS = envNumber('ATLAS_GATEWAY_QUEUE_IDLE_MS', 10_000, 2_000, 5 
 const PUSH_ACTIVE_MS = envNumber('ATLAS_GATEWAY_PUSH_ACTIVE_MS', 2_000, 1_000, 30_000)
 const PUSH_IDLE_MS = envNumber('ATLAS_GATEWAY_PUSH_IDLE_MS', 30_000, 5_000, 10 * 60_000)
 const ERROR_BACKOFF_MS = envNumber('ATLAS_GATEWAY_ERROR_BACKOFF_MS', 60_000, 10_000, 15 * 60_000)
+const RECONNECT_BASE_MS = envNumber('ATLAS_GATEWAY_RECONNECT_BASE_MS', 15_000, 3_000, 5 * 60_000)
+const RECONNECT_MAX_MS = envNumber('ATLAS_GATEWAY_RECONNECT_MAX_MS', 5 * 60_000, 30_000, 30 * 60_000)
 
 function scheduleLoop(currentTimer, fn, delayMs) {
   if (currentTimer) clearTimeout(currentTimer)
@@ -95,6 +98,12 @@ function scheduleLoop(currentTimer, fn, delayMs) {
 function backoffDelay(baseDelay, errorStreak) {
   if (!errorStreak) return baseDelay
   return Math.min(ERROR_BACKOFF_MS, baseDelay * (2 ** Math.min(errorStreak, 5)))
+}
+
+function reconnectDelay(channelId) {
+  const attempts = Number(reconnectAttempts.get(channelId) || 0) + 1
+  reconnectAttempts.set(channelId, attempts)
+  return Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * (2 ** Math.min(attempts - 1, 6)))
 }
 
 const localPanel = http.createServer((req, res) => {
@@ -960,6 +969,7 @@ async function connectChannel(channel) {
           qrDataUrl: null,
           updatedAt: new Date().toISOString(),
         })
+        reconnectAttempts.delete(channel.id)
         console.log(
           `[gateway] conectado: ${channel.nome} -> ${result?.connectedNumber || connectedJid || 'ok'}`,
         )
@@ -984,7 +994,9 @@ async function connectChannel(channel) {
           console.log(`[gateway] reconectando: ${channel.nome}`)
         }
 
-        setTimeout(() => void connectChannel(channel), 3000)
+        const delay = reconnectDelay(channel.id)
+        console.log(`[gateway] nova tentativa em ${Math.round(delay / 1000)}s: ${channel.nome}`)
+        setTimeout(() => void connectChannel(channel), delay)
       }
     })
 
@@ -1060,7 +1072,11 @@ async function connectChannel(channel) {
     sessions.delete(channel.id)
     console.error(`[gateway] falha ao iniciar ${channel.nome}:`, error.message)
     await reportState(channel.id, 'offline')
-    if (!shuttingDown) setTimeout(() => void connectChannel(channel), 5000)
+    if (!shuttingDown) {
+      const delay = reconnectDelay(channel.id)
+      console.log(`[gateway] nova tentativa em ${Math.round(delay / 1000)}s: ${channel.nome}`)
+      setTimeout(() => void connectChannel(channel), delay)
+    }
   }
 }
 
