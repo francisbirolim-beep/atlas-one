@@ -67,9 +67,36 @@ let refreshTimer = null
 let queueTimer = null
 let pushTimer = null
 let pushSending = false
+let refreshErrorStreak = 0
+let queueErrorStreak = 0
+let pushErrorStreak = 0
 let panelBrowserOpened = false
 
 const LOCAL_PANEL_PORT = 3337
+
+function envNumber(name, fallback, min, max) {
+  const value = Number(process.env[name] || fallback)
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(min, Math.min(max, value))
+}
+
+const REFRESH_CHANNELS_MS = envNumber('ATLAS_GATEWAY_REFRESH_CHANNELS_MS', 30_000, 5_000, 5 * 60_000)
+const QUEUE_ACTIVE_MS = envNumber('ATLAS_GATEWAY_QUEUE_ACTIVE_MS', 900, 500, 30_000)
+const QUEUE_IDLE_MS = envNumber('ATLAS_GATEWAY_QUEUE_IDLE_MS', 10_000, 2_000, 5 * 60_000)
+const PUSH_ACTIVE_MS = envNumber('ATLAS_GATEWAY_PUSH_ACTIVE_MS', 2_000, 1_000, 30_000)
+const PUSH_IDLE_MS = envNumber('ATLAS_GATEWAY_PUSH_IDLE_MS', 30_000, 5_000, 10 * 60_000)
+const ERROR_BACKOFF_MS = envNumber('ATLAS_GATEWAY_ERROR_BACKOFF_MS', 60_000, 10_000, 15 * 60_000)
+
+function scheduleLoop(currentTimer, fn, delayMs) {
+  if (currentTimer) clearTimeout(currentTimer)
+  return setTimeout(() => void fn(), delayMs)
+}
+
+function backoffDelay(baseDelay, errorStreak) {
+  if (!errorStreak) return baseDelay
+  return Math.min(ERROR_BACKOFF_MS, baseDelay * (2 ** Math.min(errorStreak, 5)))
+}
+
 const localPanel = http.createServer((req, res) => {
   if (req.url?.startsWith('/state')) {
     res.writeHead(200, {
@@ -720,12 +747,12 @@ async function syncHistoryBundle(channel, data, lidToPnBase = null) {
 
 async function processQueue(channelId) {
   const state = sessions.get(channelId)
-  if (!state?.sock?.user || state.sending) return
+  if (!state?.sock?.user || state.sending) return false
   state.sending = true
   try {
     const response = await atlas(`channelId=${encodeURIComponent(channelId)}`, { method: 'GET' })
     const item = response?.item
-    if (!item) return
+    if (!item) return false
 
     try {
       const payload = item.payload && typeof item.payload === 'object' ? item.payload : {}
@@ -806,7 +833,7 @@ async function processQueue(channelId) {
             whatsappMessageId: null,
           }),
         })
-        return
+        return true
       } else {
         throw new Error(`Tipo de saida ainda nao suportado: ${item.tipo}`)
       }
@@ -822,6 +849,7 @@ async function processQueue(channelId) {
           whatsappMessageId: sent?.key?.id || null,
         }),
       })
+      return true
     } catch (error) {
       await atlas('', {
         method: 'POST',
@@ -835,7 +863,8 @@ async function processQueue(channelId) {
       })
     }
   } catch (error) {
-    console.error(`[gateway:${channelId}] fila:`, error.message)
+    console.error(`[gateway:${channelId}] fila:`, error instanceof Error ? error.message : String(error))
+    throw error
   } finally {
     state.sending = false
   }
@@ -1048,25 +1077,51 @@ async function refreshChannels() {
     for (const channel of channels) {
       if (!sessions.has(channel.id)) void connectChannel(channel)
     }
+    refreshErrorStreak = 0
   } catch (error) {
-    console.error('[gateway] canais:', error.message)
+    refreshErrorStreak += 1
+    console.error('[gateway] canais:', error instanceof Error ? error.message : String(error))
+  } finally {
+    if (!shuttingDown) {
+      refreshTimer = scheduleLoop(
+        refreshTimer,
+        refreshChannels,
+        backoffDelay(REFRESH_CHANNELS_MS, refreshErrorStreak),
+      )
+    }
   }
 }
 
 async function processAllQueues() {
   if (shuttingDown) return
-  for (const [channelId, state] of sessions) {
-    if (state.sock?.user) void processQueue(channelId)
+  let processed = 0
+  try {
+    const jobs = []
+    for (const [channelId, state] of sessions) {
+      if (state.sock?.user) jobs.push(processQueue(channelId))
+    }
+    const results = await Promise.allSettled(jobs)
+    processed = results.filter((result) => result.status === 'fulfilled' && result.value === true).length
+    const failed = results.filter((result) => result.status === 'rejected')
+    if (failed.length) throw failed[0].reason
+    queueErrorStreak = 0
+  } catch (error) {
+    queueErrorStreak += 1
+    console.error('[gateway] fila geral:', error instanceof Error ? error.message : String(error))
+  } finally {
+    const baseDelay = processed > 0 ? QUEUE_ACTIVE_MS : QUEUE_IDLE_MS
+    queueTimer = scheduleLoop(queueTimer, processAllQueues, backoffDelay(baseDelay, queueErrorStreak))
   }
 }
 
 async function processPushQueue() {
   if (shuttingDown || pushSending || !PUSH_READY) return
   pushSending = true
+  let processed = false
   try {
     const response = await atlas('mode=push-pending', { method: 'GET' })
     const item = response?.item
-    if (!item || item.skipped || !item.notificacao) return
+    if (!item || item.skipped || !item.notificacao) return false
 
     const notificacao = item.notificacao
     const payload = JSON.stringify({
@@ -1112,10 +1167,18 @@ async function processPushQueue() {
         resultados,
       }),
     })
+    processed = true
+    return true
   } catch (error) {
+    pushErrorStreak += 1
     console.error('[gateway] push:', error instanceof Error ? error.message : String(error))
   } finally {
     pushSending = false
+    if (!shuttingDown && PUSH_READY) {
+      if (processed) pushErrorStreak = 0
+      const baseDelay = processed ? PUSH_ACTIVE_MS : PUSH_IDLE_MS
+      pushTimer = scheduleLoop(pushTimer, processPushQueue, backoffDelay(baseDelay, pushErrorStreak))
+    }
   }
 }
 
@@ -1138,6 +1201,5 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'))
 console.log('[gateway] iniciando gerenciador multicanal Atlas One...')
 console.log(PUSH_READY ? '[gateway] Web Push ativo.' : '[gateway] Web Push desativado: chaves VAPID ausentes.')
 await refreshChannels()
-refreshTimer = setInterval(() => void refreshChannels(), 5000)
-queueTimer = setInterval(() => void processAllQueues(), 1200)
-pushTimer = setInterval(() => void processPushQueue(), 1500)
+queueTimer = scheduleLoop(queueTimer, processAllQueues, QUEUE_ACTIVE_MS)
+if (PUSH_READY) pushTimer = scheduleLoop(pushTimer, processPushQueue, PUSH_ACTIVE_MS)
