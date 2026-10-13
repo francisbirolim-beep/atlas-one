@@ -666,6 +666,9 @@ export async function POST(req: NextRequest) {
 
     if (acao === 'validar_importacao' || acao === 'corrigir_importacao') {
       const fluxoAtual = obj(alvo.wvetro_fluxo)
+      if (obj(fluxoAtual.atualizacao_pendente).payload) {
+        return NextResponse.json({ error: 'Existe nova versão W.Vetro pendente. Confira e aplique ou encaminhe a revisão antes de validar o orçamento.' }, { status: 409 })
+      }
       const numeroWvetro = txt(fluxoAtual.numero, fluxoAtual.numero_wvetro)
       const origemWvetro = txt(fluxoAtual.origem).toLowerCase().includes('wvetro')
       if (!numeroWvetro || !origemWvetro) {
