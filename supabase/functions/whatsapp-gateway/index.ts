@@ -2009,8 +2009,9 @@ async function conversationForInbound(
   let ownerId = channel.usuario_id || null;
   let ownerName: string | null = null;
   let sector = null;
+  // Usado também para preservar a responsabilidade em conversas já existentes.
+  const principal = isGroup ? await groupPrimaryOwner(config.empresa_id, channel.id, chatJid) : null;
   if (isGroup) {
-    const principal = await groupPrimaryOwner(config.empresa_id, channel.id, chatJid);
     if (principal?.id) {
       ownerId = principal.id;
       ownerName = principal.nome || null;
