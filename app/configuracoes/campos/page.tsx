@@ -49,6 +49,8 @@ export default function CamposConfiguraveisPage() {
   const [contexto, setContexto] = useState<ContextoCampoConfiguravel>('cliente')
   const [busca, setBusca] = useState('')
   const [campoAberto, setCampoAberto] = useState<string | null>(null)
+  // A lista completa precisa permanecer disponível para reativar um campo desmarcado.
+  const [somenteDaEtapa, setSomenteDaEtapa] = useState(false)
 
   useEffect(() => {
     usuarioAtual().then((u) => setAutorizado(u?.role === 'master'))
@@ -61,10 +63,10 @@ export default function CamposConfiguraveisPage() {
   const camposDoSetor = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase('pt-BR')
     return campos
-      .filter((campo) => campo.mostrarEm.includes(contexto) || campo.obrigatorioEm.includes(contexto))
+      .filter((campo) => !somenteDaEtapa || campo.mostrarEm.includes(contexto) || campo.obrigatorioEm.includes(contexto))
       .filter((campo) => !termo || campo.label.toLocaleLowerCase('pt-BR').includes(termo) || campo.chave.toLocaleLowerCase('pt-BR').includes(termo))
       .sort((a, b) => a.ordem - b.ordem)
-  }, [campos, contexto, busca])
+  }, [campos, contexto, busca, somenteDaEtapa])
 
   const resumo = useMemo(() => {
     const doContexto = campos.filter((campo) => campo.mostrarEm.includes(contexto) || campo.obrigatorioEm.includes(contexto))
@@ -107,15 +109,14 @@ export default function CamposConfiguraveisPage() {
 
   function mover(id: string, direcao: -1 | 1) {
     setCampos((atual) => {
-      const visiveis = atual
-        .filter((campo) => campo.mostrarEm.includes(contexto) || campo.obrigatorioEm.includes(contexto))
-        .sort((a, b) => a.ordem - b.ordem)
-      const indice = visiveis.findIndex((campo) => campo.id === id)
+      // Respeita a lista efetivamente exibida (todos ou somente da etapa, com busca).
+      const idsExibidos = camposDoSetor.map((campo) => campo.id)
+      const indice = idsExibidos.indexOf(id)
       const destino = indice + direcao
-      if (indice < 0 || destino < 0 || destino >= visiveis.length) return atual
+      if (indice < 0 || destino < 0 || destino >= idsExibidos.length) return atual
 
-      const atualId = visiveis[indice].id
-      const destinoId = visiveis[destino].id
+      const atualId = idsExibidos[indice]
+      const destinoId = idsExibidos[destino]
       const ordemAtual = atual.find((campo) => campo.id === atualId)?.ordem || 0
       const ordemDestino = atual.find((campo) => campo.id === destinoId)?.ordem || 0
       return atual.map((campo) => {
@@ -150,7 +151,8 @@ export default function CamposConfiguraveisPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">CONFIGURAÇÕES</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900">Campos por setor</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            Escolha uma etapa do Atlas e configure apenas os campos usados nela. As mesmas regras continuam valendo no sistema inteiro.
+            Escolha uma etapa do Atlas, marque ou desmarque Mostrar, Obrigatório e Ativo, e clique em Salvar alterações.
+            Campos desmarcados continuam disponíveis para serem marcados novamente.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -213,7 +215,20 @@ export default function CamposConfiguraveisPage() {
             className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-slate-500"
           />
         </div>
-        <div className="text-xs text-slate-400">{camposDoSetor.length} de {resumo.total} campo(s)</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600">
+            <input
+              type="checkbox"
+              checked={somenteDaEtapa}
+              onChange={(e) => setSomenteDaEtapa(e.target.checked)}
+              className="h-4 w-4 cursor-pointer accent-slate-900"
+            />
+            Somente campos desta etapa
+          </label>
+          <div className="text-xs text-slate-400">
+            {camposDoSetor.length} de {somenteDaEtapa ? resumo.total : campos.length} campo(s)
+          </div>
+        </div>
       </div>
 
       {carregando ? (
@@ -230,27 +245,31 @@ export default function CamposConfiguraveisPage() {
             const aberto = campoAberto === campo.id
             const mostrar = campo.mostrarEm.includes(contexto)
             const obrigatorio = campo.obrigatorioEm.includes(contexto)
+            const vinculado = mostrar || obrigatorio
             return (
               <section key={campo.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="grid gap-3 p-4 md:grid-cols-[minmax(220px,1fr)_150px_150px_120px_auto] md:items-center">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold text-slate-800">{campo.label}</div>
                     <div className="mt-0.5 truncate text-[11px] text-slate-400">{campo.chave} · {TIPOS_CAMPO.find((tipo) => tipo.valor === campo.tipo)?.label || campo.tipo}</div>
+                    {!vinculado && (
+                      <div className="mt-1 text-[11px] text-amber-700">Fora desta etapa — marque Mostrar para incluir</div>
+                    )}
                   </div>
 
                   <label className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 md:bg-transparent md:px-0">
                     <span>Mostrar</span>
-                    <input type="checkbox" checked={mostrar} onChange={(e) => definirNoContexto(campo.id, 'mostrar', e.target.checked)} />
+                    <input type="checkbox" aria-label={`Mostrar ${campo.label} em ${contextoLabel(contexto)}`} className="h-4 w-4 cursor-pointer accent-slate-900" checked={mostrar} onChange={(e) => definirNoContexto(campo.id, 'mostrar', e.target.checked)} />
                   </label>
 
                   <label className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 md:bg-transparent md:px-0">
                     <span>Obrigatório</span>
-                    <input type="checkbox" checked={obrigatorio} onChange={(e) => definirNoContexto(campo.id, 'obrigatorio', e.target.checked)} />
+                    <input type="checkbox" aria-label={`Obrigatório: ${campo.label} em ${contextoLabel(contexto)}`} className="h-4 w-4 cursor-pointer accent-slate-900" checked={obrigatorio} onChange={(e) => definirNoContexto(campo.id, 'obrigatorio', e.target.checked)} />
                   </label>
 
                   <label className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 md:bg-transparent md:px-0">
                     <span>Ativo</span>
-                    <input type="checkbox" checked={campo.ativo} onChange={(e) => atualizar(campo.id, { ativo: e.target.checked })} />
+                    <input type="checkbox" aria-label={`Ativo: ${campo.label}`} className="h-4 w-4 cursor-pointer accent-slate-900" checked={campo.ativo} onChange={(e) => atualizar(campo.id, { ativo: e.target.checked })} />
                   </label>
 
                   <div className="flex items-center justify-end gap-1">
