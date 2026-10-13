@@ -24,7 +24,7 @@ assert.equal(disponibilidadePeca([ordem('em_producao',4,2)],'marco-1',4).prontas
 assert.equal(disponibilidadePeca([ordem('cancelada',4,2)],'marco-1',4).prontas,0)
 assert.equal(disponibilidadePeca([ordem('conferencia',4,4)],'marco-1',4).prontas,4)
 assert.equal(disponibilidadePeca([ordem('conferencia',4,2),ordem('conferencia',4,1)],'marco-1',8).prontas,3)
-const migration=fs.readFileSync('supabase/migrations/20261013170000_ordens_producao_unidades_parciais_v1.sql','utf8')
+const migration=fs.readFileSync('supabase/migrations/20261013161132_ordens_producao_unidades_parciais_v1_20261013.sql','utf8')
 assert.match(migration,/unique\(ordem_id,indice\)/)
 assert.match(migration,/p_empresa uuid,p_ordem uuid,p_indices integer\[\]/)
 assert.match(migration,/if v\.bloqueada/)
