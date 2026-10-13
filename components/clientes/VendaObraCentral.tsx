@@ -1462,6 +1462,45 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </>}
 
 
+        {aba==='materiais'&&<div className="space-y-4">
+          <Box titulo="Materiais da venda: estoque, separacao e compras">
+            <p className="mb-4 text-sm text-slate-600">Confira o material necessario, a separacao fisica e a compra, sem misturar barras comerciais com cortes da Producao.</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Kpi titulo="Materiais tecnicos" valor={String(materiaisTecnicos.length)} detalhe="Perfis, acessorios, vidros e outros" />
+              <Kpi titulo="Separacoes do estoque" valor={String(separacoesMateriais.length)} detalhe="Reservas vinculadas a obra" />
+              <Kpi titulo="Itens em Compras" valor={String(compras.length)} detalhe="Necessidades acompanhadas" />
+              <Kpi titulo="Itens recebidos" valor={String(compras.filter(c=>Boolean(c.recebido_em)||String(c.status||'').toLowerCase()==='recebido').length)} detalhe="Com recebimento registrado" />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {obra?.id?<Link href={'/obras/'+obra.id+'/materiais'} className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white"><PackageCheck size={16}/>Conferir estoque e separar</Link>:<p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Vincule uma obra para realizar a separacao.</p>}
+              <button type="button" onClick={()=>setAba('compras')} className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold text-blue-700"><ShoppingCart size={16}/>Compras e fornecedores</button>
+              <button type="button" onClick={()=>{setEditorCortesAberto(true);setAba('producao')}} className="rounded-xl border px-4 py-2 text-sm font-bold text-slate-700">Materiais tecnicos e cortes</button>
+            </div>
+            <div className="mt-5 border-t pt-4">
+              <b className="text-sm text-slate-800">Conferencia por categoria</b>
+              <p className="text-xs text-slate-500">Os perfis e acessorios precisam ter imagem. Quantidades de cortes nao equivalem a barras comerciais para comprar.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(['perfil','acessorios','vidro','outros'] as const).map(cat=><button key={cat} type="button" onClick={()=>setCategoriaMaterialAberta(cat)} className={categoriaMaterialAberta===cat?'rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white':'rounded-lg border px-3 py-2 text-xs font-bold text-slate-700'}>{rotuloCategoria(cat)} ({materiaisPorCategoria[cat].length})</button>)}
+              </div>
+              <div className="mt-3 max-h-[400px] space-y-2 overflow-y-auto">
+                {materiaisCategoria.map(m=><div key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50/50 p-3">
+                  <ItemCompraVisual codigo={m.codigo} descricao={m.descricao} imagem={imagemMaterial(m)} imagemObrigatoria={categoriaMaterialAberta==='perfil'||categoriaMaterialAberta==='acessorios'}/>
+                  <div className="flex flex-wrap gap-4 text-xs"><span>Qtd. tecnica: <b>{Number(m.quantidade_ajustada??m.quantidade_tecnica??0).toLocaleString('pt-BR')} {m.unidade||'UN'}</b></span><span>Sobra vinculada: <b className="text-emerald-700">{quantidadeSobraMaterial(m).toLocaleString('pt-BR')}</b></span><span>Saldo tecnico: <b className="text-amber-700">{quantidadeComprarMaterial(m).toLocaleString('pt-BR')}</b></span></div>
+                </div>)}
+                {!materiaisCategoria.length&&<p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">Nenhum material nesta categoria; confira as barras comerciais abaixo.</p>}
+              </div>
+            </div>
+          </Box>
+          <Box titulo="Barras Utilizadas WVetro: lista e Kanban">
+            <div role="tablist" aria-label="Visualizacao das barras comerciais" className="mb-4 flex flex-wrap gap-2">
+              <button type="button" role="tab" aria-selected={modoMateriais==='lista'} onClick={()=>setModoMateriais('lista')} className={modoMateriais==='lista'?'rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white':'rounded-lg border px-4 py-2 text-sm font-bold text-slate-700'}>Lista para comprar</button>
+              <button type="button" role="tab" aria-selected={modoMateriais==='kanban'} onClick={()=>setModoMateriais('kanban')} className={modoMateriais==='kanban'?'rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white':'rounded-lg border px-4 py-2 text-sm font-bold text-slate-700'}>Kanban de compras</button>
+            </div>
+            <VendaBarrasWVetro modo={modoMateriais} vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>{setEditorCortesAberto(false);setAba('producao')}}/>
+            <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Barras inteiras para compra ficam aqui. O Kanban acompanha cotacao, pedido, entrega e recebimento; os cortes permanecem em Producao e os pedidos/historicos continuam na aba Compras.</p>
+          </Box>
+        </div>}
+
         {aba==='tipologias'&&<VendaTipologiasMateriais
           itens={itens}
           materiais={materiaisTecnicos}
