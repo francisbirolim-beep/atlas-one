@@ -124,6 +124,7 @@ function ehOrcamentoWVetro(card: OrcamentoRapido | null | undefined): boolean {
 
 function wvetroAguardandoValidacao(card: OrcamentoRapido | null | undefined): boolean {
   if (!ehOrcamentoWVetro(card)) return false
+  if (fluxoWVetro(card).atualizacao_pendente) return true
   return String(fluxoWVetro(card).validacao_status || 'aguardando').toLowerCase() !== 'validado'
 }
 
@@ -587,7 +588,7 @@ listarHistorico(cardSelecionado.id).then(setHistorico)
 }
 
 async function apiWVetroKanban(
-acao: 'buscar' | 'vincular' | 'validar_importacao' | 'corrigir_importacao',
+acao: 'buscar' | 'vincular' | 'validar_importacao' | 'corrigir_importacao' | 'aplicar_atualizacao',
 numeroWvetro?: string,
 correcao?: OrcamentoRapido | null,
 ) {
@@ -625,6 +626,29 @@ setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao sincronizar o W.Vet
 } finally {
 setSincronizandoWVetro(false)
 }
+}
+
+async function aplicarRevisaoWVetro() {
+  if (!cardSelecionado || validandoWVetro) return
+  if (!window.confirm('Aplicar a nova versão do W.Vetro neste mesmo orçamento? As medidas finais e vendas existentes não serão substituídas.')) return
+  setValidandoWVetro(true)
+  setMensagemWVetro('')
+  try {
+    const json = await apiWVetroKanban('aplicar_atualizacao')
+    const atualizado = json.orcamento as OrcamentoRapido
+    if (atualizado?.id) {
+      const exibicao = { ...atualizado, anexos: normalizarVersoesLegadas(atualizado.anexos) }
+      setEditando(exibicao)
+      setCardSelecionado(exibicao)
+      setCards(prev => prev.map(c => c.id === exibicao.id ? exibicao : c))
+      setHistorico(await listarHistorico(exibicao.id))
+    }
+    setMensagemWVetro(json.mensagem || 'Revisão W.Vetro aplicada ao orçamento existente.')
+  } catch (e) {
+    setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao aplicar revisão W.Vetro.')
+  } finally {
+    setValidandoWVetro(false)
+  }
 }
 
 async function validarImportacaoWVetro(modo: 'correto' | 'corrigir') {
@@ -1367,7 +1391,9 @@ style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}
 )}
 {!card.eh_assistencia && ehOrcamentoWVetro(card) && (
 <p className="text-xs font-semibold mt-1" style={{ color: est ? est.texto : (wvetroAguardandoValidacao(card) ? '#b45309' : '#047857') }}>
-{wvetroAguardandoValidacao(card)
+{fluxoWVetro(card).atualizacao_pendente
+? `⚠ W.Vetro #${numeroWVetroCard(card)} · nova versão para conferir`
+: wvetroAguardandoValidacao(card)
 ? `W.Vetro #${numeroWVetroCard(card)} · aguardando validação`
 : `W.Vetro #${numeroWVetroCard(card)} · validado`}
 </p>
@@ -1459,6 +1485,33 @@ Card adicionado em {new Date(cardSelecionado.kanban_entrada_em || cardSelecionad
 </div>
 )}
 </div>
+{ehOrcamentoWVetro(cardSelecionado) && fluxoWVetro(cardSelecionado).atualizacao_pendente && (
+<div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-3 space-y-3" role="alert">
+  <div>
+    <p className="text-sm font-bold text-amber-900">⚠ W.Vetro #{numeroWVetroCard(cardSelecionado)} foi alterado</p>
+    <p className="text-xs text-amber-800 mt-1">
+      Foi recebida uma nova versão do mesmo número, sem duplicar o orçamento. Confira as alterações antes de aplicá-las.
+      Medidas finais, vendas e informações já registradas estão protegidas.
+    </p>
+  </div>
+  <ul className="max-h-60 overflow-y-auto space-y-2 text-xs text-slate-800">
+    {(Array.isArray(fluxoWVetro(cardSelecionado).atualizacao_pendente?.diferencas)
+      ? fluxoWVetro(cardSelecionado).atualizacao_pendente.diferencas : []).map((mudanca: any, indice: number) => (
+      <li key={indice} className="rounded-lg border border-amber-200 bg-white p-2">
+        <strong>{mudanca.tipo === 'incluido' ? 'Item incluído' : mudanca.tipo === 'removido' ? 'Item removido' : 'Item alterado'}</strong>
+        {' · '}{String(mudanca.item || 'Orçamento')}{' · '}{String(mudanca.campo || '')}
+        {mudanca.antes != null && <span className="block text-red-700">Antes: {String(mudanca.antes)}</span>}
+        {mudanca.depois != null && <span className="block text-emerald-800">Agora: {String(mudanca.depois)}</span>}
+      </li>
+    ))}
+  </ul>
+  <button type="button" onClick={() => void aplicarRevisaoWVetro()} disabled={validandoWVetro || sincronizandoWVetro}
+    className="w-full rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50">
+    {validandoWVetro ? 'Conferindo...' : 'Aplicar nova versão após conferência'}
+  </button>
+  {mensagemWVetro && <p className="text-xs font-medium text-amber-900">{mensagemWVetro}</p>}
+</div>
+)}
 {ehOrcamentoWVetro(cardSelecionado) && (
 <div className={`rounded-xl border p-3 ${wvetroAguardandoValidacao(cardSelecionado) ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
 <div className="flex flex-wrap items-center justify-between gap-2">
