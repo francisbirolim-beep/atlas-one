@@ -154,3 +154,14 @@ Exemplo canônico: sincronizar um orçamento W.Vetro pode atualizar itens, valor
 6. Publicações são incrementalmente testadas em branch isolada, build/preflight e preview; fazer backup/snapshot e evitar mudanças fora do escopo. Não modificar funcionalidades prontas sem solicitação expressa.
 
 **Origem:** aprovação do usuário para publicar a correção Materiais=lista de compra, Produção=lista de corte e Compras=Kanban, com regra adicional obrigatória de imagem para todo perfil e acessório (13/10/2026).
+
+## 2026-10-13 — Instalação baseada nas tipologias vendidas, inclusive sem obra vinculada
+
+A aba **Instalação da venda** acompanha exatamente as tipologias do snapshot do orçamento **fechado** (`vendas_obras.itens_snapshot`), independentemente de cadastro/vínculo formal da obra. O vínculo da obra continua obrigatório para fotos arquivadas, conclusão definitiva e encerramento dos gates da obra.
+
+- Cada tipologia vendida deve estar visível individualmente, com referência estável, ambiente, descrição, medida, quantidade, imagem/croqui disponível e estado: A instalar, Em instalação, Com pendência/falta finalizar, Finalizada.
+- O profissional registra quantidade instalada, pendência descritiva (ex. cantoneira, arremate, vedação), quatro verificações técnicas (nivelamento, vedação, acabamento, limpeza) e foto quando houver obra vinculada.
+- **Instalação física não é finalização**. Mesmo com quantidade instalada integral, falta de checklist ou pendência impede estado finalizado e impede indicar 100% de conclusão no indicador da venda. Finalização é ação explícita, após produção liberada, vínculo da obra, checklists íntegros e ausência de pendência.
+- Fazer preparação idempotente a partir do snapshot com chave única (empresa, venda, item_ref), usando `ignoreDuplicates`. Nunca recriar nem zerar peças, histórico, quantidades ou checklists existentes ao abrir o cliente ou vincular obra.
+- Aumentar quantidade instalada continua limitado às unidades efetivamente liberadas pela Produção; OPs legadas concluídas mantêm compatibilidade. Controle de instalações/pendências sem obra não bypassa os gates de fabricação/encerramento.
+- Avanços em etapas gerais da obra dependem de todos os itens finalizados, produção, compras, financeiro e regras de segurança já existentes. Não alterar os módulos de Produção nesta entrega inicial; tratar implementação mais profunda da Produção em tarefa separada.
