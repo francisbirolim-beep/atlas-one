@@ -189,6 +189,7 @@ export async function PATCH(req: NextRequest) {
         .from('atendimento_whatsapp_canais')
         .update({
           gateway_status: status,
+          conexao_pausada: acao === 'desconectar',
           gateway_qr_data_url: null,
           updated_at: new Date().toISOString(),
         })
