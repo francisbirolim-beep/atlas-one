@@ -38,6 +38,9 @@ jobs:
       - name: W.Vetro technical regression
         run: npm run test:wvetro-comparador
 
+      - name: W.Vetro orçamento revision regression
+        run: npm run test:wvetro-revisoes
+
       - name: Supplier quotation deterministic comparison
         run: npm run test:cotacao-ia
 
