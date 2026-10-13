@@ -61,6 +61,8 @@ export function avaliarFluxoVenda(d:Entrada){
   const totalPecas=d.instalacoes.reduce((s,i)=>s+Math.max(0,nr(i.quantidade)),0)
   const qtdInstalada=d.instalacoes.reduce((s,i)=>s+Math.min(Math.max(0,nr(i.quantidade_instalada)),Math.max(0,nr(i.quantidade))),0)
   const instalacoesValidadas=d.instalacoes.filter(instalacaoConcluida).length
+  const quantidadeFinalizada=d.instalacoes.filter(instalacaoConcluida)
+    .reduce((sum,i)=>sum+Math.max(0,nr(i.quantidade)),0)
   const instalacaoConcluidaTotal=d.instalacoes.length>0&&instalacoesValidadas===d.instalacoes.length
   const instalacaoDetalhe=!d.instalacoes.length?'Sem peças no checklist de instalação':
     instalacoesValidadas+' de '+d.instalacoes.length+' item(ns) instalado(s) e conferido(s)'
@@ -75,8 +77,10 @@ export function avaliarFluxoVenda(d:Entrada){
   return {
     etapas,pendencias,
     podeEncerrar:pendencias.length===0,
-    progressoInstalacao:totalPecas>0?Math.round(qtdInstalada/totalPecas*100):0,
-    totalPecas,quantidadeInstalada:qtdInstalada,
+    // A barra de progresso sinaliza finalização, não só instalação física:
+    // uma cantoneira ou arremate pendente impede indicar 100% concluído.
+    progressoInstalacao:totalPecas>0?Math.round(quantidadeFinalizada/totalPecas*100):0,
+    totalPecas,quantidadeInstalada:qtdInstalada,quantidadeFinalizada,
     parcelasCorretas,saldo,comprasRecebidas,ordensConcluidas,instalacoesValidadas,
   }
 }
