@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plu
 import { tokenAtual } from '@/lib/auth'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
-type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null;perfil_previsao?:number|null;perfil_previsao_fonte?:'despesas_extras_wvetro'|'conciliacao_wvetro'|null}
+type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null}
 type Lancamento={id:string;categoria:Categoria;origem:string;descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_nome?:string|null}
 type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>;historicoRevisoes:RevisaoCmv[];feedbackIA:number}
 const labels:Record<Categoria,string>={perfil:'Perfis',acessorio:'Acessórios',vidro:'Vidros',perda:'Perda de corte',mao_obra:'Mão de obra',instalacao:'Instalação',frete:'Frete',outros:'Outros'}
@@ -44,12 +44,13 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  const porCategoria=useMemo(()=>Object.fromEntries(categories.map(c=>[c,Number(comprasExistentes[c]||0)+(dados?.lancamentos.filter(l=>l.categoria===c).reduce((s,l)=>s+Number(l.valor||0),0)||0)])) as Record<Categoria,number>,[dados,comprasExistentes])
  async function enviar(e:FormEvent<HTMLFormElement>){
   e.preventDefault();if(enviandoRef.current)return
+  // Captura formulário e anexo antes do primeiro await; currentTarget não persiste.
+  const form=e.currentTarget
   enviandoRef.current=true
   setErro('');setSucesso('');setSalvando(true)
   try{
-   const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.')
-   const form=e.currentTarget
    const dadosEnvio=new FormData(form);dadosEnvio.append('vendaId',vendaId)
+   const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.')
    const resp=await fetch('/api/vendas/cmv',{method:'POST',headers:{Authorization:'Bearer '+token},body:dadosEnvio})
    const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Erro ao salvar custo.')
    form.reset();setAdicionar(null);setSucesso('Registro realizado com sucesso.');await buscar()
@@ -94,7 +95,8 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   </form>
  }
  const p=dados?.previsto
- const perfis=p?(p.perfil_previsao??(p.categorias.perfil!==null&&p.categorias.sobra!==null?p.categorias.perfil+p.categorias.sobra:null)):null
+ const perfis=p&&(p.categorias.perfil!==null&&p.categorias.sobra!==null)
+  ?p.categorias.perfil+p.categorias.sobra:null
  const revisoes=dados?.revisoes||{}
  const esperado=Object.fromEntries(categories.map(c=>[c,p?custoRevisado(p,revisoes,c):null])) as Record<Categoria,number|null>
  const totalRevisado=p?custoRevisado(p,revisoes,'total'):null
@@ -120,18 +122,19 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   {carregando&&!dados?<p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin"/> Carregando CMV...</p>:null}
   {adicionar&&<form onSubmit={enviar} className="rounded-xl border bg-slate-50 p-4">
    <h4 className="mb-3 font-bold">{adicionar==='compra'?'Registrar compra / material realizado':'Registrar custo adicional não previsto'}</h4>
+   <p className="mb-3 text-xs text-slate-500">* Campos obrigatórios; demais informações opcionais.</p>
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-    <label className="text-xs font-semibold">Categoria<select required name="categoria" key={adicionar} defaultValue={adicionar==='compra'?'perfil':'outros'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{(adicionar==='compra'?(['perfil','acessorio','vidro','outros'] as Categoria[]):categories).map(c=><option key={c} value={c}>{labels[c]}</option>)}</select></label>
-    <label className="text-xs font-semibold">Origem<select required name="origem" key={adicionar} defaultValue={adicionar==='compra'?'compra':'outro'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option><option value="estoque">Material / sobra do estoque</option></>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
-    <label className="text-xs font-semibold">Valor total (R$)<input required name="valor" inputMode="decimal" placeholder="Ex.: 1250,50" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold lg:col-span-2">Descrição<input required name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Data<input name="data" type="date" defaultValue={dataLocal()} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Categoria *<select required name="categoria" key={adicionar} defaultValue={adicionar==='compra'?'perfil':'outros'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{(adicionar==='compra'?(['perfil','acessorio','vidro','outros'] as Categoria[]):categories).map(c=><option key={c} value={c}>{labels[c]}</option>)}</select></label>
+    <label className="text-xs font-semibold">Origem *<select required name="origem" key={adicionar} defaultValue={adicionar==='compra'?'compra':'outro'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option><option value="estoque">Material / sobra do estoque</option></>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
+    <label className="text-xs font-semibold">Valor total (R$) *<input required name="valor" inputMode="decimal" placeholder="Ex.: 1250,50" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold lg:col-span-2">Descrição (opcional)<input name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Data *<input required name="data" type="date" defaultValue={dataLocal()} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Quantidade (opcional)<input name="quantidade" type="number" min="0.001" step="any" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Unidade (opcional)<input name="unidade" placeholder="UN, barra, M², KG" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Fornecedor (opcional)<input name="fornecedor" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Fornecedor *<input required name="fornecedor" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Nº nota/documento (opcional)<input name="documento" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold lg:col-span-2">Comprovante (PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
-    <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">Observações<input name="observacoes" maxLength={1000} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold lg:col-span-2">Comprovante (opcional, PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
+    <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">Observações (opcional)<input name="observacoes" maxLength={1000} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
    </div>
    <p className="mt-3 text-xs text-slate-500">Este formulário registra valores no CMV, mas não movimenta o Kanban de Compras. Para acompanhar pedidos e recebimentos, use a aba Compras. Material reaproveitado entra como estoque pelo custo consumido. Se a compra já tem valor real vinculado à obra, não registre a mesma nota novamente.</p>
    <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>setAdicionar(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando?'Salvando...':adicionar==='compra'?'Registrar compra':'Registrar custo adicional'}</button></div>
@@ -171,9 +174,9 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
        {aberto===c&&<tr className="border-b bg-slate-50/70"><td colSpan={4} className="px-6 py-4">
         {c==='perfil'&&<div className="space-y-2">
          <div className="grid gap-2 sm:grid-cols-3">
-          <div className="rounded-xl border bg-white p-3"><Card titulo="Uso técnico · ResumoObra W.Vetro" valor={previstoFmt(p?.categorias.perfil??null)}/>{botoesRevisao('perfil_uso')}</div>
+          <div className="rounded-xl border bg-white p-3"><Card titulo="Uso na obra · W.Vetro original" valor={previstoFmt(p?.categorias.perfil??null)}/>{botoesRevisao('perfil_uso')}</div>
           <div className="rounded-xl border bg-white p-3"><Card titulo="Sobra do perfil · W.Vetro original" valor={previstoFmt(p?.categorias.sobra??null)} nota="Custo da sobra, mesmo não cobrada ao cliente"/>{botoesRevisao('sobra')}</div>
-          <Card titulo="Previsão de perfis" valor={previstoFmt(perfis)} nota={p?.perfil_previsao_fonte==='despesas_extras_wvetro'?'Despesas Extras/Previsão · MATÉRIA PRIMA - PERFIL':p?.perfil_previsao_fonte==='conciliacao_wvetro'?'Conciliado pelo total do W.Vetro, acessórios e vidros: conferir antes de validar':'Uso + sobra (quando disponíveis)'}/>
+          <Card titulo="Perfis · W.Vetro original" valor={previstoFmt(perfis)} nota="Uso + sobra (corrigidos separadamente quando necessário)"/>
          </div>
          {formularioRevisao('perfil_uso')}
          {formularioRevisao('sobra')}
