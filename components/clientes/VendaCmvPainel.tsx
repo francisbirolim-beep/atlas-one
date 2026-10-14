@@ -1,5 +1,6 @@
 'use client'
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
@@ -240,7 +241,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  return <div className="space-y-5">
   <div className="flex flex-wrap items-center justify-between gap-3">
    <div><h3 className="font-bold text-slate-900">Custos / CMV da obra</h3><p className="text-xs text-slate-500">Previsão W.Vetro separada dos lançamentos reais e do financeiro da venda.</p></div>
-   <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void buscar()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw size={14}/> Atualizar</button><button type="button" onClick={()=>{setOrigemNova('compra');setEtapaNova('comprado');setUnidadeNova('KG');setValorCompra('');setPesoCompra('');setAdicionar(adicionar==='compra'?null:'compra')}} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14}/> Adicionar compra</button><button type="button" onClick={()=>{setOrigemNova('outro');setEtapaNova('comprado');setAdicionar(adicionar==='adicional'?null:'adicional')}} className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"><Plus size={14}/> Custo adicional</button></div>
+   <div className="flex flex-wrap gap-2"><Link href={`/relatorios/fornecedores?obra=${encodeURIComponent(vendaId)}`} className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">Comparar compra e recebimento</Link><button type="button" onClick={()=>void buscar()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw size={14}/> Atualizar</button><button type="button" onClick={()=>{setOrigemNova('compra');setEtapaNova('comprado');setUnidadeNova('KG');setValorCompra('');setPesoCompra('');setAdicionar(adicionar==='compra'?null:'compra')}} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14}/> Adicionar compra</button><button type="button" onClick={()=>{setOrigemNova('outro');setEtapaNova('comprado');setAdicionar(adicionar==='adicional'?null:'adicional')}} className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"><Plus size={14}/> Custo adicional</button></div>
   </div>
   {erro&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
   {sucesso&&<p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{sucesso}</p>}
