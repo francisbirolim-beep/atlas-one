@@ -11,6 +11,7 @@ export const dynamic='force-dynamic'
 const BUCKET='cmv-comprovantes'
 const categorias=['perfil','acessorio','vidro','perda','mao_obra','instalacao','frete','outros']
 const origens=['compra','estoque','servico','outro']
+const etapas=['comprado','recebido']
 const tipos=['application/pdf','image/jpeg','image/png','image/webp']
 function numerico(v:unknown):number|null{
  if(v===null||v===undefined||v==='')return null
@@ -90,7 +91,11 @@ export async function GET(req:NextRequest){
    return {...linha,anexo_url}
   }))
   const {ativos,excluidos}=separarLancamentosCmv(linhas)
-  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:ativos,excluidos,historicoLancamentos:trilha,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0})
+  // O esquema em previsualização pode ainda estar na versão anterior.
+  // Não modificar nem migrar automaticamente o banco enquanto a prévia é testada.
+  const {error:erroEtapa}=await supabaseAdmin.from('venda_cmv_lancamentos').select('etapa_cmv').eq('empresa_id',usuario.empresa_id).limit(0)
+  const etapasDisponiveis=!erroEtapa
+  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:ativos,excluidos,historicoLancamentos:trilha,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0,etapasDisponiveis})
  }catch(e){
   console.error('Falha ao carregar CMV da venda:',e)
   return erro('Não foi possível carregar o CMV. Confira se a migração de lançamentos foi aplicada.',500)
@@ -107,6 +112,7 @@ export async function POST(req:NextRequest){
   if(!venda)return erro('Venda não localizada nesta empresa.',404)
   const categoria=txt(form.get('categoria'),30)
   const origem=txt(form.get('origem'),30)
+  const etapa_cmv=txt(form.get('etapa_cmv'),30)||'comprado'
   const descricaoInformada=txt(form.get('descricao'),500)
   const fornecedor=txt(form.get('fornecedor'),150)
   const valor=numerico(form.get('valor'))
@@ -114,13 +120,16 @@ export async function POST(req:NextRequest){
   const data_lancamento=txt(form.get('data'),10)
   if(!categorias.includes(categoria))return erro('Categoria inválida.')
   if(!origens.includes(origem))return erro('Origem de custo inválida.')
+  if(!etapas.includes(etapa_cmv))return erro('Destino de lançamento inválido.')
+  if(etapa_cmv==='recebido'&&origem!=='compra')return erro('Recebimento precisa indicar origem Compra.')
+  if(etapa_cmv==='recebido'&&!txt(form.get('documento'),100))return erro('No recebido, informe a nota fiscal ou romaneio.')
   if(valor===null||valor<=0||valor>999999999)return erro('Informe um valor positivo.')
   if(!fornecedor)return erro('Informe o fornecedor.')
   if(quantidade!==null&&(quantidade<=0||quantidade>999999999))return erro('Quantidade inválida.')
   // Somente novas compras passam a exigir peso real e unidade KG.
   // Registros históricos e edições continuam inalterados.
   if(origem==='compra'&&(quantidade===null||txt(form.get('unidade'),30).toUpperCase()!=='KG'))
-   return erro('Informe o peso comprado em quilos (KG obrigatório) para novas compras.')
+   return erro(etapa_cmv==='recebido'?'Informe o peso recebido em quilos (KG obrigatório).':'Informe o peso comprado em quilos (KG obrigatório) para novas compras.')
   if(!data_lancamento)return erro('Informe a data do custo.')
   if(!/^\d{4}-\d{2}-\d{2}$/.test(data_lancamento)||Number.isNaN(Date.parse(data_lancamento)))return erro('Data inválida.')
   // O banco mantém descrição NOT NULL para histórico antigo; se o usuário
@@ -139,6 +148,7 @@ export async function POST(req:NextRequest){
     if(error)throw new Error('Falha ao guardar comprovante: '+error.message)
   }
   const {data,error}=await supabaseAdmin.from('venda_cmv_lancamentos').insert({
+    ...(etapa_cmv==='recebido'?{etapa_cmv}:{}),
     empresa_id:usuario.empresa_id,venda_obra_id:vendaId,orcamento_id:venda.orcamento_id,
     categoria,origem,descricao,valor:Math.round(valor*100)/100,
     quantidade,unidade:txt(form.get('unidade'),30)||null,data_lancamento,
@@ -185,20 +195,27 @@ export async function PATCH(req:NextRequest){
   if(antigo.versao!==versao)return erro('Este lançamento foi alterado por outra pessoa. Atualize antes de editar.',409)
   const categoria=txt(form.get('categoria'),30)
   const origem=txt(form.get('origem'),30)
+  const etapa_cmv=txt(form.get('etapa_cmv'),30)||'comprado'
   const valor=numerico(form.get('valor'))
   const quantidade=numerico(form.get('quantidade'))
   const data_lancamento=txt(form.get('data'),10)
   const fornecedor=txt(form.get('fornecedor'),150)
   if(!categorias.includes(categoria))return erro('Categoria inválida.')
   if(!origens.includes(origem))return erro('Origem inválida.')
+  if(!etapas.includes(etapa_cmv))return erro('Destino inválido.')
+  if(etapa_cmv==='recebido'&&origem!=='compra')return erro('Recebimento precisa indicar origem Compra.')
+  if(etapa_cmv==='recebido'&&!txt(form.get('documento'),100))return erro('Informe a nota fiscal ou romaneio do material recebido.')
   if(valor===null||valor<=0||valor>999999999)return erro('Informe um valor positivo.')
   if(!data_lancamento)return erro('Informe a data do custo.')
   if(!/^\d{4}-\d{2}-\d{2}$/.test(data_lancamento)||Number.isNaN(Date.parse(data_lancamento)))return erro('Data inválida.')
   if(!fornecedor)return erro('Informe o fornecedor.')
   if(quantidade!==null&&(quantidade<=0||quantidade>999999999))return erro('Quantidade inválida.')
+  if(etapa_cmv==='recebido'&&(quantidade===null||txt(form.get('unidade'),30).toUpperCase()!=='KG'))
+   return erro('Informe o peso recebido em quilos (KG obrigatório).')
   const descricao=txt(form.get('descricao'),500)||[categoria.replace(/_/g,' '),origem.replace(/_/g,' ')].join(' · ')
   const anexo=form.get('arquivo')
   const patch:Record<string,unknown>={
+   ...(etapa_cmv==='recebido'||antigo.etapa_cmv==='recebido'?{etapa_cmv}:{}),
    categoria,origem,descricao,valor:Math.round(valor*100)/100,quantidade,
    unidade:txt(form.get('unidade'),30)||null,data_lancamento,fornecedor,
    documento:txt(form.get('documento'),100)||null,observacoes:txt(form.get('observacoes'),1000)||null,

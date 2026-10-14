@@ -4,12 +4,13 @@ import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plu
 import { tokenAtual } from '@/lib/auth'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 import { compararPesosCmv } from '@/lib/vendaCmvPesos'
+import { separarEtapasCmv } from '@/lib/vendaCmvEtapas'
 import VendaCmvRecebimentos, { type RecebimentoCmv, type HistoricoRecebimento } from '@/components/clientes/VendaCmvRecebimentos'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
 type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null;perfil_previsao?:number|null;perfil_previsao_fonte?:'despesas_extras_wvetro'|'uso_mais_sobra_wvetro'|null;total_uso?:number|null;total_com_sobra?:number|null;perfil_centro_custo?:number|null;perda_fonte?:'wvetro'|'conciliacao_wvetro'|null}
-type Lancamento={id:string;categoria:Categoria;origem:string;descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;observacoes?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_nome?:string|null;versao?:number;atualizado_em?:string|null;atualizado_por_nome?:string|null;cancelado_em?:string|null;cancelado_por_nome?:string|null;motivo_cancelamento?:string|null}
+type Lancamento={id:string;categoria:Categoria;origem:string;etapa_cmv?:'comprado'|'recebido';descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;observacoes?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_nome?:string|null;versao?:number;atualizado_em?:string|null;atualizado_por_nome?:string|null;cancelado_em?:string|null;cancelado_por_nome?:string|null;motivo_cancelamento?:string|null}
 type HistoricoLancamento={id:string;lancamento_id:string;antes:Record<string,any>;depois:Record<string,any>;alterado_por_nome?:string|null;alterado_em:string;anexo_anterior_url?:string|null}
-type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];excluidos?:Lancamento[];historicoLancamentos?:HistoricoLancamento[];revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>;historicoRevisoes:RevisaoCmv[];feedbackIA:number}
+type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];excluidos?:Lancamento[];historicoLancamentos?:HistoricoLancamento[];revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>;historicoRevisoes:RevisaoCmv[];feedbackIA:number;etapasDisponiveis?:boolean}
 
 const labels:Record<Categoria,string>={perfil:'Perfis',acessorio:'Acessórios',vidro:'Vidros',perda:'Perda de corte',mao_obra:'Mão de obra',instalacao:'Instalação',frete:'Frete',outros:'Outros'}
 const moedas=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
@@ -27,6 +28,8 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  const [historicoRecebimentos,setHistoricoRecebimentos]=useState<HistoricoRecebimento[]>([])
  const [recebimentosDisponiveis,setRecebimentosDisponiveis]=useState(false)
  const [origemNova,setOrigemNova]=useState('compra')
+ const [etapaNova,setEtapaNova]=useState<'comprado'|'recebido'>('comprado')
+ const [etapaEdicao,setEtapaEdicao]=useState<'comprado'|'recebido'>('comprado')
  const [valorCompra,setValorCompra]=useState('')
  const [pesoCompra,setPesoCompra]=useState('')
  const [unidadeNova,setUnidadeNova]=useState('KG')
@@ -56,7 +59,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    const resp=await fetch('/api/vendas/cmv?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Falha no CMV.')
    setDados(json as Dados)
-   onMudanca?.((json.lancamentos as Lancamento[]).reduce((s,l)=>s+Number(l.valor||0),0))
+   onMudanca?.((json.lancamentos as Lancamento[]).filter(l=>l.etapa_cmv!=='recebido').reduce((s,l)=>s+Number(l.valor||0),0))
    // Recebimentos são opcionais no banco até a migração nova ser aprovada.
    // A ausência desta tabela NUNCA impede a leitura do CMV anterior.
    try{
@@ -71,10 +74,24 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   finally{setCarregando(false)}
  }
  useEffect(()=>{void buscar()},[vendaId])
- const realizado=useMemo(()=>Object.values(comprasExistentes).reduce<number>((s,v)=>s+Number(v||0),0)+(dados?.lancamentos.reduce((s,l)=>s+Number(l.valor||0),0)||0),[dados,comprasExistentes])
- const porCategoria=useMemo(()=>Object.fromEntries(categories.map(c=>[c,Number(comprasExistentes[c]||0)+(dados?.lancamentos.filter(l=>l.categoria===c).reduce((s,l)=>s+Number(l.valor||0),0)||0)])) as Record<Categoria,number>,[dados,comprasExistentes])
- const comparativos=useMemo(()=>Object.fromEntries(categories.map(c=>[c,compararPesosCmv(c,dados?.lancamentos||[],recebimentos,porCategoria[c],Number(comprasExistentes[c]||0))])) as Record<Categoria,ReturnType<typeof compararPesosCmv>>,[dados,recebimentos,porCategoria,comprasExistentes])
- const totalRecebido=useMemo(()=>recebimentos.reduce((s,r)=>s+Number(r.valor_total||0),0),[recebimentos])
+ // Uma linha manual pertence a uma ÚNICA etapa. A movimentação não cria
+ // segunda linha, não duplica os R$ da obra e mantém o ID e o anexo.
+ const etapas=useMemo(()=>separarEtapasCmv(dados?.lancamentos||[]),[dados])
+ const comprasManuais=etapas.comprados
+ const recebimentosManuais=etapas.recebidos
+ const recebimentosConsolidados=useMemo(()=>[
+  ...recebimentos,
+  ...recebimentosManuais.map(l=>({
+   id:l.id,categoria:l.categoria,peso_kg:Number(l.quantidade||0),
+   preco_kg:Number(l.quantidade)>0?Number(l.valor)/Number(l.quantidade):0,
+   valor_total:Number(l.valor),fornecedor:l.fornecedor||'',nota_numero:l.documento,
+   data_recebimento:l.data_lancamento,versao:l.versao||1
+  }))
+ ],[recebimentos,recebimentosManuais])
+ const realizado=useMemo(()=>Object.values(comprasExistentes).reduce<number>((s,v)=>s+Number(v||0),0)+comprasManuais.reduce((s,l)=>s+Number(l.valor||0),0),[comprasManuais,comprasExistentes])
+ const porCategoria=useMemo(()=>Object.fromEntries(categories.map(c=>[c,Number(comprasExistentes[c]||0)+comprasManuais.filter(l=>l.categoria===c).reduce((s,l)=>s+Number(l.valor||0),0)])) as Record<Categoria,number>,[comprasManuais,comprasExistentes])
+ const comparativos=useMemo(()=>Object.fromEntries(categories.map(c=>[c,compararPesosCmv(c,comprasManuais,recebimentosConsolidados,porCategoria[c],Number(comprasExistentes[c]||0))])) as Record<Categoria,ReturnType<typeof compararPesosCmv>>,[comprasManuais,recebimentosConsolidados,porCategoria,comprasExistentes])
+ const totalRecebido=useMemo(()=>recebimentosConsolidados.reduce((s,r)=>s+Number(r.valor_total||0),0),[recebimentosConsolidados])
  // O resumo superior usa somente pesos conhecidos; não atribui kg a compras antigas sem pesagem.
  const resumoPesos=useMemo(()=>{
   const materiais:Categoria[]=['perfil','acessorio','vidro','outros']
@@ -87,7 +104,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   const percentual=podeComparar?100*(pesoRecebido-pesoComprado)/pesoComprado:null
   return {pesoComprado,pesoRecebido,pendenteKg,temRecebimento,diferencaKg,percentual}
  },[comparativos])
- const existeRecebimento=recebimentos.length>0
+ const existeRecebimento=recebimentosConsolidados.length>0
  async function enviar(e:FormEvent<HTMLFormElement>){
   e.preventDefault();if(enviandoRef.current)return
   // Capturar o elemento e o arquivo ANTES de qualquer await: o evento React
@@ -95,13 +112,18 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   const form=e.currentTarget
   const dadosEnvio=new FormData(form)
   dadosEnvio.set('vendaId',vendaId)
+  // Nenhum recebimento poderá gravar sem o banco aprovado/habilitado.
+  if(etapaNova==='recebido'&&!dados?.etapasDisponiveis){
+   setErro('O cadastro de recebidos aguarda habilitação no banco. A compra anterior permanece intacta.')
+   return
+  }
   enviandoRef.current=true
   setErro('');setSucesso('');setSalvando(true)
   try{
    const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.')
    const resp=await fetch('/api/vendas/cmv',{method:'POST',headers:{Authorization:'Bearer '+token},body:dadosEnvio})
    const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Erro ao salvar custo.')
-   form.reset();setAdicionar(null);setValorCompra('');setPesoCompra('');setSucesso('Registro realizado com sucesso.');await buscar()
+   form.reset();setAdicionar(null);setEtapaNova('comprado');setValorCompra('');setPesoCompra('');setSucesso('Registro realizado com sucesso.');await buscar()
   }catch(err){setErro(err instanceof Error?err.message:'Erro ao registrar custo.')}
   finally{enviandoRef.current=false;setSalvando(false)}
  }
@@ -113,6 +135,10 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   payload.set('vendaId',vendaId)
   payload.set('lancamentoId',l.id)
   payload.set('versao',String(l.versao||1))
+  if(etapaEdicao==='recebido'&&!dados?.etapasDisponiveis){
+   setErro('A mudança para Recebido aguarda habilitação no banco. O custo original não foi alterado.')
+   return
+  }
   enviandoEdicao.current=true;setSalvandoEdicao(true);setErro('');setSucesso('')
   try{
    const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.')
@@ -214,30 +240,36 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  return <div className="space-y-5">
   <div className="flex flex-wrap items-center justify-between gap-3">
    <div><h3 className="font-bold text-slate-900">Custos / CMV da obra</h3><p className="text-xs text-slate-500">Previsão W.Vetro separada dos lançamentos reais e do financeiro da venda.</p></div>
-   <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void buscar()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw size={14}/> Atualizar</button><button type="button" onClick={()=>{setOrigemNova('compra');setUnidadeNova('KG');setValorCompra('');setPesoCompra('');setAdicionar(adicionar==='compra'?null:'compra')}} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14}/> Adicionar compra</button><button type="button" onClick={()=>{setOrigemNova('outro');setAdicionar(adicionar==='adicional'?null:'adicional')}} className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"><Plus size={14}/> Custo adicional</button></div>
+   <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void buscar()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw size={14}/> Atualizar</button><button type="button" onClick={()=>{setOrigemNova('compra');setEtapaNova('comprado');setUnidadeNova('KG');setValorCompra('');setPesoCompra('');setAdicionar(adicionar==='compra'?null:'compra')}} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14}/> Adicionar compra</button><button type="button" onClick={()=>{setOrigemNova('outro');setEtapaNova('comprado');setAdicionar(adicionar==='adicional'?null:'adicional')}} className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"><Plus size={14}/> Custo adicional</button></div>
   </div>
   {erro&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
   {sucesso&&<p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{sucesso}</p>}
   {carregando&&!dados?<p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin"/> Carregando CMV...</p>:null}
   {adicionar&&<form onSubmit={enviar} className="rounded-xl border bg-slate-50 p-4">
-   <h4 className="mb-3 font-bold">{adicionar==='compra'?'Registrar custo comprado / material':'Registrar custo adicional não previsto'}</h4>
-   <p className="mb-3 text-xs text-slate-600">Compras novas exigem peso em kg, valor, data e fornecedor. O preço por quilo é calculado automaticamente; custos adicionais mantêm o formulário anterior.</p>
+   <h4 className="mb-3 font-bold">{adicionar==='compra'?(etapaNova==='recebido'?'Registrar custo recebido / material':'Registrar custo comprado / material'):'Registrar custo adicional não previsto'}</h4>
+   <p className="mb-3 text-xs text-slate-600">Escolha se este lançamento pertence ao custo Comprado ou Recebido. O valor e o peso aparecem somente na etapa selecionada. Nenhum lançamento é duplicado.</p>
+   {adicionar==='compra'&&<div className="mb-3 max-w-md"><label className="text-xs font-bold text-slate-800">Destino do lançamento *
+    <select name="etapa_cmv" value={etapaNova} onChange={e=>{const destino=e.target.value as 'comprado'|'recebido';setEtapaNova(destino);if(destino==='recebido'){setOrigemNova('compra');setUnidadeNova('KG')}}} className="mt-1 block w-full rounded-lg border-2 border-blue-300 bg-white p-3">
+     <option value="comprado">Custo comprado — pedido / cotação</option>
+     <option value="recebido">Custo recebido — nota fiscal / romaneio</option>
+    </select></label></div>}
+   {etapaNova==='recebido'&&!dados?.etapasDisponiveis&&<p role="alert" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">A opção Recebido está visível para sua conferência, mas sua gravação ficará disponível após habilitar a migração do banco. Não afetará o custo comprado já lançado.</p>}
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
     <label className="text-xs font-semibold">Categoria<select required name="categoria" key={adicionar} defaultValue={adicionar==='compra'?'perfil':'outros'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{(adicionar==='compra'?(['perfil','acessorio','vidro','outros'] as Categoria[]):categories).map(c=><option key={c} value={c}>{labels[c]}</option>)}</select></label>
-    <label className="text-xs font-semibold">Origem<select required name="origem" key={adicionar} value={origemNova} onChange={e=>{setOrigemNova(e.target.value);if(e.target.value==='compra')setUnidadeNova('KG')}} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option><option value="estoque">Material / sobra do estoque</option></>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
+    <label className="text-xs font-semibold">Origem<select required name="origem" key={adicionar} value={origemNova} onChange={e=>{setOrigemNova(e.target.value);if(e.target.value==='compra')setUnidadeNova('KG')}} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option>{etapaNova!=='recebido'&&<option value="estoque">Material / sobra do estoque</option>}</>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
     <label className="text-xs font-semibold">Valor total (R$)<input required name="valor" inputMode="decimal" value={valorCompra} onChange={e=>setValorCompra(e.target.value)} placeholder="Ex.: 832,00" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold lg:col-span-2">Descrição (opcional)<input name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Data *<input required name="data" type="date" defaultValue={dataLocal()} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">{adicionar==='compra'&&origemNova==='compra'?'Peso comprado (kg) *':'Quantidade (opcional)'}<input required={adicionar==='compra'&&origemNova==='compra'} name="quantidade" type="number" min="0.001" step="any" value={pesoCompra} onChange={e=>setPesoCompra(e.target.value)} placeholder={adicionar==='compra'?'Ex.: 100':''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">{adicionar==='compra'&&origemNova==='compra'?(etapaNova==='recebido'?'Peso recebido (kg) *':'Peso comprado (kg) *'):'Quantidade (opcional)'}<input required={adicionar==='compra'&&origemNova==='compra'} name="quantidade" type="number" min="0.001" step="any" value={pesoCompra} onChange={e=>setPesoCompra(e.target.value)} placeholder={adicionar==='compra'?'Ex.: 100':''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Unidade {adicionar==='compra'&&origemNova==='compra'?'(KG obrigatório)':'(opcional)'}<input key={adicionar} name="unidade" value={adicionar==='compra'&&origemNova==='compra'?'KG':unidadeNova} onChange={e=>setUnidadeNova(e.target.value)} readOnly={adicionar==='compra'&&origemNova==='compra'} placeholder="UN, barra, M², KG" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    {adicionar==='compra'&&origemNova==='compra'&&<div className="rounded-lg border bg-white p-2.5 text-xs"><b>Preço comprado por kg</b><p className="mt-1 text-lg font-bold">{Number(pesoCompra)>0?moedas(Number(String(valorCompra).replace(/\./g,'').replace(',','.'))/Number(pesoCompra))+'/kg':'Preencha valor e kg'}</p></div>}
+    {adicionar==='compra'&&origemNova==='compra'&&<div className="rounded-lg border bg-white p-2.5 text-xs"><b>{etapaNova==='recebido'?'Preço recebido por kg':'Preço comprado por kg'}</b><p className="mt-1 text-lg font-bold">{Number(pesoCompra)>0?moedas(Number(String(valorCompra).replace(/\./g,'').replace(',','.'))/Number(pesoCompra))+'/kg':'Preencha valor e kg'}</p></div>}
     <label className="text-xs font-semibold">Fornecedor *<input required name="fornecedor" maxLength={150} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Nº nota/documento (opcional)<input name="documento" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">{etapaNova==='recebido'?'Nº nota fiscal / romaneio *':'Nº nota/documento (opcional)'}<input name="documento" required={etapaNova==='recebido'} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold lg:col-span-2">Comprovante (PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
     <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3">Observações<input name="observacoes" maxLength={1000} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
    </div>
    <p className="mt-3 text-xs text-slate-500">Este formulário registra valores no CMV, mas não movimenta o Kanban de Compras. Para acompanhar pedidos e recebimentos, use a aba Compras. Material reaproveitado entra como estoque pelo custo consumido. Se a compra já tem valor real vinculado à obra, não registre a mesma nota novamente.</p>
-   <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>setAdicionar(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando?'Salvando...':adicionar==='compra'?'Registrar compra':'Registrar custo adicional'}</button></div>
+   <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={()=>setAdicionar(null)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando||(etapaNova==='recebido'&&!dados?.etapasDisponiveis)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{salvando?'Salvando...':adicionar==='compra'?(etapaNova==='recebido'?'Registrar recebido':'Registrar compra'):'Registrar custo adicional'}</button></div>
   </form>}
   {dados&&<div className="space-y-4">
    {realizado<=0&&<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Ainda não há custo efetivamente registrado nesta venda. O custo previsto W.Vetro é referência; não representa o realizado. Registre compras e custos antes de avaliar margem real.</p>}
@@ -312,14 +344,14 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
          </div>
          {compara.temRecebimento&&<div className="mt-2 rounded-lg border bg-white p-3 text-xs">Diferença de valor entre recebido e comprado nesta categoria: <b className={compara.diferencaCompraRecebido!==null&&compara.diferencaCompraRecebido>0?'text-red-700':'text-slate-800'}>{compara.diferencaCompraRecebido!==null?moedas(compara.diferencaCompraRecebido):'—'}</b>. Enquanto houver entrega pendente, os resultados são parciais.</div>}
          {compara.faltaPesoComprado&&<p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Há compras sem o peso em kg disponível neste painel. Informe os quilos nas compras manuais ou concilie os dados da aba Compras antes de confiar na variação percentual.</p>}
-         <VendaCmvRecebimentos vendaId={vendaId} categoria={c} registros={recebimentos} historico={historicoRecebimentos} disponivel={recebimentosDisponiveis} onAtualizar={buscar}/>
+         {(!dados.etapasDisponiveis||recebimentos.some(r=>r.categoria===c))&&<VendaCmvRecebimentos vendaId={vendaId} categoria={c} registros={recebimentos} historico={historicoRecebimentos} disponivel={recebimentosDisponiveis&&!dados.etapasDisponiveis} onAtualizar={buscar}/>}
         </>}
         <div className="mt-3 space-y-2">
          {Number(comprasExistentes[c]||0)>0&&<p className="text-xs text-slate-600">Compras vinculadas anteriormente: {moedas(Number(comprasExistentes[c]))}</p>}
          {dados.lancamentos.filter(l=>l.categoria===c).map(l=>{
           const historico=(dados.historicoLancamentos||[]).filter(h=>h.lancamento_id===l.id)
           const camposMudados=(h:HistoricoLancamento)=>{
-           const campos:[string,string][]=[['categoria','Categoria'],['origem','Origem'],['valor','Valor'],['data_lancamento','Data'],['fornecedor','Fornecedor'],['descricao','Descrição'],['quantidade','Quantidade'],['unidade','Unidade'],['documento','Documento'],['observacoes','Observações'],['anexo_nome','Comprovante']]
+           const campos:[string,string][]=[['categoria','Categoria'],['etapa_cmv','Destino do lançamento'],['origem','Origem'],['valor','Valor'],['data_lancamento','Data'],['fornecedor','Fornecedor'],['descricao','Descrição'],['quantidade','Quantidade'],['unidade','Unidade'],['documento','Documento'],['observacoes','Observações'],['anexo_nome','Comprovante']]
            return campos.filter(([campo])=>String(h.antes?.[campo]??'')!==String(h.depois?.[campo]??''))
             .map(([campo,rotulo])=>rotulo+(campo==='valor'?': '+moedas(Number(h.antes.valor))+' → '+moedas(Number(h.depois.valor)):'')).join(' · ')
           }
@@ -327,6 +359,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
            <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="text-xs">
              <b>{l.descricao}</b>
+             <p className="mt-1 font-semibold text-blue-700">Destino: {l.etapa_cmv==='recebido'?'Recebido':'Comprado'}</p>
              <p className="mt-1 text-slate-500">{l.origem==='estoque'?'Retirado do estoque':'Compra / custo'} · {l.data_lancamento}{l.fornecedor?' · '+l.fornecedor:''}{l.documento?' · Doc. '+l.documento:''}</p>
              {l.anexo_url&&<a href={l.anexo_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-blue-700 underline"><FileText size={12}/> {l.anexo_nome||'Comprovante'}</a>}
              {!l.anexo_url&&<p className="mt-1 text-amber-700">Sem comprovante anexado</p>}
@@ -335,7 +368,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
             <div className="flex flex-wrap items-center gap-3">
              <b className="text-sm">{moedas(Number(l.valor))}</b>
              <button type="button" disabled={salvandoEdicao||salvandoExclusao}
-              onClick={()=>{setEditandoLancamento(editandoLancamento===l.id?null:l.id);setExcluindoLancamento(null);setMotivoExclusao('');setErro('');setSucesso('')}}
+              onClick={()=>{setEtapaEdicao(l.etapa_cmv==='recebido'?'recebido':'comprado');setEditandoLancamento(editandoLancamento===l.id?null:l.id);setExcluindoLancamento(null);setMotivoExclusao('');setErro('');setSucesso('')}}
               className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">
               <Pencil size={13}/>{editandoLancamento===l.id?'Fechar edição':'Editar lançamento'}
              </button>
@@ -369,17 +402,24 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
            </details>}
            {editandoLancamento===l.id&&<form key={l.id+'-'+String(l.versao)} onSubmit={e=>void salvarEdicao(e,l)} className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
             <h4 className="mb-1 text-sm font-bold text-slate-800">Corrigir lançamento existente</h4>
-            <p className="mb-3 text-xs text-slate-600">Salva nesta mesma compra, sem duplicar custo. Categoria, origem, valor, data e fornecedor são obrigatórios. O restante é opcional.</p>
+            <p className="mb-3 text-xs text-slate-600">Salva no mesmo lançamento, preservando comprovantes e histórico. Também permite corrigir o destino Comprado/Recebido sem recriar o custo.</p>
+            <label className="mb-3 block max-w-md text-xs font-bold">Destino do lançamento *
+             <select name="etapa_cmv" value={etapaEdicao} onChange={e=>setEtapaEdicao(e.target.value as 'comprado'|'recebido')} className="mt-1 block w-full rounded-lg border-2 border-blue-300 bg-white p-3">
+              <option value="comprado">Custo comprado — pedido / cotação</option>
+              <option value="recebido">Custo recebido — nota fiscal / romaneio</option>
+             </select>
+            </label>
+            {etapaEdicao==='recebido'&&!dados.etapasDisponiveis&&<p role="alert" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">A reclassificação para Recebido aguarda migração do banco. A compra original permanecerá intacta.</p>}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
              <label className="text-xs font-semibold">Categoria *<select required name="categoria" defaultValue={l.categoria} className="mt-1 w-full rounded-lg border bg-white p-2.5">{categories.map(cat=><option value={cat} key={cat}>{labels[cat]}</option>)}</select></label>
-             <label className="text-xs font-semibold">Origem *<select required name="origem" defaultValue={l.origem} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="compra">Compra</option><option value="estoque">Material / sobra de estoque</option><option value="servico">Serviço</option><option value="outro">Custo adicional</option></select></label>
+             <label className="text-xs font-semibold">Origem *<select required name="origem" defaultValue={etapaEdicao==='recebido'?'compra':l.origem} key={etapaEdicao} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="compra">Compra</option><option value="estoque">Material / sobra de estoque</option><option value="servico">Serviço</option><option value="outro">Custo adicional</option></select></label>
              <label className="text-xs font-semibold">Valor total (R$) *<input required name="valor" inputMode="decimal" defaultValue={String(l.valor).replace('.',',')} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
              <label className="text-xs font-semibold lg:col-span-2">Descrição (opcional)<input name="descricao" maxLength={500} defaultValue={l.descricao} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
              <label className="text-xs font-semibold">Data *<input required name="data" type="date" defaultValue={l.data_lancamento} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-             <label className="text-xs font-semibold">Quantidade (opcional)<input name="quantidade" type="number" min="0.001" step="any" defaultValue={l.quantidade??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-             <label className="text-xs font-semibold">Unidade (opcional)<input name="unidade" defaultValue={l.unidade??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+             <label className="text-xs font-semibold">{etapaEdicao==='recebido'?'Peso recebido (kg) *':'Quantidade / peso comprado (kg)'}<input name="quantidade" type="number" min="0.001" step="any" required={etapaEdicao==='recebido'} defaultValue={l.quantidade??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+             <label className="text-xs font-semibold">Unidade {etapaEdicao==='recebido'?'(KG obrigatório)':'(opcional)'}<input name="unidade" key={etapaEdicao} readOnly={etapaEdicao==='recebido'} defaultValue={etapaEdicao==='recebido'?'KG':l.unidade??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
              <label className="text-xs font-semibold">Fornecedor *<input required name="fornecedor" maxLength={150} defaultValue={l.fornecedor??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-             <label className="text-xs font-semibold">Nº nota/documento (opcional)<input name="documento" defaultValue={l.documento??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+             <label className="text-xs font-semibold">{etapaEdicao==='recebido'?'Nº nota fiscal / romaneio *':'Nº nota/documento (opcional)'}<input name="documento" required={etapaEdicao==='recebido'} defaultValue={l.documento??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
              <label className="text-xs font-semibold lg:col-span-2">Anexar ou substituir comprovante (opcional, até 15 MB)
               <input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2.5"/>
               <span className="mt-1 block text-[11px] font-normal text-slate-500">{l.anexo_nome?'Atual: '+l.anexo_nome+'. Sem novo arquivo, o atual permanece.':'Nenhum anexo. Selecione PDF ou imagem para acrescentar.'}</span>
@@ -388,7 +428,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
             </div>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
              <button type="button" disabled={salvandoEdicao} onClick={()=>setEditandoLancamento(null)} className="rounded-lg border bg-white px-4 py-2 text-xs">Cancelar</button>
-             <button type="submit" disabled={salvandoEdicao} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{salvandoEdicao?'Salvando...':'Salvar correção'}</button>
+             <button type="submit" disabled={salvandoEdicao||(etapaEdicao==='recebido'&&!dados.etapasDisponiveis)} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{salvandoEdicao?'Salvando...':'Salvar correção'}</button>
             </div>
            </form>}
           </div>

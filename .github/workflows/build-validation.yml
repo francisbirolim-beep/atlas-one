@@ -50,6 +50,9 @@ jobs:
       - name: CMV soft-delete and financial totals regression
         run: npm run test:cmv-exclusao
 
+      - name: CMV launch destination classification regression
+        run: npm run test:cmv-destino
+
       - name: CMV purchased versus received weight and value regression
         run: npm run test:cmv-pesos
 
