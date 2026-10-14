@@ -27,6 +27,7 @@ import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetal
 import VendaFinanceiroHaver from '@/components/clientes/VendaFinanceiroHaver'
 import VendaNotasRecibos from '@/components/clientes/VendaNotasRecibos'
 import VendaCmvPainel from '@/components/clientes/VendaCmvPainel'
+import VendaWVetroConferenciaValores from '@/components/clientes/VendaWVetroConferenciaValores'
 import { avaliarFluxoVenda, type InstalacaoResumo } from '@/lib/vendaFluxoResumo'
 import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 import { custoRealCompraConfirmada } from '@/lib/vendaCmvRegras'
@@ -1306,12 +1307,15 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <VendaFinanceiroHaver clienteId={clienteId} vendaId={venda.id} obraId={obra?.id||null} aReceber={aReceber} onAtualizar={atualizarComposicaoTipologia}/>
         </Box>}
 
-        {aba==='custos'&&<VendaCmvPainel vendaId={venda.id} comprasExistentes={{
+        {aba==='custos'&&<div className="space-y-5">
+          {orcamento?.wvetro_fluxo?.numero&&<VendaWVetroConferenciaValores vendaId={venda.id}/>}
+          <VendaCmvPainel vendaId={venda.id} comprasExistentes={{
           perfil:custosPorCategoria.perfil.realizado,
           acessorio:custosPorCategoria.acessorios.realizado,
           vidro:custosPorCategoria.vidro.realizado,
           outros:custosPorCategoria.outros.realizado,
-        }} onMudanca={setRealizadoCmvManual}/>}
+        }} onMudanca={setRealizadoCmvManual}/>
+        </div>}
 
         {aba==='compras'&&<>
           <VendaBarrasWVetro modo="kanban" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>setAba('producao')}/>
