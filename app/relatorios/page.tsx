@@ -2,14 +2,14 @@
 
 import { Fragment, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { BarChart3, Building2, ChevronDown, ChevronRight, ClipboardList, Download, FileText, Factory, Landmark, PackageSearch, Printer, Ruler, Search, ShoppingCart, WalletCards, Wrench } from 'lucide-react'
+import { BarChart3, Building2, ChevronDown, ChevronRight, ClipboardList, Download, FileText, Factory, Landmark, PackageSearch, Printer, Ruler, Search, ShoppingCart, WalletCards, Wrench, BookOpen } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import FinanceiroRelatorio, { FinanceiroRelatorioDados } from '@/components/relatorios/FinanceiroRelatorio'
 import PlanoContasGerencial from '@/components/relatorios/PlanoContasGerencial'
 import { baixarCsv, carregarResumoComercial, carregarResumoMedicao, ResumoComercial, ResumoMedicao } from '@/lib/relatorios'
 import { formatarMoeda, formatarNumero, formatarPercentual } from '@/lib/formatacao'
 
-type Setor = 'obras'|'comercial'|'financeiro'|'producao'|'compras'|'engenharia'|'assistencia'
+type Setor = 'obras'|'comercial'|'financeiro'|'producao'|'compras'|'engenharia'|'assistencia'|'consultoria'
 type Obra = {
   id:string;clienteId:string;cliente:string;cidade:string;numero:number|null;orcamento:string|number;status:string;data:string
   venda:number;previsto:number|null;realizado:number;compras:number;lancamentos:number;parcial:boolean;diferenca:number|null
@@ -23,6 +23,7 @@ const setores: {id:Setor;nome:string;descricao:string;Icon:typeof BarChart3}[]=[
   {id:'obras',nome:'Obras / CMV',descricao:'Previsto × realizado por obra',Icon:Building2},
   {id:'comercial',nome:'Comercial',descricao:'Orçamentos e vendas',Icon:ClipboardList},
   {id:'financeiro',nome:'Financeiro',descricao:'Contas e recebimentos',Icon:WalletCards},
+  {id:'consultoria',nome:'Consultoria GR&F',descricao:'DRE e 33 relatórios',Icon:BookOpen},
   {id:'producao',nome:'Produção',descricao:'Medição e execução',Icon:Factory},
   {id:'compras',nome:'Compras / Estoque',descricao:'Pedidos e materiais',Icon:ShoppingCart},
   {id:'engenharia',nome:'Engenharia',descricao:'Planos e materiais',Icon:Landmark},
@@ -124,11 +125,11 @@ export default function RelatoriosPage(){
     <div><b className="text-sm text-slate-900">Consultoria GR&F · Caderno Digital</b><p className="mt-1 text-xs text-slate-600">Fechamento mensal com os 33 relatórios, DRE, fluxo de caixa, gráficos e conferências · acesso Master</p></div>
     <span className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Abrir Consultoria →</span>
    </Link>
-   <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7 print:hidden">
+   <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8 print:hidden">
     {setores.map(({id,nome,descricao,Icon})=><button key={id} type="button" aria-pressed={setor===id} onClick={()=>selecionar(id)} className={`min-w-0 rounded-xl border p-3 text-left transition ${setor===id?'border-blue-600 bg-blue-50 shadow-sm':'border-slate-200 bg-white hover:border-blue-300'}`}><Icon size={19} className={setor===id?'text-blue-700':'text-slate-500'}/><b className="mt-2 block text-xs text-slate-900">{nome}</b><span className="mt-0.5 block text-[11px] text-slate-500">{descricao}</span></button>)}
    </div>
-   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 print:hidden"><label className="font-semibold" htmlFor="tipo-relatorio">Tipo de relatório</label><select id="tipo-relatorio" value={setor} onChange={e=>selecionar(e.target.value as Setor)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="obras">Obras — Previsto × realizado / CMV</option><option value="comercial">Comercial — Resumo de orçamentos e vendas</option><option value="financeiro">Financeiro — DRE prévia, fluxo e títulos</option><option value="producao">Produção — Resumo de Medição Final</option><option value="compras">Compras — Consultas do setor</option><option value="engenharia">Engenharia — Consultas do setor</option><option value="assistencia">Assistência — Consultas do setor</option></select></div>
-   <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 print:border-0 print:p-0">
+   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 print:hidden"><label className="font-semibold" htmlFor="tipo-relatorio">Tipo de relatório</label><select id="tipo-relatorio" value={setor} onChange={e=>selecionar(e.target.value as Setor)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="obras">Obras — Previsto × realizado / CMV</option><option value="comercial">Comercial — Resumo de orçamentos e vendas</option><option value="financeiro">Financeiro — DRE prévia, fluxo e títulos</option><option value="consultoria">Consultoria GR&F — Caderno Digital / DRE</option><option value="producao">Produção — Resumo de Medição Final</option><option value="compras">Compras — Consultas do setor</option><option value="engenharia">Engenharia — Consultas do setor</option><option value="assistencia">Assistência — Consultas do setor</option></select></div>
+   {setor!=='consultoria'&&<div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 print:border-0 print:p-0">
     <div className="flex flex-wrap items-end gap-3 print:hidden">
      <label className="text-xs font-semibold text-slate-600">De<input type="date" value={inicio} onChange={e=>setInicio(e.target.value)} className="mt-1 block rounded-lg border p-2 text-sm"/></label>
      <label className="text-xs font-semibold text-slate-600">Até<input type="date" value={fim} onChange={e=>setFim(e.target.value)} className="mt-1 block rounded-lg border p-2 text-sm"/></label>
@@ -136,7 +137,7 @@ export default function RelatoriosPage(){
     </div>
     <div className="flex gap-2 print:hidden">{['obras','comercial','producao','financeiro'].includes(setor)&&<button disabled={carregando||setor==='obras'&&!dados} onClick={exportar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Download size={15}/> CSV / Excel</button>}<button onClick={()=>window.print()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Printer size={15}/> Imprimir / PDF</button></div>
     <p className="hidden text-sm text-slate-600 print:block">Período: {inicio} a {fim} · Data de confirmação da venda (Obras)</p>
-   </div>
+   </div>}
    {erro&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
    {setor==='obras'&&<section className="space-y-5">
      <div className="flex flex-wrap justify-between gap-2"><div><h2 className="text-lg font-bold">Relatório de Obras / CMV</h2><p className="text-xs text-slate-500">Período pela confirmação da venda. Custos realizados acumulados até a consulta, mesmo quando registrados depois do período.</p></div><label className="relative print:hidden"><Search size={16} className="absolute left-3 top-2.5 text-slate-400"/><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Filtrar cliente ou obra" className="rounded-lg border py-2 pl-9 pr-3 text-sm"/></label></div>
@@ -153,6 +154,17 @@ export default function RelatoriosPage(){
    {setor==='comercial'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios Comerciais</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Orçamentos" valor={formatarNumero(comercial.totalOrcamentos)}/><Kpi nome="Valor orçado" valor={formatarMoeda(comercial.valorOrcado)}/><Kpi nome="Vendidos" valor={formatarNumero(comercial.vendidos)}/><Kpi nome="Conversão" valor={formatarPercentual(comercial.taxaConversao,1)}/><Kpi nome="Aprovados" valor={formatarNumero(comercial.aprovados)}/><Kpi nome="Recusados" valor={formatarNumero(comercial.recusados)}/><Kpi nome="Ticket médio" valor={formatarMoeda(comercial.ticketMedio)}/></div><Modulo nome="Orçamentos e funil" texto="Consultar os orçamentos e o andamento comercial." href="/orcamento/pesquisar"/></section>}
    {setor==='producao'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios de Produção</h2><p className="text-xs text-slate-500">Resumo existente de Medição Final</p><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Medições" valor={formatarNumero(medicao.totalMedicoes)}/><Kpi nome="Medições com itens" valor={formatarNumero(medicao.medicoesComItens)}/><Kpi nome="Itens para medir" valor={formatarNumero(medicao.itensTotal)}/><Kpi nome="Itens medidos" valor={formatarNumero(medicao.itensMedidos)}/><Kpi nome="Conclusão de itens" valor={formatarPercentual(medicao.percentualItensMedidos,1)}/></div><Modulo nome="Quadro de Produção" texto="Acompanhar os cards, etapas e liberações." href="/producao"/></section>}
    {setor==='financeiro'&&<><FinanceiroRelatorio dados={financeiro} carregando={carregando}/><PlanoContasGerencial inicio={inicio} fim={fim} onClassificado={()=>void carregar("financeiro")}/><div className="grid gap-3 md:grid-cols-3 print:hidden"><Modulo nome="Contas a receber" texto="Acessar títulos e recebimentos detalhados" href="/financeiro/contas-receber"/><Modulo nome="Contas a pagar" texto="Acessar obrigações e pagamentos detalhados" href="/financeiro/contas-pagar"/><Modulo nome="Caixa" texto="Acessar os movimentos do balcão" href="/balcao/caixa"/></div></>}
+   {setor==='consultoria'&&<section className="space-y-4 rounded-xl border border-blue-200 bg-white p-5">
+    <div><h2 className="text-lg font-bold text-slate-900">Consultoria GR&F · Caderno Digital</h2>
+     <p className="mt-1 text-sm text-slate-600">Relatórios do fechamento mensal da Esquadrifácio, incluindo DRE, fluxo de caixa, gráficos e conferências.</p>
+     <p className="mt-1 text-xs font-semibold text-amber-700">Acesso protegido: Master da Esquadrifácio.</p>
+    </div>
+    <div className="max-w-xl">
+     <Modulo nome="Abrir os 33 relatórios da Consultoria" texto="DRE, fluxo de caixa, indicadores e demais demonstrativos no Caderno Digital (PDF ou versão interativa)." href="/consultoria"/>
+    </div>
+    <p className="text-xs text-slate-600">Para a DRE prévia calculada com os dados do Atlas, selecione a categoria Financeiro acima.</p>
+    <p className="text-xs text-slate-600">O Caderno Digital original continua na mesma área protegida. Este acesso centralizado não migra, duplica ou recalcula informações da consultoria.</p>
+   </section>}
    {setor==='compras'&&<Catalogo setor="Compras / Estoque" itens={[['Compras','Consultar os pedidos e materiais','/compras'],['Notas fiscais','Consultar os documentos de compra','/compras/notas'],['Estoque','Consultar o estoque disponível','/estoque']]}/>}
    {setor==='engenharia'&&<Catalogo setor="Engenharia" itens={[['Engenharia','Consultar receitas, materiais e plano de corte','/engenharia']]}/>}
    {setor==='assistencia'&&<Catalogo setor="Assistência" itens={[['Assistências','Consultar os atendimentos e manutenções','/assistencias']]}/>}
