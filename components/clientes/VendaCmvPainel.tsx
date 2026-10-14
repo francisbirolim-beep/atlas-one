@@ -59,7 +59,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    const resp=await fetch('/api/vendas/cmv?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Falha no CMV.')
    setDados(json as Dados)
-   onMudanca?.((json.lancamentos as Lancamento[]).reduce((s,l)=>s+Number(l.valor||0),0))
+   onMudanca?.((json.lancamentos as Lancamento[]).filter(l=>l.etapa_cmv!=='recebido').reduce((s,l)=>s+Number(l.valor||0),0))
    // Recebimentos são opcionais no banco até a migração nova ser aprovada.
    // A ausência desta tabela NUNCA impede a leitura do CMV anterior.
    try{

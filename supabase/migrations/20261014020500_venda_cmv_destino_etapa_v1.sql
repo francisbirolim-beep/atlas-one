@@ -1,5 +1,13 @@
 -- Aditiva: classificação contábil dos lançamentos MANUAIS já existentes.
 -- Preserva integralmente ID, valor, anexo, auditoria, compras do Kanban e W.Vetro.
+-- Snapshot anterior à adição da coluna de destino.
+-- Histórico preservado e acesso restrito a service_role.
+CREATE TABLE IF NOT EXISTS public.cmv_backup_pre_etapa_20261014 AS
+ SELECT * FROM public.venda_cmv_lancamentos;
+ALTER TABLE public.cmv_backup_pre_etapa_20261014 ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.cmv_backup_pre_etapa_20261014 FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.cmv_backup_pre_etapa_20261014 TO service_role;
+
 ALTER TABLE public.venda_cmv_lancamentos
  ADD COLUMN IF NOT EXISTS etapa_cmv text NOT NULL DEFAULT 'comprado';
 DO $$
