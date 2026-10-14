@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, ChevronDown, ChevronUp, Clock3, FileDown, ImageOff, Layers3, LockKeyhole, PackageCheck, Printer, ShieldAlert } from 'lucide-react'
 import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
+import { supabase } from '@/lib/supabase'
 
 type Ordem = {
   id:string; item_ref?:string|null; titulo?:string|null; status?:string|null
@@ -84,7 +85,27 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   const [perguntarImpressao,setPerguntarImpressao]=useState<string|null>(null)
   const [referenciasImpressao,setReferenciasImpressao]=useState<string[]>([])
   const [imprimindo,setImprimindo]=useState(false)
+  const [fotoCadastrada,setFotoCadastrada]=useState<Record<string,string>>({})
+  const [carregandoDesenhos,setCarregandoDesenhos]=useState(false)
   const [agora,setAgora]=useState(()=>Date.now())
+  const idsTipologias=Array.from(new Set([
+    ...(Array.isArray(itens)?itens:[]).map(i=>texto(i?.tipologia_id)),
+    ...(ordens||[]).map(o=>texto(o.item_snapshot?.tipologia_id)),
+  ].filter(id=>/^[0-9a-f-]{36}$/i.test(id)))).sort().join(',')
+  useEffect(()=>{
+    let ativo=true
+    if(!idsTipologias){setFotoCadastrada({});setCarregandoDesenhos(false);return}
+    setCarregandoDesenhos(true)
+    void supabase.from('tipologias').select('id,foto_url').in('id',idsTipologias.split(',')).then(({data,error})=>{
+      if(!ativo)return
+      if(error){setAviso('Não foi possível consultar os desenhos das tipologias. Confira o cadastro técnico antes de imprimir.')}
+      const fotos:Record<string,string>={}
+      for(const t of data||[])if(texto(t.foto_url))fotos[t.id]=texto(t.foto_url)
+      setFotoCadastrada(fotos)
+      setCarregandoDesenhos(false)
+    })
+    return()=>{ativo=false}
+  },[idsTipologias])
   useEffect(()=>{const timer=window.setInterval(()=>setAgora(Date.now()),60000);return()=>window.clearInterval(timer)},[])
   const cards=useMemo(()=>{
     const mapa=new Map<string,{ref:string;item:Record<string,unknown>;ordens:Ordem[];indice:number}>()
@@ -109,12 +130,12 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         ambiente:texto(i.ambiente)||texto(i.local)||'Ambiente não informado',
         largura:valor(i.largura_mm||ordem?.item_snapshot?.largura_mm),
         altura:valor(i.altura_mm||ordem?.item_snapshot?.altura_mm),
-        foto:imagemTipologia(i)||imagemTipologia(ordem?.item_snapshot||{}),
+        foto:fotoCadastrada[texto(i.tipologia_id)||texto(ordem?.item_snapshot?.tipologia_id)]||imagemTipologia(i)||imagemTipologia(ordem?.item_snapshot||{}),
         qtd:qtdPrevista,produzidas,etapa,pronta,progresso:Math.round((produzidas/qtdPrevista)*100),
         bloqueio:c.ordens.map(o=>texto(o.bloqueio_motivo)).filter(Boolean).join(' · '),
       }
     })
-  },[itens,ordens,etapasSim,qtdSim])
+  },[itens,ordens,etapasSim,qtdSim,fotoCadastrada])
   const materialDoCard=(ref:string)=>materiais.filter(m=>String(m.item_ref||'')===ref)
   function mover(ref:string,destino:Etapa){
     const card=cards.find(c=>c.ref===ref)
@@ -128,10 +149,27 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     setAviso(destino==='concluida'?'Simulação: tipologia concluída. O envio automático para “A instalar” será habilitado somente após validação do fluxo real, sem duplicar cards.':'Movimento demonstrativo: nenhuma ordem real foi modificada.')
     if(destino==='liberada')setPerguntarImpressao(ref)
   }
-  function prepararImpressao(refs:string[]){
+  async function prepararImpressao(refs:string[]){
     if(!refs.length){setAviso('Selecione ao menos uma tipologia para imprimir.');return}
+    if(carregandoDesenhos){setAviso('Aguarde o carregamento dos desenhos das tipologias antes de gerar o plano de corte.');return}
+    const selecionadas=cards.filter(c=>refs.includes(c.ref))
+    const semDesenho=selecionadas.filter(c=>!c.foto)
+    if(semDesenho.length){
+      setAviso('Plano de corte não gerado: é obrigatório ter o desenho original da tipologia. Cadastre ou vincule o desenho em: '+semDesenho.map(c=>c.nome).join(', ')+'.')
+      return
+    }
+    setAviso('Carregando os desenhos originais para o PDF...')
+    const resultados=await Promise.all(selecionadas.map(c=>new Promise<boolean>(resolve=>{
+      const imagem=new window.Image()
+      const timer=window.setTimeout(()=>resolve(false),8000)
+      imagem.onload=()=>{window.clearTimeout(timer);resolve(true)}
+      imagem.onerror=()=>{window.clearTimeout(timer);resolve(false)}
+      imagem.src=c.foto
+    })))
+    if(resultados.some(x=>!x)){setAviso('A impressão foi interrompida: não foi possível carregar todos os desenhos originais. Verifique os arquivos das tipologias.');return}
     setReferenciasImpressao(refs)
     setPerguntarImpressao(null)
+    setAviso('')
     setImprimindo(true)
   }
   useEffect(()=>{
