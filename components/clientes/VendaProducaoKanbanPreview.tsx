@@ -22,13 +22,18 @@ type Produto={codigo?:string|null;foto_url?:string|null}
 const ETAPAS=[
   {id:'aguardando',nome:'Aguardando liberação'},
   {id:'liberada',nome:'Liberado para produção'},
-  {id:'corte',nome:'Corte'},
-  {id:'montagem',nome:'Montagem'},
-  {id:'conferencia',nome:'Conferência de qualidade'},
+  {id:'em_producao',nome:'Em produção'},
   {id:'pendente',nome:'Produção pendente'},
   {id:'concluida',nome:'Produção concluída'},
 ] as const
+const FASES=[
+  {id:'corte',nome:'Corte'},
+  {id:'montagem',nome:'Montagem'},
+  {id:'conferencia',nome:'Conferência de qualidade'},
+] as const
 type Etapa=typeof ETAPAS[number]['id']
+type Fase=typeof FASES[number]['id']
+const nomeFase=(fase:Fase)=>FASES.find(f=>f.id===fase)?.nome||'Corte'
 type Categoria='perfil'|'acessorio'|'vidro'|'outros'
 const finalizada=(o:Ordem)=>o.status==='concluida'
 const habilitada=(o:Ordem)=>!o.bloqueada&&['liberada','em_producao','conferencia','concluida'].includes(String(o.status||''))
@@ -39,8 +44,7 @@ function etapaDaOrdem(ordens:Ordem[]):Etapa{
   if(!ordens.length)return 'aguardando'
   if(ordens.every(finalizada))return 'concluida'
   if(ordens.some(o=>o.bloqueada&&o.status!=='aguardando'))return 'pendente'
-  if(ordens.some(o=>o.status==='conferencia'))return 'conferencia'
-  if(ordens.some(o=>o.status==='em_producao'))return 'corte'
+  if(ordens.some(o=>o.status==='conferencia'||o.status==='em_producao'))return 'em_producao'
   if(ordens.some(o=>o.status==='liberada'))return 'liberada'
   return 'aguardando'
 }
@@ -77,6 +81,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   pacoteId?:string|null;orcamentoId:string;onEditarCortes:()=>void
 }){
   const [etapasSim,setEtapasSim]=useState<Record<string,Etapa>>({})
+  const [fasesSim,setFasesSim]=useState<Record<string,Fase>>({})
   const [qtdSim,setQtdSim]=useState<Record<string,number>>({})
   const [entradaSim,setEntradaSim]=useState<Record<string,number>>({})
   const [aberto,setAberto]=useState<string|null>(null)
@@ -124,6 +129,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       const produzidasReais=c.ordens.reduce((n,o)=>n+Math.max(0,Math.min(valor(o.quantidade),o.quantidade_produzida==null?(finalizada(o)?valor(o.quantidade):0):valor(o.quantidade_produzida))),0)
       const produzidas=Math.min(qtdPrevista,Math.max(0,qtdSim[c.ref]??produzidasReais))
       const etapa=etapasSim[c.ref]||etapaDaOrdem(c.ordens)
+      const fase=fasesSim[c.ref]||(c.ordens.some(o=>o.status==='conferencia')?'conferencia':'corte')
       const pronta=c.ordens.length>0&&c.ordens.every(habilitada)
       return {...c,
         nome:texto(i.tipo_outro_texto)||texto(i.descricao)||texto(i.tipo_esquadria)||texto(i.tipologia_nome)||texto(i.configuracao_nome)||texto(ordem?.titulo)||'Tipologia '+(c.indice+1),
@@ -131,18 +137,18 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         largura:valor(i.largura_mm||ordem?.item_snapshot?.largura_mm),
         altura:valor(i.altura_mm||ordem?.item_snapshot?.altura_mm),
         foto:fotoCadastrada[texto(i.tipologia_id)||texto(ordem?.item_snapshot?.tipologia_id)]||imagemTipologia(i)||imagemTipologia(ordem?.item_snapshot||{}),
-        qtd:qtdPrevista,produzidas,etapa,pronta,progresso:Math.round((produzidas/qtdPrevista)*100),
+        qtd:qtdPrevista,produzidas,etapa,fase,pronta,progresso:Math.round((produzidas/qtdPrevista)*100),
         bloqueio:c.ordens.map(o=>texto(o.bloqueio_motivo)).filter(Boolean).join(' · '),
       }
     })
-  },[itens,ordens,etapasSim,qtdSim,fotoCadastrada])
+  },[itens,ordens,etapasSim,fasesSim,qtdSim,fotoCadastrada])
   const materialDoCard=(ref:string)=>materiais.filter(m=>String(m.item_ref||'')===ref)
   function mover(ref:string,destino:Etapa){
     const card=cards.find(c=>c.ref===ref)
     if(!card)return
     if(destino!=='aguardando'&&!card.pronta){setAviso('A tipologia ainda não possui liberação técnica confirmada. Esta prévia não ignora a Medição Final nem os bloqueios.');return}
-    if(destino==='concluida'&&(card.produzidas<card.qtd||card.etapa!=='conferencia')){
-      setAviso('Para concluir, todas as unidades devem estar conferidas e o card deve passar pela Conferência de qualidade.');return
+    if(destino==='concluida'&&(card.produzidas<card.qtd||card.etapa!=='em_producao'||card.fase!=='conferencia')){
+      setAviso('Para concluir, todas as unidades devem estar produzidas e a etapa interna Conferência de qualidade deve estar concluída.');return
     }
     setEtapasSim(prev=>({...prev,[ref]:destino}))
     setEntradaSim(prev=>({...prev,[ref]:Date.now()}))
@@ -184,12 +190,12 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   const cardsImpressao=cards.filter(c=>referenciasImpressao.includes(c.ref))
   const imprimirMaterial=materiais.filter(m=>referenciasImpressao.includes(String(m.item_ref||''))||(referenciasImpressao.length===cards.length&&!m.item_ref))
   const abertoCard=cards.find(c=>c.ref===aberto)
-  const cores=['border-slate-200 bg-slate-50','border-sky-200 bg-sky-50','border-blue-200 bg-blue-50','border-violet-200 bg-violet-50','border-amber-200 bg-amber-50','border-orange-200 bg-orange-50','border-emerald-200 bg-emerald-50']
+  const cores=['border-slate-200 bg-slate-50','border-sky-200 bg-sky-50','border-violet-200 bg-violet-50','border-orange-200 bg-orange-50','border-emerald-200 bg-emerald-50']
 
   return <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="flex items-center gap-2 font-bold text-slate-900"><Layers3 size={19} className="text-blue-700"/>Kanban de tipologias · prévia para aprovação</h3>
-        <p className="mt-1 text-xs text-slate-600">Uma tipologia por card. Movimentos e quantidades nesta prévia são simulações locais: não alteram ordens, materiais ou Instalação.</p></div>
+        <p className="mt-1 text-xs text-slate-600">Uma tipologia por card, com cinco colunas. Corte, Montagem e Conferência de qualidade ficam dentro de Em produção. Esta prévia não altera ordens, materiais ou Instalação.</p></div>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="rounded-lg border px-3 py-2 text-xs font-bold" onClick={()=>setSelecionados(selecionadosValidos.length===cards.length?[]:cards.map(c=>c.ref))}>{selecionadosValidos.length===cards.length?'Desmarcar todas':'Selecionar todas'}</button>
         <button type="button" className="inline-flex items-center gap-1 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white" onClick={()=>prepararImpressao(selecionadosValidos)}><FileDown size={14}/>Imprimir selecionadas ({selecionadosValidos.length})</button>
@@ -213,6 +219,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full bg-blue-600" style={{width:c.progresso+'%'}}/></div>
               <div className="mt-1 flex justify-between text-[11px]"><span>{c.produzidas}/{c.qtd} produzidas</span><b>{c.progresso}%</b></div>
               <p className={'mt-1 flex items-center gap-1 text-[10px] '+atraso}><Clock3 size={11}/>{dur==null?'Tempo na etapa: a registrar':'Nesta etapa: '+duracao(dur)}</p>
+              {c.etapa==='em_producao'&&<p className="mt-2 rounded-md bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-800">Etapa interna: {nomeFase(c.fase)}</p>}
               {c.bloqueio&&<p className="mt-1 text-[10px] text-amber-700">{c.bloqueio}</p>}
               <button type="button" className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold" onClick={()=>setAberto(aberto===c.ref?null:c.ref)}>{aberto===c.ref?<ChevronUp size={13}/>:<ChevronDown size={13}/>} {aberto===c.ref?'Fechar tipologia':'Abrir tipologia'}</button>
             </div>
@@ -232,6 +239,15 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
           <p>Quantidade: {abertoCard.qtd} · Produzidas: {abertoCard.produzidas}</p>
         </div>
       </div>
+      {abertoCard.etapa==='em_producao'&&<div className="mb-4 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
+        <p className="mb-2 text-xs font-bold text-violet-900">Etapas internas de Em produção</p>
+        <div className="flex flex-wrap gap-2">{FASES.map(f=><button key={f.id} type="button" aria-pressed={abertoCard.fase===f.id}
+          onClick={()=>{setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' selecionada somente nesta simulação. Nenhuma ordem real foi alterada.')}}
+          className={'rounded-lg border px-3 py-2 text-xs font-semibold '+(abertoCard.fase===f.id?'border-violet-700 bg-violet-700 text-white':'border-violet-200 bg-white text-violet-800')}>
+          {f.nome}
+        </button>)}</div>
+        <p className="mt-2 text-[11px] text-violet-700">Conclua corte, montagem e conferência de qualidade antes de mover a tipologia para Produção concluída.</p>
+      </div>}
       <VendaListaCorteWVetro
         materiais={materialDoCard(abertoCard.ref).map(m=>({...m,unidade:m.unidade||'UN'}))}
         obraId={null} pacoteId={pacoteId} orcamentoId={orcamentoId} onEditar={onEditarCortes}
