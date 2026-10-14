@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { extrairPrevisaoWVetro } from '@/lib/wvetroCmvResumo'
+import { separarLancamentosCmv } from '@/lib/vendaCmvLancamentos'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -64,7 +65,8 @@ export async function GET(req: NextRequest) {
     if (!base.length) return NextResponse.json({ ok: true, periodo: { inicio, fim, criterio: 'confirmado_em' }, obras: [], total: { quantidade: 0, venda: 0, previsto: 0, previstoDisponivel: 0, realizado: 0, compras: 0, lancamentos: 0, concluidas: 0 }, avisos: [] })
     const clientes = await selecionar('clientes','id,nome,cidade','id',unico(base.map(v=>v.cliente_id)),u.empresa_id)
     const orcamentos = await selecionar('orcamentos','id,numero,wvetro_fluxo,custo_estimado,cliente_nome,obra_nome','id',unico(base.map(v=>v.orcamento_id)),u.empresa_id)
-    const lancamentos = await selecionar('venda_cmv_lancamentos','id,venda_obra_id,categoria,origem,valor','venda_obra_id',unico(base.map(v=>v.id)),u.empresa_id)
+    const lancamentosAtuais = await selecionar('venda_cmv_lancamentos','id,venda_obra_id,categoria,origem,valor,cancelado_em','venda_obra_id',unico(base.map(v=>v.id)),u.empresa_id)
+    const {ativos:lancamentos}=separarLancamentosCmv(lancamentosAtuais) // Exclusões auditadas não entram no realizado.
     const idsObras = unico(base.map(v => v.obra_id))
     const compras = await selecionar('compras_necessidades','id,obra_id,categoria,quantidade,status,observacoes','obra_id',idsObras,u.empresa_id)
     const cotacoes = await selecionar('compras_cotacoes','id,necessidade_id,preco_unitario,frete,selecionada','necessidade_id',unico(compras.map(c=>c.id)),u.empresa_id)

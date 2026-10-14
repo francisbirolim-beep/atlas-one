@@ -4,6 +4,7 @@ import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { extrairPrevisaoWVetro } from '@/lib/wvetroCmvResumo'
 import { lerRevisaoCmv, type RevisaoCmv, type CategoriaCmvRevisao } from '@/lib/vendaCmvRevisao'
+import { separarLancamentosCmv } from '@/lib/vendaCmvLancamentos'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -88,7 +89,8 @@ export async function GET(req:NextRequest){
    }
    return {...linha,anexo_url}
   }))
-  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:linhas,historicoLancamentos:trilha,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0})
+  const {ativos,excluidos}=separarLancamentosCmv(linhas)
+  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:ativos,excluidos,historicoLancamentos:trilha,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0})
  }catch(e){
   console.error('Falha ao carregar CMV da venda:',e)
   return erro('Não foi possível carregar o CMV. Confira se a migração de lançamentos foi aplicada.',500)
@@ -169,7 +171,8 @@ export async function PATCH(req:NextRequest){
   if(!venda)return erro('Venda não encontrada nesta empresa.',404)
   const {data:antigo,error:erroAntigo}=await supabaseAdmin.from('venda_cmv_lancamentos')
    .select('*').eq('id',lancamentoId).eq('empresa_id',usuario.empresa_id)
-   .eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id).maybeSingle()
+   .eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id)
+   .is('cancelado_em',null).maybeSingle()
   if(erroAntigo)throw erroAntigo
   if(!antigo)return erro('Lançamento não encontrado nesta venda.',404)
   // Evita que outro colaborador altere lançamentos de terceiros sem autorização Master.
@@ -212,7 +215,8 @@ export async function PATCH(req:NextRequest){
   }
   const {data:atualizado,error:erroUpdate}=await supabaseAdmin.from('venda_cmv_lancamentos')
    .update(patch).eq('id',lancamentoId).eq('empresa_id',usuario.empresa_id)
-   .eq('venda_obra_id',vendaId).eq('versao',versao).select('id,versao').maybeSingle()
+   .eq('venda_obra_id',vendaId).eq('versao',versao)
+   .is('cancelado_em',null).select('id,versao').maybeSingle()
   if(erroUpdate)throw erroUpdate
   if(!atualizado)return erro('O lançamento mudou enquanto você editava. Atualize e tente novamente.',409)
   gravado=true
@@ -226,5 +230,92 @@ export async function PATCH(req:NextRequest){
   if(novoAnexoPath&&!gravado){
    try{await supabaseAdmin.storage.from(BUCKET).remove([novoAnexoPath])}catch{}
   }
+ }
+}
+
+
+// Excluir no CMV equivale a cancelar apenas este lançamento manual.
+// Operação reversível e auditada: o trigger registra antes/depois e guarda anexos.
+// Compras de outros módulos, custos do W.Vetro e comprovantes ficam intactos.
+export async function DELETE(req:NextRequest){
+ const usuario=await autenticarTenant(req)
+ if(!usuario)return erro('Sessão inválida.',401)
+ try{
+  const body=await req.json().catch(()=>null)
+  const vendaId=txt(body?.vendaId,80)
+  const lancamentoId=txt(body?.lancamentoId,80)
+  const versao=Number(body?.versao)
+  const motivo=txt(body?.motivo,500)
+  if(!/^[0-9a-f-]{36}$/i.test(vendaId)||!/^[0-9a-f-]{36}$/i.test(lancamentoId)
+   ||!Number.isInteger(versao)||versao<1)return erro('Identificação do lançamento inválida.')
+  if(motivo.length<5)return erro('Informe o motivo da exclusão (mínimo 5 caracteres).')
+  const venda=await vendaVerificada(usuario.empresa_id,vendaId)
+  if(!venda)return erro('Venda não encontrada nesta empresa.',404)
+  const {data:antigo,error:erroAntigo}=await supabaseAdmin.from('venda_cmv_lancamentos')
+   .select('id,empresa_id,venda_obra_id,orcamento_id,criado_por_id,versao,cancelado_em')
+   .eq('id',lancamentoId).eq('empresa_id',usuario.empresa_id)
+   .eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id).maybeSingle()
+  if(erroAntigo)throw erroAntigo
+  if(!antigo)return erro('Lançamento não encontrado nesta venda.',404)
+  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id)
+   return erro('A exclusão deste lançamento exige o autor original ou o Master.',403)
+  if(antigo.cancelado_em)return erro('Lançamento já excluído. Atualize a tela.',409)
+  if(antigo.versao!==versao)return erro('Este lançamento foi alterado por outra pessoa. Atualize antes de excluir.',409)
+  const agora=new Date().toISOString()
+  const {data:cancelado,error:erroCancelamento}=await supabaseAdmin.from('venda_cmv_lancamentos')
+   .update({cancelado_em:agora,cancelado_por_id:usuario.id,cancelado_por_nome:usuario.nome,
+    motivo_cancelamento:motivo,atualizado_em:agora,atualizado_por_id:usuario.id,
+    atualizado_por_nome:usuario.nome,versao:versao+1})
+   .eq('id',lancamentoId).eq('empresa_id',usuario.empresa_id)
+   .eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id)
+   .eq('versao',versao).is('cancelado_em',null)
+   .select('id,versao,cancelado_em').maybeSingle()
+  if(erroCancelamento)throw erroCancelamento
+  if(!cancelado)return erro('Lançamento alterado por outra pessoa. Atualize antes de excluir.',409)
+  return NextResponse.json({ok:true,id:cancelado.id,versao:cancelado.versao,cancelado_em:cancelado.cancelado_em})
+ }catch(e){
+  console.error('Falha ao excluir lançamento de CMV:',e)
+  return erro('Não foi possível excluir o lançamento. Nenhum comprovante foi removido.',500)
+ }
+}
+
+// Restauração segura: reativa o mesmo lançamento, sem criar custo duplicado.
+// O trigger de auditoria grava a reversão com autoria e versão incrementada.
+export async function PUT(req:NextRequest){
+ const usuario=await autenticarTenant(req)
+ if(!usuario)return erro('Sessão inválida.',401)
+ try{
+  const body=await req.json().catch(()=>null)
+  const vendaId=txt(body?.vendaId,80)
+  const lancamentoId=txt(body?.lancamentoId,80)
+  const versao=Number(body?.versao)
+  if(!/^[0-9a-f-]{36}$/i.test(vendaId)||!/^[0-9a-f-]{36}$/i.test(lancamentoId)
+   ||!Number.isInteger(versao)||versao<1)return erro('Identificação do lançamento inválida.')
+  const venda=await vendaVerificada(usuario.empresa_id,vendaId)
+  if(!venda)return erro('Venda não encontrada nesta empresa.',404)
+  const {data:antigo,error:erroAntigo}=await supabaseAdmin.from('venda_cmv_lancamentos')
+   .select('id,criado_por_id,versao,cancelado_em').eq('id',lancamentoId)
+   .eq('empresa_id',usuario.empresa_id).eq('venda_obra_id',vendaId)
+   .eq('orcamento_id',venda.orcamento_id).maybeSingle()
+  if(erroAntigo)throw erroAntigo
+  if(!antigo)return erro('Lançamento não encontrado nesta venda.',404)
+  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id)
+   return erro('A restauração deste lançamento exige o autor original ou o Master.',403)
+  if(!antigo.cancelado_em)return erro('Lançamento já está ativo. Atualize a tela.',409)
+  if(antigo.versao!==versao)return erro('O lançamento foi alterado. Atualize antes de restaurar.',409)
+  const agora=new Date().toISOString()
+  const {data:restaurado,error:erroRestauracao}=await supabaseAdmin.from('venda_cmv_lancamentos')
+   .update({cancelado_em:null,cancelado_por_id:null,cancelado_por_nome:null,motivo_cancelamento:null,
+    atualizado_em:agora,atualizado_por_id:usuario.id,atualizado_por_nome:usuario.nome,versao:versao+1})
+   .eq('id',lancamentoId).eq('empresa_id',usuario.empresa_id)
+   .eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id)
+   .eq('versao',versao).not('cancelado_em','is',null)
+   .select('id,versao').maybeSingle()
+  if(erroRestauracao)throw erroRestauracao
+  if(!restaurado)return erro('O lançamento mudou durante a restauração. Atualize a tela.',409)
+  return NextResponse.json({ok:true,id:restaurado.id,versao:restaurado.versao})
+ }catch(e){
+  console.error('Falha ao restaurar lançamento de CMV:',e)
+  return erro('Não foi possível restaurar o lançamento. Nenhum custo foi duplicado.',500)
  }
 }

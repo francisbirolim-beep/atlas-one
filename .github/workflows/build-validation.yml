@@ -47,6 +47,9 @@ jobs:
       - name: Venda CMV review and IA feedback
         run: npm run test:venda-cmv-revisao
 
+      - name: CMV soft-delete and financial totals regression
+        run: npm run test:cmv-exclusao
+
       - name: CMV W.Vetro original totals and leftovers
         run: npm run test:cmv-wvetro-valores
 
