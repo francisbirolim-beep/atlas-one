@@ -52,5 +52,8 @@ assert.match(page,/Salvar PDF/)
 assert.match(page,/BookPeriodoEsquadrifacio/)
 assert.match(page,/relatoriosEsquadrifacio\.map/)
 assert.match(page,/Foto pendente/)
+assert.equal((page.match(/src="\/branding\/esquadrifacio-logo-r.webp"/g)||[]).length,4,'Símbolo e logo na capa, índice, cabeçalho e conclusão')
+assert.equal((page.match(/alt="Logotipo Esquadrifácio®"/g)||[]).length,4,'Toda marca visual exige ®')
+
 assert.doesNotMatch(page,/GR&F|GRF/)
 console.log('PASS: book A4, 31 relatórios, período, fontes pendentes, imagens, CMV e DRE sem dados inventados.')
