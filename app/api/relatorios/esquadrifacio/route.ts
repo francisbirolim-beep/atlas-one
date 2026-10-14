@@ -44,11 +44,12 @@ export async function GET(req:NextRequest){
   return NextResponse.json({error:'Selecione um período válido de até 12 meses.'},{status:400})
  const empresa=u.empresa_id
  try{
-  const [obrasOrigem,balcaoOrigem,metas,notasOrigem]=await Promise.all([
+  const [obrasOrigem,balcaoOrigem,metas,notasOrigem,comprasCmvOrigem]=await Promise.all([
    ler('vendas_obras','id,cliente_id,valor_venda,custo_previsto,confirmado_em,status',empresa,q=>q.gte('confirmado_em',inicio+'T00:00:00-03:00').lte('confirmado_em',fim+'T23:59:59-03:00')),
    ler('balcao_vendas','id,cliente_id,cliente_nome,vendedor_nome,total,status,finalizada_em',empresa,q=>q.gte('finalizada_em',inicio+'T00:00:00-03:00').lte('finalizada_em',fim+'T23:59:59-03:00')),
    ler('crm_metas','mes,meta_valor,usuario_id,usuario_nome',empresa,q=>q.gte('mes',inicio.slice(0,7)).lte('mes',fim.slice(0,7))),
-   ler('compras_nfs','id,fornecedor_nome,valor_total,data_entrada,status',empresa,q=>q.gte('data_entrada',inicio).lte('data_entrada',fim))
+   ler('compras_nfs','id,fornecedor_nome,valor_total,data_entrada,status',empresa,q=>q.gte('data_entrada',inicio).lte('data_entrada',fim)),
+   ler('venda_cmv_lancamentos','id,fornecedor,valor,data_lancamento,etapa_cmv,origem,cancelado_em',empresa,q=>q.eq('etapa_cmv','comprado').eq('origem','compra').is('cancelado_em',null).gte('data_lancamento',inicio).lte('data_lancamento',fim))
   ])
   const obras=(obrasOrigem as any[]).filter(v=>v.status!=='cancelada'&&v.status!=='cancelado'&&dia(v.confirmado_em)>=inicio&&dia(v.confirmado_em)<=fim)
   const balcao=(balcaoOrigem as any[]).filter(v=>v.status==='finalizada'&&dia(v.finalizada_em)>=inicio&&dia(v.finalizada_em)<=fim)
@@ -107,13 +108,14 @@ export async function GET(req:NextRequest){
    margemPrevista:x.semCusto?null:arredonda(x.total-x.custoConhecido)
   })).sort((a,b)=>b.total-a.total)
   const fornecedores=somarPor(notas,(x:any)=>String(x.fornecedor_nome||'Fornecedor não informado'),(x:any)=>valor(x.valor_total))
+  const fornecedoresCmv=somarPor(comprasCmvOrigem,(x:any)=>String(x.fornecedor||'Fornecedor não informado'),(x:any)=>valor(x.valor))
   const totalContratos=arredonda(obras.reduce((s,x)=>s+valor(x.valor_venda),0))
   const totalBalcao=arredonda(balcao.reduce((s,x)=>s+valor(x.total),0))
   const totalComprasNf=arredonda(notas.reduce((s,x)=>s+valor(x.valor_total),0))
   return NextResponse.json({
-   ok:true,periodo:{inicio,fim},resumo:{qtdObras:obras.length,qtdBalcao:balcao.length,totalContratos,totalBalcao,totalComercial:arredonda(totalContratos+totalBalcao),meta:arredonda((metas as any[]).reduce((s,m)=>s+valor(m.meta_valor),0)),comprasNf:totalComprasNf,quantidadeNf:notas.length},
-   mensal,representantes,clientes,clientesMargem,cidades,produtos,fornecedores,
-   notas:['Vendas de obras são contratos confirmados, não notas fiscais de saída.','Vendas de balcão são vendas finalizadas.','Margens são estimativas onde há CMV previsto completo.','Compras por fornecedor utilizam somente notas fiscais de entrada cadastradas, sem duplicar CMV manual.']
+   ok:true,periodo:{inicio,fim},resumo:{qtdObras:obras.length,qtdBalcao:balcao.length,totalContratos,totalBalcao,totalComercial:arredonda(totalContratos+totalBalcao),meta:arredonda((metas as any[]).reduce((s,m)=>s+valor(m.meta_valor),0)),comprasNf:totalComprasNf,quantidadeNf:notas.length,comprasCmv:arredonda(fornecedoresCmv.reduce((a,x)=>a+x.valor,0)),quantidadeCmv:(comprasCmvOrigem as any[]).length},
+   mensal,representantes,clientes,clientesMargem,cidades,produtos,fornecedores,fornecedoresCmv,
+   notas:['Vendas de obras são contratos confirmados, não notas fiscais de saída.','Vendas de balcão são vendas finalizadas.','Margens são estimativas onde há CMV previsto completo.','Compras por fornecedor separam NF de entrada e lançamentos manuais no CMV. NÃO somar essas bases sem conciliar para evitar duplicidade.']
   },{headers:{'Cache-Control':'private, no-store'}})
  }catch(e){
   console.error('Falha ao consultar relatórios individuais Esquadrifácio:',e)

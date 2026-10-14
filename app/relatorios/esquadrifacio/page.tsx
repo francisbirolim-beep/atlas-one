@@ -12,10 +12,10 @@ type Produto={nome:string;imagem:string|null;quantidade:number;total:number;cust
 type ClienteResultado={nome:string;contratos:number;valorContratos:number;custoPrevisto:number|null;margemPrevista:number|null}
 type Dados={
  ok:true;periodo:{inicio:string;fim:string};
- resumo:{qtdObras:number;qtdBalcao:number;totalContratos:number;totalBalcao:number;totalComercial:number;meta:number;comprasNf:number;quantidadeNf:number};
+ resumo:{qtdObras:number;qtdBalcao:number;totalContratos:number;totalBalcao:number;totalComercial:number;meta:number;comprasNf:number;quantidadeNf:number;comprasCmv:number;quantidadeCmv:number};
  mensal:{mes:string;contratos:number;balcao:number;meta:number;obras:number}[];
  representantes:Simples[];clientes:Simples[];clientesMargem:ClienteResultado[];cidades:Simples[];
- produtos:Produto[];fornecedores:Simples[];notas:string[]
+ produtos:Produto[];fornecedores:Simples[];fornecedoresCmv:Simples[];notas:string[]
 }
 const moeda=(n:number)=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const num=(n:number)=>Number(n||0).toLocaleString('pt-BR',{maximumFractionDigits:2})
@@ -89,8 +89,11 @@ export default function RelatoriosEsquadrifacio(){
    return {colunas:['Produto (foto)','Imagem','Quantidade vendida','Valor vendido'],imagens:true,linhas:dados.produtos.map(x=>[x.nome,x.imagem,num(x.quantidade),moeda(x.total)])}
   }
   if(f==='cidades')return {colunas:['Cidade','Obras vendidas','Valor contratado'],linhas:dados.cidades.map(x=>[x.nome,x.quantidade,moeda(x.valor)])}
-  if(f==='fornecedores')return {colunas:['Fornecedor','Notas fiscais de entrada','Valor das notas'],linhas:dados.fornecedores.map(x=>[x.nome,x.quantidade,moeda(x.valor)])}
-  if(f==='comparativo')return {colunas:['Indicador','Base de dados','Valor'],linhas:[['Vendas de obras','Contratos confirmados',moeda(dados.resumo.totalContratos)],['Vendas de balcão','Finalizadas',moeda(dados.resumo.totalBalcao)],['Compras de mercadoria','Notas de entrada cadastradas',moeda(dados.resumo.comprasNf)]]}
+  if(f==='fornecedores')return {colunas:['Fornecedor','Origem da informação','Registros','Valor registrado'],linhas:[
+   ...dados.fornecedores.map(x=>[x.nome,'NF de entrada',x.quantidade,moeda(x.valor)]),
+   ...dados.fornecedoresCmv.map(x=>[x.nome,'Compra manual no CMV (não somada à NF)',x.quantidade,moeda(x.valor)])
+  ]}
+  if(f==='comparativo')return {colunas:['Indicador','Base de dados','Valor'],linhas:[['Vendas de obras','Contratos confirmados',moeda(dados.resumo.totalContratos)],['Vendas de balcão','Finalizadas',moeda(dados.resumo.totalBalcao)],['Compras de mercadoria','Notas de entrada cadastradas',moeda(dados.resumo.comprasNf)],['Compras manuais','CMV (origem distinta; pode repetir NF)',moeda(dados.resumo.comprasCmv)]]}
   if(f==='dre'&&financeiro){
    const d=financeiro.dre
    if(relatorio.id==='dre-analitica-2'){
@@ -165,7 +168,8 @@ export default function RelatoriosEsquadrifacio(){
       </div>:<>
        {relatorio.fonte==='vendas'&&dados&&<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Indicador nome="Obras confirmadas" valor={moeda(dados.resumo.totalContratos)} nota={dados.resumo.qtdObras+' contratos'}/><Indicador nome="Balcão finalizado" valor={moeda(dados.resumo.totalBalcao)} nota={dados.resumo.qtdBalcao+' vendas'}/><Indicador nome="Total comercial" valor={moeda(dados.resumo.totalComercial)} nota="Não representa faturamento fiscal"/></div>}
        {relatorio.fonte==='metas'&&dados&&<div className="grid gap-3 sm:grid-cols-2"><Indicador nome="Meta cadastrada" valor={dados.resumo.meta>0?moeda(dados.resumo.meta):'Sem meta'}/><Indicador nome="Contratos de obra confirmados" valor={moeda(dados.resumo.totalContratos)}/></div>}
-       {relatorio.fonte==='comparativo'&&dados&&<p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Não subtraia compras de estoque da receita contratada para apurar lucro. As datas e regimes das fontes são diferentes.</p>}
+       {relatorio.fonte==='comparativo'&&dados&&<p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">Não subtraia compras de estoque da receita contratada para apurar lucro. As datas e regimes das fontes são diferentes; notas e CMV manual podem conter a mesma compra.</p>}
+       {relatorio.fonte==='fornecedores'&&<p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">As compras do CMV e as notas fiscais são mostradas separadamente. A soma de ambas pode duplicar uma mesma aquisição; a conciliação por documento será uma etapa futura.</p>}
        {relatorio.fonte==='caixa'&&financeiro&&<div className="grid gap-3 sm:grid-cols-3"><Indicador nome="Recebimentos" valor={moeda(financeiro.caixa.recebido)}/><Indicador nome="Pagamentos" valor={moeda(financeiro.caixa.pago)}/><Indicador nome="Diferença registrada" valor={moeda(financeiro.caixa.saldoParcial)} nota="Não é saldo bancário"/></div>}
        {relatorio.fonte==='dre'&&financeiro&&<p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">DRE PRELIMINAR: CMV previsto, receita comercial contratada, sem lucro líquido ou tributos apurados. Para o detalhamento completo disponível, consulte <Link href="/relatorios" className="font-semibold underline">Financeiro</Link>.</p>}
        {tabela?<Tabela colunas={tabela.colunas} linhas={tabela.linhas} imagem={tabela.imagens}/>:<p className="rounded-xl border bg-white p-6 text-sm text-slate-600">{carregando?'Consultando fontes de dados...':'Informações não disponíveis. Verifique o período e as fontes habilitadas.'}</p>}

@@ -26,7 +26,7 @@ export const relatoriosEsquadrifacio:ReadonlyArray<RelatorioIndividual>=[
  {id:'analise-por-produto',nome:'Análise comercial por produto',grupo:'Produtos',pagina:19,fonte:'produtos',observacao:'Vendas de balcão finalizadas, agrupadas por produto.'},
  {id:'faturamento-cidade',nome:'Vendas por cidade · visão do faturamento',grupo:'Cidades',pagina:20,fonte:'cidades',observacao:'Exibe valor contratado por cidade; não representa receita fiscal emitida.'},
  {id:'analise-por-cidade',nome:'Análise comercial por cidade',grupo:'Cidades',pagina:21,fonte:'cidades',observacao:'Contratos confirmados por cidade do cliente.'},
- {id:'compra-por-fornecedor',nome:'Compras por fornecedor',grupo:'Compras',pagina:22,fonte:'fornecedores',observacao:'Notas fiscais de ENTRADA cadastradas e não canceladas; compras manuais do CMV não somadas para evitar duplicidade.'},
+ {id:'compra-por-fornecedor',nome:'Compras por fornecedor',grupo:'Compras',pagina:22,fonte:'fornecedores',observacao:'Notas fiscais de entrada e compras manuais do CMV aparecem em bases separadas, sem soma duplicada.'},
  {id:'comparativo',nome:'Comparativo comercial × compras',grupo:'Resultados',pagina:23,fonte:'comparativo',observacao:'Contratos confirmados versus notas de entrada no período; bases distintas, NÃO é demonstração de lucro.'},
  {id:'margem',nome:'Margem projetada',grupo:'Resultados',pagina:24,fonte:'margem',observacao:'Receita comercial e CMV previsto, sem dedução de tributos/despesas; requer custos completos.'},
  {id:'dre-analitica-1',nome:'DRE · receita e custos previstos',grupo:'Financeiro',pagina:25,fonte:'dre',observacao:'DRE GERENCIAL PRELIMINAR; receita de contratos, não regime fiscal de competência.'},
