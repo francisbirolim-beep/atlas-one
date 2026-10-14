@@ -1,11 +1,12 @@
 'use client'
 import {useEffect,useMemo,useState} from 'react'
 import Link from 'next/link'
-import {ArrowLeft,BarChart3,Download,Printer,Search} from 'lucide-react'
+import {ArrowLeft,BarChart3,BookOpen,Download,Printer,Search} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import {baixarCsv} from '@/lib/relatorios'
 import FinanceiroRelatorio,{type FinanceiroRelatorioDados} from '@/components/relatorios/FinanceiroRelatorio'
 import {gruposRelatorios,relatoriosEsquadrifacio,type RelatorioIndividual,type FonteRelatorio} from '@/lib/relatoriosEsquadrifacio'
+import {validarPeriodoBook} from '@/lib/bookEsquadrifacio'
 
 type Simples={nome:string;quantidade:number;valor:number}
 type Produto={nome:string;imagem:string|null;quantidade:number;total:number;custoConhecido:number|null;margemPrevista:number|null}
@@ -143,7 +144,9 @@ export default function RelatoriosEsquadrifacio(){
     <p className="text-xs font-bold uppercase tracking-widest text-blue-700">Esquadrifácio · Gestão e resultados</p>
     <h1 className="mt-1 text-2xl font-bold text-slate-900">Relatórios gerenciais individuais</h1>
     <p className="mt-1 text-sm text-slate-600">31 visões do fechamento de referência, organizadas por assunto. Consulte cada relatório antes de compilar o fechamento mensal.</p>
-   </div><div className="relatorios-acoes flex gap-2"><button disabled={!tabela} onClick={exportar} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/> Excel / CSV</button><button onClick={()=>window.print()} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Printer size={15}/> Imprimir / PDF</button></div></div>
+   </div><div className="relatorios-acoes flex flex-wrap gap-2">
+    {validarPeriodoBook(periodo.inicio,periodo.fim)&&<Link href={'/relatorios/esquadrifacio/book?inicio='+encodeURIComponent(periodo.inicio)+'&fim='+encodeURIComponent(periodo.fim)} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white"><BookOpen size={17}/> Gerar Book do Período</Link>}
+    <button disabled={!tabela} onClick={exportar} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/> Excel / CSV</button><button onClick={()=>window.print()} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Printer size={15}/> Imprimir / PDF</button></div></div>
    <section className="relatorios-acoes flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4">
     <label className="text-xs font-bold">Data inicial<input className="mt-1 block rounded-lg border px-3 py-2 text-sm" type="date" value={periodo.inicio} onChange={e=>setPeriodo(p=>({...p,inicio:e.target.value}))}/></label>
     <label className="text-xs font-bold">Data final<input className="mt-1 block rounded-lg border px-3 py-2 text-sm" type="date" value={periodo.fim} onChange={e=>setPeriodo(p=>({...p,fim:e.target.value}))}/></label>
@@ -178,6 +181,6 @@ export default function RelatoriosEsquadrifacio(){
      <p className="text-xs text-slate-600">Os relatórios são consultas de leitura; nenhum cadastro ou lançamento será modificado. Onde faltam fontes, há aviso explícito.</p>
     </section>
    </div>
-   <div className="rounded-xl border bg-white p-4"><div className="flex items-center gap-2"><BarChart3 size={18}/><h3 className="font-semibold">Fechamento mensal Esquadrifácio</h3></div><p className="mt-1 text-sm text-slate-600">Quando as visões individuais e fontes pendentes forem homologadas, poderemos consolidar o mês num único caderno. Esta tela ainda não gera cadernos automaticamente.</p></div>
+   <div className="rounded-xl border bg-white p-4"><div className="flex items-center gap-2"><BarChart3 size={18}/><h3 className="font-semibold">Fechamento mensal Esquadrifácio</h3></div><p className="mt-1 text-sm text-slate-600">Reúna as 31 visões em um Book gerencial com capa Esquadrifácio, índice, período consultado, relatórios disponíveis e avisos para integrações pendentes. Imprima ou salve o conjunto completo em PDF, sem alterar lançamentos.</p>{validarPeriodoBook(periodo.inicio,periodo.fim)&&<Link href={'/relatorios/esquadrifacio/book?inicio='+encodeURIComponent(periodo.inicio)+'&fim='+encodeURIComponent(periodo.fim)} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white"><BookOpen size={17}/> Gerar e imprimir Book do período</Link>}</div>
   </main></div>
 }
