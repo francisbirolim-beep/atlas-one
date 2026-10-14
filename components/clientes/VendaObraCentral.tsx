@@ -20,6 +20,7 @@ import { adicionarDocumentoCliente } from '@/lib/cliente360'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { adicionarMaterialManual, ajustarMaterial, excluirMaterialDoPacote, gerarPacoteTecnico, recalcularAproveitamentoPacote } from '@/lib/materialPlanejamento'
 import VendaProducaoDetalhada from '@/components/clientes/VendaProducaoDetalhada'
+import VendaProducaoKanbanPreview from '@/components/clientes/VendaProducaoKanbanPreview'
 import VendaLiberacaoOrdens from '@/components/clientes/VendaLiberacaoOrdens'
 import VendaVincularObra from '@/components/clientes/VendaVincularObra'
 import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetalhada'
@@ -1656,6 +1657,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </Box>
         })()}
           <VendaLiberacaoOrdens vendaId={venda.id} onAtualizar={carregar}/>
+          <VendaProducaoKanbanPreview ordens={ordens} itens={itens} materiais={materiaisTecnicos} produtosMateriais={produtosMateriais}/>
           <VendaProducaoDetalhada ordens={ordens} itens={itens} statusGeral={setorPorNome.producao?.nome||null}/>
         </Box>}
 
