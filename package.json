@@ -17,6 +17,7 @@
     "test:venda-cmv": "node scripts/test-venda-cmv-regras.cjs",
     "test:venda-cmv-revisao": "node scripts/test-venda-cmv-revisao.cjs",
     "test:cmv-exclusao": "node scripts/test-cmv-excluir-lancamento.cjs",
+    "test:cmv-pesos": "node scripts/test-cmv-peso-recebimento.cjs",
     "test:cmv-wvetro-valores": "node scripts/test-cmv-perfil-previsao.cjs",
     "test:venda-fluxo": "node scripts/test-venda-fluxo-resumo.cjs",
     "test:kanban-conciliacao": "node scripts/test-kanban-conciliacao.cjs",
