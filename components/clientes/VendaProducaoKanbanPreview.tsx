@@ -233,7 +233,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         </div>
       </div>
       <VendaListaCorteWVetro
-        materiais={materialDoCard(abertoCard.ref)}
+        materiais={materialDoCard(abertoCard.ref).map(m=>({...m,unidade:m.unidade||'UN'}))}
         obraId={null} pacoteId={pacoteId} orcamentoId={orcamentoId} onEditar={onEditarCortes}
         imagensPorProduto={Object.fromEntries(Object.entries(produtosMateriais).filter(([,p])=>Boolean(p.foto_url)).map(([id,p])=>[id,String(p.foto_url)]))}
         imagensPorCodigo={Object.fromEntries(Object.values(produtosMateriais).filter(p=>Boolean(p.codigo&&p.foto_url)).map(p=>[String(p.codigo).trim().toUpperCase(),String(p.foto_url)]))}/>
