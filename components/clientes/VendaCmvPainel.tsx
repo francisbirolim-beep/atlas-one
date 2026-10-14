@@ -13,11 +13,13 @@ type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];exclu
 
 const labels:Record<Categoria,string>={perfil:'Perfis',acessorio:'Acessórios',vidro:'Vidros',perda:'Perda de corte',mao_obra:'Mão de obra',instalacao:'Instalação',frete:'Frete',outros:'Outros'}
 const moedas=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
+const quilos=(n:number)=>n.toLocaleString('pt-BR',{maximumFractionDigits:3})+' kg'
+const variacaoPeso=(n:number)=>((n>0?'+':'')+n.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%')
 const previstoFmt=(n:number|null)=>n===null?'Aguardando W.Vetro':moedas(n)
 const categories=Object.keys(labels) as Categoria[]
 const dataLocal=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
-function Card({titulo,valor,nota}:{titulo:string;valor:string;nota?:string}){
- return <div className="rounded-xl border bg-white p-4"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{titulo}</div><div className="mt-1 text-xl font-bold text-slate-900">{valor}</div>{nota&&<p className="mt-1 text-xs text-slate-500">{nota}</p>}</div>
+function Card({titulo,valor,detalhe,nota}:{titulo:string;valor:string;detalhe?:string;nota?:string}){
+ return <div className="rounded-xl border bg-white p-4"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{titulo}</div><div className="mt-1 text-xl font-bold text-slate-900">{valor}</div>{detalhe&&<div className="mt-2 text-sm font-semibold text-slate-800">{detalhe}</div>}{nota&&<p className="mt-1 text-xs text-slate-500">{nota}</p>}</div>
 }
 export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{vendaId:string;comprasExistentes:Partial<Record<Categoria,number>>;onMudanca?:(total:number)=>void}){
  const [dados,setDados]=useState<Dados|null>(null)
@@ -73,6 +75,18 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
  const porCategoria=useMemo(()=>Object.fromEntries(categories.map(c=>[c,Number(comprasExistentes[c]||0)+(dados?.lancamentos.filter(l=>l.categoria===c).reduce((s,l)=>s+Number(l.valor||0),0)||0)])) as Record<Categoria,number>,[dados,comprasExistentes])
  const comparativos=useMemo(()=>Object.fromEntries(categories.map(c=>[c,compararPesosCmv(c,dados?.lancamentos||[],recebimentos,porCategoria[c],Number(comprasExistentes[c]||0))])) as Record<Categoria,ReturnType<typeof compararPesosCmv>>,[dados,recebimentos,porCategoria,comprasExistentes])
  const totalRecebido=useMemo(()=>recebimentos.reduce((s,r)=>s+Number(r.valor_total||0),0),[recebimentos])
+ // O resumo superior usa somente pesos conhecidos; não atribui kg a compras antigas sem pesagem.
+ const resumoPesos=useMemo(()=>{
+  const materiais:Categoria[]=['perfil','acessorio','vidro','outros']
+  const pesoComprado=materiais.reduce((s,c)=>s+comparativos[c].pesoComprado,0)
+  const pesoRecebido=materiais.reduce((s,c)=>s+comparativos[c].pesoRecebido,0)
+  const pendenteKg=materiais.some(c=>comparativos[c].faltaPesoComprado)
+  const temRecebimento=materiais.some(c=>comparativos[c].temRecebimento)
+  const podeComparar=temRecebimento&&pesoComprado>0&&!pendenteKg
+  const diferencaKg=podeComparar?pesoRecebido-pesoComprado:null
+  const percentual=podeComparar?100*(pesoRecebido-pesoComprado)/pesoComprado:null
+  return {pesoComprado,pesoRecebido,pendenteKg,temRecebimento,diferencaKg,percentual}
+ },[comparativos])
  const existeRecebimento=recebimentos.length>0
  async function enviar(e:FormEvent<HTMLFormElement>){
   e.preventDefault();if(enviandoRef.current)return
@@ -229,9 +243,9 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    {realizado<=0&&<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Ainda não há custo efetivamente registrado nesta venda. O custo previsto W.Vetro é referência; não representa o realizado. Registre compras e custos antes de avaliar margem real.</p>}
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <Card titulo="Custo previsto revisado" valor={previstoFmt(totalRevisado)} nota={`Original W.Vetro: ${previstoFmt(totalBruto)} · ${dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}`}/>
-    <Card titulo="Custo comprado registrado" valor={moedas(realizado)} nota="Valor de compras e lançamentos existentes, sem duplicar pelo recebimento"/>
-    <Card titulo="Custo recebido" valor={existeRecebimento?moedas(totalRecebido):'Aguardando recebimento'} nota="Valor das entregas registradas por nota ou romaneio; não soma novamente ao comprado"/>
-    <Card titulo="Diferença até agora" valor={totalRevisado==null?'—':moedas(totalRevisado-(existeRecebimento?totalRecebido:realizado))} nota={existeRecebimento?'Previsto menos recebido até agora · parcial até fechar a obra':'Previsto menos comprado · parcial até haver recebimento'}/>
+    <Card titulo="Custo comprado registrado" valor={moedas(realizado)} detalhe={'Peso comprado: '+(resumoPesos.pesoComprado>0?quilos(resumoPesos.pesoComprado):'A preencher')} nota={resumoPesos.pendenteKg?'Peso parcial: há compras ainda sem quilos conciliados':'Valor de compras e lançamentos existentes, sem duplicar pelo recebimento'}/>
+    <Card titulo="Custo recebido" valor={existeRecebimento?moedas(totalRecebido):'Aguardando recebimento'} detalhe={'Peso recebido: '+(resumoPesos.temRecebimento?quilos(resumoPesos.pesoRecebido):'Aguardando')} nota="Entregas conforme nota ou romaneio; não somar novamente ao comprado"/>
+    <Card titulo="Diferença até agora" valor={totalRevisado==null?'—':moedas(totalRevisado-(existeRecebimento?totalRecebido:realizado))} detalhe={'Diferença de peso: '+(resumoPesos.diferencaKg===null?'A conferir':(resumoPesos.diferencaKg>0?'+':'')+quilos(resumoPesos.diferencaKg)+' ('+variacaoPeso(resumoPesos.percentual??0)+')')} nota={existeRecebimento?'Previsto menos recebido em R$ · peso recebido menos comprado · parcial':'Previsto menos comprado em R$ · aguarda recebimento para diferença em kg'}/>
     <Card titulo="Lançamentos" valor={String(dados.lancamentos.length)} nota="Registros de custos desta venda"/>
    </div>
    <section aria-label="Resultado original da obra W.Vetro" className="rounded-xl border border-slate-200 p-3">
