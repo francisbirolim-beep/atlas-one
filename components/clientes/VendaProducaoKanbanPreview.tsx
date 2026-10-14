@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, ChevronDown, ChevronUp, Clock3, FileDown, ImageOff, Layers3, LockKeyhole, PackageCheck, Printer, ShieldAlert } from 'lucide-react'
 import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
+import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 
 type Ordem = {
   id:string; item_ref?:string|null; titulo?:string|null; status?:string|null
@@ -28,9 +29,6 @@ const ETAPAS=[
 ] as const
 type Etapa=typeof ETAPAS[number]['id']
 type Categoria='perfil'|'acessorio'|'vidro'|'outros'
-const CATEGORIAS:[Categoria,string][]=[
-  ['perfil','Perfis'],['acessorio','Acessórios'],['vidro','Vidros'],['outros','Outros']
-]
 const finalizada=(o:Ordem)=>o.status==='concluida'
 const habilitada=(o:Ordem)=>!o.bloqueada&&['liberada','em_producao','conferencia','concluida'].includes(String(o.status||''))
 const valor=(n:unknown)=>Number.isFinite(Number(n))?Number(n):0
@@ -59,7 +57,13 @@ function imagemMaterial(m:Material,produtos:Record<string,Produto>){
   return texto(porId)||texto(porCodigo)||texto(wvetro)||''
 }
 function imagemTipologia(i:Record<string,unknown>){
-  return texto(i.foto_url)||texto(i.imagem_url)||texto(i.croqui_url)||texto(i.desenho_url)||''
+  // O desenho deve vir do item vendido, de seu snapshot ou do cadastro técnico, nunca ser inventado.
+  const origem=i.dados_origem&&typeof i.dados_origem==='object'?i.dados_origem as Record<string,unknown>:{}
+  const tipologia=i.tipologia&&typeof i.tipologia==='object'?i.tipologia as Record<string,unknown>:{}
+  return [i.foto_url,i.imagem_url,i.croqui_url,i.desenho_url,i.thumbnail_url,
+    i.imagem_catalogo_url,i.imagem_tipologia_url,i.wvetro_imagem_url,
+    tipologia.foto_url,tipologia.imagem_url,tipologia.desenho_url,
+    origem.imagem_url,origem.foto_url,origem.desenho_url].map(texto).find(Boolean)||''
 }
 function duracao(ms:number){
   const minutos=Math.max(0,Math.floor(ms/60000))
@@ -67,14 +71,14 @@ function duracao(ms:number){
   const horas=Math.floor(minutos/60)
   return horas<24?horas+' h '+(minutos%60)+' min':Math.floor(horas/24)+' d '+(horas%24)+' h'
 }
-export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produtosMateriais}:{
-  ordens:Ordem[];itens:any[];materiais:Material[];produtosMateriais:Record<string,Produto>
+export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produtosMateriais,pacoteId,orcamentoId,onEditarCortes}:{
+  ordens:Ordem[];itens:any[];materiais:Material[];produtosMateriais:Record<string,Produto>;
+  pacoteId?:string|null;orcamentoId:string;onEditarCortes:()=>void
 }){
   const [etapasSim,setEtapasSim]=useState<Record<string,Etapa>>({})
   const [qtdSim,setQtdSim]=useState<Record<string,number>>({})
   const [entradaSim,setEntradaSim]=useState<Record<string,number>>({})
   const [aberto,setAberto]=useState<string|null>(null)
-  const [categoria,setCategoria]=useState<Categoria>('perfil')
   const [selecionados,setSelecionados]=useState<string[]>([])
   const [aviso,setAviso]=useState('')
   const [perguntarImpressao,setPerguntarImpressao]=useState<string|null>(null)
@@ -105,7 +109,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         ambiente:texto(i.ambiente)||texto(i.local)||'Ambiente não informado',
         largura:valor(i.largura_mm||ordem?.item_snapshot?.largura_mm),
         altura:valor(i.altura_mm||ordem?.item_snapshot?.altura_mm),
-        foto:imagemTipologia(i),
+        foto:imagemTipologia(i)||imagemTipologia(ordem?.item_snapshot||{}),
         qtd:qtdPrevista,produzidas,etapa,pronta,progresso:Math.round((produzidas/qtdPrevista)*100),
         bloqueio:c.ordens.map(o=>texto(o.bloqueio_motivo)).filter(Boolean).join(' · '),
       }
@@ -164,7 +168,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
             const atraso=dur!=null&&dur>24*3600000?'text-red-700':dur!=null&&dur>8*3600000?'text-amber-700':'text-slate-500'
             return <div key={c.ref} draggable onDragStart={e=>e.dataTransfer.setData('text/plain',c.ref)} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex items-start gap-2"><input type="checkbox" aria-label={'Selecionar '+c.nome} checked={selecionadosValidos.includes(c.ref)} onChange={e=>setSelecionados(prev=>e.target.checked?[...new Set([...prev,c.ref])]:prev.filter(r=>r!==c.ref))}/>
-                {c.foto?<img src={c.foto} alt={'Desenho da '+c.nome} className="h-12 w-12 rounded border object-contain"/>:<div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded border bg-slate-50 text-[9px] text-slate-400"><ImageOff size={16}/>Sem desenho</div>}
+                {c.foto?<img src={c.foto} alt={'Desenho da '+c.nome} className="h-14 w-14 shrink-0 rounded border object-contain"/>:<div role="status" className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded border border-amber-300 bg-amber-50 text-center text-[9px] font-semibold text-amber-800"><ImageOff size={16}/>Desenho pendente</div>}
                 <div className="min-w-0 flex-1"><b className="block text-xs text-slate-900">{c.nome}</b><p className="text-[11px] text-slate-500">{c.ambiente}</p><p className="text-[11px] text-slate-500">{c.largura&&c.altura?c.largura+' × '+c.altura+' mm · ':''}{c.qtd} un.</p></div>
               </div>
               <p className={'mt-2 flex items-center gap-1 text-[11px] font-semibold '+(c.pronta?'text-emerald-700':'text-amber-700')}>{c.pronta?<CheckCircle2 size={13}/>:<LockKeyhole size={13}/>} {c.pronta?'Liberada tecnicamente':'Aguardando liberação técnica'}</p>
@@ -172,7 +176,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
               <div className="mt-1 flex justify-between text-[11px]"><span>{c.produzidas}/{c.qtd} produzidas</span><b>{c.progresso}%</b></div>
               <p className={'mt-1 flex items-center gap-1 text-[10px] '+atraso}><Clock3 size={11}/>{dur==null?'Tempo na etapa: a registrar':'Nesta etapa: '+duracao(dur)}</p>
               {c.bloqueio&&<p className="mt-1 text-[10px] text-amber-700">{c.bloqueio}</p>}
-              <button type="button" className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold" onClick={()=>{setAberto(aberto===c.ref?null:c.ref);setCategoria('perfil')}}>{aberto===c.ref?<ChevronUp size={13}/>:<ChevronDown size={13}/>} {aberto===c.ref?'Fechar tipologia':'Abrir tipologia'}</button>
+              <button type="button" className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold" onClick={()=>setAberto(aberto===c.ref?null:c.ref)}>{aberto===c.ref?<ChevronUp size={13}/>:<ChevronDown size={13}/>} {aberto===c.ref?'Fechar tipologia':'Abrir tipologia'}</button>
             </div>
           })}</div>
         </div>
@@ -182,11 +186,19 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     {abertoCard&&<div className="mt-4 rounded-xl border border-blue-200 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h4 className="font-bold">{abertoCard.nome} · {abertoCard.ambiente}</h4><p className="text-xs text-slate-500">Materiais exclusivos desta tipologia, conforme pacote técnico do WVetro.</p></div>
         <button type="button" className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold" onClick={()=>prepararImpressao([abertoCard.ref])}><Printer size={13}/>Imprimir esta tipologia</button></div>
-      <div className="mt-3 flex flex-wrap gap-2">{CATEGORIAS.map(([id,nome])=><button type="button" key={id} className={'rounded-lg border px-3 py-1.5 text-xs '+(categoria===id?'bg-blue-700 text-white':'bg-white')} onClick={()=>setCategoria(id)}>{nome}</button>)}</div>
-      <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] text-left text-xs"><thead><tr className="bg-slate-100"><th className="p-2">Imagem</th><th>Código</th><th>Descrição</th><th>Qtd.</th><th>Corte</th><th>Cor</th></tr></thead><tbody>{materialDoCard(abertoCard.ref).filter(m=>categoriaMaterial(m)===categoria).map(m=>{
-        const img=imagemMaterial(m,produtosMateriais)
-        return <tr key={m.id} className="border-b"><td className="p-2">{img?<img src={img} alt={'Desenho '+(m.codigo||m.descricao)} className="h-12 w-12 object-contain"/>:<span className="inline-flex items-center gap-1 text-amber-700"><ImageOff size={14}/>Imagem pendente</span>}</td><td className="font-mono font-bold">{m.codigo||'—'}</td><td>{m.descricao}</td><td>{numero(m.quantidade_ajustada??m.quantidade_tecnica)} {m.unidade||'UN'}</td><td>{m.comprimento_corte_mm?numero(m.comprimento_corte_mm)+' mm':'—'}</td><td>{m.cor_ref||'—'}</td></tr>
-      })}{!materialDoCard(abertoCard.ref).some(m=>categoriaMaterial(m)===categoria)&&<tr><td colSpan={6} className="p-5 text-slate-500">Nenhum material desta categoria vinculado à tipologia.</td></tr>}</tbody></table></div>
+      <div className="my-3 flex flex-wrap items-center gap-3 rounded-xl border bg-slate-50 p-3">
+        {abertoCard.foto?<img src={abertoCard.foto} alt={'Desenho técnico de '+abertoCard.nome} className="h-28 w-36 rounded-lg border bg-white object-contain p-1"/>:<div role="status" className="flex h-28 w-36 flex-col items-center justify-center gap-1 rounded-lg border border-amber-300 bg-amber-50 text-center text-xs font-semibold text-amber-800"><ImageOff size={24}/>Desenho da tipologia pendente de cadastro</div>}
+        <div className="text-xs text-slate-700"><b className="block text-sm">{abertoCard.nome}</b>
+          <p>Ambiente: {abertoCard.ambiente}</p>
+          <p>Medidas: {abertoCard.largura&&abertoCard.altura?`${abertoCard.largura} × ${abertoCard.altura} mm`:'Não informadas'}</p>
+          <p>Quantidade: {abertoCard.qtd} · Produzidas: {abertoCard.produzidas}</p>
+        </div>
+      </div>
+      <VendaListaCorteWVetro
+        materiais={materialDoCard(abertoCard.ref)}
+        obraId={null} pacoteId={pacoteId} orcamentoId={orcamentoId} onEditar={onEditarCortes}
+        imagensPorProduto={Object.fromEntries(Object.entries(produtosMateriais).filter(([,p])=>Boolean(p.foto_url)).map(([id,p])=>[id,String(p.foto_url)]))}
+        imagensPorCodigo={Object.fromEntries(Object.values(produtosMateriais).filter(p=>Boolean(p.codigo&&p.foto_url)).map(p=>[String(p.codigo).trim().toUpperCase(),String(p.foto_url)]))}/>
       <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 p-3 text-xs">
         <label>Produzidas nesta simulação: <input aria-label="Quantidade produzida na prévia" type="number" min={0} max={abertoCard.qtd} className="ml-1 w-16 rounded border px-2 py-1" value={abertoCard.produzidas} onChange={e=>setQtdSim(prev=>({...prev,[abertoCard.ref]:Math.max(0,Math.min(abertoCard.qtd,Math.floor(valor(e.target.value))))}))}/></label>
         <label>Testar etapa: <select aria-label="Etapa simulada" className="rounded border px-2 py-1" value={abertoCard.etapa} onChange={e=>mover(abertoCard.ref,e.target.value as Etapa)}>{ETAPAS.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}</select></label>
@@ -197,11 +209,11 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     <div className="atlas-producao-print hidden">
       <h1>Atlas One · Plano de corte / ficha completa de produção</h1>
       <p>Tipologias selecionadas: {cardsImpressao.length} · Impressão técnica por peça, não lista de compra de barras.</p>
-      {cardsImpressao.map(c=><section key={c.ref} className="print-bloco"><h2>{c.nome} · {c.ambiente}</h2><p>{c.largura&&c.altura?c.largura+' × '+c.altura+' mm · ':''}Quantidade: {c.qtd} · {c.ref}</p></section>)}
-      <table className="print-tabela"><thead><tr><th>Desenho</th><th>Tipologia</th><th>Grupo</th><th>Código</th><th>Descrição</th><th>Quantidade</th><th>Corte</th><th>Cor</th></tr></thead><tbody>{imprimirMaterial.map(m=>{
+      {cardsImpressao.map(c=><section key={c.ref} className="print-bloco"><h2>{c.nome} · {c.ambiente}</h2>{c.foto?<img src={c.foto} alt={'Desenho '+c.nome} style={{width:92,height:72,objectFit:'contain'}}/>:<p>Desenho da tipologia pendente de cadastro</p>}<p>{c.largura&&c.altura?c.largura+' × '+c.altura+' mm · ':''}Quantidade: {c.qtd} · {c.ref}</p></section>)}
+      <table className="print-tabela"><thead><tr><th>Desenho</th><th>Tipologia</th><th>Grupo</th><th>Código</th><th>Descrição</th><th>Quantidade</th><th>Corte</th><th>Cor</th><th>Barra de origem</th></tr></thead><tbody>{imprimirMaterial.map(m=>{
         const img=imagemMaterial(m,produtosMateriais)
         const tip=cards.find(c=>c.ref===String(m.item_ref||''))
-        return <tr key={m.id}><td>{img?<img src={img} alt={'Desenho '+(m.codigo||m.descricao)}/>:<span>Imagem pendente</span>}</td><td>{tip?.nome||'Geral da obra'}</td><td>{categoriaMaterial(m)}</td><td>{m.codigo||'—'}</td><td>{m.descricao}</td><td>{numero(m.quantidade_ajustada??m.quantidade_tecnica)} {m.unidade}</td><td>{m.comprimento_corte_mm?numero(m.comprimento_corte_mm)+' mm':'—'}</td><td>{m.cor_ref||'—'}</td></tr>
+        return <tr key={m.id}><td>{img?<img src={img} alt={'Desenho '+(m.codigo||m.descricao)}/>:<span>Imagem pendente</span>}</td><td>{tip?.nome||'Geral da obra'}</td><td>{categoriaMaterial(m)}</td><td>{m.codigo||'—'}</td><td>{m.descricao}</td><td>{numero(m.quantidade_ajustada??m.quantidade_tecnica)} {m.unidade}</td><td>{m.comprimento_corte_mm?numero(m.comprimento_corte_mm)+' mm':'—'}</td><td>{m.cor_ref||'—'}</td><td>{m.comprimento_barra_mm?numero(m.comprimento_barra_mm)+' mm':'—'}</td></tr>
       })}</tbody></table>
       <p>Documento gerado para conferência. Imagens não cadastradas permanecem indicadas como pendentes.</p>
     </div>
