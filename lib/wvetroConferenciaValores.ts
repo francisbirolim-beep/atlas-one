@@ -17,7 +17,7 @@ function moeda(x:unknown):number|null{
 const soma=(numeros:(number|null)[]):number|null=>numeros.every(n=>n!==null)?Math.round(numeros.reduce<number>((a,b)=>a+Number(b),0)*100)/100:null
 const diff=(a:number|null,b:number|null)=>a===null||b===null?null:Math.round((a-b)*100)/100
 export type ItemWVetroConferido={
- ordem:number; codigo:string; descricao:string; quantidade:number;
+ chaveWVetro:string|null; ordem:number; codigo:string; descricao:string; quantidade:number;
  custoWVetro:number|null; vendaWVetro:number|null;
  vendaAtlas:number|null; custoAtlas:number|null;
  imagemUrl:string|null
@@ -50,6 +50,7 @@ export function construirConferenciaWVetro(
    ||objeto(itensAtlas[i])
   const desc=string(w.Nome||w.Modelo||w.Descricao||w.Codigo)||'Tipologia '+(i+1)
   return {
+   chaveWVetro:string(w.Id||w.ItemId)||null,
    ordem:i+1,codigo:string(w.Codigo||w.Id),descricao:desc,
    quantidade:Math.max(1,Number(w.Qtde||w.Quantidade||1)||1),
    // Estes são os campos verificados contra o relatório original do orçamento 1073.
@@ -105,4 +106,102 @@ export function extrairPedidoAtual(payload:unknown,numero:string):Registro|null{
    if(obj[chave]&&typeof obj[chave]==='object')fila.push(obj[chave])
  }
  return null
+}
+
+
+// Diff financeiro entre o orçamento W.Vetro importado e uma consulta em tempo real.
+// Não usa totais do Atlas para inferir custos das tipologias, não aplica nada,
+// e NÃO emparelha por posição quando um item pode ter sido acrescentado/removido.
+export type DiferencaItemWVetro={
+ chave:string; status:'incluida'|'removida'|'alterada'|'sem_alteracao'|'identidade_incerta';
+ anterior:ItemWVetroConferido|null; novo:ItemWVetroConferido|null;
+ alteracoes:string[];
+}
+export type DiferencaTotalWVetro={
+ chave:'custoGeralWVetro'|'custoTipologias'|'vendaTipologias'|'vendaBrutaWVetro'|'descontoWVetro'|'vendaLiquidaWVetro';
+ rotulo:string; anterior:number|null; novo:number|null; diferenca:number|null;
+ mudou:boolean;
+}
+export type DiferencaConferenciaWVetro={
+ numero:string; fonte:'comparacao_ao_vivo'; somenteLeitura:true;
+ itens:DiferencaItemWVetro[]; totais:DiferencaTotalWVetro[];
+ qtdAlteradas:number;qtdIncluidas:number;qtdRemovidas:number;qtdSemMudanca:number;qtdIncertas:number;
+ aplicacaoAutomaticaPermitida:false; avisos:string[];
+}
+export function compararConferenciasWVetro(
+ anterior:WVetroConferencia,novo:WVetroConferencia,
+):DiferencaConferenciaWVetro{
+ if(!anterior.numero||anterior.numero!==novo.numero)
+  throw new Error('Não é possível comparar orçamentos de números diferentes.')
+ // IDs que se repetem em uma mesma versão não podem ser emparelhados automaticamente.
+ const contagem=(itens:ItemWVetroConferido[])=>{
+  const mapa=new Map<string,number>()
+  for(const it of itens)if(it.chaveWVetro)mapa.set(it.chaveWVetro,(mapa.get(it.chaveWVetro)||0)+1)
+  return mapa
+ }
+ const ca=contagem(anterior.itens),cn=contagem(novo.itens)
+ const idsConfiaveis=new Set<string>()
+ for(const [id,q] of ca)if(q===1&&cn.get(id)===1)idsConfiaveis.add(id)
+ const originais=new Map(anterior.itens.filter(i=>i.chaveWVetro&&idsConfiaveis.has(i.chaveWVetro)).map(i=>[i.chaveWVetro!,i]))
+ const atuais=new Map(novo.itens.filter(i=>i.chaveWVetro&&idsConfiaveis.has(i.chaveWVetro)).map(i=>[i.chaveWVetro!,i]))
+ const itens:DiferencaItemWVetro[]=[]
+ const pares=new Set<string>()
+ for(const it of anterior.itens){
+  const id=it.chaveWVetro
+  if(!id||ca.get(id)!==1){
+   itens.push({chave:'antiga:'+it.ordem,status:'identidade_incerta',anterior:it,novo:null,
+    alteracoes:['Identificador não permite associar com segurança. Conferir manualmente.']})
+   continue
+  }
+  const novoItem=idsConfiaveis.has(id)?atuais.get(id)||null:null
+  if(!novoItem){
+   // Só é segura a classificação de exclusão quando a lista original e a nova
+   // possuem IDs únicos. Caso contrário há risco de falso positivo.
+   const seguro=!cn.has(id)&&cn.size===novo.itens.length&&ca.size===anterior.itens.length
+   itens.push({chave:'id:'+id,status:seguro?'removida':'identidade_incerta',anterior:it,novo:null,
+    alteracoes:[seguro?'Tipologia ausente no W.Vetro atual':'Conferir se esta tipologia foi removida ou alterou ID']})
+   continue
+  }
+  pares.add(id)
+  const alteracoes:string[]=[]
+  if(it.descricao!==novoItem.descricao)alteracoes.push('Descrição')
+  if(it.codigo!==novoItem.codigo)alteracoes.push('Código')
+  if(it.quantidade!==novoItem.quantidade)alteracoes.push('Quantidade')
+  if(it.custoWVetro!==novoItem.custoWVetro)alteracoes.push('Custo')
+  if(it.vendaWVetro!==novoItem.vendaWVetro)alteracoes.push('Venda')
+  if(it.ordem!==novoItem.ordem)alteracoes.push('Posição no orçamento')
+  itens.push({chave:'id:'+id,status:alteracoes.length?'alterada':'sem_alteracao',
+   anterior:it,novo:novoItem,alteracoes})
+ }
+ for(const it of novo.itens){
+  if(it.chaveWVetro&&pares.has(it.chaveWVetro))continue
+  const id=it.chaveWVetro
+  const seguro=Boolean(id&&ca.size===anterior.itens.length&&cn.size===novo.itens.length
+   &&!ca.has(id)&&cn.get(id)===1)
+  itens.push({chave:'nova:'+it.ordem,status:seguro?'incluida':'identidade_incerta',
+   anterior:null,novo:it,alteracoes:[seguro?'Nova tipologia detectada':'Novo item sem identificação segura']})
+ }
+ const campos:[DiferencaTotalWVetro['chave'],string][]=[
+  ['custoGeralWVetro','Custo geral W.Vetro'],
+  ['custoTipologias','Soma dos custos por tipologia'],
+  ['vendaTipologias','Soma das vendas das tipologias'],
+  ['vendaBrutaWVetro','Venda bruta'],
+  ['descontoWVetro','Desconto'],
+  ['vendaLiquidaWVetro','Venda líquida'],
+ ]
+ const totais=campos.map(([chave,rotulo])=>{
+  const a=anterior.totais[chave],n=novo.totais[chave]
+  return {chave,rotulo,anterior:a,novo:n,diferenca:diff(n,a),mudou:a!==n}
+ })
+ const qtd=(status:DiferencaItemWVetro['status'])=>itens.filter(i=>i.status===status).length
+ const avisos:string[]=[]
+ if(qtd('identidade_incerta'))avisos.push('Há tipologias sem identificação segura. Não tentar relacionar itens por posição ou nome.')
+ if(novo.totais.vendaLiquidaWVetro===null||novo.totais.custoGeralWVetro===null)
+  avisos.push('O W.Vetro não forneceu todos os totais atuais. É proibido completar valores atuais com o histórico antigo.')
+ if(novo.alertas.length)avisos.push(...novo.alertas)
+ avisos.push('Comparação somente leitura. Uma venda confirmada não pode ser reescrita sem confirmação individual, auditoria e reconciliação financeira.')
+ return {numero:novo.numero,fonte:'comparacao_ao_vivo',somenteLeitura:true,
+  itens,totais,qtdAlteradas:qtd('alterada'),qtdIncluidas:qtd('incluida'),
+  qtdRemovidas:qtd('removida'),qtdSemMudanca:qtd('sem_alteracao'),qtdIncertas:qtd('identidade_incerta'),
+  aplicacaoAutomaticaPermitida:false,avisos}
 }

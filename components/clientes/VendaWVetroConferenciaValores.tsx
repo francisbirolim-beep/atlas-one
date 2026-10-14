@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, ArrowRightLeft, CheckCircle2, Eye, ImageIcon, Loader2, RefreshCw } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
-import type { WVetroConferencia } from '@/lib/wvetroConferenciaValores'
+import type { DiferencaConferenciaWVetro, WVetroConferencia } from '@/lib/wvetroConferenciaValores'
 
 const brl=(n:number|null|undefined)=>n==null?'Não informado':n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const delta=(n:number|null)=>n===null?'Não calculado':(n>0?'+':'')+brl(n)
 const d=(x:number|null)=>x!==null&&Math.abs(x)>0.01
 export default function VendaWVetroConferenciaValores({vendaId}:{vendaId:string}){
  const [dados,setDados]=useState<WVetroConferencia|null>(null)
+ const [diferencas,setDiferencas]=useState<DiferencaConferenciaWVetro|null>(null)
  const [carregando,setCarregando]=useState(false)
  const [consultando,setConsultando]=useState(false)
  const [erro,setErro]=useState('')
@@ -17,6 +18,7 @@ export default function VendaWVetroConferenciaValores({vendaId}:{vendaId:string}
  const buscar=useCallback(async(aoVivo:boolean)=>{
   if(aoVivo)setConsultando(true);else setCarregando(true)
   setErro('');setAviso('')
+  if(!aoVivo)setDiferencas(null)
   try{
    const token=await tokenAtual()
    if(!token)throw Error('Sua sessão expirou. Entre novamente.')
@@ -25,11 +27,12 @@ export default function VendaWVetroConferenciaValores({vendaId}:{vendaId:string}
    const json=await resp.json().catch(()=>({}))
    if(!resp.ok)throw Error(json.error||'Falha ao conferir os valores.')
    setDados(json.conferencia)
+   if(aoVivo)setDiferencas(json.diferencas||null)
    setAviso(aoVivo?'Consulta ao W.Vetro concluída agora, somente para conferência. Nada foi gravado no Atlas.':'')
   }catch(e){setErro(e instanceof Error?e.message:'Falha na conferência.')}
   finally{setCarregando(false);setConsultando(false)}
  },[vendaId])
- useEffect(()=>{setDados(null);void buscar(false)},[buscar])
+ useEffect(()=>{setDados(null);setDiferencas(null);void buscar(false)},[buscar])
  return <section className="rounded-2xl border border-blue-200 bg-white shadow-sm" aria-label="Conferência de valores originais W.Vetro">
   <div className="flex flex-wrap items-start justify-between gap-3 border-b border-blue-100 bg-blue-50/60 px-5 py-4">
    <div>
@@ -108,6 +111,63 @@ export default function VendaWVetroConferenciaValores({vendaId}:{vendaId:string}
       </tr></tfoot>
      </table>
     </div>
+    {diferencas&&<section aria-label="Prévia das alterações da sincronização" className="rounded-xl border border-indigo-200 bg-indigo-50/30 p-4">
+     <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+       <h3 className="text-sm font-bold text-slate-900">Prévia da sincronização W.Vetro — o que mudou</h3>
+       <p className="mt-1 text-xs text-slate-600">Comparação entre os dados importados e a consulta feita agora. Nenhuma informação foi aplicada à venda.</p>
+      </div>
+      <span className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-[11px] font-bold text-indigo-800">Somente conferência</span>
+     </div>
+     <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold">
+      <span className="rounded-lg bg-white px-2.5 py-1.5 text-blue-800">{diferencas.qtdAlteradas} alterada(s)</span>
+      <span className="rounded-lg bg-white px-2.5 py-1.5 text-emerald-800">{diferencas.qtdIncluidas} incluída(s)</span>
+      <span className="rounded-lg bg-white px-2.5 py-1.5 text-amber-800">{diferencas.qtdRemovidas} removida(s)</span>
+      <span className="rounded-lg bg-white px-2.5 py-1.5 text-slate-700">{diferencas.qtdSemMudanca} sem mudança</span>
+      {diferencas.qtdIncertas>0&&<span className="rounded-lg bg-amber-100 px-2.5 py-1.5 text-amber-900">{diferencas.qtdIncertas} exigem conferência de identificação</span>}
+     </div>
+     <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <table className="min-w-[700px] w-full text-left text-xs">
+       <thead className="bg-slate-50 text-slate-600"><tr>
+        <th className="px-3 py-2">Total</th>
+        <th className="px-3 py-2 text-right">Importado antes</th>
+        <th className="px-3 py-2 text-right">Consultado agora</th>
+        <th className="px-3 py-2 text-right">Alteração</th>
+       </tr></thead>
+       <tbody>{diferencas.totais.map(total=><tr key={total.chave} className={'border-t '+(total.mudou?'bg-amber-50/40':'')}>
+        <td className="px-3 py-2 font-semibold">{total.rotulo}</td>
+        <td className="px-3 py-2 text-right">{brl(total.anterior)}</td>
+        <td className="px-3 py-2 text-right font-semibold">{brl(total.novo)}</td>
+        <td className={'px-3 py-2 text-right '+(total.mudou?'font-bold text-amber-800':'text-slate-500')}>
+         {total.diferenca===null?'Conferir':total.mudou?delta(total.diferenca):'Sem mudança'}
+        </td>
+       </tr>)}</tbody>
+      </table>
+     </div>
+     <h4 className="mb-2 mt-4 text-xs font-bold text-slate-800">Alterações por tipologia</h4>
+     <div className="space-y-2">{diferencas.itens.map(item=>{
+      const antigo=item.anterior,novo=item.novo
+      const label=item.status==='alterada'?'Alterada':item.status==='incluida'?'Incluída':item.status==='removida'?'Removida':item.status==='sem_alteracao'?'Sem alteração':'Conferir vínculo'
+      return <div key={item.chave} className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
+       <div className="flex flex-wrap items-start justify-between gap-2">
+        <b className="max-w-[75%] text-slate-800">{novo?.descricao||antigo?.descricao||'Tipologia sem identificação'}</b>
+        <span className={'rounded-md px-2 py-1 font-bold '+(item.status==='sem_alteracao'?'bg-slate-100 text-slate-600':item.status==='incluida'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800')}>{label}</span>
+       </div>
+       <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <p className="text-slate-600">Custo: <b>{brl(antigo?.custoWVetro)} → {brl(novo?.custoWVetro)}</b></p>
+        <p className="text-slate-600">Venda: <b>{brl(antigo?.vendaWVetro)} → {brl(novo?.vendaWVetro)}</b></p>
+        <p className="text-slate-600">Quantidade: <b>{antigo?.quantidade??'—'} → {novo?.quantidade??'—'}</b></p>
+        <p className="text-slate-500">Identificador W.Vetro: {novo?.chaveWVetro||antigo?.chaveWVetro||'não informado'}</p>
+       </div>
+       {item.alteracoes.length>0&&<p className="mt-2 text-[11px] text-slate-500">Alterações identificadas: {item.alteracoes.join(' · ')}</p>}
+      </div>
+     })}</div>
+     <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+      <b>Aplicação automática bloqueada nesta fase.</b>
+      <p className="mt-1">A venda já foi confirmada. Precisamos revisar diferenças e impactos no financeiro, documentos, custos e produção antes de autorizar qualquer atualização.</p>
+      {diferencas.avisos.filter(a=>!a.startsWith('Comparação somente leitura')).map((a,i)=><p className="mt-1" key={i}>• {a}</p>)}
+     </div>
+    </section>}
     {dados.alertas.length>0&&<div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
      <p className="flex items-center gap-2 text-xs font-bold text-amber-900"><AlertTriangle size={15}/> Divergências identificadas</p>
      <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-amber-900">
