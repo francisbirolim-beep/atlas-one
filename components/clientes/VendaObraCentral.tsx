@@ -20,6 +20,7 @@ import { adicionarDocumentoCliente } from '@/lib/cliente360'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { adicionarMaterialManual, ajustarMaterial, excluirMaterialDoPacote, gerarPacoteTecnico, recalcularAproveitamentoPacote } from '@/lib/materialPlanejamento'
 import VendaProducaoDetalhada from '@/components/clientes/VendaProducaoDetalhada'
+import VendaProducaoKanbanPreview from '@/components/clientes/VendaProducaoKanbanPreview'
 import VendaLiberacaoOrdens from '@/components/clientes/VendaLiberacaoOrdens'
 import VendaVincularObra from '@/components/clientes/VendaVincularObra'
 import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetalhada'
@@ -1570,11 +1571,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         />}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
-          <VendaListaCorteWVetro
-            materiais={materiaisTecnicos} obraId={obra?.id||null} pacoteId={pacoteTecnicoId}
-            orcamentoId={venda.orcamento_id} onEditar={()=>setEditorCortesAberto(true)}
-            imagensPorProduto={Object.fromEntries(Object.entries(produtosMateriais).filter(([,p])=>Boolean(p.foto_url)).map(([id,p])=>[id,String(p.foto_url)]))}
-            imagensPorCodigo={Object.fromEntries(Object.values(produtosMateriais).filter(p=>Boolean(p.codigo&&p.foto_url)).map(p=>[String(p.codigo).trim().toUpperCase(),String(p.foto_url)]))}/>
+          <VendaProducaoKanbanPreview
+            ordens={ordens} itens={itens} materiais={materiaisTecnicos} produtosMateriais={produtosMateriais}
+            pacoteId={pacoteTecnicoId} orcamentoId={venda.orcamento_id}
+            onEditarCortes={()=>setEditorCortesAberto(true)}/>
         {editorCortesAberto&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
           const rotulo=rotuloCategoria(categoriaMaterialAberta)
