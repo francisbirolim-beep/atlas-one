@@ -1,6 +1,7 @@
 'use client'
 
 import VendaBarrasWVetro from '@/components/clientes/VendaBarrasWVetro'
+import VendaListaCompraWVetro from '@/components/clientes/VendaListaCompraWVetro'
 import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
@@ -210,6 +211,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [documentos,setDocumentos]=useState<Documento[]>([])
   const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
   const [materiaisTecnicos,setMateriaisTecnicos]=useState<MaterialTecnico[]>([])
+  const [sincronizacaoListaCompraKey,setSincronizacaoListaCompraKey]=useState(0)
   const [separacoesMateriais,setSeparacoesMateriais]=useState<SeparacaoMaterial[]>([])
   const [produtosMateriais,setProdutosMateriais]=useState<Record<string,ProdutoMaterial>>({})
   const [categoriaMaterialAberta,setCategoriaMaterialAberta]=useState<'perfil'|'acessorios'|'vidro'|'outros'>('perfil')
@@ -1489,11 +1491,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">Sobra usada: {totalSobraCategoria.toLocaleString('pt-BR')}</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">A cotar: {totalComprarCategoria.toLocaleString('pt-BR')}</span>{lotesAtivos.find(l=>l.categoria===categoriaMaterialAberta)&&<span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-700">Cotação emitida · confira alterações antes de reemitir</span>}</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={()=>void sincronizarMateriaisWVetro(false)} disabled={sincronizandoMateriais||ocupadoMateriais} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">{sincronizandoMateriais?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoMateriais?'Sincronizando...':'Sincronizar W.Vetro'}</button>
+                <button type="button" onClick={()=>setSincronizacaoListaCompraKey(n=>n+1)} disabled={ocupadoMateriais} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50"><RefreshCw size={13}/> Sincronizar W.Vetro (conferir)</button>
                 {obra?.id&&<Link href={`/obras/${obra.id}/materiais`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><Boxes size={13}/>Editor completo</Link>}
               </div>
             </div>
 
+            {Boolean(orcamento?.wvetro_fluxo?.numero)&&
+              <VendaListaCompraWVetro vendaId={venda.id} solicitarSync={sincronizacaoListaCompraKey}/>}
+            <details className="mt-4 rounded-xl border border-slate-200 bg-white" {...(orcamento?.wvetro_fluxo?.numero?{}:{open:true})}>
+              <summary className="cursor-pointer px-4 py-3 text-xs font-bold text-slate-700">Composição técnica e peças de corte — editor existente (não é lista de compra)</summary>
+              <div className="px-4 pb-4">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               {([
                 ['perfil','Perfil',materiaisPorCategoria.perfil.length,Boxes],
@@ -1557,6 +1564,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
                 </tbody>
               </table>
             </div>
+              </div>
+            </details>
           </Box>
         })()}
 
