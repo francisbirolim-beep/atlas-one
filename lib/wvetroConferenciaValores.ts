@@ -95,19 +95,25 @@ export function construirConferenciaWVetro(
 // A API operacional pode devolver o pedido em diferentes envelopes; confirmar
 // sempre o mesmo Nro antes de considerar uma resposta atual do W.Vetro.
 export function extrairPedidoAtual(payload:unknown,numero:string):Registro|null{
- const fila=[payload];let iter=0
- while(fila.length&&iter++<45){
+ const fila:unknown[]=[payload];let visitados=0
+ while(fila.length&&visitados++<500){
   const atual=fila.shift()
-  if(Array.isArray(atual)){fila.push(...atual.slice(0,20));continue}
+  if(Array.isArray(atual)){fila.push(...atual.slice(0,250));continue}
   const obj=objeto(atual)
   if(!Object.keys(obj).length)continue
-  if(string(obj.Nro||obj.Orcamentoid||obj.OrcamentoId)===numero&&Array.isArray(obj.Itens))return obj
-  for(const chave of ['data','Dados','pedido','Pedido','result','Result','conteudo','Conteudo','retorno','Retorno','items','Items'])
-   if(obj[chave]&&typeof obj[chave]==='object')fila.push(obj[chave])
+  // Orcamentoid pode ser diferente do número comercial Nro.
+  const n=obj.Nro??obj.nro??obj.Numero??obj.numero
+  const itens=Array.isArray(obj.Itens)?obj.Itens:Array.isArray(obj.itens)?obj.itens:null
+  if(n!==undefined&&/^\d+$/.test(string(n))&&Number(n)===Number(numero)&&itens?.length){
+   return {...obj,Itens:itens}
+  }
+  for(const [chave,item] of Object.entries(obj)){
+   if(item&&typeof item==='object'&&(Array.isArray(item)||/^(?:List[A-Za-z]+|lista[A-Za-z]*|pedido|pedidos|orcamento|orcamentos|data|dados|result|resultado|content|response)$/i.test(chave)))
+    fila.push(item)
+  }
  }
  return null
 }
-
 
 // Diff financeiro entre o orçamento W.Vetro importado e uma consulta em tempo real.
 // Não usa totais do Atlas para inferir custos das tipologias, não aplica nada,

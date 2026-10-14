@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { buscarPedidoWVetro } from '@/lib/wvetroApi'
-import { construirConferenciaWVetro, compararConferenciasWVetro, extrairPedidoAtual } from '@/lib/wvetroConferenciaValores'
+import { consultarPedidoConferenciaWVetro } from '@/lib/wvetroConferenciaConsultaServer'
+import { construirConferenciaWVetro, compararConferenciasWVetro } from '@/lib/wvetroConferenciaValores'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -39,13 +39,16 @@ export async function GET(req:NextRequest){
   let fonte:'importacao_atlas'|'consulta_ao_vivo'='importacao_atlas'
   let dadosFluxo:unknown=fluxo
   if(aoVivo){
-   // Consulta o pedido agora, sem importar/atualizar tabelas, vendas ou financeiro.
-   let resposta:unknown
-   try{resposta=await buscarPedidoWVetro(numero)}
-   catch(e){console.error('Falha ao consultar W.Vetro ao vivo:',e);return erro('Não foi possível consultar o W.Vetro neste momento. Os dados importados continuam preservados.',503)}
-   const pedido=extrairPedidoAtual(resposta,numero)
-   if(!pedido)return erro('O W.Vetro não retornou os itens do orçamento solicitado. Não houve alteração no Atlas.',422)
-   dadosFluxo={numero,payload_bruto:pedido}
+   // Consultar somente leitura: pedidoByKey e, se preciso, lista de pedidos
+   // da data original e lista de orçamentos da emissão. Confirmar Nro e
+   // custo/venda individuais antes de mostrar diferenças ou substituir fontes.
+   const importado=(fluxo.payload_bruto||{}) as Record<string,unknown>
+   const consulta=await consultarPedidoConferenciaWVetro(numero,importado)
+   if(!consulta.pedido){
+    console.warn('Consulta W.Vetro sem composição financeira', {numero,etapas:consulta.motivos})
+    return erro('O W.Vetro não forneceu uma composição financeira completa nas consultas disponíveis. Os dados anteriores permanecem intactos. Confira a data e o número do orçamento no W.Vetro.',422)
+   }
+   dadosFluxo={numero,payload_bruto:consulta.pedido}
    fonte='consulta_ao_vivo'
   }
   const resultado=construirConferenciaWVetro({
