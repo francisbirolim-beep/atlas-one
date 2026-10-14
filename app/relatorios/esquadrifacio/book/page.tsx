@@ -131,16 +131,16 @@ export default function BookPeriodoEsquadrifacio(){
    {avisoFinanceiro&&<p role="status" className="book-ajuda mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{avisoFinanceiro}. Os demonstrativos indisponíveis serão identificados no livro.</p>}
    {apto&&consulta&&<div className="book-documento bg-white px-6 py-8 md:px-12">
     <section className="book-capa flex min-h-[850px] flex-col justify-between bg-slate-900 p-10 text-white">
-     <div><p className="text-xs font-bold tracking-[.3em] text-blue-200">ESQUADRIFÁCIO</p><div className="mt-4 h-1 w-24 bg-blue-400"/></div>
+     <div><div className="inline-block max-w-full rounded-xl bg-white p-4 shadow-sm"><img src="/branding/esquadrifacio-logo-r.webp" alt="Logotipo Esquadrifácio®" width={640} height={118} loading="eager" className="block h-auto w-full max-w-[360px] object-contain"/></div><div className="mt-4 h-1 w-24 bg-blue-400"/></div>
      <div><BookOpen className="mb-8 text-blue-300" size={58}/>
       <p className="text-lg uppercase tracking-[.17em] text-blue-200">Gestão e resultados</p>
       <h1 className="mt-4 text-5xl font-bold leading-tight">BOOK GERENCIAL</h1>
       <p className="mt-4 text-2xl font-semibold">{tituloMes(consulta.inicio,consulta.fim)}</p>
       <p className="mt-5 max-w-xl text-base text-slate-200">Fechamento do período · Vendas · Clientes · Produtos · Cidades · Compras · Resultados · DRE · Fluxo de caixa</p>
      </div>
-     <div className="border-t border-white/25 pt-5 text-sm text-slate-300"><b className="text-white">ESQUADRIFÁCIO SOLUÇÕES EM ALUMÍNIO LTDA</b><p className="mt-2">Documento gerencial do Atlas One · Confidencial · Acesso Master</p><p className="mt-1">Período: {dataBR(consulta.inicio)} a {dataBR(consulta.fim)}</p><p className="mt-1">Demonstrações fiscais ainda não conciliadas são expressamente identificadas no conteúdo.</p></div>
+     <div className="border-t border-white/25 pt-5 text-sm text-slate-300"><b className="text-white">ESQUADRIFÁCIO® SOLUÇÕES EM ALUMÍNIO LTDA</b><p className="mt-2">Documento gerencial do Atlas One · Confidencial · Acesso Master</p><p className="mt-1">Período: {dataBR(consulta.inicio)} a {dataBR(consulta.fim)}</p><p className="mt-1">Demonstrações fiscais ainda não conciliadas são expressamente identificadas no conteúdo.</p></div>
     </section>
-    <section className="book-indice py-10"><p className="text-sm font-bold uppercase tracking-widest text-blue-700">Apresentação</p><h2 className="mt-3 text-3xl font-bold">Índice do Book</h2>
+    <section className="book-indice py-10"><img src="/branding/esquadrifacio-logo-r.webp" alt="Logotipo Esquadrifácio®" width={640} height={118} loading="eager" className="mb-6 h-auto w-full max-w-[240px]"/><p className="text-sm font-bold uppercase tracking-widest text-blue-700">Apresentação</p><h2 className="mt-3 text-3xl font-bold">Índice do Book</h2>
      <p className="mt-3 text-sm text-slate-700">Relatórios do período {dataBR(consulta.inicio)} a {dataBR(consulta.fim)}, consultados dos cadastros disponíveis no Atlas One. Indicadores de natureza diferente não devem ser confundidos com lucro ou receita fiscal.</p>
      <div className="mt-5 grid grid-cols-3 gap-3 text-center">{[['Visões',visoes.length],['Com dados',disponiveis],['Integrações pendentes',pendentes+indisponiveis]].map(([l,n])=><div key={String(l)} className="rounded-lg border bg-slate-50 p-3"><p className="text-[11px] text-slate-600">{l}</p><b className="text-2xl">{n}</b></div>)}</div>
      <div className="mt-7 space-y-4">{gruposRelatorios.map(g=><div key={g}><h3 className="mb-2 border-b border-blue-200 pb-1 font-bold text-blue-900">{g}</h3>{visoes.filter(v=>v.relatorio.grupo===g).map(v=><div key={v.relatorio.id} className="flex justify-between gap-3 py-1 text-xs"><span>{String(v.relatorio.pagina-1).padStart(2,'0')}. {v.relatorio.nome}</span><span className="shrink-0 text-slate-600">{v.estado==='disponivel'?'Consulta disponível':'Pendente'}</span></div>)}</div>)}</div>
@@ -148,7 +148,7 @@ export default function BookPeriodoEsquadrifacio(){
     </section>
     {visoes.map((v,i)=><section key={v.relatorio.id} className="book-pagina">
      <header className="mb-5 border-b-2 border-blue-700 pb-4">
-      <div className="flex items-center justify-between gap-2"><b className="text-xs tracking-widest text-blue-700">ESQUADRIFÁCIO · BOOK GERENCIAL</b><span className="text-xs text-slate-500">{String(i+1).padStart(2,'0')} / {String(visoes.length).padStart(2,'0')}</span></div>
+      <div className="flex items-center justify-between gap-2"><img src="/branding/esquadrifacio-logo-r.webp" alt="Logotipo Esquadrifácio®" width={640} height={118} loading="eager" className="h-auto w-full max-w-[188px]"/><span className="text-xs text-slate-500">{String(i+1).padStart(2,'0')} / {String(visoes.length).padStart(2,'0')}</span></div>
       <p className="mt-3 text-xs font-semibold uppercase text-slate-500">{v.relatorio.grupo}</p>
       <h2 className="mt-1 text-2xl font-bold">{v.relatorio.nome}</h2>
       <p className="mt-2 text-xs text-slate-600">{dataBR(consulta.inicio)} a {dataBR(consulta.fim)}</p>
@@ -173,9 +173,9 @@ export default function BookPeriodoEsquadrifacio(){
        <p className="mt-2 text-sm text-amber-900">{v.aviso}</p>
        <p className="mt-2 text-xs text-amber-800">Esta página faz parte do modelo de fechamento. Os resultados somente serão calculados após a integração e validação da origem dos dados.</p>
       </div>}
-     <footer className="book-rodape mt-8 border-t pt-2 text-[10px] text-slate-500">Esquadrifácio · Atlas One · Relatório {i+1} de {visoes.length} · {v.estado==='disponivel'?'Consulta aos dados do Atlas':'Dados a conferir'}</footer>
+     <footer className="book-rodape mt-8 border-t pt-2 text-[10px] text-slate-500">Esquadrifácio® · Atlas One · Relatório {i+1} de {visoes.length} · {v.estado==='disponivel'?'Consulta aos dados do Atlas':'Dados a conferir'}</footer>
     </section>)}
-    <section className="book-pagina"><header className="mb-5 border-b-2 border-blue-700 pb-4"><b className="text-xs tracking-widest text-blue-700">ESQUADRIFÁCIO</b><h2 className="mt-3 text-2xl font-bold">Notas metodológicas e pendências</h2></header>
+    <section className="book-pagina"><header className="mb-5 border-b-2 border-blue-700 pb-4"><img src="/branding/esquadrifacio-logo-r.webp" alt="Logotipo Esquadrifácio®" width={640} height={118} loading="eager" className="mb-4 h-auto w-full max-w-[188px]"/><h2 className="mt-3 text-2xl font-bold">Notas metodológicas e pendências</h2></header>
      <p className="text-sm">Este relatório gerencial foi emitido a partir dos registros disponíveis no Atlas One para o período selecionado. A geração é somente de leitura e não equivale a demonstrações contábeis homologadas.</p>
      <div className="mt-5 space-y-2 text-xs">{dados!.notas.map((nota,i)=><p key={i} className="rounded bg-slate-50 p-2">{nota}</p>)}</div>
      <p className="mt-6 text-sm font-bold">Visões com integração pendente: {pendentes+indisponiveis}</p>
