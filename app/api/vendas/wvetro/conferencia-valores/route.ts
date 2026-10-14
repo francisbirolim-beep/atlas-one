@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buscarPedidoWVetro } from '@/lib/wvetroApi'
-import { construirConferenciaWVetro, extrairPedidoAtual } from '@/lib/wvetroConferenciaValores'
+import { construirConferenciaWVetro, compararConferenciasWVetro, extrairPedidoAtual } from '@/lib/wvetroConferenciaValores'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -31,6 +31,11 @@ export async function GET(req:NextRequest){
    .select('valor_bruto,valor_total,custo_com_sobra,custo_sem_sobra')
    .eq('wvetro_numero',numero).eq('empresa_id',usuario.empresa_id)
    .order('capturado_em',{ascending:false}).limit(1).maybeSingle()
+  const antes=construirConferenciaWVetro({
+   fluxo,itensAtlas:orcamento.itens,vendaAtlas:venda.valor_venda,
+   custoAtlas:venda.custo_previsto,historico,fonte:'importacao_atlas',
+  })
+  if(!antes)return erro('O orçamento importado não contém a composição original para comparar.',422)
   let fonte:'importacao_atlas'|'consulta_ao_vivo'='importacao_atlas'
   let dadosFluxo:unknown=fluxo
   if(aoVivo){
@@ -45,10 +50,12 @@ export async function GET(req:NextRequest){
   }
   const resultado=construirConferenciaWVetro({
    fluxo:dadosFluxo,itensAtlas:orcamento.itens,vendaAtlas:venda.valor_venda,
-   custoAtlas:venda.custo_previsto,historico,fonte,
+   custoAtlas:venda.custo_previsto,historico:aoVivo?undefined:historico,fonte,
   })
   if(!resultado)return erro('Ainda não há itens financeiros originais do W.Vetro para comparar.',404)
-  return NextResponse.json({ok:true,conferencia:resultado},{headers:{'Cache-Control':'no-store'}})
+  const diferencas=aoVivo?compararConferenciasWVetro(antes,resultado):null
+  return NextResponse.json({ok:true,conferencia:resultado,diferencas},
+   {headers:{'Cache-Control':'no-store'}})
  }catch(e){
   console.error('Falha na conferência W.Vetro sem gravação:',e)
   return erro('Não foi possível conferir os valores. Nenhuma alteração foi feita na venda.',500)
