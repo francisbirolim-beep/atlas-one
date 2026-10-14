@@ -117,6 +117,10 @@ export async function POST(req:NextRequest){
   if(valor===null||valor<=0||valor>999999999)return erro('Informe um valor positivo.')
   if(!fornecedor)return erro('Informe o fornecedor.')
   if(quantidade!==null&&(quantidade<=0||quantidade>999999999))return erro('Quantidade inválida.')
+  // Somente novas compras passam a exigir peso real e unidade KG.
+  // Registros históricos e edições continuam inalterados.
+  if(origem==='compra'&&(quantidade===null||txt(form.get('unidade'),30).toUpperCase()!=='KG'))
+   return erro('Informe o peso comprado em quilos (KG obrigatório) para novas compras.')
   if(!data_lancamento)return erro('Informe a data do custo.')
   if(!/^\d{4}-\d{2}-\d{2}$/.test(data_lancamento)||Number.isNaN(Date.parse(data_lancamento)))return erro('Data inválida.')
   // O banco mantém descrição NOT NULL para histórico antigo; se o usuário
