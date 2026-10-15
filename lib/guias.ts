@@ -61,7 +61,8 @@ export const GUIAS: Guia[] = [
 
   { href: '/assistencias', label: 'Assistências', icon: Wrench, grupo: 'Assistência' },
 
-  { href: '/cadastro', label: 'Cadastros', icon: PackageSearch, grupo: 'Cadastros' },
+  { href: '/cadastros', label: 'Cadastros 360', icon: PackageSearch, grupo: 'Cadastros' },
+  { href: '/cadastro', label: 'Cadastros', icon: Settings, grupo: 'Cadastros', masterOnly: true },
 ]
 
 export const GRUPOS_ORDEM_GUIAS = [

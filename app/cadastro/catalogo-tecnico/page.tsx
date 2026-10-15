@@ -5,6 +5,7 @@ import Link from 'next/link'
 import ImagemProdutoTecnico from '@/components/engenharia/ImagemProdutoTecnico'
 import { ArrowLeft, History, ImageOff, Images, PackageSearch, Plus, RefreshCcw, Search } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { alternarAtivoProduto, listarProdutos } from '@/lib/produtos'
 import { listarFornecedores } from '@/lib/fornecedores'
 import { listarImagensProduto, type ProdutoImagem } from '@/lib/historicoCadastros'
@@ -58,6 +59,8 @@ function imagemEstavel(url?: string | null) {
 export default function CatalogoTecnicoPage() {
   const [carregando, setCarregando] = useState(true)
   const [permitido, setPermitido] = useState<boolean | null>(null)
+  const [podeEditar, setPodeEditar] = useState(false)
+  const [master, setMaster] = useState(false)
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [imagens, setImagens] = useState<ProdutoImagem[]>([])
@@ -86,7 +89,10 @@ export default function CatalogoTecnicoPage() {
   async function carregar() {
     setCarregando(true)
     const me = await usuarioAtual()
-    const pode = me?.role === 'master'
+    const acesso=await carregarAcessoCadastro(me)
+    const pode=podeAcaoCadastro(acesso, 'catalogo_tecnico')
+    setMaster(me?.role==='master')
+    setPodeEditar(podeAcaoCadastro(acesso, 'catalogo_tecnico', 'editar'))
     setPermitido(pode)
     if (pode) {
       const [ps, imgs, fs] = await Promise.all([listarProdutos(), listarImagensProduto(), listarFornecedores()])
@@ -135,6 +141,7 @@ export default function CatalogoTecnicoPage() {
   }
 
   async function alternarAtivo(p: Produto) {
+    if (!podeEditar) return
     setAlterandoId(p.id)
     const novoAtivo = p.ativo === false
     const { error } = await alternarAtivoProduto(p.id, novoAtivo)
@@ -184,7 +191,7 @@ export default function CatalogoTecnicoPage() {
   }, [produtos, grupo, status, busca, fornecedorPorId])
 
   if (carregando) return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando catálogo técnico...</div>
-  if (!permitido) return <div className="min-h-screen flex items-center justify-center text-slate-500">Somente usuário master pode acessar o catálogo técnico.</div>
+  if (!permitido) return <div className="min-h-screen flex items-center justify-center text-slate-500">Seu usuário não possui acesso ao catálogo técnico.</div>
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
@@ -231,7 +238,7 @@ export default function CatalogoTecnicoPage() {
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"><Images size={15}/>{comImagemEstavel} imagens estáveis <span className="text-slate-300">•</span> <ImageOff size={15}/>{semImagem} sem imagem estável</div>
       </div>
 
-      {(estadoImagens.pendentes > 0 || estadoImagens.erros > 0 || mensagemImagens) && <div className="mb-4 flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 sm:flex-row sm:items-center sm:justify-between"><div className="text-xs text-blue-900"><strong>Imagens W.Vetro:</strong> {estadoImagens.pendentes} pendentes de cópia · {estadoImagens.erros} com erro na origem.{mensagemImagens && <span className="ml-1">{mensagemImagens}</span>}</div>{estadoImagens.pendentes > 0 && <button onClick={sincronizarImagensWVetro} disabled={sincronizandoImagens} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><RefreshCcw size={14} className={sincronizandoImagens ? 'animate-spin' : ''}/>{sincronizandoImagens ? 'Sincronizando...' : 'Sincronizar imagens W.Vetro'}</button>}</div>}
+      {master && (estadoImagens.pendentes > 0 || estadoImagens.erros > 0 || mensagemImagens) && <div className="mb-4 flex flex-col gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 sm:flex-row sm:items-center sm:justify-between"><div className="text-xs text-blue-900"><strong>Imagens W.Vetro:</strong> {estadoImagens.pendentes} pendentes de cópia · {estadoImagens.erros} com erro na origem.{mensagemImagens && <span className="ml-1">{mensagemImagens}</span>}</div>{estadoImagens.pendentes > 0 && <button onClick={sincronizarImagensWVetro} disabled={sincronizandoImagens} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><RefreshCcw size={14} className={sincronizandoImagens ? 'animate-spin' : ''}/>{sincronizandoImagens ? 'Sincronizando...' : 'Sincronizar imagens W.Vetro'}</button>}</div>}
 
       <div className="mb-3 flex items-center justify-between text-xs text-slate-500"><span>{filtrados.length} item(ns) encontrados</span><span>Mostrando {Math.min(limite, filtrados.length)}</span></div>
 
@@ -269,13 +276,13 @@ export default function CatalogoTecnicoPage() {
                   {p.status_validacao && <span className="rounded bg-slate-100 px-2 py-1">{p.status_validacao}</span>}
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <ImagemProdutoTecnico codigo={codigo} produto={p} apenasControles permitirEdicao onAtualizar={atualizarFotoCadastro} />
+                  <ImagemProdutoTecnico codigo={codigo} produto={p} apenasControles permitirEdicao={podeEditar} onAtualizar={atualizarFotoCadastro} />
                   <Link href={`/cadastro/produtos/${p.id}/historico`} className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><History size={14}/>Histórico</Link>
-                  <Link href={`/cadastro/produtos?categoria=${encodeURIComponent(p.categoria)}`} className="flex items-center justify-center rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</Link>
+                  {podeEditar&&<Link href={`/cadastro/produtos?categoria=${encodeURIComponent(p.categoria)}`} className="flex items-center justify-center rounded-lg border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Editar</Link>}
                 </div>
-                <button onClick={() => alternarAtivo(p)} disabled={alterandoId === p.id} className={`mt-2 w-full rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-50 ${ativo ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                {podeEditar&&<button onClick={() => alternarAtivo(p)} disabled={alterandoId === p.id} className={`mt-2 w-full rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-50 ${ativo ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
                   {alterandoId === p.id ? 'Salvando...' : ativo ? 'INATIVAR — NÃO USAMOS' : 'REATIVAR ITEM'}
-                </button>
+                </button>}
               </div>
             </article>
           )

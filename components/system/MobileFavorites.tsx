@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Boxes, FilePlus2, FileText, LayoutGrid, Settings, Star, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import type { Usuario } from '@/lib/tipos'
 import {
   GUIAS,
@@ -26,10 +27,11 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
   const [aberto, setAberto] = useState(false)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [ocultos, setOcultos] = useState<string[]>([])
+  const [podeVerCadastros, setPodeVerCadastros] = useState(false)
 
   useEffect(() => {
     setOcultos(lerOcultos())
-    usuarioAtual().then(setUsuario)
+    usuarioAtual().then(async u => {setUsuario(u);const acesso=await carregarAcessoCadastro(u);setPodeVerCadastros(acesso.usuario?.role==='master'||(acesso.nivel!=='oculto' && (['clientes','produtos','linhas','materiais','fornecedores','catalogo_tecnico','historico','precificacao'] as const).some(id=>podeAcaoCadastro(acesso,id))))})
 
     const atualizar = () => setOcultos(lerOcultos())
     window.addEventListener(EVENTO_OCULTOS_MUDOU, atualizar)
@@ -44,12 +46,12 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
 
   const isMaster = usuario?.role === 'master'
   const guiasDisponiveis = useMemo(
-    () => GUIAS.filter(guia => !guia.masterOnly || isMaster),
-    [isMaster],
+    () => GUIAS.filter(guia => (!guia.masterOnly || isMaster) && (guia.href!=='/cadastros'||podeVerCadastros)),
+    [isMaster,podeVerCadastros],
   )
   const favoritos = useMemo(
-    () => guiasFavoritos(ocultos, Boolean(isMaster)),
-    [ocultos, isMaster],
+    () => guiasFavoritos(ocultos, Boolean(isMaster)).filter(guia=>guia.href!=='/cadastros'||podeVerCadastros),
+    [ocultos, isMaster, podeVerCadastros],
   )
 
   function alternarGuia(href: string) {

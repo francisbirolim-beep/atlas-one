@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Database, History, Receipt, Search } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { listarHistoricoCadastro, listarHistoricoPrecosCompra, type HistoricoCadastroRegistro, type HistoricoPrecoCompra } from '@/lib/historicoCadastros'
 
 function normalizar(v: string) {
@@ -33,7 +34,8 @@ export default function HistoricoCadastrosPage() {
   async function carregar() {
     setCarregando(true)
     const me = await usuarioAtual()
-    const pode = me?.role === 'master'
+    const acesso = await carregarAcessoCadastro(me)
+    const pode = podeAcaoCadastro(acesso, 'historico')
     setPermitido(pode)
     if (pode) {
       const [h, c] = await Promise.all([
@@ -64,7 +66,7 @@ export default function HistoricoCadastrosPage() {
   }, [compras, busca])
 
   if (carregando) return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando histórico...</div>
-  if (!permitido) return <div className="min-h-screen flex items-center justify-center text-slate-500">Somente usuário master pode acessar o histórico.</div>
+  if (!permitido) return <div className="min-h-screen flex items-center justify-center text-slate-500">Seu usuário não possui acesso a este histórico.</div>
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8">
