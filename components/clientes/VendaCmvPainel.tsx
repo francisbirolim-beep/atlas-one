@@ -23,7 +23,7 @@ const dataLocal=()=>{const d=new Date();return [d.getFullYear(),String(d.getMont
 function Card({titulo,valor,detalhe,nota}:{titulo:string;valor:string;detalhe?:string;nota?:string}){
  return <div className="rounded-xl border bg-white p-4"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{titulo}</div><div className="mt-1 text-xl font-bold text-slate-900">{valor}</div>{detalhe&&<div className="mt-2 text-sm font-semibold text-slate-800">{detalhe}</div>}{nota&&<p className="mt-1 text-xs text-slate-500">{nota}</p>}</div>
 }
-export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{vendaId:string;comprasExistentes:Partial<Record<Categoria,number>>;onMudanca?:(total:number)=>void}){
+export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{vendaId:string;comprasExistentes:Partial<Record<Categoria,number>>;onMudanca?:(total:number,previstoRevisado:number|null)=>void}){
  const [dados,setDados]=useState<Dados|null>(null)
  const [recebimentos,setRecebimentos]=useState<RecebimentoCmv[]>([])
  const [historicoRecebimentos,setHistoricoRecebimentos]=useState<HistoricoRecebimento[]>([])
@@ -60,7 +60,8 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    const resp=await fetch('/api/vendas/cmv?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const json=await resp.json();if(!resp.ok)throw new Error(json.error||'Falha no CMV.')
    setDados(json as Dados)
-   onMudanca?.((json.lancamentos as Lancamento[]).filter(l=>l.etapa_cmv!=='recebido').reduce((s,l)=>s+Number(l.valor||0),0))
+   onMudanca?.((json.lancamentos as Lancamento[]).filter(l=>l.etapa_cmv!=='recebido').reduce((s,l)=>s+Number(l.valor||0),0),
+    json.previsto?custoRevisado(json.previsto,json.revisoes||{},'total'):null)
    // Recebimentos são opcionais no banco até a migração nova ser aprovada.
    // A ausência desta tabela NUNCA impede a leitura do CMV anterior.
    try{
