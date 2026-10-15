@@ -41,4 +41,11 @@ assert.equal(custoRevisado(completo,{sobra:corrigirSobra},'perfil'),1106.18,'Cor
 assert.equal(custoRevisado(completo,{sobra:corrigirSobra},'total'),1800.84,'Sobra entra uma vez no total, não duas')
 const corrigirPerda={...corrigida,categoria:'perda',valor_origem:3.77,valor_revisado:4.77}
 assert.equal(custoRevisado(completo,{perda:corrigirPerda},'total'),1791.84,'Perda corrigida somada uma vez')
+// O painel de custos deve atualizar imediatamente o valor previsto, a margem e o markup do cabeçalho.
+const telaVenda=fs.readFileSync('components/clientes/VendaObraCentral.tsx','utf8')
+const painelCmv=fs.readFileSync('components/clientes/VendaCmvPainel.tsx','utf8')
+assert.match(telaVenda,/setPrevisaoCmvRevisada\\(\\{vendaId,valor:dados\\.previsto\\?custoRevisado/, 'Cabeçalho carrega a previsão revisada')
+assert.match(telaVenda,/const custoPrevistoBase=previsaoCmvRevisada/, 'KPI e margem dependem da revisão')
+assert.match(telaVenda,/onMudanca=\\{\\(totalRealizado,previstoRevisado\\)=>/, 'Aba Custos comunica correção ao cabeçalho')
+assert.match(painelCmv,/onMudanca\\?\\.\\([\\s\\S]*?custoRevisado\\(json\\.previsto,json\\.revisoes\\|\\|\\{\\},'total'\\)/, 'Aba Custos envia o total revisado')
 console.log('PASS: revisão CMV preserva original, custo ausente, soma perfil+sobra, total e validade após nova importação.')
