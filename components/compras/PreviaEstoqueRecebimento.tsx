@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { AlertTriangle, Boxes, Loader2 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 
@@ -87,7 +88,7 @@ export default function PreviaEstoqueRecebimento({ nfId, linhas, revisao }: {
       {carregando ? <div className="flex items-center gap-2 p-5 text-sm text-slate-600"><Loader2 size={16} className="animate-spin" /> Consultando estoque...</div> :
         erro ? <div className="p-5 text-sm text-amber-800">Prévia indisponível: {erro}. A conferência original permanece disponível.</div> :
         <div className="space-y-4 p-5">
-          {pendencias > 0 && <p className="flex items-center gap-2 text-sm font-semibold text-amber-800"><AlertTriangle size={16} /> {pendencias} item(ns) com recebimento informado precisam de vínculo ou fator de conversão para movimentar o estoque.</p>}
+          {pendencias > 0 && <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-amber-800"><span className="flex items-center gap-2"><AlertTriangle size={16} /> {pendencias} item(ns) com recebimento informado precisam de vínculo ou fator de conversão.</span><Link href="/compras/vinculos" className="underline underline-offset-2">Resolver vínculos em Compras</Link></div>}
           {(semImagem > 0 || imagensPendentes > 0) && <p className="text-sm text-amber-800">Imagens de perfis/acessórios: {semImagem} sem foto, {imagensPendentes} com foto ainda não validada. É preciso conferir as imagens no cadastro.</p>}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
