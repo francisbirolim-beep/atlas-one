@@ -266,11 +266,17 @@ const MODULOS:ItemPermissaoBloco[] = [
 
   m('compras','compras','Compras','Necessidades, cotações e pedidos de compra.','compras_estoque',[
     a('compras.geral.consultar','Consultar compras','Ver necessidades, cotações e pedidos.'),
+    a('compras.geral.ver_proprios','Ver solicitações próprias','Consultar somente descrição e situação dos próprios pedidos.'),
+    a('compras.geral.editar_proprios','Editar solicitações próprias','Alterar ou cancelar somente solicitações criadas pelo usuário, com histórico.'),
+    a('compras.geral.editar_todos','Editar todas as solicitações','Alterar ou cancelar solicitações da empresa, com histórico.'),
+    a('compras.geral.financeiro','Consultar valores e custos','Ver valores financeiros, preços e custos de compras.'),
     a('compras.geral.solicitar','Criar solicitação','Abrir necessidade/pedido de compra.'),
+    a('compras.geral.editar','Editar solicitação','Corrigir necessidades de material quando autorizado.'),
     a('compras.geral.cotar','Fazer cotação','Registrar propostas de fornecedores.'),
     a('compras.geral.aprovar','Aprovar compra','Autorizar pedido de compra.'),
     a('compras.geral.comprar','Confirmar compra','Efetivar pedido ao fornecedor.'),
     a('compras.geral.cancelar','Cancelar compra','Cancelar solicitação/pedido.'),
+    a('compras.kanban.gerenciar','Organizar colunas do Kanban','Criar, renomear e reordenar colunas, sem alterar status internos.'),
     a('compras.notas.consultar','Consultar notas de entrada','Ver notas recebidas.'),
     a('compras.notas.lancar','Lançar nota de entrada','Importar/cadastrar NF de entrada.'),
   ]),

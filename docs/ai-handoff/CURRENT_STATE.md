@@ -1,3 +1,9 @@
+## 2026-10-15 — Compras: conferência de NF + estoque visível — em branch, NÃO publicada
+
+Branch: `feature/compras-recebimento-estoque-20261015` criada a partir de `main` (#842). Desenvolvimento local **sem deploy nem migração no banco real**. Pedidos com destino cliente/obra ou estoque, importação XML/PDF e entrada manual existentes foram preservados. A entrada da NF passou a consultar saldos do produto vinculado (físico, reservado, disponível), mostrar imagens cadastradas e filtrar produtos/fornecedores pelo `empresa_id` do usuário. A conferência de recebimento apresenta saldo, entrada projetada, saldo após a entrada e pendências; reforçado isolamento da empresa e preenchimento de `empresa_id` nas gravações. A movimentação física continua exclusivamente pela RPC existente `aplicar_estoque_recebimento`, depois da confirmação; avarias não entram no estoque.
+
+Nova conciliação **pedido de compra ↔ item da nota** na tela de detalhe da NF: vínculo manual a necessidade/pedido aprovado, destino estoque ou cliente/obra, quantidades e saldos pendentes, múltiplas NFs para um mesmo pedido e múltiplos pedidos por NF. Nova migração ADITIVA `20261015173000_compras_nf_vinculo_pedidos_v1.sql` cria tabela e gatilhos de validação por empresa, fornecedor/cotação selecionada, produto e unidade compatíveis, além de limites quantitativos e impedimento de exclusão após recebimento. A migração ainda **NÃO foi aplicada**; função de vínculo precisa da migração no ambiente de teste e teste autenticado. Associar pedido à NF não reserva, movimenta ou consome o estoque; esses eventos seguem independentes. Faltam teste funcional com notas/estoque de homologação e aprovação de release.
+
 ## 2026-10-12 — Separação de Materiais por peça aprovada — em desenvolvimento (não publicada)
 
 Branch: `feat/producao-separacao-parcial-20261012`.
