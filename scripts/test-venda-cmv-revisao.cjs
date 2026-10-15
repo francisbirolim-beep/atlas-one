@@ -6,7 +6,7 @@ const src=fs.readFileSync('lib/vendaCmvRevisao.ts','utf8')
 const codigo=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText
 const m=new Module('lib/vendaCmvRevisao.ts',module)
 m.filename='lib/vendaCmvRevisao.ts';m.paths=module.paths;m._compile(codigo,m.filename)
-const {custoPrevistoOriginal,custoRevisado,revisaoAtual,lerRevisaoCmv}=m.exports
+const {custoPrevistoOriginal,custoRevisado,revisaoAtual,revisaoPerfilSobrepoePerda,lerRevisaoCmv}=m.exports
 const bruto={categorias:{perfil:525.9,acessorio:289.09,vidro:401.8,sobra:null,perda:null},total:null}
 assert.equal(custoPrevistoOriginal(bruto,'perfil'),null,'Sobra desconhecida não deve virar zero')
 assert.equal(custoRevisado(bruto,{},'perfil'),null,'Sem revisão, custo ausente permanece ausente')
@@ -41,4 +41,23 @@ assert.equal(custoRevisado(completo,{sobra:corrigirSobra},'perfil'),1106.18,'Cor
 assert.equal(custoRevisado(completo,{sobra:corrigirSobra},'total'),1800.84,'Sobra entra uma vez no total, não duas')
 const corrigirPerda={...corrigida,categoria:'perda',valor_origem:3.77,valor_revisado:4.77}
 assert.equal(custoRevisado(completo,{perda:corrigirPerda},'total'),1791.84,'Perda corrigida somada uma vez')
+// O painel de custos deve atualizar imediatamente o valor previsto, a margem e o markup do cabeçalho.
+const telaVenda=fs.readFileSync('components/clientes/VendaObraCentral.tsx','utf8')
+const painelCmv=fs.readFileSync('components/clientes/VendaCmvPainel.tsx','utf8')
+assert.ok(telaVenda.includes("setPrevisaoCmvRevisada({vendaId,valor:dados.previsto?custoRevisado"), 'Cabeçalho carrega a previsão revisada')
+assert.ok(telaVenda.includes('const custoPrevistoBase=previsaoCmvRevisada'), 'KPI e margem dependem da revisão')
+assert.ok(telaVenda.includes('onMudanca={(totalRealizado,previstoRevisado)=>'), 'Aba Custos comunica correção ao cabeçalho')
+assert.ok(painelCmv.includes("json.previsto?custoRevisado(json.previsto,json.revisoes||{},'total'):null"), 'Aba Custos envia o total revisado')
+// Regressão real #1176: houve correção manual do subtotal de perfis
+// de 1096,18 para 1099,95, valor que já trazia 3,77 de perda.
+const obra1176={...completo,perda_fonte:'conciliacao_wvetro'}
+const perfilComPerdaDuplicada={...corrigida,categoria:'perfil',valor_origem:1096.18,valor_revisado:1099.95,justificativa:'VALOR DO WVETRO'}
+assert.equal(revisaoPerfilSobrepoePerda(obra1176,{perfil:perfilComPerdaDuplicada}),true)
+assert.equal(custoRevisado(obra1176,{perfil:perfilComPerdaDuplicada},'perfil'),1096.18,'Perfil conciliado permanece sem perda duplicada')
+assert.equal(custoRevisado(obra1176,{perfil:perfilComPerdaDuplicada},'total'),1790.84,'Cabeçalho com sobra não pode repetir perda de 3,77')
+assert.equal(custoRevisado(obra1176,{perfil:perfilComPerdaDuplicada,total:{...perfilComPerdaDuplicada,categoria:'total',valor_origem:1790.84,valor_revisado:1800}},'total'),1800,'Correção explícita do total prevalece')
+const perfilLegitimo={...perfilComPerdaDuplicada,valor_revisado:1100}
+assert.equal(revisaoPerfilSobrepoePerda(obra1176,{perfil:perfilLegitimo}),false,'Correção genuína diferente não deve ser ignorada')
+assert.equal(custoRevisado(obra1176,{perfil:perfilLegitimo},'total'),1794.66,'Correção legítima do perfil altera total')
+assert.equal(custoRevisado({...obra1176,perda_fonte:'wvetro'},{perfil:perfilComPerdaDuplicada},'total'),1794.61,'Sem perda reconciliada não presumir sobreposição')
 console.log('PASS: revisão CMV preserva original, custo ausente, soma perfil+sobra, total e validade após nova importação.')
