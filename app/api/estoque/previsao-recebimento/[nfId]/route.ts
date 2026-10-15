@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: { nfId: string
 
     const ids = Array.from(new Set((itens || []).map(i => i.produto_id).filter((id): id is string => Boolean(id))))
     const produtos = new Map<string, { codigo: string | null; nome: string; categoria: string; unidade: string | null; foto_url: string | null }>()
-    const imagens = new Map<string, string>()
+    const imagens = new Map<string, { url: string; validada: boolean }>()
     const saldos = new Map<string, { fisico: number; reservado: number }>()
     const fatores = new Map<string, number>()
 
@@ -48,8 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: { nfId: string
       for (const p of produtosResp.data || []) produtos.set(p.id, p)
       for (const img of imagensResp.data || []) {
         if (!img.url || imagens.has(img.produto_id)) continue
-        if (!['validado', 'aprovado'].includes(String(img.status_validacao || '').toLowerCase())) continue
-        imagens.set(img.produto_id, img.url)
+        imagens.set(img.produto_id, { url: img.url, validada: ['validado', 'aprovado'].includes(String(img.status_validacao || '').toLowerCase()) })
       }
       for (const s of saldosResp.data || []) {
         const anterior = saldos.get(s.produto_id) || { fisico: 0, reservado: 0 }
@@ -88,7 +87,8 @@ export async function GET(req: NextRequest, { params }: { params: { nfId: string
           nfItemId: i.id,
           produtoId: i.produto_id,
           produto: p ? { codigo: p.codigo, nome: p.nome, categoria: p.categoria, unidade: p.unidade } : null,
-          imagemUrl: p ? (p.foto_url?.trim() || imagens.get(i.produto_id!) || null) : null,
+          imagemUrl: p ? (p.foto_url?.trim() || imagens.get(i.produto_id!)?.url || null) : null,
+          imagemValidada: Boolean(p?.foto_url?.trim()) || Boolean(i.produto_id && imagens.get(i.produto_id)?.validada),
           fatorConversao: fator,
           unidadeCompra: i.unidade,
           unidadeEstoque: i.unidade_estoque || p?.unidade || null,
