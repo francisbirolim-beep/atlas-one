@@ -27,7 +27,7 @@ export async function GET(req:NextRequest){
     db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).order('nome').limit(4000)
    ]):[{data:[],error:null},{data:[],error:null}]
    if(clientes.error||obras.error)throw clientes.error||obras.error
-   return NextResponse.json({acessos:a,solicitacoes:[],itens:[],historico:[],clientes:clientes.data||[],
+   return NextResponse.json({acessos:a,usuarioId:u.id,solicitacoes:[],itens:[],historico:[],clientes:clientes.data||[],
     obras:obras.data||[],produtos:[],fornecedores:[],carrinhos:[],linhas:[]})
   }
   let q=db.from('compras_solicitacoes').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(300)
@@ -63,7 +63,7 @@ export async function GET(req:NextRequest){
    if(data?.signedUrl)fotos[i.id]=data.signedUrl
   }))
   const podeFinanceiro=a.financeiro||a.cotar||a.comprar
-  return NextResponse.json({acessos:a,solicitacoes:solicitacoes||[],
+  return NextResponse.json({acessos:a,usuarioId:u.id,solicitacoes:solicitacoes||[],
    itens:(itensR.data||[]).map(i=>({...i,foto_url:fotos[i.id]||null})),
    historico:(historicoR.data||[]).map(h=>({...h,autor_nome:h.usuario_id?nomesHist.get(h.usuario_id)||'Usuário':'Sistema'})),clientes:clientesR.data||[],obras:obrasR.data||[],produtos:produtosR.data||[],
    fornecedores:(fornecedoresR.data||[]).map(f=>({...f,pedido_minimo:podeFinanceiro?f.pedido_minimo:null})),
