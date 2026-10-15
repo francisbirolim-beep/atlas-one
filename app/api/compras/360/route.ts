@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { autenticarCompras } from "@/lib/comprasServer";
+import { obterComprasAcessos } from "@/lib/comprasPermissoesServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,24 @@ export async function GET(req: NextRequest) {
 
   try {
     const empresaId = usuario.empresa_id;
+    const acessos = await obterComprasAcessos(usuario);
+    if (!acessos.consultar && !acessos.solicitar) {
+      return NextResponse.json({ error: 'Sem permissão de acesso a Compras.' }, { status: 403 });
+    }
+    // O solicitante recebe apenas os catálogos necessários para preencher o pedido.
+    // Não expor lista de compras, fornecedores, valores ou cotações sem "consultar".
+    if (!acessos.consultar) {
+      const [produtos, clientes, obras] = await Promise.all([
+        supabaseAdmin.from('produtos').select('id,nome,codigo,categoria,unidade').eq('empresa_id',empresaId).eq('ativo',true).order('nome').limit(5000),
+        supabaseAdmin.from('clientes').select('id,nome,apelido,cidade').eq('empresa_id',empresaId).order('nome').limit(2000),
+        supabaseAdmin.from('obras').select('id,cliente_id,nome,status').eq('empresa_id',empresaId).order('nome').limit(4000),
+      ]);
+      if (produtos.error || clientes.error || obras.error) throw new Error('Erro ao carregar dados de solicitação');
+      return NextResponse.json({ acessos, necessidades: [], cotacoes: [],
+        produtos: (produtos.data || []).map(p=>({...p,custo:null})),
+        fornecedores: [], ultimoPrecoPorProduto: {}, historicoWVetroSuprimentos: [],
+        clientes:clientes.data||[], obras:obras.data||[] });
+    }
     const [
       necessidadesResp,
       cotacoesResp,
@@ -155,12 +174,13 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
+      acessos,
       necessidades: necessidadesResp.data || [],
-      cotacoes: cotacoesResp.data || [],
-      produtos: produtosResp.data || [],
-      fornecedores: fornecedoresResp.data || [],
-      ultimoPrecoPorProduto: Object.fromEntries(ultimoPorProduto),
-      historicoWVetroSuprimentos: historicoWVetroResp.data || [],
+      cotacoes: (acessos.financeiro || acessos.cotar || acessos.comprar) ? (cotacoesResp.data || []) : (cotacoesResp.data || []).map(c=>({ ...c,preco_unitario:null,frete:0,forma_pagamento:null })),
+      produtos: (produtosResp.data || []).map(p=>(acessos.financeiro || acessos.cotar || acessos.comprar)?p:{...p,custo:null}),
+      fornecedores: (fornecedoresResp.data || []).map(f=>(acessos.financeiro || acessos.cotar || acessos.comprar)?f:{...f,pedido_minimo:null}),
+      ultimoPrecoPorProduto: (acessos.financeiro || acessos.cotar || acessos.comprar) ? Object.fromEntries(ultimoPorProduto) : {},
+      historicoWVetroSuprimentos: (acessos.financeiro || acessos.cotar || acessos.comprar) ? (historicoWVetroResp.data || []) : [],
       clientes: clientesResp.data || [],
       obras: obrasResp.data || [],
     });
@@ -182,6 +202,11 @@ export async function POST(req: NextRequest) {
     const empresaId = usuario.empresa_id;
     const body = await req.json();
     const acao = texto(body.acao, 50);
+    const acessos = await obterComprasAcessos(usuario);
+    const permitido = acao === 'criar_necessidade' ? acessos.solicitar
+      : acao === 'convidar_fornecedores' || acao === 'adicionar_cotacao' ? acessos.cotar
+      : acao === 'selecionar_cotacao' ? acessos.aprovar : false;
+    if (!permitido) return NextResponse.json({ error: 'Sem permissão para esta ação em Compras.' }, { status: 403 });
 
     if (acao === "criar_necessidade") {
       const descricao = texto(body.descricao, 300);
@@ -193,7 +218,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const destino = body.destino === "obra" ? "obra" : "estoque";
+      if (body.destino !== "obra" && body.destino !== "estoque") {
+        return NextResponse.json(
+          { error: "Escolha o destino da compra: Cliente/Obra ou Estoque." },
+          { status: 400 },
+        );
+      }
+      const destino: "obra" | "estoque" = body.destino;
       const clienteId = destino === "obra" ? texto(body.cliente_id, 80) : "";
       const obraId = destino === "obra" ? texto(body.obra_id, 80) : "";
       if (destino === "obra" && (!clienteId || !obraId)) {
@@ -468,6 +499,13 @@ export async function PATCH(req: NextRequest) {
     const empresaId = usuario.empresa_id;
     const body = await req.json();
     const status = texto(body.status, 40);
+    const acessos = await obterComprasAcessos(usuario);
+    const permitido = status === 'cotacao' ? acessos.cotar
+      : status === 'aprovado' ? acessos.aprovar
+      : status === 'pedido_emitido' || status === 'aguardando_entrega' ? acessos.comprar
+      : status === 'recebido' ? acessos.receber
+      : status === 'cancelado' ? acessos.cancelar : false;
+    if (!permitido) return NextResponse.json({ error: 'Sem permissão para mover esta etapa de Compras.' }, { status: 403 });
     if (!body.id || !STATUS_VALIDOS.has(status)) {
       return NextResponse.json(
         { error: "Necessidade ou situação inválida." },
