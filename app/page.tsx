@@ -14,6 +14,7 @@ import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
 import { listarSetores, listarPermissoesUsuario, nivelEfetivo } from '@/lib/setores'
 import { lerFavoritosSetores, EVENTO_FAVORITOS_SETORES_MUDOU } from '@/lib/favoritosSetores'
 import { Guia, lerOcultos, guiasFavoritos, EVENTO_OCULTOS_MUDOU } from '@/lib/guias'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import {
   listarEventosDoUsuario,
   criarEvento,
@@ -117,8 +118,10 @@ export default function Home() {
 
   // Guias fixos marcados com estrela (guia rapido, no menu lateral) tambem
   // aparecem aqui, junto com os setores favoritados, num unico grupo de atalhos.
-  function atualizarGuiasFavoritas(u: Usuario) {
-    setGuiasFavoritas(guiasFavoritos(lerOcultos(), u.role === 'master'))
+  async function atualizarGuiasFavoritas(u: Usuario) {
+    const acesso=await carregarAcessoCadastro(u)
+    const podeVer=acesso.usuario?.role==='master'||(acesso.nivel!=='oculto' && (['clientes','produtos','linhas','materiais','fornecedores','catalogo_tecnico','precificacao'] as const).some(id=>podeAcaoCadastro(acesso,id)))
+    setGuiasFavoritas(guiasFavoritos(lerOcultos(), u.role === 'master').filter(item=>item.href!=='/cadastros'||podeVer))
   }
 
   const tarefasAbertas = tarefas

@@ -27,6 +27,7 @@ import {
   agruparGuias,
 } from '@/lib/guias'
 import { listarPermissoesUsuario, listarSetores, nivelEfetivo } from '@/lib/setores'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
 import { ATALHOS_PESQUISA_ATLAS, correspondePesquisaAtlas } from '@/lib/navegacaoPesquisa'
 import type { Guia } from '@/lib/guias'
@@ -62,6 +63,7 @@ export default function MobileNavigationControls() {
   const [tema, setTema] = useState<TemaAtlas>('escuro')
   const [setores, setSetores] = useState<Setor[]>([])
   const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
+  const [podeVerCadastros, setPodeVerCadastros] = useState(false)
 
   useEffect(() => {
     let ativo = true
@@ -75,6 +77,11 @@ export default function MobileNavigationControls() {
 
       setUsuario(usuarioLogado)
       setSetores(setoresCadastrados)
+      if (usuarioLogado) {
+        const acesso = await carregarAcessoCadastro(usuarioLogado)
+        if (ativo) setPodeVerCadastros(acesso.usuario?.role === 'master' ||
+          (acesso.nivel !== 'oculto' && (['clientes','produtos','linhas','materiais','fornecedores','catalogo_tecnico','historico','produtos_linha','precificacao','unidades','receitas','formulas','campos'] as const).some(id => podeAcaoCadastro(acesso,id))))
+      }
 
       if (usuarioLogado && usuarioLogado.role !== 'master') {
         const mapa = await listarPermissoesUsuario(usuarioLogado.id)
@@ -139,16 +146,16 @@ export default function MobileNavigationControls() {
   }
 
   const guiasPermitidas = useMemo(() => {
-    if (!usuario) return GUIAS.filter(guia => !guia.masterOnly)
+    if (!usuario) return GUIAS.filter(guia => !guia.masterOnly && guia.href !== '/cadastros')
     if (usuario.role === 'master') return GUIAS
 
     return GUIAS.filter(guia => {
-      if (guia.masterOnly) return false
+      if (guia.masterOnly || (guia.href === '/cadastros' && !podeVerCadastros)) return false
       if (guia.href === '/') return true
       const setor = setores.find(item => item.rota && rotasRelacionadas(guia.href, item.rota))
       return !setor || nivelEfetivo(usuario, setor.id, permissoes) !== 'oculto'
     })
-  }, [permissoes, setores, usuario])
+  }, [permissoes, setores, usuario, podeVerCadastros])
 
   const termo = normalizar(busca)
   const gruposVisiveis = useMemo(() => {
