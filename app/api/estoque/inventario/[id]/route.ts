@@ -29,11 +29,13 @@ export async function GET(req: NextRequest, {params}: {params: {id: string}}) {
     for (const i of imagens || []) if(i.url && !fotos.has(i.produto_id)) fotos.set(i.produto_id,i.url)
   }
   return NextResponse.json({ok:true,master:usuario.role==='master',inventario,
-   itens:(itens||[]).map(item=>({
-    ...item,
-    produto: item.produto ? { ...item.produto, foto_url: item.produto.foto_url || fotos.get(item.produto_id) || null } : null,
-    custo_inicial_referencia:usuario.role==='master'?item.custo_inicial_referencia:null,
-   })),
+   itens:(itens||[]).map(item=>{
+    const produto = Array.isArray(item.produto) ? item.produto[0] : item.produto
+    return {...item,
+      produto: produto ? { ...produto, foto_url: produto.foto_url || fotos.get(item.produto_id) || null } : null,
+      custo_inicial_referencia: usuario.role==='master'?item.custo_inicial_referencia:null,
+    }
+   }),
   })
  } catch(e) {
   console.error('Erro ao consultar inventário:',e)
