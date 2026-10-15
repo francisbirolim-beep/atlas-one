@@ -9,7 +9,7 @@ import { tokenAtual } from '@/lib/auth'
 type Local = {id:string;codigo:string;nome:string}
 type Produto = {
  id:string; codigo:string|null;nome:string;categoria:string;unidade:string|null
- fotoUrl:string|null;fotoPendente:boolean;custoReferencia:number|null
+ fotoUrl:string|null;fotoPendente:boolean;enderecado:boolean;custoReferencia:number|null
  saldoId:string|null;atualizadoEm:string|null;fisico:number|null;reservado:number|null
 }
 type Contagem = {produto:Produto;quantidade:string}
@@ -106,7 +106,7 @@ export default function InventarioInicialPage(){
   <header>
    <Link href="/estoque" className="inline-flex items-center gap-2 text-sm text-slate-600"><ArrowLeft size={16}/> Voltar ao estoque</Link>
    <h1 className="mt-3 text-2xl font-bold text-slate-900">Inventário inicial e contagem física</h1>
-   <p className="mt-1 text-sm text-slate-600">Conte o que existe na empresa. Salvar uma contagem cria uma revisão, sem alterar saldos ou custos da Engenharia.</p>
+   <p className="mt-1 text-sm text-slate-600">Conte o que existe no local, sem endereçamento de prateleira/caixa nesta primeira etapa. Materiais já endereçados exigem contagem específica. Salvar cria uma revisão sem alterar saldos ou custos da Engenharia.</p>
   </header>
   {erro&&<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</p>}
   {aviso&&<p className="rounded-xl border bg-white p-3 text-sm text-slate-600">{aviso}</p>}
@@ -132,10 +132,10 @@ export default function InventarioInicialPage(){
     <thead className="bg-slate-50 text-left text-slate-500"><tr><th className="p-2">Imagem</th><th className="p-2">Produto / código</th><th className="p-2 text-right">Saldo do Atlas</th><th className="p-2 text-right">Reservado</th><th className="p-2">Ação</th></tr></thead>
     <tbody>{resultados.map(p=><tr key={p.id} className="border-t">
      <td className="p-2">{['perfil','acessorio'].includes(p.categoria)&&<Foto produto={p}/>}</td>
-     <td className="p-2"><div className="font-semibold">{p.codigo||'—'} — {p.nome}</div><div className="text-xs text-slate-500">{p.unidade||'un.'}{p.fotoPendente?' • Imagem pendente':''}</div></td>
+     <td className="p-2"><div className="font-semibold">{p.codigo||'—'} — {p.nome}</div><div className="text-xs text-slate-500">{p.unidade||'un.'}{p.fotoPendente?' • Imagem pendente':''}{p.enderecado?' • Contar por endereço':''}</div></td>
      <td className="p-2 text-right">{n(p.fisico)}</td>
      <td className="p-2 text-right">{p.reservado==null?'—':n(p.reservado)}</td>
-     <td className="p-2"><button disabled={contagens.some(c=>c.produto.id===p.id)} onClick={()=>adicionar(p)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 font-semibold disabled:opacity-40"><Plus size={15}/> Adicionar</button></td>
+     <td className="p-2"><button disabled={p.enderecado||contagens.some(c=>c.produto.id===p.id)} onClick={()=>adicionar(p)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 font-semibold disabled:opacity-40"><Plus size={15}/> Adicionar</button></td>
     </tr>)}</tbody>
    </table></div>}
   </section>
