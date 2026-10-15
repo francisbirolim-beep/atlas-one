@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Camera, ExternalLink, Loader2, PackageCheck, Save, ShieldCheck } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import PreviaEstoqueRecebimento from '@/components/compras/PreviaEstoqueRecebimento'
 
 type ItemBase = {
   id: string
@@ -288,6 +289,8 @@ export default function ConferenciaRecebimentoPage() {
           </div>
         </section>
 
+        <PreviaEstoqueRecebimento nfId={dados.nf.id} linhas={linhas} revisao={dados.recebimentos.length} />
+
         <section className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="font-bold text-slate-900">Dados do recebimento</h2>
@@ -309,7 +312,7 @@ export default function ConferenciaRecebimentoPage() {
         </section>
 
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <div className="flex gap-3"><ShieldCheck size={20} className="mt-0.5 shrink-0" /><div><strong>Estoque ainda não é movimentado.</strong> Esta etapa registra a conferência real e as divergências. A entrada em estoque será liberada somente depois de validar unidade operacional e conversões de embalagem.</div></div>
+          <div className="flex gap-3"><ShieldCheck size={20} className="mt-0.5 shrink-0" /><div><strong>A conferência pode movimentar o estoque.</strong> Após registrar o recebimento, os itens associados e com conversão válida são lançados automaticamente no estoque. Os itens sem vínculo ou conversão ficam pendentes, sem aumentar o saldo. Confira a prévia acima antes de salvar.</div></div>
         </div>
 
         <div className="flex justify-end">
