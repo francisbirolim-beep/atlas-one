@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { podeLancarNF } from '@/lib/nfEntradaAcessoServer'
 import { enriquecerVinculos, lerXmlNFe } from '@/lib/nfeEntradaServer'
 import { lerPdfDanfeV7 } from '@/lib/danfePdfParserV7'
 
@@ -11,13 +12,14 @@ async function autenticar(req: NextRequest) {
   if (!token) return null
   const { data, error } = await supabaseAdmin.auth.getUser(token)
   if (error || !data?.user) return null
-  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,nome,role').eq('id', data.user.id).maybeSingle()
-  return usuario || null
+  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,nome,role,empresa_id').eq('id', data.user.id).maybeSingle()
+  return usuario?.empresa_id ? usuario : null
 }
 
 export async function POST(req: NextRequest) {
   const usuario = await autenticar(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+  if (!(await podeLancarNF(usuario))) return NextResponse.json({ error: 'Sem permissão para lançar nota fiscal.' }, { status: 403 })
 
   try {
     const form = await req.formData()
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
       console.info('[Compras][DANFE][diagnostico]', nf.diagnostico || 'sem diagnostico')
     }
 
-    nf = await enriquecerVinculos(nf)
+    nf = await enriquecerVinculos(nf, usuario.empresa_id)
     return NextResponse.json({
       ok: true,
       arquivo: { nome: arquivo.name, tamanho: arquivo.size, tipo: arquivo.type || (ehXml ? 'application/xml' : 'application/pdf') },
