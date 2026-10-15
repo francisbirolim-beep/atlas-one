@@ -88,6 +88,14 @@ begin
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
    v_empresa::text||'/'||v_item.produto_id::text||'/'||v_inv.local_id::text||'/sem_endereco',0));
 
+  -- Primeiro inventario atua apenas em estoque sem enderecamento.
+  -- Se ha saldo em prateleira/caixa, exigir contagem especifica em outro fluxo.
+  if exists(select 1 from public.estoque_saldos sx
+    where sx.empresa_id=v_empresa and sx.produto_id=v_item.produto_id
+      and sx.local_id=v_inv.local_id and sx.endereco_id is not null) then
+    raise exception 'Produto % possui estoque enderecado; conferir por endereco antes de ajustar.',v_item.produto_nome;
+  end if;
+
   select * into v_saldo from public.estoque_saldos s
   where s.empresa_id=v_empresa and s.produto_id=v_item.produto_id
     and s.local_id=v_inv.local_id and s.endereco_id is null
@@ -154,3 +162,9 @@ end;
 $$;
 revoke all on function public.aprovar_inventario_estoque(uuid,uuid) from public,anon,authenticated;
 grant execute on function public.aprovar_inventario_estoque(uuid,uuid) to service_role;
+
+-- Grants explícitos para as APIs server-side, sem conceder acesso direto ao navegador.
+revoke all on public.estoque_inventarios from anon, authenticated;
+revoke all on public.estoque_inventario_itens from anon, authenticated;
+grant select,insert,update,delete on public.estoque_inventarios to service_role;
+grant select,insert,update,delete on public.estoque_inventario_itens to service_role;
