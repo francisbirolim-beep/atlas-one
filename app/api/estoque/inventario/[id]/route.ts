@@ -18,9 +18,20 @@ export async function GET(req: NextRequest, {params}: {params: {id: string}}) {
    .select('id,produto_id,quantidade_contada,saldo_referencia,saldo_referencia_id,custo_inicial_referencia,quantidade_aplicada_delta,produto:produtos(codigo,nome,categoria,unidade,foto_url)')
    .eq('empresa_id',usuario.empresa_id).eq('inventario_id',inventario.id).order('created_at')
   if(erroItens) throw erroItens
+  const ids = (itens || []).map(i => i.produto_id)
+  const fotos = new Map<string,string>()
+  if (ids.length) {
+    const {data:imagens,error:imagensErro} = await supabaseAdmin.from('produto_imagens')
+      .select('produto_id,url').eq('empresa_id',usuario.empresa_id)
+      .eq('ativo',true).in('produto_id',ids)
+      .order('principal',{ascending:false})
+    if (imagensErro) throw imagensErro
+    for (const i of imagens || []) if(i.url && !fotos.has(i.produto_id)) fotos.set(i.produto_id,i.url)
+  }
   return NextResponse.json({ok:true,master:usuario.role==='master',inventario,
    itens:(itens||[]).map(item=>({
     ...item,
+    produto: item.produto ? { ...item.produto, foto_url: item.produto.foto_url || fotos.get(item.produto_id) || null } : null,
     custo_inicial_referencia:usuario.role==='master'?item.custo_inicial_referencia:null,
    })),
   })
