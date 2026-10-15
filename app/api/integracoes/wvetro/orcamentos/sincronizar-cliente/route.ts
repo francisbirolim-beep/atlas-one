@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarUsuarioWVetro } from '@/lib/wvetroAcessoServer'
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import { sincronizar } from '../sincronizar/route'
@@ -24,6 +25,18 @@ function dataYmd(d: Date) {
 export async function POST(req: NextRequest) {
   const usuario = await autenticarUsuarioWVetro(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida ou sem acesso à integração W.Vetro.' }, { status: 401 })
+
+  // Mesmo controle de permissão do Cliente 360: edição de orçamento, sem exigir Master.
+  // A chamada global de sincronização permanece exclusiva do Master.
+  const permitido = await usuarioPodeAcaoServer({
+    usuarioId: usuario.id,
+    role: usuario.role,
+    setorId: 'fazer-orcamento-msanfyvj',
+    acaoId: 'comercial.orcamento.editar',
+    empresaId: usuario.empresa_id,
+    minimo: 'edicao',
+  })
+  if (!permitido) return NextResponse.json({ error: 'Sem permissão para sincronizar orçamentos W.Vetro.' }, { status: 403 })
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const clienteId = String(body.clienteId || '').trim()
