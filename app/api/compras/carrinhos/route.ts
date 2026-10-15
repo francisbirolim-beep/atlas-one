@@ -103,11 +103,10 @@ export async function PATCH(req:NextRequest){
   for(const sid of solicitacoes){
    const [solR,itR]=await Promise.all([
     db.from('compras_solicitacoes').select('id,destino,status').eq('empresa_id',u.empresa_id).eq('id',sid).maybeSingle(),
-    db.from('compras_solicitacao_itens').select('id,quantidade_necessaria').eq('empresa_id',u.empresa_id).eq('solicitacao_id',sid).eq('status','ativo')
+    db.from('compras_solicitacao_itens').select('id,quantidade_necessaria,destino').eq('empresa_id',u.empresa_id).eq('solicitacao_id',sid).eq('status','ativo')
    ])
    if(solR.error||itR.error)throw solR.error||itR.error
    if(!solR.data||!itR.data?.length)continue
-   const destino=solR.data.destino
    const {data:links,error:el}=await db.from('compras_carrinho_itens').select('item_id,carrinho_id,quantidade_obra,quantidade_estoque')
     .eq('empresa_id',u.empresa_id).in('item_id',itR.data.map(x=>x.id))
    if(el)throw el
@@ -117,7 +116,7 @@ export async function PATCH(req:NextRequest){
    const emitidos=new Set((carts.data||[]).filter(c=>!['rascunho','cancelado'].includes(c.status)).map(c=>c.id))
    const completos=itR.data.every(it=>{
     const comprado=(links||[]).filter(l=>l.item_id===it.id&&emitidos.has(l.carrinho_id))
-    if(destino==='estoque')return comprado.some(l=>Number(l.quantidade_estoque)>0)
+    if(it.destino==='estoque')return comprado.some(l=>Number(l.quantidade_estoque)>0)
     return comprado.reduce((acc,l)=>acc+Number(l.quantidade_obra),0)>=Number(it.quantidade_necessaria)
    })
    const {error:estatus}=await db.from('compras_solicitacoes').update({status:completos?'comprado':'em_cotacao',

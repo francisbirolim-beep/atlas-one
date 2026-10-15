@@ -10,15 +10,27 @@ type Obra={id:string;cliente_id:string;nome:string}
 type Produto={id:string;codigo:string|null;nome:string;categoria:string|null;unidade:string|null;foto_url:string|null}
 type Fornecedor={id:string;nome:string;pedido_minimo:number|null}
 type Sol={id:string;solicitante_id:string;solicitante_nome:string;destino:'obra'|'estoque';cliente_id:string|null;obra_id:string|null;status:string;created_at:string}
-type Item={id:string;solicitacao_id:string;ordem:number;categoria:string;descricao:string;quantidade_necessaria:number|null;unidade:string;produto_id:string|null;status:string;foto_url:string|null;identificacao_status:string}
+type Item={id:string;solicitacao_id:string;ordem:number;destino:'obra'|'estoque';cliente_id:string|null;obra_id:string|null;categoria:string;descricao:string;quantidade_necessaria:number|null;unidade:string;produto_id:string|null;status:string;foto_url:string|null;identificacao_status:string}
 type Cart={id:string;fornecedor_id:string;status:string;pedido_emitido_em:string|null;created_at:string}
 type CartLine={id:string;carrinho_id:string;item_id:string;quantidade_obra:number;quantidade_estoque:number;preco_unitario:number|null}
 type Evento={id:number;solicitacao_id:string;item_id:string|null;entidade:string;acao:string;created_at:string;autor_nome:string}
 type Payload={acessos:ComprasAcessos;usuarioId:string;solicitacoes:Sol[];itens:Item[];clientes:Cliente[];obras:Obra[];produtos:Produto[];fornecedores:Fornecedor[];carrinhos:Cart[];linhas:CartLine[];historico:Evento[]}
-type NovoItem={categoria:string;descricao:string;quantidade_necessaria:string;unidade:string;foto:File|null}
+type NovoItem={modo:'mesma'|'obra'|'estoque';cliente_id:string;obra_id:string;categoria:string;descricao:string;quantidade_necessaria:string;unidade:string;foto:File|null}
 type Sugestao={id:string;nome:string;ultimoPrecoPago:number|null;precoCatalogo:number|null;pedidoMinimo:number;ultimaCompra:string|null;preferencial:boolean}
 type Cotacao={estoque:{fisico:number;reservado:number;disponivel:number};fornecedores:Sugestao[]}
-const novo=():NovoItem=>({categoria:'acessorio',descricao:'',quantidade_necessaria:'',unidade:'UN',foto:null})
+const novo=(modo:NovoItem['modo']='obra'):NovoItem=>({modo,cliente_id:'',obra_id:'',categoria:'acessorio',descricao:'',quantidade_necessaria:'',unidade:'UN',foto:null})
+const resolverDestino=(linhas:NovoItem[],index:number):{destino:'obra'|'estoque';cliente_id:string|null;obra_id:string|null}=>{
+ const atual=linhas[index]
+ if(!atual)return {destino:'estoque',cliente_id:null,obra_id:null}
+ if(atual.modo==='mesma'&&index>0)return resolverDestino(linhas,index-1)
+ if(atual.modo==='estoque'||(atual.modo==='mesma'&&index===0))return {destino:'estoque',cliente_id:null,obra_id:null}
+ return {destino:'obra',cliente_id:atual.cliente_id||null,obra_id:atual.obra_id||null}
+}
+function FotoItem({foto}:{foto:File|null}){
+ const [url,setUrl]=useState<string|null>(null)
+ useEffect(()=>{if(!foto){setUrl(null);return}const u=URL.createObjectURL(foto);setUrl(u);return()=>URL.revokeObjectURL(u)},[foto])
+ return <div className="flex items-center gap-2">{url&&<img alt="Foto escolhida do material" src={url} className="h-16 w-16 rounded-lg border bg-white object-contain"/>}<span className="text-xs text-slate-500">{foto?foto.name:'Você pode anexar uma foto real do material'}</span></div>
+}
 const moeda=(v:number|null|undefined)=>v==null?'Não informado':Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const dt=(s:string|null)=>s?new Date(s).toLocaleDateString('pt-BR'):'—'
 const stat=(s:string)=>({aguardando_validacao:'Aguardando validação',em_cotacao:'Em cotação',aguardando_minimo:'Aguardando pedido mínimo',comprado:'Comprado',aguardando_entrega:'Aguardando entrega',recebido_parcial:'Recebido parcial',recebido:'Recebido',cancelado:'Cancelado',rascunho:'Carrinho aberto',pedido_emitido:'Pedido comprado'}[s]||s)
@@ -31,7 +43,7 @@ export default function ComprasSolicitacoes(){
  const [abrirId,setAbrirId]=useState<string|null>(null),[buscaProduto,setBuscaProduto]=useState('')
  const [qObra,setQObra]=useState(''),[qEstoque,setQEstoque]=useState(''),[preco,setPreco]=useState(''),[fornecedorId,setFornecedorId]=useState(''),[carrinhoId,setCarrinhoId]=useState('')
  const [cot,setCot]=useState<Cotacao|null>(null),[buscando,setBuscando]=useState(false)
- const [editando,setEditando]=useState<string|null>(null),[editDesc,setEditDesc]=useState(''),[editQtd,setEditQtd]=useState('')
+ const [editando,setEditando]=useState<string|null>(null),[editDesc,setEditDesc]=useState(''),[editQtd,setEditQtd]=useState(''),[editDestino,setEditDestino]=useState<'obra'|'estoque'>('estoque'),[editCliente,setEditCliente]=useState(''),[editObra,setEditObra]=useState('')
  const request=useCallback(async(url:string,init?:RequestInit)=>{
   const token=await tokenAtual();if(!token)throw Error('Sessão expirada, entre novamente')
   const r=await fetch(url,{...init,headers:{Authorization:'Bearer '+token,...init?.headers},cache:'no-store'})
@@ -50,12 +62,15 @@ export default function ComprasSolicitacoes(){
  const prodFiltrados=useMemo(()=>d?.produtos.filter(p=>(p.nome+' '+p.codigo).toLowerCase().includes(buscaProduto.toLowerCase())).slice(0,30)||[],[d?.produtos,buscaProduto])
  const linhasCart=useMemo(()=>new Map((d?.carrinhos||[]).map(c=>[c.id,(d?.linhas||[]).filter(l=>l.carrinho_id===c.id)])),[d?.carrinhos,d?.linhas])
  async function enviar(){
-  if(destino==='obra'&&(!clienteId||!obraId)){setErro('Selecione o cliente e a obra');return}
-  if(itens.some(i=>i.descricao.trim().length<2||destino==='obra'&&!(Number(i.quantidade_necessaria)>0))){setErro('Descreva cada material e informe a quantidade quando for para uma obra');return}
+  if(itens.some((i,index)=>{const x=resolverDestino(itens,index);return i.descricao.trim().length<2||x.destino==='obra'&&(!x.cliente_id||!x.obra_id||!(Number(i.quantidade_necessaria)>0))})){
+   setErro('Revise descrição, cliente, obra e quantidade obrigatória de cada item');return
+  }
   setErro('');setMsg('');setBusy(true)
   try{const form=new FormData()
-   form.append('payload',JSON.stringify({destino,cliente_id:clienteId,obra_id:obraId,
-    itens:itens.map(i=>({categoria:i.categoria,descricao:i.descricao,quantidade_necessaria:i.quantidade_necessaria||null,unidade:i.unidade}))}))
+   form.append('payload',JSON.stringify({
+    itens:itens.map((i,index)=>({categoria:i.categoria,descricao:i.descricao,
+     quantidade_necessaria:i.quantidade_necessaria||null,unidade:i.unidade,
+     ...resolverDestino(itens,index)}))}))
    itens.forEach((i,idx)=>{if(i.foto)form.append('foto_'+idx,i.foto)})
    const r=await request('/api/compras/solicitacoes',{method:'POST',body:form})
    setMsg(`Solicitação enviada para Compras. ${r.itens} item(ns) aguardando validação.`)
@@ -73,7 +88,7 @@ export default function ComprasSolicitacoes(){
   try{setBuscando(true);setCot(await request('/api/compras/cotacao-assistida?produtoId='+encodeURIComponent(pid)))
   }catch(e){setErro(e instanceof Error?e.message:'Não foi possível consultar fornecedores')}finally{setBuscando(false)}
  }
- function abrir(i:Item){setAbrirId(i.id);setBuscaProduto('');setFornecedorId('');setCarrinhoId('');setPreco('');setQObra(String((d?.solicitacoes.find(s=>s.id===i.solicitacao_id)?.destino==='obra'?i.quantidade_necessaria:0)||0));setQEstoque('0');void consultarProduto(i.produto_id)}
+ function abrir(i:Item){setAbrirId(i.id);setBuscaProduto('');setFornecedorId('');setCarrinhoId('');setPreco('');setQObra(String((i.destino==='obra'?i.quantidade_necessaria:0)||0));setQEstoque('0');void consultarProduto(i.produto_id)}
  async function adicionarCarrinho(){if(!selecionado||!fornecedorId)return setErro('Selecione um fornecedor')
   try{setBusy(true);setErro('');await request('/api/compras/carrinhos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
    itemId:selecionado.id,fornecedorId,carrinhoId:carrinhoId||null,
@@ -94,20 +109,61 @@ export default function ComprasSolicitacoes(){
   {erro&&<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{erro} <button onClick={()=>setErro('')} className="ml-2 underline">Fechar</button></p>}
   {msg&&<p role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">{msg}</p>}
   {!d?.acessos?.solicitar&&!d?.acessos?.consultar&&!meus&&!comprador&&<p className="rounded-xl border bg-white p-6">Este usuário não tem acesso ao novo fluxo de Compras. As permissões são definidas no cadastro de usuários.</p>}
-  {d?.acessos?.solicitar&&<section className="rounded-2xl border bg-white p-5 shadow-sm"><h2 className="text-lg font-bold">Fazer pedido de compra</h2><p className="mb-4 text-xs text-slate-500">Apenas informe o que precisa; o comprador identifica o código, estoque e fornecedor depois.</p>
-   <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Destino obrigatório<select value={destino} onChange={e=>{setDestino(e.target.value as 'estoque'|'obra');setClienteId('');setObraId('');setRevisar(false)}} className="mt-1 w-full rounded-lg border p-2"><option value="estoque">Estoque</option><option value="obra">Cliente e obra</option></select></label>
-   {destino==='obra'&&<><label className="text-sm font-medium">Cliente<select value={clienteId} onChange={e=>{setClienteId(e.target.value);setObraId('')}} className="mt-1 w-full rounded-lg border p-2"><option value="">Selecionar cliente</option>{d.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label><label className="text-sm font-medium">Obra do cliente<select value={obraId} onChange={e=>setObraId(e.target.value)} className="mt-1 w-full rounded-lg border p-2"><option value="">Selecionar obra</option>{obra.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label></>}</div>
-   {itens.map((i,idx)=><div key={idx} className="mb-3 rounded-xl border border-slate-200 p-3"><div className="mb-2 flex items-center justify-between"><b className="text-sm">Item {idx+1}</b>{itens.length>1&&<button className="text-xs text-red-700" onClick={()=>setItens(x=>x.filter((_,a)=>a!==idx))}>Remover</button>}</div>
-    <div className="grid gap-3 md:grid-cols-[170px_1fr_135px]"><label className="text-xs">Categoria<select value={i.categoria} className="mt-1 w-full rounded-lg border p-2" onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,categoria:e.target.value}:v))}>{categorias.map(c=><option key={c[0]} value={c[0]}>{c[1]}</option>)}</select></label><label className="text-xs">O que precisa comprar?<input className="mt-1 w-full rounded-lg border p-2" value={i.descricao} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,descricao:e.target.value}:v))} placeholder="Ex.: fechadura bico de papagaio, linha Suprema"/></label><label className="text-xs">Quantidade {destino==='obra'?'*':'(opcional)'}<input type="number" min="0.0001" step="any" className="mt-1 w-full rounded-lg border p-2" value={i.quantidade_necessaria} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,quantidade_necessaria:e.target.value}:v))} placeholder="Comprador define"/></label></div>
-    <label className="mt-2 block text-xs">Foto do material (opcional, até 5 MB) <input type="file" accept="image/jpeg,image/png,image/webp" className="mt-1 block w-full text-xs" onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,foto:e.target.files?.[0]||null}:v))}/></label>
-   </div>)}
-   <div className="flex flex-wrap gap-2"><button className="rounded-xl border px-3 py-2 text-sm" onClick={()=>{setItens(a=>[...a,novo()]);setRevisar(false)}}>+ Adicionar outro material</button><button className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white" onClick={()=>setRevisar(true)}>Revisar e confirmar</button></div>
-   {revisar&&<div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm"><b>Confirme sua solicitação</b><p className="my-2">Destino: {destino==='estoque'?'Estoque':(d.clientes.find(c=>c.id===clienteId)?.nome||'Cliente')+' / '+(d.obras.find(o=>o.id===obraId)?.nome||'Obra')}</p><ul className="mb-3 list-disc pl-5">{itens.map((i,k)=><li key={k}>{i.descricao||'(sem descrição)'} · {i.quantidade_necessaria||'quantidade a definir'}</li>)}</ul><button disabled={busy} onClick={()=>void enviar()} className="rounded-lg bg-emerald-700 px-4 py-2 font-bold text-white disabled:opacity-40">{busy?'Enviando...':'Confirmar e enviar para Compras'}</button></div>}
-  </section>}
+  {d?.acessos?.solicitar&&<section className="rounded-2xl border bg-white p-5 shadow-sm">
+    <h2 className="text-lg font-bold">Fazer pedido de compra</h2>
+    <p className="mb-4 text-xs text-slate-500">Adicione vários materiais. Cada item pode ir para a mesma obra, outra obra ou estoque, mantendo um só pedido.</p>
+    {itens.map((i,idx)=>{
+      const x=resolverDestino(itens,idx)
+      const anterior=idx>0?resolverDestino(itens,idx-1):null
+      const obras=(d?.obras||[]).filter(o=>o.cliente_id===i.cliente_id)
+      const cor=x.destino==='estoque'?'border-emerald-200 bg-emerald-50/50':i.modo==='mesma'?'border-blue-200 bg-blue-50/50':idx===0?'border-blue-200 bg-blue-50/50':'border-orange-200 bg-orange-50/50'
+      return <div key={idx} className="mb-3 rounded-2xl border border-slate-200 p-4">
+       <div className="mb-3 flex items-center justify-between"><b className="text-sm">Item {idx+1}</b>
+        {itens.length>1&&<button type="button" className="text-xs font-semibold text-red-600" onClick={()=>setItens(a=>{
+          const at=a.filter((_,index)=>index!==idx)
+          if(at[0]?.modo==='mesma'){const efetivo=resolverDestino(a,idx+1);at[0]={...at[0],modo:efetivo.destino,cliente_id:efetivo.cliente_id||'',obra_id:efetivo.obra_id||''}}
+          return at})}>Remover</button>}</div>
+       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_130px]">
+         <div className="space-y-3">
+           <div className="grid gap-2 sm:grid-cols-[170px_1fr]">
+             <label className="text-xs font-medium">Categoria<select value={i.categoria} className="mt-1 w-full rounded-lg border p-2.5" onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,categoria:e.target.value}:v))}>{categorias.map(c=><option key={c[0]} value={c[0]}>{c[1]}</option>)}</select></label>
+             <label className="text-xs font-medium">O que precisa comprar?<input className="mt-1 w-full rounded-lg border p-2.5" value={i.descricao} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,descricao:e.target.value}:v))} placeholder="Ex.: fechadura STAN, perfil SU007"/></label>
+           </div>
+           <label className="block text-xs font-medium">Foto do material (opcional, até 5 MB)
+             <input type="file" accept="image/jpeg,image/png,image/webp" className="mt-1 block w-full text-xs" onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,foto:e.target.files?.[0]||null}:v))}/>
+           </label>
+           <FotoItem foto={i.foto}/>
+         </div>
+         <div className={'rounded-xl border p-3 '+cor}>
+           <p className={'mb-2 text-sm font-bold '+(x.destino==='estoque'?'text-emerald-800':'text-blue-800')}>Destino deste item</p>
+           <select aria-label={'Destino do item '+(idx+1)} value={i.modo} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,modo:e.target.value as NovoItem['modo'],cliente_id:e.target.value==='obra'?'':v.cliente_id,obra_id:e.target.value==='obra'?'':v.obra_id}:v))} className="w-full rounded-lg border bg-white p-2.5 text-sm">
+             {idx>0&&<option value="mesma">{anterior?.destino==='obra'?'Manter mesma obra do item anterior':'Manter estoque do item anterior'}</option>}
+             <option value="obra">{idx===0?'Cliente e obra':'Outra obra (escolher cliente e obra)'}</option>
+             <option value="estoque">Enviar para estoque</option>
+           </select>
+           {i.modo==='obra'&&<div className="mt-3 grid gap-2 sm:grid-cols-2">
+             <label className="text-xs font-medium">Cliente *<select value={i.cliente_id} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,cliente_id:e.target.value,obra_id:''}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">Selecionar cliente</option>{d.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
+             <label className="text-xs font-medium">Obra *<select value={i.obra_id} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,obra_id:e.target.value}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">Selecionar obra</option>{obras.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
+           </div>}
+           {i.modo==='mesma'&&<p className="mt-2 text-xs font-medium text-blue-700">{x.destino==='obra'?(d.clientes.find(c=>c.id===x.cliente_id)?.nome||'Cliente')+' · '+(d.obras.find(o=>o.id===x.obra_id)?.nome||'Selecione obra no item anterior'):'Mesmo destino: estoque'}</p>}
+           {x.destino==='estoque'&&<p className="mt-2 text-xs text-emerald-800">Este item será destinado ao estoque geral da empresa.</p>}
+         </div>
+         <label className="text-xs font-medium">Quantidade {x.destino==='obra'?'*':'(opcional)'}
+           <input type="number" min="0.0001" step="any" className="mt-1 w-full rounded-lg border p-2.5" value={i.quantidade_necessaria} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,quantidade_necessaria:e.target.value}:v))} placeholder="A definir"/>
+         </label>
+       </div>
+      </div>
+    })}
+    <div className="flex flex-wrap justify-between gap-3"><button className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold" onClick={()=>{setItens(a=>[...a,novo('mesma')]);setRevisar(false)}}>+ Adicionar outro material</button><button className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white" onClick={()=>setRevisar(true)}>Revisar e confirmar pedido →</button></div>
+    {revisar&&<div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm"><b>Revise o destino de cada item antes de enviar</b>
+      <ul className="mb-3 mt-2 space-y-2">{itens.map((i,k)=>{const x=resolverDestino(itens,k);return <li key={k} className="rounded-lg border bg-white p-2"><b>Item {k+1}:</b> {i.descricao||'(sem descrição)'} · {i.quantidade_necessaria||'quantidade a definir'} {i.unidade}<p className="text-xs text-slate-600">Destino: {x.destino==='estoque'?'Estoque':(d.clientes.find(c=>c.id===x.cliente_id)?.nome||'Cliente não escolhido')+' / '+(d.obras.find(o=>o.id===x.obra_id)?.nome||'Obra não escolhida')}</p></li>})}</ul>
+      <button disabled={busy} onClick={()=>void enviar()} className="rounded-lg bg-emerald-700 px-4 py-2 font-bold text-white disabled:opacity-40">{busy?'Enviando...':'Confirmar e enviar um pedido com '+itens.length+' item(ns)'}</button>
+    </div>}
+   </section>}
   {(d?.acessos?.consultar||meus||comprador)&&<section className="rounded-2xl border bg-white p-5 shadow-sm"><h2 className="mb-2 text-lg font-bold">{d.acessos.consultar||comprador?'Lista de faltas e solicitações':'Minhas solicitações'}</h2><p className="mb-3 text-xs text-slate-500">Cada solicitação agrupa seus materiais. Cancelamentos e alterações preservam o histórico.</p>
-   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{d.solicitacoes.map(s=><article key={s.id} className="rounded-xl border p-3"><div className="flex items-center justify-between gap-2"><strong className="text-sm">{s.destino==='estoque'?'Estoque':(d.clientes.find(c=>c.id===s.cliente_id)?.nome||'Cliente')+' · '+(d.obras.find(o=>o.id===s.obra_id)?.nome||'Obra')}</strong><span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] text-blue-700">{stat(s.status)}</span></div><p className="my-2 text-xs text-slate-500">Solicitado por {s.solicitante_nome} · {dt(s.created_at)}</p>
+   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{d.solicitacoes.map(s=><article key={s.id} className="rounded-xl border p-3"><div className="flex items-center justify-between gap-2"><strong className="text-sm">{'Pedido de compra · '+d.itens.filter(i=>i.solicitacao_id===s.id).length+' item(ns)'}</strong><span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] text-blue-700">{stat(s.status)}</span></div><p className="my-2 text-xs text-slate-500">Solicitado por {s.solicitante_nome} · {dt(s.created_at)}</p>
     {(d.itens.filter(i=>i.solicitacao_id===s.id)).map(i=><div key={i.id} className="border-t py-2"><div className="flex gap-2">{(i.foto_url||d.produtos.find(p=>p.id===i.produto_id)?.foto_url)?<img src={i.foto_url||d.produtos.find(p=>p.id===i.produto_id)?.foto_url||''} alt={i.descricao} className="h-12 w-12 rounded border object-contain"/>:<div className="flex h-12 w-12 items-center rounded border border-dashed p-1 text-[9px] text-slate-400">Foto pendente</div>}
-     <div className="min-w-0 flex-1"><p className="text-xs font-semibold">{i.descricao}</p><p className="text-[11px] text-slate-500">{i.categoria} · {i.quantidade_necessaria||'Quantidade a definir'} {i.unidade} {i.status==='cancelado'?'· Cancelado':''}</p></div></div>
+     <div className="min-w-0 flex-1"><p className="text-xs font-semibold">{i.descricao}</p><p className="text-[11px] text-slate-500">{i.categoria} · {i.quantidade_necessaria||'Quantidade a definir'} {i.unidade} · {i.destino==='estoque'?'Estoque':(d.clientes.find(c=>c.id===i.cliente_id)?.nome||'Cliente')+' / '+(d.obras.find(o=>o.id===i.obra_id)?.nome||'Obra')} {i.status==='cancelado'?'· Cancelado':''}</p></div></div>
      {(d.acessos.consultar||comprador)&&d.linhas.filter(l=>l.item_id===i.id).map(l=>{
       const ca=d.carrinhos.find(c=>c.id===l.carrinho_id)
       if(!ca||ca.status==='rascunho'||ca.status==='cancelado')return null
@@ -117,8 +173,14 @@ export default function ComprasSolicitacoes(){
       </p>
      })}
      {comprador&&i.status!=='cancelado'&&<button className="mt-2 text-xs font-semibold text-blue-700 underline" onClick={()=>abrir(i)}>Validar produto / cotar / carrinho</button>}
-     {!comprador&&(d.acessos.editarTodos||d.acessos.editarProprios&&s.solicitante_id===d.usuarioId)&&i.status==='ativo'&&<div className="mt-1 flex gap-2"><button className="text-xs text-blue-700 underline" onClick={()=>{setEditando(i.id);setEditDesc(i.descricao);setEditQtd(i.quantidade_necessaria==null?'':String(i.quantidade_necessaria))}}>Editar</button><button className="text-xs text-red-700 underline" onClick={()=>{if(confirm('Cancelar este item? O histórico ficará preservado.'))void alterarItem('cancelar',i.id)}}>Cancelar</button></div>}
-     {editando===i.id&&<div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-2"><input aria-label="Descrição corrigida" className="w-full rounded border p-2 text-xs" value={editDesc} onChange={e=>setEditDesc(e.target.value)}/><input aria-label="Quantidade corrigida" type="number" className="w-full rounded border p-2 text-xs" value={editQtd} onChange={e=>setEditQtd(e.target.value)}/><button disabled={busy} className="rounded bg-blue-700 px-3 py-1 text-xs text-white" onClick={()=>void alterarItem('editar',i.id,{descricao:editDesc,quantidade_necessaria:editQtd||null})}>Salvar correção</button><button className="ml-2 text-xs" onClick={()=>setEditando(null)}>Voltar</button></div>}
+     {!comprador&&(d.acessos.editarTodos||d.acessos.editarProprios&&s.solicitante_id===d.usuarioId)&&i.status==='ativo'&&<div className="mt-1 flex gap-2"><button className="text-xs text-blue-700 underline" onClick={()=>{setEditando(i.id);setEditDesc(i.descricao);setEditQtd(i.quantidade_necessaria==null?'':String(i.quantidade_necessaria));setEditDestino(i.destino);setEditCliente(i.cliente_id||'');setEditObra(i.obra_id||'')}}>Editar</button><button className="text-xs text-red-700 underline" onClick={()=>{if(confirm('Cancelar este item? O histórico ficará preservado.'))void alterarItem('cancelar',i.id)}}>Cancelar</button></div>}
+     {editando===i.id&&<div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-2">
+       <label className="block text-xs">Descrição<input aria-label="Descrição corrigida" className="mt-1 w-full rounded border p-2" value={editDesc} onChange={e=>setEditDesc(e.target.value)}/></label>
+       <label className="block text-xs">Quantidade<input aria-label="Quantidade corrigida" type="number" min="0.0001" step="any" className="mt-1 w-full rounded border p-2" value={editQtd} onChange={e=>setEditQtd(e.target.value)}/></label>
+       <label className="block text-xs">Destino deste item<select aria-label="Destino corrigido" value={editDestino} className="mt-1 w-full rounded border p-2" onChange={e=>{setEditDestino(e.target.value as 'obra'|'estoque');setEditCliente('');setEditObra('')}}><option value="obra">Cliente e obra</option><option value="estoque">Estoque</option></select></label>
+       {editDestino==='obra'&&<><label className="block text-xs">Cliente<select aria-label="Cliente corrigido" value={editCliente} onChange={e=>{setEditCliente(e.target.value);setEditObra('')}} className="mt-1 w-full rounded border p-2"><option value="">Selecionar cliente</option>{d.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label><label className="block text-xs">Obra<select aria-label="Obra corrigida" className="mt-1 w-full rounded border p-2" value={editObra} onChange={e=>setEditObra(e.target.value)}><option value="">Selecionar obra</option>{d.obras.filter(o=>o.cliente_id===editCliente).map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label></>}
+       <button disabled={busy} className="rounded bg-blue-700 px-3 py-1 text-xs text-white" onClick={()=>void alterarItem('editar',i.id,{descricao:editDesc,quantidade_necessaria:editQtd||null,destino:editDestino,cliente_id:editDestino==='obra'?editCliente:null,obra_id:editDestino==='obra'?editObra:null})}>Salvar correção com histórico</button>
+       <button className="ml-2 text-xs" onClick={()=>setEditando(null)}>Voltar</button></div>}
     </div>)}
     {d.historico.some(e=>e.solicitacao_id===s.id)&&<details className="mt-2 text-[11px] text-slate-500"><summary className="cursor-pointer">Histórico de alterações</summary>{d.historico.filter(e=>e.solicitacao_id===s.id).slice(0,30).map(e=><p key={e.id}>{dt(e.created_at)} · {e.autor_nome} · {e.acao} · {e.entidade.replace('compras_solicitacao_','')}</p>)}</details>}
    </article>)}{!d.solicitacoes.length&&<p className="text-sm text-slate-500">Nenhuma solicitação visível para seu perfil.</p>}</div>

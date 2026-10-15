@@ -45,6 +45,16 @@ export async function GET(req:NextRequest){
    todos?db.from('fornecedores').select('id,nome,pedido_minimo').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(2000):Promise.resolve({data:[],error:null}),
   ])
   for(const r of [itensR,clientesR,obrasR,produtosR,fornecedoresR])if(r.error)throw r.error
+  // Destinos adicionais do mesmo pedido: permitir exibir apenas clientes/obras realmente associados
+  // sem mostrar o cadastro inteiro a quem só consulta os próprios pedidos.
+  let extrasClientesDados: Array<{id:string;nome:string}>=[]
+  let extrasObrasDados: Array<{id:string;nome:string;cliente_id:string}>=[]
+  if(apenasProprios){
+   const extrasClientes=[...new Set((itensR.data||[]).map(i=>i.cliente_id).filter(Boolean))].filter(id=>!clientesIds.includes(id))
+   const extrasObras=[...new Set((itensR.data||[]).map(i=>i.obra_id).filter(Boolean))].filter(id=>!obrasIds.includes(id))
+   if(extrasClientes.length){const {data,error}=await db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).in('id',extrasClientes);if(error)throw error;extrasClientesDados=data||[]}
+   if(extrasObras.length){const {data,error}=await db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).in('id',extrasObras);if(error)throw error;extrasObrasDados=data||[]}
+  }
   const itemIds=(itensR.data||[]).map(x=>x.id)
   const [historicoR,linhasR]=await Promise.all([
    ids.length?db.from('compras_solicitacao_auditoria').select('id,solicitacao_id,item_id,acao,entidade,usuario_id,created_at').eq('empresa_id',u.empresa_id).in('solicitacao_id',ids).order('created_at',{ascending:false}).limit(1000):Promise.resolve({data:[],error:null}),
@@ -65,7 +75,7 @@ export async function GET(req:NextRequest){
   const podeFinanceiro=a.financeiro||a.cotar||a.comprar
   return NextResponse.json({acessos:a,usuarioId:u.id,solicitacoes:solicitacoes||[],
    itens:(itensR.data||[]).map(i=>({...i,foto_url:fotos[i.id]||null})),
-   historico:(historicoR.data||[]).map(h=>({...h,autor_nome:h.usuario_id?nomesHist.get(h.usuario_id)||'Usuário':'Sistema'})),clientes:clientesR.data||[],obras:obrasR.data||[],produtos:produtosR.data||[],
+   historico:(historicoR.data||[]).map(h=>({...h,autor_nome:h.usuario_id?nomesHist.get(h.usuario_id)||'Usuário':'Sistema'})),clientes:[...(clientesR.data||[]),...extrasClientesDados],obras:[...(obrasR.data||[]),...extrasObrasDados],produtos:produtosR.data||[],
    fornecedores:(fornecedoresR.data||[]).map(f=>({...f,pedido_minimo:podeFinanceiro?f.pedido_minimo:null})),
    carrinhos:(carrinhosR.data||[]).map(c=>podeFinanceiro?c:{...c,numero_pedido:null}),
    linhas:(linhasR.data||[]).map(l=>podeFinanceiro?l:{...l,preco_unitario:null})
@@ -81,28 +91,40 @@ export async function POST(req:NextRequest){
   const a=await obterComprasAcessos(u);if(!a.solicitar)return falha('Sem permissão para solicitar compras',403)
   const form=await req.formData();let p:any
   try{p=JSON.parse(str(form.get('payload'),25000))}catch{return falha('Pedido inválido')}
-  if(!['obra','estoque'].includes(p.destino))return falha('Escolha estoque ou cliente e obra')
   if(!Array.isArray(p.itens)||p.itens.length<1||p.itens.length>30)return falha('Informe de 1 a 30 itens')
-  const clienteId=p.destino==='obra'?str(p.cliente_id,80):null
-  const obraId=p.destino==='obra'?str(p.obra_id,80):null
-  if(p.destino==='obra'){
-   if(!clienteId||!obraId||!uuid.test(clienteId)||!uuid.test(obraId))return falha('Escolha cliente e obra')
-   const {data:obra,error}=await db.from('obras').select('id').eq('empresa_id',u.empresa_id).eq('id',obraId).eq('cliente_id',clienteId).maybeSingle()
-   if(error)throw error
-   if(!obra)return falha('A obra não pertence ao cliente selecionado')
-  }
+  // Cada linha do mesmo pedido tem destino independente. Campos do cabeçalho
+  // continuam aceitos para leitura retrocompatível com clientes antigos.
   const itens=[]
   for(let i=0;i<p.itens.length;i++){
    const it=p.itens[i],desc=str(it.descricao,500),q=quantidade(it.quantidade_necessaria)
+   const destino=str(it.destino||p.destino,30)
+   const clienteId=destino==='obra'?str(it.cliente_id||p.cliente_id,80):null
+   const obraId=destino==='obra'?str(it.obra_id||p.obra_id,80):null
+   if(!['obra','estoque'].includes(destino))return falha(`Item ${i+1}: escolha obra ou estoque`)
+   if(destino==='obra'&&(!uuid.test(clienteId||'')||!uuid.test(obraId||'')))return falha(`Item ${i+1}: escolha cliente e obra`)
    if(!categorias.has(it.categoria)||desc.length<2)return falha(`Item ${i+1}: selecione a categoria e descreva o produto`)
    if(q!=null&&(!Number.isFinite(q)||q<=0))return falha(`Item ${i+1}: quantidade inválida`)
-   if(p.destino==='obra'&&q==null)return falha(`Item ${i+1}: informe a quantidade da obra`)
+   if(destino==='obra'&&q==null)return falha(`Item ${i+1}: informe a quantidade da obra`)
    const foto=form.get('foto_'+i)
    if(foto&&(!(foto instanceof File)||foto.size>5*1024*1024||foto.size<1||!fotosValidas[foto.type]))return falha(`Item ${i+1}: foto deve ser JPG, PNG ou WEBP, até 5 MB`)
-   itens.push({empresa_id:u.empresa_id,ordem:i+1,categoria:it.categoria,descricao:desc,quantidade_necessaria:q,unidade:str(it.unidade,20)||'UN',atualizado_por_id:u.id})
+   itens.push({empresa_id:u.empresa_id,ordem:i+1,categoria:it.categoria,descricao:desc,
+    destino,cliente_id:clienteId,obra_id:obraId,
+    quantidade_necessaria:q,unidade:str(it.unidade,20)||'UN',atualizado_por_id:u.id})
   }
-  const {data:sol,error:es}=await db.from('compras_solicitacoes').insert({empresa_id:u.empresa_id,destino:p.destino,
-   cliente_id:clienteId,obra_id:obraId,solicitante_id:u.id,solicitante_nome:u.nome,observacoes:str(p.observacoes,1000)||null,
+  const obraIds=[...new Set(itens.filter(i=>i.destino==='obra').map(i=>i.obra_id as string))]
+  if(obraIds.length){
+   const {data:obras,error}=await db.from('obras').select('id,cliente_id')
+     .eq('empresa_id',u.empresa_id).in('id',obraIds)
+   if(error)throw error
+   const mapa=new Map((obras||[]).map(o=>[o.id,o.cliente_id]))
+   for(const item of itens){
+    if(item.destino==='obra'&&mapa.get(item.obra_id)!==item.cliente_id)
+     return falha(`Item ${item.ordem}: obra não pertence ao cliente selecionado`)
+   }
+  }
+  const primeiro=itens[0]
+  const {data:sol,error:es}=await db.from('compras_solicitacoes').insert({empresa_id:u.empresa_id,destino:primeiro.destino,
+   cliente_id:primeiro.cliente_id,obra_id:primeiro.obra_id,solicitante_id:u.id,solicitante_nome:u.nome,observacoes:str(p.observacoes,1000)||null,
    atualizado_por_id:u.id}).select('id').single()
   if(es)throw es
   solId=sol.id
@@ -132,7 +154,7 @@ export async function PATCH(req:NextRequest){
  try{
   const a=await obterComprasAcessos(u),b=await req.json().catch(()=>null)
   if(!b||!uuid.test(str(b.itemId,80)))return falha('Item inválido')
-  const {data:item,error:ei}=await db.from('compras_solicitacao_itens').select('id,solicitacao_id,status,produto_id,descricao,quantidade_necessaria')
+  const {data:item,error:ei}=await db.from('compras_solicitacao_itens').select('id,solicitacao_id,status,produto_id,descricao,quantidade_necessaria,destino,cliente_id,obra_id')
    .eq('empresa_id',u.empresa_id).eq('id',b.itemId).maybeSingle()
   if(ei)throw ei
   if(!item)return falha('Item não encontrado',404)
@@ -167,10 +189,21 @@ export async function PATCH(req:NextRequest){
   if(b.acao==='editar'){
    if(item.status==='cancelado')return falha('Pedido cancelado, histórico preservado',409)
    const descricao=str(b.descricao,500),q=quantidade(b.quantidade_necessaria)
-   if(descricao.length<2||q!=null&&(!Number.isFinite(q)||q<=0)||(sol.destino==='obra'&&q==null))return falha('Descrição ou quantidade inválida')
-   const {data:usado}=await db.from('compras_carrinho_itens').select('id').eq('empresa_id',u.empresa_id).eq('item_id',item.id).limit(1)
+   const destino=b.destino===undefined?item.destino:str(b.destino,20)
+   if(destino!=='obra'&&destino!=='estoque')return falha('Destino inválido')
+   const clienteId=destino==='obra'?(b.cliente_id===undefined?item.cliente_id:str(b.cliente_id,80)):null
+   const obraId=destino==='obra'?(b.obra_id===undefined?item.obra_id:str(b.obra_id,80)):null
+   if(descricao.length<2||q!=null&&(!Number.isFinite(q)||q<=0)||(destino==='obra'&&q==null))return falha('Descrição ou quantidade inválida')
+   if(destino==='obra'){
+    if(!uuid.test(clienteId||'')||!uuid.test(obraId||''))return falha('Escolha cliente e obra')
+    const {data:obra,error:eobra}=await db.from('obras').select('id').eq('empresa_id',u.empresa_id).eq('id',obraId).eq('cliente_id',clienteId).maybeSingle()
+    if(eobra)throw eobra
+    if(!obra)return falha('A obra não pertence ao cliente selecionado')
+   }
+   const {data:usado,error:euso}=await db.from('compras_carrinho_itens').select('id').eq('empresa_id',u.empresa_id).eq('item_id',item.id).limit(1)
+   if(euso)throw euso
    if(usado?.length)return falha('Comprador já separou este item. Não é possível alterar.',409)
-   const {error}=await db.from('compras_solicitacao_itens').update({descricao,quantidade_necessaria:q,atualizado_por_id:u.id,
+   const {error}=await db.from('compras_solicitacao_itens').update({descricao,quantidade_necessaria:q,destino,cliente_id:clienteId,obra_id:obraId,atualizado_por_id:u.id,
     updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',item.id)
    if(error)throw error
    return NextResponse.json({ok:true,acao:'editado',historicoPreservado:true})
