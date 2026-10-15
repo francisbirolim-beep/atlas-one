@@ -10,6 +10,7 @@ type Item = {
   produtoId: string | null
   produto: { codigo: string | null; nome: string; categoria: string; unidade: string | null } | null
   imagemUrl: string | null
+  imagemValidada: boolean
   fatorConversao: number | null
   unidadeCompra: string | null
   unidadeEstoque: string | null
@@ -54,23 +55,27 @@ export default function PreviaEstoqueRecebimento({ nfId, linhas, revisao }: {
     return () => { ativo = false }
   }, [nfId, revisao])
 
-  const { linhasPorId, entradas, pendencias, semImagem } = useMemo(() => {
+  const { linhasPorId, entradas, pendencias, semImagem, imagensPendentes } = useMemo(() => {
     const linhasPorId = new Map(linhas.map(l => [l.nfItemId, l]))
     const entradas = new Map<string, number>()
     let pendencias = 0
     let semImagem = 0
+    let imagensPendentes = 0
     for (const item of itens) {
       const linha = linhasPorId.get(item.nfItemId)
       const recebido = Number(linha?.quantidadeRecebida || 0)
       const avariado = Number(linha?.quantidadeAvariada || 0)
       const liquido = Math.max(0, recebido - avariado)
       if (liquido > 0 && (!item.produtoId || !item.fatorConversao || item.fatorConversao <= 0)) pendencias += 1
-      if (item.produto && ['perfil', 'acessorio'].includes(item.produto.categoria) && !item.imagemUrl) semImagem += 1
+      if (item.produto && ['perfil', 'acessorio'].includes(item.produto.categoria)) {
+        if (!item.imagemUrl) semImagem += 1
+        else if (!item.imagemValidada) imagensPendentes += 1
+      }
       if (item.produtoId && item.fatorConversao && item.fatorConversao > 0 && liquido > 0) {
         entradas.set(item.produtoId, (entradas.get(item.produtoId) || 0) + liquido * item.fatorConversao)
       }
     }
-    return { linhasPorId, entradas, pendencias, semImagem }
+    return { linhasPorId, entradas, pendencias, semImagem, imagensPendentes }
   }, [itens, linhas])
 
   return (
@@ -83,7 +88,7 @@ export default function PreviaEstoqueRecebimento({ nfId, linhas, revisao }: {
         erro ? <div className="p-5 text-sm text-amber-800">Prévia indisponível: {erro}. A conferência original permanece disponível.</div> :
         <div className="space-y-4 p-5">
           {pendencias > 0 && <p className="flex items-center gap-2 text-sm font-semibold text-amber-800"><AlertTriangle size={16} /> {pendencias} item(ns) com recebimento informado precisam de vínculo ou fator de conversão para movimentar o estoque.</p>}
-          {semImagem > 0 && <p className="text-sm text-amber-800">{semImagem} produto(s) de perfil/acessório ainda não têm imagem validada no cadastro; é necessário regularizar as fotos.</p>}
+          {(semImagem > 0 || imagensPendentes > 0) && <p className="text-sm text-amber-800">Imagens de perfis/acessórios: {semImagem} sem foto, {imagensPendentes} com foto ainda não validada. É preciso conferir as imagens no cadastro.</p>}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -105,6 +110,7 @@ export default function PreviaEstoqueRecebimento({ nfId, linhas, revisao }: {
                           ? <img src={item.imagemUrl} alt={item.produto?.nome || 'Produto'} className="h-14 w-14 shrink-0 rounded-lg border object-contain" />
                           : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed bg-slate-50 text-center text-[10px] text-amber-700">Foto pendente</div>)}
                         <div><div className="font-semibold">{item.produto ? `${item.produto.codigo || 'Sem código'} — ${item.produto.nome}` : 'Produto ainda não associado no Atlas'}</div>
+                          {categoriaImagem && item.imagemUrl && !item.imagemValidada && <div className="text-xs text-amber-700">Foto aguardando validação</div>}
                           <div className="mt-1 text-xs text-slate-500">Unidade de estoque: {item.unidadeEstoque || '—'} • 1 {item.unidadeCompra || 'unid. NF'} = {item.fatorConversao && item.fatorConversao > 0 ? numero(item.fatorConversao) : 'conversão pendente'} {item.unidadeEstoque || 'unid. estoque'}</div>
                         </div>
                       </div>
