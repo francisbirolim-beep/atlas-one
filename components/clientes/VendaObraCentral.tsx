@@ -1134,7 +1134,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
         <Kpi titulo="Recebido" valor={moeda(recebido)} detalhe={`${pct(recebido,valorVenda).toFixed(0)}% recebido`}/>
         <Kpi titulo="A receber" valor={moeda(aReceber)} destaque/>
-        <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0||previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?moeda(custoPrevistoBase):'—'} detalhe={previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?'Conferido na aba Custos / CMV':undefined}/>
+        <Kpi titulo="Custo previsto c/ sobra" valor={custoPrevistoBase>0||previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?moeda(custoPrevistoBase):'—'} detalhe={previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?'Conferido na aba Custos / CMV':undefined}/>
         <Kpi titulo="Custo realizado (parcial)" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% da venda já lançado como custo':'Sem custo real registrado. Cotação não é compra.'}/>
         <Kpi titulo="Margem prevista" valor={custoPrevistoBase>0?margemPrevista.toFixed(1)+'%':'—'}/>
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
