@@ -16,7 +16,10 @@ type ItemBase = {
   valor_unitario: number | null
   valor_total: number | null
   vinculo_status: string
-  produto: { id: string; codigo: string | null; nome: string; unidade: string | null } | null
+  unidade_estoque: string | null
+  fator_conversao: number | null
+  estoque: { fisico: number; reservado: number; disponivel: number; unidade: string | null } | null
+  produto: { id: string; codigo: string | null; nome: string; unidade: string | null; foto_url: string | null } | null
   quantidadeNf: number
   jaRecebida: number
   jaAvariada: number
@@ -59,13 +62,24 @@ type Resultado = {
   itensConferidos: number
   divergencias: number
   fotosGuardadas: number
-  estoqueMovimentado: boolean
+  estoqueMovimentados: number
+  estoquePendencias: Array<{ nfItemId: string; motivo: string }>
   mensagem: string
 }
 
 function moeda(valor: number | null | undefined) {
   if (valor == null) return '—'
   return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function quantidadeBR(valor: number) { return Number(valor).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) }
+function entradaPrevista(item: ItemBase, linha?: LinhaForm) {
+  const fator = Number(item.fator_conversao)
+  if (!item.produto_id || item.fator_conversao == null || !Number.isFinite(fator) || fator <= 0) return null
+  const recebido = Number(linha?.quantidadeRecebida || 0)
+  const avariado = Number(linha?.quantidadeAvariada || 0)
+  if (!Number.isFinite(recebido) || !Number.isFinite(avariado) || recebido < 0 || avariado < 0 || avariado > recebido) return null
+  return (recebido - avariado) * fator
 }
 
 function dataBR(valor: string | null | undefined) {
@@ -242,7 +256,7 @@ export default function ConferenciaRecebimentoPage() {
         </header>
 
         {erro ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div> : null}
-        {resultado ? <div className={`rounded-xl border p-4 text-sm ${resultado.divergencias ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}><strong>{resultado.mensagem}</strong> Fotos guardadas: {resultado.fotosGuardadas}.</div> : null}
+        {resultado ? <div className={`rounded-xl border p-4 text-sm ${resultado.estoquePendencias?.length ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}><strong>{resultado.mensagem}</strong><div className="mt-1">{resultado.estoqueMovimentados || 0} item(ns) deram entrada; {resultado.estoquePendencias?.length || 0} pendência(s). Fotos: {resultado.fotosGuardadas}.</div><Link href="/estoque" className="mt-2 inline-block font-semibold underline">Ver estoque atualizado</Link></div> : null}
 
         <section className="grid gap-3 md:grid-cols-4">
           <Info titulo="Fornecedor" valor={dados.nf.fornecedor_nome || '—'} />
@@ -261,25 +275,31 @@ export default function ConferenciaRecebimentoPage() {
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-5">
             <h2 className="font-bold text-slate-900">Itens para conferir</h2>
-            <p className="mt-1 text-sm text-slate-500">O campo Recebido vem preenchido com o saldo ainda esperado. Ajuste para a quantidade que realmente chegou.</p>
+            <p className="mt-1 text-sm text-slate-500">Confira quantidades e avarias. O saldo físico, reservado e disponível é mostrado antes da confirmação; a projeção não movimenta o estoque.</p>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-[1050px] w-full text-sm">
+            <table className="min-w-[1450px] w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                <tr><th className="p-3">Produto / código</th><th className="p-3 text-right">NF</th><th className="p-3 text-right">Já recebido</th><th className="p-3 text-right">Saldo</th><th className="p-3">Recebido agora</th><th className="p-3">Avariado</th><th className="p-3">Observação</th></tr>
+                <tr><th className="p-3">Produto / código</th><th className="p-3 text-right">NF</th><th className="p-3 text-right">Já recebido</th><th className="p-3 text-right">Saldo</th><th className="p-3">Recebido agora</th><th className="p-3">Avariado</th><th className="p-3">Estoque atual</th><th className="p-3">Entrada prevista</th><th className="p-3">Após a entrada</th><th className="p-3">Observação</th></tr>
               </thead>
               <tbody>
                 {dados.itens.map((item, i) => (
                   <tr key={item.id} className="border-t border-slate-100 align-top">
                     <td className="p-3">
-                      <div className="font-semibold text-slate-900">{item.codigo_fornecedor || item.produto?.codigo || '—'} — {item.descricao}</div>
-                      <div className="mt-1 text-xs text-slate-500">{item.produto ? `Atlas: ${item.produto.codigo || ''} ${item.produto.nome}` : 'Produto ainda não vinculado'} • Unidade NF: {item.unidade || '—'}</div>
+                      <div className="flex items-center gap-3">
+                        {item.produto?.foto_url ? <img src={item.produto.foto_url} alt={item.produto.nome} className="h-14 w-14 shrink-0 rounded-lg border bg-white object-contain" loading="lazy" /> : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed bg-slate-50 p-1 text-center text-[9px] text-slate-500">Imagem não cadastrada</div>}
+                        <div><div className="font-semibold text-slate-900">{item.codigo_fornecedor || item.produto?.codigo || '—'} — {item.descricao}</div>
+                        <div className="mt-1 text-xs text-slate-500">{item.produto ? `Atlas: ${item.produto.codigo || ''} ${item.produto.nome}` : 'Produto ainda não vinculado'} • Unidade NF: {item.unidade || '—'}</div></div>
+                      </div>
                     </td>
                     <td className="p-3 text-right font-semibold">{Number(item.quantidadeNf).toLocaleString('pt-BR')} {item.unidade || ''}</td>
                     <td className="p-3 text-right">{Number(item.jaRecebida).toLocaleString('pt-BR')}</td>
                     <td className="p-3 text-right font-semibold">{Number(item.saldo).toLocaleString('pt-BR')}</td>
                     <td className="p-3"><input type="number" min="0" step="any" value={linhas[i]?.quantidadeRecebida ?? 0} onChange={e => atualizarLinha(i, 'quantidadeRecebida', Number(e.target.value))} className="w-28 rounded-lg border border-slate-300 px-3 py-2" /></td>
                     <td className="p-3"><input type="number" min="0" step="any" value={linhas[i]?.quantidadeAvariada ?? 0} onChange={e => atualizarLinha(i, 'quantidadeAvariada', Number(e.target.value))} className="w-24 rounded-lg border border-slate-300 px-3 py-2" /></td>
+                    <td className="p-3 text-xs">{item.estoque ? <><div className="font-semibold">Físico: {quantidadeBR(item.estoque.fisico)}</div><div>Reservado: {quantidadeBR(item.estoque.reservado)}</div><div className="text-emerald-700">Disponível: {quantidadeBR(item.estoque.disponivel)} {item.estoque.unidade || item.produto?.unidade || ''}</div></> : <span className="text-amber-700">Vincule um produto para consultar.</span>}</td>
+                    <td className="p-3 text-right text-xs">{entradaPrevista(item, linhas[i]) == null ? <span className="text-amber-700">Conferir vínculo / conversão</span> : <span className="font-semibold text-blue-700">+ {quantidadeBR(entradaPrevista(item, linhas[i]) || 0)} {item.unidade_estoque || item.produto?.unidade || ''}</span>}</td>
+                    <td className="p-3 text-right text-xs">{item.estoque && entradaPrevista(item, linhas[i]) != null ? <span className="font-semibold">{quantidadeBR(item.estoque.fisico + (entradaPrevista(item, linhas[i]) || 0))} {item.estoque.unidade || item.produto?.unidade || ''}</span> : '—'}</td>
                     <td className="p-3"><input value={linhas[i]?.observacoes ?? ''} onChange={e => atualizarLinha(i, 'observacoes', e.target.value)} placeholder="Ex.: embalagem rasgada" className="w-full min-w-52 rounded-lg border border-slate-300 px-3 py-2" /></td>
                   </tr>
                 ))}
@@ -309,7 +329,7 @@ export default function ConferenciaRecebimentoPage() {
         </section>
 
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <div className="flex gap-3"><ShieldCheck size={20} className="mt-0.5 shrink-0" /><div><strong>Estoque ainda não é movimentado.</strong> Esta etapa registra a conferência real e as divergências. A entrada em estoque será liberada somente depois de validar unidade operacional e conversões de embalagem.</div></div>
+          <div className="flex gap-3"><ShieldCheck size={20} className="mt-0.5 shrink-0" /><div><strong>Entrada controlada no estoque.</strong> Ao registrar a conferência, o Atlas tenta movimentar somente a quantidade recebida e não avariada, quando o produto está vinculado e a conversão é válida. Itens pendentes são informados separadamente e não entram no saldo. A projeção exibida é por linha; consulte o estoque por local para o saldo consolidado.</div></div>
         </div>
 
         <div className="flex justify-end">

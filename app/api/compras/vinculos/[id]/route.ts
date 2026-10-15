@@ -1,3 +1,4 @@
+import { obterComprasAcessos } from '@/lib/comprasPermissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarCompras } from '@/lib/comprasServer'
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await autenticarCompras(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+  if (!(await obterComprasAcessos(usuario)).notasLancar) return NextResponse.json({ error: 'Acesso não autorizado a esta operação de Compras.' }, { status: 403 })
 
   try {
     const body = await req.json().catch(() => ({})) as { produtoId?: string | null }
