@@ -42,7 +42,25 @@ export async function POST(req:NextRequest){
   const gravar=existente?db.from('compras_carrinho_itens').update(linha).eq('empresa_id',u.empresa_id).eq('id',existente.id):db.from('compras_carrinho_itens').insert(linha)
   const {error:el}=await gravar
   if(el)throw el
-  return NextResponse.json({ok:true,carrinhoId})
+  // O estado do pedido acompanha o carrinho do fornecedor. Sempre considerar
+  // todos os itens daquele carrinho para calcular o pedido mínimo do fornecedor.
+  const {data:linhasAtualizadas,error:elc}=await db.from('compras_carrinho_itens')
+    .select('quantidade_obra,quantidade_estoque,preco_unitario')
+    .eq('empresa_id',u.empresa_id).eq('carrinho_id',carrinhoId)
+  if(elc)throw elc
+  const subtotal=(linhasAtualizadas||[]).reduce((total,l)=>total+
+    (Number(l.quantidade_obra)+Number(l.quantidade_estoque))*Number(l.preco_unitario||0),0)
+  const atingiuMinimo=!(linhasAtualizadas||[]).some(l=>l.preco_unitario===null)
+    && subtotal>=Number(forn.pedido_minimo||0)
+  const proximoStatus=atingiuMinimo?'em_cotacao':'aguardando_minimo'
+  const {error:es}=await db.from('compras_solicitacoes')
+    .update({status:proximoStatus,atualizado_por_id:u.id,updated_at:new Date().toISOString()})
+    .eq('empresa_id',u.empresa_id).eq('id',item.solicitacao_id)
+    .in('status',['aguardando_validacao','em_cotacao','aguardando_minimo'])
+  if(es){console.error('[compras carrinhos] solicitacao status sync',es)}
+  return NextResponse.json({ok:true,carrinhoId,pedidoMinimoAtingido:atingiuMinimo,
+    faltaMinimo:Math.max(0,Number(forn.pedido_minimo||0)-subtotal),
+    aviso:es?'O item foi vinculado, mas o status da solicitação exige revisão.':null})
  }catch(e){
   if(criadoId)await db.from('compras_carrinhos').delete().eq('empresa_id',u.empresa_id).eq('id',criadoId)
   console.error('[compras carrinhos POST]',e)
