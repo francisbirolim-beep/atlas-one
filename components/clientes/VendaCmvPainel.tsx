@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
-import { custoPrevistoOriginal, custoRevisado, revisaoAtual, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
+import { custoPrevistoOriginal, custoRevisado, revisaoAtual, revisaoPerfilSobrepoePerda, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 import { compararPesosCmv } from '@/lib/vendaCmvPesos'
 import { separarEtapasCmv } from '@/lib/vendaCmvEtapas'
 import VendaCmvRecebimentos, { type RecebimentoCmv, type HistoricoRecebimento } from '@/components/clientes/VendaCmvRecebimentos'
@@ -232,8 +232,10 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   const bruto=p?custoPrevistoOriginal(p,categoria):null
   const revisao=revisoes[categoria]
   const atual=revisaoAtual(revisao,bruto)
+  const perdaDuplicada=categoria==='perfil'&&p?revisaoPerfilSobrepoePerda(p,revisoes):false
   return <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-   {atual&&<span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${revisao?.acao==='corrigido'?'bg-blue-100 text-blue-800':'bg-emerald-100 text-emerald-800'}`}>{revisao?.acao==='corrigido'?'Corrigido':'Validado'} · {revisao?.usuario_nome}</span>}
+   {atual&&!perdaDuplicada&&<span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${revisao?.acao==='corrigido'?'bg-blue-100 text-blue-800':'bg-emerald-100 text-emerald-800'}`}>{revisao?.acao==='corrigido'?'Corrigido':'Validado'} · {revisao?.usuario_nome}</span>}
+   {perdaDuplicada&&<span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">Conferência conciliada: R$ {p?.categorias.perda?.toFixed(2).replace('.',',')} de perda já contabilizados separadamente</span>}
    {!atual&&revisao&&<span className="text-[10px] font-bold text-amber-700">W.Vetro mudou: revisar novamente</span>}
    <button type="button" disabled={salvandoRevisao||bruto===null} onClick={()=>void revisarCusto(categoria,'validado')} title={bruto===null?'Sem valor informado pelo W.Vetro':'Confirmar valor W.Vetro sem alterações'} className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-40"><CheckCircle2 size={12}/>Validar custo</button>
    <button type="button" disabled={salvandoRevisao} onClick={()=>abrirCorrecao(categoria)} className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-40"><Pencil size={12}/>Corrigir custo</button>
@@ -276,7 +278,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
   {dados&&<div className="space-y-4">
    {realizado<=0&&<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Ainda não há custo efetivamente registrado nesta venda. O custo previsto W.Vetro é referência; não representa o realizado. Registre compras e custos antes de avaliar margem real.</p>}
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-    <Card titulo="Custo previsto revisado" valor={previstoFmt(totalRevisado)} nota={`Original W.Vetro: ${previstoFmt(totalBruto)} · ${dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}`}/>
+    <Card titulo="Custo previsto com sobra" valor={previstoFmt(totalRevisado)} nota={`Original W.Vetro com sobra: ${previstoFmt(totalBruto)} · ${dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}`}/>
     <Card titulo="Custo comprado registrado" valor={moedas(realizado)} detalhe={'Peso comprado: '+(resumoPesos.pesoComprado>0?quilos(resumoPesos.pesoComprado):'A preencher')} nota={resumoPesos.pendenteKg?'Peso parcial: há compras ainda sem quilos conciliados':'Valor de compras e lançamentos existentes, sem duplicar pelo recebimento'}/>
     <Card titulo="Custo recebido" valor={existeRecebimento?moedas(totalRecebido):'Aguardando recebimento'} detalhe={'Peso recebido: '+(resumoPesos.temRecebimento?quilos(resumoPesos.pesoRecebido):'Aguardando')} nota="Entregas conforme nota ou romaneio; não somar novamente ao comprado"/>
     <Card titulo="Diferença até agora" valor={totalRevisado==null?'—':moedas(totalRevisado-(existeRecebimento?totalRecebido:realizado))} detalhe={'Diferença de peso: '+(resumoPesos.diferencaKg===null?'A conferir':(resumoPesos.diferencaKg>0?'+':'')+quilos(resumoPesos.diferencaKg)+' ('+variacaoPeso(resumoPesos.percentual??0)+')')} nota={existeRecebimento?'Previsto menos recebido em R$ · peso recebido menos comprado · parcial':'Previsto menos comprado em R$ · aguarda recebimento para diferença em kg'}/>
@@ -285,9 +287,9 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca}:{ve
    <section aria-label="Resultado original da obra W.Vetro" className="rounded-xl border border-slate-200 p-3">
     <h4 className="mb-2 text-sm font-bold text-slate-800">Resultado do orçamento no W.Vetro · valores originais</h4>
     <div className="grid gap-3 sm:grid-cols-3">
-     <Card titulo="Usado na obra" valor={previstoFmt(p?.total_uso??null)} nota="Soma dos materiais utilizados e perda de corte, sem sobra"/>
+     <Card titulo="Usado na obra · sem sobra" valor={previstoFmt(p?.total_uso??null)} nota="Soma dos materiais utilizados e perda de corte, sem sobra"/>
      <Card titulo="Sobra de material" valor={previstoFmt(p?.categorias.sobra??null)} nota="Somada somente no resultado com sobra"/>
-     <Card titulo="Resultado com sobra" valor={previstoFmt(p?.total_com_sobra??null)} nota="Usado na obra + sobra · não é custo realizado"/>
+     <Card titulo="Custo previsto com sobra · original" valor={previstoFmt(p?.total_com_sobra??null)} nota="Material usado + sobra; referência de compra, não é custo realizado"/>
     </div>
     {p?.total_uso!=null&&p?.total_com_sobra!=null&&p?.categorias.sobra!=null&&
      <p className={`mt-2 text-xs font-semibold ${Math.abs(p.total_uso+p.categorias.sobra-p.total_com_sobra)<=0.02?'text-emerald-700':'text-amber-700'}`}>
