@@ -44,9 +44,9 @@ export async function GET(req:NextRequest,{params}:{params:{clienteId:string}}){
     const situacao=i.status==='cancelado'?'cancelado':!compras.length?'aguardando_compra':
      i.quantidade_necessaria!=null&&total<Number(i.quantidade_necessaria)?'comprado_parcial':'comprado'
     return {id:i.id,descricao:i.descricao,quantidade_necessaria:i.quantidade_necessaria,unidade:i.unidade,
-     status:situacao,compras:compras.map(v=>({fornecedor:nomeFornecedor.get(v.cart!.fornecedor_id)||'Fornecedor',
+     status:situacao,compras:todos?compras.map(v=>({fornecedor:nomeFornecedor.get(v.cart!.fornecedor_id)||'Fornecedor',
       comprado_em:v.cart!.pedido_emitido_em,quantidade_obra:v.linha.quantidade_obra,quantidade_estoque:v.linha.quantidade_estoque,
-      status:v.cart!.status}))}
+      status:v.cart!.status})):[]}
    })}))
   return NextResponse.json({solicitacoes:r},{headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('[compras cliente]',e);return erro('Não foi possível consultar as compras deste cliente',503)}
