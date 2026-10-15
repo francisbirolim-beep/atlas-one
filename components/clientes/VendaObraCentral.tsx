@@ -31,6 +31,7 @@ import VendaCmvPainel from '@/components/clientes/VendaCmvPainel'
 import { avaliarFluxoVenda, type InstalacaoResumo } from '@/lib/vendaFluxoResumo'
 import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 import { custoRealCompraConfirmada } from '@/lib/vendaCmvRegras'
+import { custoRevisado } from '@/lib/vendaCmvRevisao'
 
 type Venda = {
   id:string
@@ -196,6 +197,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [orcamento,setOrcamento]=useState<Orcamento|null>(null)
   const [contas,setContas]=useState<Conta[]>([])
   const [realizadoCmvManual,setRealizadoCmvManual]=useState(0)
+  const [previsaoCmvRevisada,setPrevisaoCmvRevisada]=useState<{vendaId:string;valor:number|null}|null>(null)
   const [compras,setCompras]=useState<Compra[]>([])
   const [lotesCotacao,setLotesCotacao]=useState<LoteCotacao[]>([])
   const [movendoLoteId,setMovendoLoteId]=useState<string|null>(null)
@@ -258,7 +260,12 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         const resposta=await fetch('/api/vendas/cmv?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
         if(!resposta.ok)return
         const dados=await resposta.json()
-        if(ativo)setRealizadoCmvManual(((dados.lancamentos||[]) as {valor:number}[]).reduce((s,l)=>s+Number(l.valor||0),0))
+        if(ativo){
+          setRealizadoCmvManual(((dados.lancamentos||[]) as {valor:number;etapa_cmv?:string}[])
+            .filter(l=>l.etapa_cmv!=='recebido').reduce((s,l)=>s+Number(l.valor||0),0))
+          // Uma única fonte para o cartão superior e a aba Custos: aplica as correções humanas auditadas.
+          setPrevisaoCmvRevisada({vendaId,valor:dados.previsto?custoRevisado(dados.previsto,dados.revisoes||{},'total'):null})
+        }
       }catch{}
     })()
     return ()=>{ativo=false}
@@ -474,7 +481,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     return base
   },[materiaisTecnicos,compras,cotacoesCompras])
   const custoPrevistoTecnico=Object.values(custosPorCategoria).reduce((s,c)=>s+c.previsto,0)
-  const custoPrevistoBase=custoPrevisto>0?custoPrevisto:custoPrevistoTecnico
+  const custoPrevistoBase=previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null
+    ?previsaoCmvRevisada.valor:(custoPrevisto>0?custoPrevisto:custoPrevistoTecnico)
   const custoRealizado=Object.values(custosPorCategoria).reduce((s,c)=>s+c.realizado,0)+realizadoCmvManual
   const margemReal=valorVenda>0&&custoRealizado>0?((valorVenda-custoRealizado)/valorVenda)*100:0
   const cmvReal=valorVenda>0&&custoRealizado>0?(custoRealizado/valorVenda)*100:0
@@ -1126,7 +1134,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
         <Kpi titulo="Recebido" valor={moeda(recebido)} detalhe={`${pct(recebido,valorVenda).toFixed(0)}% recebido`}/>
         <Kpi titulo="A receber" valor={moeda(aReceber)} destaque/>
-        <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0?moeda(custoPrevistoBase):'—'}/>
+        <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0||previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?moeda(custoPrevistoBase):'—'} detalhe={previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?'Conferido na aba Custos / CMV':undefined}/>
         <Kpi titulo="Custo realizado (parcial)" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% da venda já lançado como custo':'Sem custo real registrado. Cotação não é compra.'}/>
         <Kpi titulo="Margem prevista" valor={custoPrevistoBase>0?margemPrevista.toFixed(1)+'%':'—'}/>
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
@@ -1313,7 +1321,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           acessorio:custosPorCategoria.acessorios.realizado,
           vidro:custosPorCategoria.vidro.realizado,
           outros:custosPorCategoria.outros.realizado,
-        }} onMudanca={setRealizadoCmvManual}/>}
+        }} onMudanca={(totalRealizado,previstoRevisado)=>{
+          setRealizadoCmvManual(totalRealizado)
+          setPrevisaoCmvRevisada({vendaId,valor:previstoRevisado})
+        }}/>}
 
         {aba==='compras'&&<>
           <VendaBarrasWVetro modo="kanban" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>setAba('producao')}/>
