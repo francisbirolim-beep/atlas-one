@@ -310,7 +310,7 @@ type ProdutoCatalogo = {
   custo: number | string | null
 }
 
-export async function buscarCatalogoProdutos(): Promise<ProdutoCatalogo[]> {
+export async function buscarCatalogoProdutos(empresaId?: string): Promise<ProdutoCatalogo[]> {
   const todos: ProdutoCatalogo[] = []
   let inicio = 0
   const pagina = 1000
@@ -319,6 +319,7 @@ export async function buscarCatalogoProdutos(): Promise<ProdutoCatalogo[]> {
       .from('produtos')
       .select('id,codigo,codigo_origem,id_externo_wvetro,nome,descricao,ncm,unidade,custo')
       .eq('ativo', true)
+      .eq('empresa_id', empresaId || '')
       .order('nome')
       .range(inicio, inicio + pagina - 1)
     if (error) throw new Error(`Não foi possível carregar produtos: ${error.message}`)
@@ -351,8 +352,8 @@ function similaridadeDescricao(item: NFeItemNormalizado, p: ProdutoCatalogo) {
   return Math.min(1, score)
 }
 
-export async function enriquecerVinculos(nf: NFeNormalizada) {
-  const produtos = await buscarCatalogoProdutos()
+export async function enriquecerVinculos(nf: NFeNormalizada, empresaId?: string) {
+  const produtos = await buscarCatalogoProdutos(empresaId)
   const indice = new Map<string, ProdutoCatalogo[]>()
   for (const produto of produtos) {
     const codigos = Array.from(new Set([
@@ -368,7 +369,7 @@ export async function enriquecerVinculos(nf: NFeNormalizada) {
   let fornecedorId = nf.fornecedorId || null
   if (nf.fornecedorCnpj) {
     const cnpj = somenteDigitos(nf.fornecedorCnpj)
-    const { data } = await supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf').not('cnpj_cpf', 'is', null)
+    const { data } = await supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf').eq('empresa_id', empresaId || '').not('cnpj_cpf', 'is', null)
     const encontrado = (data || []).find(f => somenteDigitos(String(f.cnpj_cpf || '')) === cnpj)
     if (encontrado) {
       fornecedorId = encontrado.id
@@ -383,6 +384,7 @@ export async function enriquecerVinculos(nf: NFeNormalizada) {
       .from('produto_fornecedores')
       .select('id,produto_id,codigo_fornecedor,unidade_compra,fator_conversao')
       .eq('fornecedor_id', fornecedorId)
+      .eq('empresa_id', empresaId || '')
       .eq('ativo', true)
     for (const m of data || []) mapaFornecedor.set(normalizarCodigo(m.codigo_fornecedor), { ...m, fator_conversao: m.fator_conversao == null ? null : Number(m.fator_conversao) })
   }

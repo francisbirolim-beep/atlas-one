@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { podeLancarNF } from '@/lib/nfEntradaAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -9,12 +10,14 @@ async function autenticar(req: NextRequest) {
   if (!token) return null
   const { data, error } = await supabaseAdmin.auth.getUser(token)
   if (error || !data?.user) return null
-  return data.user
+  const { data: usuario } = await supabaseAdmin.from('usuarios').select('id,role,empresa_id').eq('id', data.user.id).maybeSingle()
+  return usuario?.empresa_id ? usuario : null
 }
 
 export async function GET(req: NextRequest) {
   const usuario = await autenticar(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+  if (!(await podeLancarNF(usuario))) return NextResponse.json({ error: 'Sem permissão para lançar nota fiscal.' }, { status: 403 })
 
   try {
     const produtos: any[] = []
@@ -24,6 +27,7 @@ export async function GET(req: NextRequest) {
         .from('produtos')
         .select('id,codigo,codigo_origem,id_externo_wvetro,nome,unidade,custo,preco,margem_percentual,preco_minimo,preco_promocional,ultimo_preco_vendido')
         .eq('ativo', true)
+        .eq('empresa_id', usuario.empresa_id)
         .order('nome')
         .range(inicio, inicio + pagina - 1)
       if (error) throw error
