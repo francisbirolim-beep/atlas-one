@@ -53,8 +53,8 @@ export async function GET(req: NextRequest) {
     if (ids.length) {
       const [saldosRes, imagensRes] = await Promise.all([
         supabaseAdmin.from('estoque_saldos')
-          .select('id,produto_id,quantidade,quantidade_reservada,updated_at,custo_medio')
-          .eq('empresa_id', empresa).eq('local_id', localId).is('endereco_id', null).in('produto_id', ids),
+          .select('id,produto_id,endereco_id,quantidade,quantidade_reservada,updated_at,custo_medio')
+          .eq('empresa_id', empresa).eq('local_id', localId).in('produto_id', ids),
         supabaseAdmin.from('produto_imagens')
           .select('produto_id,url,principal,status_validacao')
           .eq('empresa_id', empresa).eq('ativo', true).in('produto_id', ids)
@@ -65,7 +65,8 @@ export async function GET(req: NextRequest) {
       saldos = saldosRes.data || []
       imagens = imagensRes.data || []
     }
-    const porProduto = new Map(saldos.map(s => [s.produto_id, s]))
+    const enderecados = new Set(saldos.filter(s => s.endereco_id != null).map(s => s.produto_id))
+    const porProduto = new Map(saldos.filter(s => s.endereco_id == null).map(s => [s.produto_id, s]))
     const fotoPorProduto = new Map<string, {url: string, status: string}>()
     for (const i of imagens) {
       if (!fotoPorProduto.has(i.produto_id) && i.url)
@@ -79,6 +80,7 @@ export async function GET(req: NextRequest) {
           id: p.id, codigo: p.codigo, nome: p.nome, categoria: p.categoria,
           unidade: p.unidade, fotoUrl: p.foto_url || f?.url || null,
           fotoPendente: !p.foto_url && (!f || !['validado', 'aprovado'].includes(f.status)),
+          enderecado: enderecados.has(p.id),
           custoReferencia: usuario.role === 'master' ? p.custo : null,
           saldoId: s?.id ?? null, atualizadoEm: s?.updated_at ?? null,
           fisico: s ? Number(s.quantidade) : null,
@@ -108,12 +110,15 @@ export async function POST(req: NextRequest) {
     const [localRes, produtosRes, saldosRes] = await Promise.all([
       supabaseAdmin.from('estoque_locais').select('id').eq('id', body.localId).eq('empresa_id', usuario.empresa_id).maybeSingle(),
       supabaseAdmin.from('produtos').select('id,custo').eq('empresa_id', usuario.empresa_id).eq('ativo', true).in('id', ids),
-      supabaseAdmin.from('estoque_saldos').select('id,produto_id,quantidade,quantidade_reservada,updated_at').eq('empresa_id', usuario.empresa_id).eq('local_id', body.localId).is('endereco_id', null).in('produto_id', ids),
+      supabaseAdmin.from('estoque_saldos').select('id,produto_id,endereco_id,quantidade,quantidade_reservada,updated_at').eq('empresa_id', usuario.empresa_id).eq('local_id', body.localId).in('produto_id', ids),
     ])
     if (localRes.error || produtosRes.error || saldosRes.error) throw (localRes.error || produtosRes.error || saldosRes.error)
     if (!localRes.data || produtosRes.data?.length !== ids.length)
       return NextResponse.json({ error: 'Local ou produto não encontrado na sua empresa.' }, { status: 400 })
-    const saldos = new Map((saldosRes.data || []).map(s => [s.produto_id, s]))
+    const enderecados = new Set((saldosRes.data || []).filter(s => s.endereco_id != null).map(s => s.produto_id))
+    if (ids.some(id => enderecados.has(id)))
+      return NextResponse.json({ error: 'Há produtos com saldo em endereço/prateleira. Use contagem por endereço antes de fazer este inventário.' }, { status: 409 })
+    const saldos = new Map((saldosRes.data || []).filter(s => s.endereco_id == null).map(s => [s.produto_id, s]))
     const produtos = new Map((produtosRes.data || []).map(p => [p.id, p]))
     for (const linha of body.itens) {
       const atual = saldos.get(linha.produtoId)
