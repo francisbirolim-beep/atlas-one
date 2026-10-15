@@ -1,3 +1,14 @@
+## COMPRAS — Próxima validação (15/10/2026)
+
+Branch isolada: `feature/compras-recebimento-estoque-20261015`. **Não publicar automaticamente.**
+
+1. Revisar SQL aditivo `20261015173000_compras_nf_vinculo_pedidos_v1.sql` em banco de **homologação** e aplicar lá somente depois da validação; não executar na produção.
+2. Testar NF XML, PDF e manual existentes, sem alterar os parsers já aprovados; conferir busca de produtos/fornecedores restrita à empresa, imagens e saldos antes de gravar.
+3. Testar associação item NF → pedido aprovado e destino estoque/cliente-obra: entregas parciais de NFs diferentes, saldos pendentes, fornecedor errado, unidades diferentes, produtos incompatíveis, excesso de quantidade, dupla associação e bloqueio de exclusão após recebimento.
+4. Conferir em homologação um produto com foto e conversão, um sem vínculo, um avariado e um recebimento parcial. Comparar saldos por local antes/depois e garantir que avarias não entram. Verificar empresa_id em NF/recebimentos/fotos.
+5. Evolução operacional posterior: geração/impressão do pedido ao fornecedor, vinculação logística à obra, reserva real com histórico ou destinação direta, sem confundir compra, recebimento, reserva e consumo.
+6. Depois da homologação, comparar a versão com a produção aprovada, definir rollback de aplicação e solicitar autorização específica para publicar.
+
 ## PRÓXIMO PASSO — Separação de Materiais por peça (12/10/2026)
 
 Branch: `feat/producao-separacao-parcial-20261012`. NÃO implantar direto na main.
