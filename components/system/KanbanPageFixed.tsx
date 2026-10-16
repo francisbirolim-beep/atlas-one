@@ -1526,6 +1526,7 @@ Card adicionado em {new Date(cardSelecionado.kanban_entrada_em || cardSelecionad
 <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
 <p className="text-xs font-bold text-blue-900">W.Vetro #{numeroWVetroCard(cardSelecionado)} · Conferência por esquadria</p>
 <p className="mt-1 text-xs text-slate-600">{(cardSelecionado.itens||[]).filter(i=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))!=='pendente').length} de {(cardSelecionado.itens||[]).length} esquadrias conferidas. Use “Está certo” ou “Corrigir e ensinar” em cada item abaixo.</p>
+{(cardSelecionado.itens||[]).some(i=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))==='pendente')&&<p role="status" className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-800">Faltam confirmar: esquadrias {(cardSelecionado.itens||[]).map((i,idx)=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))==='pendente'?idx+1:null).filter(x=>x!==null).join(', ')}. As demais estão salvas.</p>}
 {!(cardSelecionado.itens||[]).length&&<p className="mt-1 text-xs text-amber-800">Não há esquadrias importadas para conferir. Sincronize os itens antes de validar.</p>}
 </div>
 )}
