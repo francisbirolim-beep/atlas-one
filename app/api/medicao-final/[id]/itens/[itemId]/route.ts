@@ -1,3 +1,4 @@
+import { lerAcessoConfigServer } from '@/lib/acessoUsuarioServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -28,13 +29,7 @@ async function podeRemover(usuario: { id: string; role: string; empresa_id: stri
 
   if (permissaoSetor?.nivel !== 'edicao') return false
 
-  const { data: config } = await supabaseAdmin
-    .from('configuracoes_gerais')
-    .select('valor')
-    .eq('chave', `acesso_usuario:${usuario.id}`)
-    .maybeSingle()
-
-  let valor: any = config?.valor
+  let valor: any = await lerAcessoConfigServer(usuario.id,usuario.empresa_id)
   if (typeof valor === 'string') {
     try { valor = JSON.parse(valor) } catch { valor = null }
   }

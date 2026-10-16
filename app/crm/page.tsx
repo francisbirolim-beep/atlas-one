@@ -51,7 +51,8 @@ export default function CRM() {
     const nv = nivelEfetivo(me, 'crm', mapa)
     setNivel(nv)
     if (nv !== 'oculto' && me) {
-      const acesso = await lerAcessoUsuarioConfig(me)
+      let acesso
+      try { acesso=await lerAcessoUsuarioConfig(me) } catch { setNivel('oculto');setCarregando(false);return }
       let orcQuery = supabase.from('orcamentos').select('*').order('created_at', { ascending: false })
       if (me.role !== 'master' && acesso.crmEscopo === 'proprios') orcQuery = orcQuery.eq('criado_por_id', me.id)
 

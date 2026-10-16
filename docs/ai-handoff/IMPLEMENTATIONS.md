@@ -458,3 +458,13 @@ Novos `VendaListaCorteWVetro`, `VendaBarrasWVetro`, parser posicional PDF WVetro
 - Migration aditiva `20261015173000_compras_nf_vinculo_pedidos_v1.sql` cria vínculos auditáveis, valida empresa, fornecedor da cotação selecionada, produto, unidade, quantidade máxima e bloqueia desfazer vínculo depois do recebimento físico. **Não aplicada.**
 - Exibição do saldo físico/reservado/disponível e imagem cadastrada do produto já na prévia da NF; produtos, fornecedores e respectivas referências fiscais passam a respeitar a empresa autenticada.
 - Nenhum pedido original, cotação, Kanban, baixa, reserva, custos ou lançamentos existentes foram alterados. Próximo: homologação de integração, XML/PDF/manual e recebimento parcial com notas reais de teste.
+
+
+## 2026-10-15 — Permissões por etapa — primeiro incremento, não publicar
+
+Branch `feat/permissoes-etapas-20261015`, base inicial `302b0b2f`, atualizado sobre `f891d3a5`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.
+
+
+## 2026-10-16 — Publicação incremental de permissões autorizada
+
+Francis autorizou publicar somente o incremento do Cliente 360 em atlasonesystem.com. Base de produção a1aa8e88; alterações e recebimento integrado preservados. Migration aplicada 20261016042736, com seed igual ao legado, RLS e RPC exclusiva do backend; teste transacional real concluído e desfeito. Histórico prévio restaurado com conteúdo exato, sem reexecutá-lo. Demais etapas de IA/relatórios/ações internas continuam pendentes. Autorização atual substitui o bloqueio de publicação do rascunho inicial para este incremento, sem declarar revisão geral concluída.

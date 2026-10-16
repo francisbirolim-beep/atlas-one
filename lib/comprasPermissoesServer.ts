@@ -1,3 +1,4 @@
+import { lerAcessoConfigServer } from '@/lib/acessoUsuarioServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export type ComprasAcessos = {
@@ -51,16 +52,15 @@ export async function obterComprasAcessos(usuario: { id: string; empresa_id: str
   if (usuario.role === 'master') {
     return Object.fromEntries(chaves.map(k => [k, true])) as ComprasAcessos
   }
-  const [{ data: setores, error: erroSetor }, { data: configuracao, error: erroConfig }] = await Promise.all([
+  const [{ data: setores, error: erroSetor }, configuracao] = await Promise.all([
     supabaseAdmin.from('permissoes').select('setor_id,nivel')
       .eq('empresa_id', usuario.empresa_id).eq('usuario_id', usuario.id).in('setor_id', ['compras','recebimento']),
-    supabaseAdmin.from('configuracoes_gerais').select('valor')
-      .eq('chave', 'acesso_usuario:' + usuario.id).maybeSingle(),
+    lerAcessoConfigServer(usuario.id,usuario.empresa_id),
   ])
-  if (erroSetor || erroConfig) throw new Error('Falha ao conferir permissões de Compras')
+  if (erroSetor) throw new Error('Falha ao conferir permissões de Compras')
   let conf: { acoes?: Record<string, unknown> } = {}
   try {
-    const valor = configuracao?.valor
+    const valor = configuracao
     const parseado = typeof valor === 'string' ? JSON.parse(valor) : valor
     if (parseado && typeof parseado === 'object') conf = parseado
   } catch { throw new Error('Configuração de acesso inválida') }

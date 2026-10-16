@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { sessaoAtualValida, usuarioCacheLocal } from '@/lib/auth'
 import AppShell from '@/components/system/AppShell'
 import BalcaoShell from '@/components/system/BalcaoShell'
+import Cliente360RouteGuard from '@/components/system/Cliente360RouteGuard'
 import Cadastro360RouteGuard from '@/components/system/Cadastro360RouteGuard'
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
@@ -108,5 +109,5 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   )
   if (!autenticado) return null
   if (rotaBalcao) return <BalcaoShell>{children}</BalcaoShell>
-  return <AppShell><Cadastro360RouteGuard>{children}</Cadastro360RouteGuard></AppShell>
+  return <AppShell><Cadastro360RouteGuard><Cliente360RouteGuard>{children}</Cliente360RouteGuard></Cadastro360RouteGuard></AppShell>
 }
