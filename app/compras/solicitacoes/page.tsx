@@ -18,6 +18,8 @@ type Payload={acessos:ComprasAcessos;usuarioId:string;solicitacoes:Sol[];itens:I
 type NovoItem={modo:'mesma'|'obra'|'estoque';cliente_id:string;obra_id:string;categoria:string;descricao:string;quantidade_necessaria:string;unidade:string;foto:File|null}
 type Sugestao={id:string;nome:string;ultimoPrecoPago:number|null;precoCatalogo:number|null;pedidoMinimo:number;ultimaCompra:string|null;preferencial:boolean}
 type Cotacao={estoque:{fisico:number;reservado:number;disponivel:number};fornecedores:Sugestao[]}
+type SugestaoProduto={id:string;codigo:string|null;nome:string;categoria:string;foto_url:string|null;pontuacao:number;origem:'historico_validado'|'correspondencia_texto';motivo:string}
+type RespostaSugestoes={itemId:string;sugestoes:SugestaoProduto[];aviso:string;modo:string}
 const novo=(modo:NovoItem['modo']='obra'):NovoItem=>({modo,cliente_id:'',obra_id:'',categoria:'acessorio',descricao:'',quantidade_necessaria:'',unidade:'UN',foto:null})
 const resolverDestino=(linhas:NovoItem[],index:number):{destino:'obra'|'estoque';cliente_id:string|null;obra_id:string|null}=>{
  const atual=linhas[index]
@@ -43,6 +45,7 @@ export default function ComprasSolicitacoes(){
  const [abrirId,setAbrirId]=useState<string|null>(null),[buscaProduto,setBuscaProduto]=useState('')
  const [qObra,setQObra]=useState(''),[qEstoque,setQEstoque]=useState(''),[preco,setPreco]=useState(''),[fornecedorId,setFornecedorId]=useState(''),[carrinhoId,setCarrinhoId]=useState('')
  const [cot,setCot]=useState<Cotacao|null>(null),[buscando,setBuscando]=useState(false)
+ const [sugestoes,setSugestoes]=useState<RespostaSugestoes|null>(null),[buscandoSugestoes,setBuscandoSugestoes]=useState(false)
  const [editando,setEditando]=useState<string|null>(null),[editDesc,setEditDesc]=useState(''),[editQtd,setEditQtd]=useState(''),[editDestino,setEditDestino]=useState<'obra'|'estoque'>('estoque'),[editCliente,setEditCliente]=useState(''),[editObra,setEditObra]=useState(''),[editCategoria,setEditCategoria]=useState('acessorio'),[editFoto,setEditFoto]=useState<File|null>(null)
  const request=useCallback(async(url:string,init?:RequestInit)=>{
   const token=await tokenAtual();if(!token)throw Error('Sessão expirada, entre novamente')
@@ -95,7 +98,26 @@ export default function ComprasSolicitacoes(){
   try{setBuscando(true);setCot(await request('/api/compras/cotacao-assistida?produtoId='+encodeURIComponent(pid)))
   }catch(e){setErro(e instanceof Error?e.message:'Não foi possível consultar fornecedores')}finally{setBuscando(false)}
  }
- function abrir(i:Item){setAbrirId(i.id);setBuscaProduto('');setFornecedorId('');setCarrinhoId('');setPreco('');setQObra(String((i.destino==='obra'?i.quantidade_necessaria:0)||0));setQEstoque('0');void consultarProduto(i.produto_id)}
+ async function consultarSugestoes(itemId:string){
+  setSugestoes(null)
+  try{setBuscandoSugestoes(true);const resultado:RespostaSugestoes=await request('/api/compras/identificacao-assistida?itemId='+encodeURIComponent(itemId))
+   setSugestoes(resultado)
+  }catch(e){setErro(e instanceof Error?e.message:'Sugestões indisponíveis; escolha manualmente')}
+  finally{setBuscandoSugestoes(false)}
+ }
+ async function confirmarProduto(produtoId:string){
+  if(!selecionado||busy)return
+  const produto=d?.produtos.find(p=>p.id===produtoId)
+  if(!produto)return setErro('Produto não localizado no cadastro. Atualize a lista.')
+  if(!confirm('Confirmar o produto '+(produto.codigo||'sem código')+' · '+produto.nome+' para esta solicitação? A escolha ficará registrada e será usada em sugestões futuras.'))return
+  try{setBusy(true);setErro('');const result=await request('/api/compras/solicitacoes',{
+   method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'identificar',itemId:selecionado.id,produtoId})
+  })
+   setMsg(result.corrigiuSugestaoAnterior?'Produto corrigido e aprendizado atualizado.':'Produto validado pelo comprador. Confirmação registrada para futuras sugestões.')
+   setBuscaProduto('');await carregar();await consultarProduto(produtoId)
+  }catch(e){setErro(e instanceof Error?e.message:'Não foi possível validar produto')}finally{setBusy(false)}
+ }
+ function abrir(i:Item){setAbrirId(i.id);setSugestoes(null);setBuscaProduto('');setFornecedorId('');setCarrinhoId('');setPreco('');setQObra(String((i.destino==='obra'?i.quantidade_necessaria:0)||0));setQEstoque('0');void consultarSugestoes(i.id);void consultarProduto(i.produto_id)}
  async function adicionarCarrinho(){if(!selecionado||!fornecedorId)return setErro('Selecione um fornecedor')
   try{setBusy(true);setErro('');await request('/api/compras/carrinhos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
    itemId:selecionado.id,fornecedorId,carrinhoId:carrinhoId||null,
@@ -200,12 +222,21 @@ export default function ComprasSolicitacoes(){
     {d.historico.some(e=>e.solicitacao_id===s.id)&&<details className="mt-2 text-[11px] text-slate-500"><summary className="cursor-pointer">Histórico de alterações</summary>{d.historico.filter(e=>e.solicitacao_id===s.id).slice(0,30).map(e=><p key={e.id}>{dt(e.created_at)} · {e.autor_nome} · {e.detalhe}</p>)}</details>}
    </article>)}{!d.solicitacoes.length&&<p className="text-sm text-slate-500">Nenhuma solicitação visível para seu perfil.</p>}</div>
   </section>}
-  {comprador&&selecionado&&<section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-bold">Identificar material e escolher fornecedor</h2><p className="text-sm text-slate-600">{selecionado.descricao}</p></div><button className="rounded-lg border px-3 py-1.5 text-xs" onClick={()=>setAbrirId(null)}>Fechar</button></div>
+  {comprador&&selecionado&&<section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-bold">Identificar material e escolher fornecedor</h2><p className="text-sm text-slate-600">{selecionado.descricao}</p></div><button className="rounded-lg border px-3 py-1.5 text-xs" onClick={()=>{setAbrirId(null);setSugestoes(null)}}>Fechar</button></div>
    <div className="grid gap-4 lg:grid-cols-2"><div className="space-y-3"><h3 className="font-semibold">1. Conferir o produto cadastrado</h3>{selecionado.foto_url&&<img src={selecionado.foto_url} alt="Foto enviada na solicitação" className="h-32 w-32 rounded-lg border object-contain"/>}
     <input className="w-full rounded-xl border p-3 text-sm" placeholder="Pesquisar pelo nome ou código" value={buscaProduto} onChange={e=>setBuscaProduto(e.target.value)}/>
-    <p className="text-xs text-slate-500">Sugestões por correspondência de texto. O comprador deve validar; identificação por IA ainda não está ativada.</p>
-    <div className="max-h-64 space-y-1 overflow-auto rounded-xl border p-2">{prodFiltrados.map(p=><button key={p.id} type="button" onClick={()=>{void alterarItem('identificar',selecionado.id,{produtoId:p.id}).then(()=>consultarProduto(p.id));setBuscaProduto('')}} className={'flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs hover:bg-blue-50 '+(p.id===produto?.id?'bg-blue-50':'')}>
-     {p.foto_url?<img src={p.foto_url} alt={p.nome} className="h-12 w-12 rounded border object-contain"/>:<span className="flex h-12 w-12 items-center rounded border border-dashed p-1 text-[9px] text-slate-400">Imagem não cadastrada</span>}
+    <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+     <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-bold text-blue-900">Sugestões inteligentes do catálogo</h4><button disabled={buscandoSugestoes} onClick={()=>void consultarSugestoes(selecionado.id)} className="text-xs font-semibold text-blue-700 underline disabled:opacity-40">Atualizar sugestões</button></div>
+     <p className="mt-1 text-[11px] text-blue-800">Baseadas na descrição e nas escolhas já confirmadas pelos compradores. A foto é apenas referência visual, não análise automática de imagem.</p>
+     {buscandoSugestoes&&<p className="mt-2 text-xs text-blue-700">Procurando produtos relacionados...</p>}
+     {!buscandoSugestoes&&sugestoes?.itemId===selecionado.id&&<div className="mt-3 space-y-2">{sugestoes.sugestoes.map(p=><button key={p.id} type="button" disabled={busy} onClick={()=>void confirmarProduto(p.id)} className="flex w-full items-center gap-3 rounded-lg border border-blue-100 bg-white p-2 text-left text-xs hover:border-blue-400 disabled:opacity-50">
+      {p.foto_url?<img src={p.foto_url} alt={'Foto do produto '+p.nome} className="h-16 w-16 shrink-0 rounded border object-contain"/>:<span className="flex h-16 w-16 shrink-0 items-center justify-center rounded border border-dashed p-1 text-center text-[9px] text-amber-700">Produto sem foto cadastrada</span>}
+      <span className="flex-1"><b className="block">{p.codigo||'Sem código'} · {p.nome}</b><span className="mt-1 block text-slate-500">{p.motivo}</span><span className="mt-1 block font-semibold text-blue-700">{p.origem==='historico_validado'?'Aprendido com validação anterior · ':''}Confirmar este produto</span></span>
+     </button>)}{!sugestoes.sugestoes.length&&<p className="text-xs text-slate-600">Nenhuma sugestão segura encontrada. Utilize a busca manual abaixo ou cadastre o produto com sua foto.</p>}</div>}
+    </div>
+    <p className="text-xs text-slate-500">Busca manual: confirme o código e a foto real. A escolha humana é obrigatória, mesmo quando há uma sugestão aprendida.</p>
+    <div className="max-h-64 space-y-1 overflow-auto rounded-xl border p-2">{prodFiltrados.map(p=><button key={p.id} type="button" disabled={busy} onClick={()=>void confirmarProduto(p.id)} className={'flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs hover:bg-blue-50 '+(p.id===produto?.id?'bg-blue-50':'')}>
+     {p.foto_url?<img src={p.foto_url} alt={p.nome} className="h-12 w-12 rounded border object-contain"/>:<span className="flex h-12 w-12 items-center rounded border border-dashed p-1 text-[9px] text-slate-400">Foto não cadastrada</span>}
      <span><b>{p.codigo||'Sem código'} · {p.nome}</b><span className="block text-slate-500">{p.id===produto?.id?'Produto vinculado — ':'Clique para validar este produto'}</span></span>
     </button>)}</div>
     <p className="text-xs">Não encontrou? <Link href="/cadastro/produtos" className="font-semibold text-blue-700 underline">Abrir cadastro de produtos</Link> e atualize a lista.</p>
