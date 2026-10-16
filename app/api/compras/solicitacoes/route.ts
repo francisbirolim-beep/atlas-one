@@ -36,8 +36,8 @@ export async function GET(req:NextRequest){
  const u=await autenticarCompras(req);if(!u)return falha('Sessão inválida',401)
  try{
   const a=await obterComprasAcessos(u)
-  const todos=a.consultar||a.editarTodos||a.cotar
-  const meus=a.verProprios||a.editarProprios
+  const todos=a.consultar||a.editarTodos||a.cotar||a.comprar||a.aprovar
+  const meus=a.verProprios||a.editarProprios||a.solicitar
   if(!todos&&!meus){
    // Solicitar somente: mostrar apenas o cadastro mínimo para selecionar cliente/obra.
    // Não expor pedidos, valores, fornecedores nem catálogo do comprador.
@@ -60,7 +60,7 @@ export async function GET(req:NextRequest){
    ids.length?db.from('compras_solicitacao_itens').select('*').eq('empresa_id',u.empresa_id).in('solicitacao_id',ids).order('ordem').limit(4000):Promise.resolve({data:[],error:null}),
    apenasProprios?(clientesIds.length?db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).in('id',clientesIds):Promise.resolve({data:[],error:null})):db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).order('nome').limit(3000),
    apenasProprios?(obrasIds.length?db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).in('id',obrasIds):Promise.resolve({data:[],error:null})):db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).order('nome').limit(4000),
-   apenasProprios?Promise.resolve({data:[],error:null}):db.from('produtos').select('id,codigo,nome,categoria,unidade,foto_url').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(5000),
+   !todos?Promise.resolve({data:[],error:null}):db.from('produtos').select('id,codigo,nome,categoria,unidade,foto_url').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(5000),
    todos?db.from('fornecedores').select('id,nome,pedido_minimo').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(2000):Promise.resolve({data:[],error:null}),
   ])
   for(const r of [itensR,clientesR,obrasR,produtosR,fornecedoresR])if(r.error)throw r.error
@@ -73,6 +73,18 @@ export async function GET(req:NextRequest){
    const extrasObras=[...new Set((itensR.data||[]).map(i=>i.obra_id).filter(Boolean))].filter(id=>!obrasIds.includes(id))
    if(extrasClientes.length){const {data,error}=await db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).in('id',extrasClientes);if(error)throw error;extrasClientesDados=data||[]}
    if(extrasObras.length){const {data,error}=await db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).in('id',extrasObras);if(error)throw error;extrasObrasDados=data||[]}
+  }
+  // Solicitante vê só imagens do produto associado aos próprios pedidos, não o catálogo completo.
+  // A lista de perfis/acessórios mantém foto real mesmo para quem só acompanha a solicitação.
+  let produtosProprios:Array<{id:string;codigo:string|null;nome:string;categoria:string|null;unidade:string|null;foto_url:string|null}>=[]
+  if(!todos){
+   const produtoIds=[...new Set((itensR.data||[]).map(i=>i.produto_id).filter(Boolean))]
+   if(produtoIds.length){
+    const {data,error}=await db.from('produtos').select('id,codigo,nome,categoria,unidade,foto_url')
+     .eq('empresa_id',u.empresa_id).eq('ativo',true).in('id',produtoIds)
+    if(error)throw error
+    produtosProprios=data||[]
+   }
   }
   const itemIds=(itensR.data||[]).map(x=>x.id)
   const [historicoR,linhasR]=await Promise.all([
@@ -94,7 +106,7 @@ export async function GET(req:NextRequest){
   const podeFinanceiro=a.financeiro||a.cotar||a.comprar
   return NextResponse.json({acessos:a,usuarioId:u.id,solicitacoes:solicitacoes||[],
    itens:(itensR.data||[]).map(i=>({...i,foto_url:fotos[i.id]||null})),
-   historico:(historicoR.data||[]).map(h=>({id:h.id,item_id:h.item_id,solicitacao_id:h.solicitacao_id,acao:h.acao,entidade:h.entidade,created_at:h.created_at,autor_nome:h.usuario_id?nomesHist.get(h.usuario_id)||'Usuário':'Sistema',detalhe:resumoAuditoria(h)})),clientes:[...(clientesR.data||[]),...extrasClientesDados],obras:[...(obrasR.data||[]),...extrasObrasDados],produtos:produtosR.data||[],
+   historico:(historicoR.data||[]).map(h=>({id:h.id,item_id:h.item_id,solicitacao_id:h.solicitacao_id,acao:h.acao,entidade:h.entidade,created_at:h.created_at,autor_nome:h.usuario_id?nomesHist.get(h.usuario_id)||'Usuário':'Sistema',detalhe:resumoAuditoria(h)})),clientes:[...(clientesR.data||[]),...extrasClientesDados],obras:[...(obrasR.data||[]),...extrasObrasDados],produtos:todos?(produtosR.data||[]):produtosProprios,
    fornecedores:(fornecedoresR.data||[]).map(f=>({...f,pedido_minimo:podeFinanceiro?f.pedido_minimo:null})),
    carrinhos:(carrinhosR.data||[]).map(c=>podeFinanceiro?c:{...c,numero_pedido:null}),
    linhas:(linhasR.data||[]).map(l=>podeFinanceiro?l:{...l,preco_unitario:null})
@@ -176,6 +188,23 @@ export async function PATCH(req:NextRequest){
   const form=multipart?await req.formData():null
   const b=form?JSON.parse(str(form.get('payload'),20000)):await req.json().catch(()=>null)
 
+  if(b?.acao==='cancelar_pedido'){
+   const sid=str(b.solicitacaoId,80)
+   if(!uuid.test(sid))return falha('Pedido inválido')
+   const {data:sol,error:eSol}=await db.from('compras_solicitacoes')
+    .select('id,solicitante_id').eq('empresa_id',u.empresa_id).eq('id',sid).maybeSingle()
+   if(eSol)throw eSol
+   if(!sol)return falha('Pedido não encontrado',404)
+   if(!(a.editarTodos||a.editarProprios&&sol.solicitante_id===u.id))
+    return falha('Sem permissão para excluir este pedido',403)
+   const motivo=str(b.motivo,250)
+   if(motivo.length<3)return falha('Informe um motivo para registrar no histórico')
+   const {data:resultado,error:eCancela}=await db.rpc('cancelar_solicitacao_compras_v1',{
+    p_empresa:u.empresa_id,p_usuario:u.id,p_solicitacao:sid,p_motivo:motivo,p_editar_todos:a.editarTodos
+   })
+   if(eCancela){console.error('[compras cancelar pedido]',eCancela);return falha('Não foi possível excluir o pedido. Nenhum registro deve ser apagado.',409)}
+   return NextResponse.json(resultado)
+  }
   if(!b||!uuid.test(str(b.itemId,80)))return falha('Item inválido')
   const {data:item,error:ei}=await db.from('compras_solicitacao_itens').select('id,solicitacao_id,status,produto_id,descricao,categoria,quantidade_necessaria,destino,cliente_id,obra_id,foto_path')
    .eq('empresa_id',u.empresa_id).eq('id',b.itemId).maybeSingle()

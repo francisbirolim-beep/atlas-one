@@ -4,12 +4,13 @@ import Link from 'next/link'
 import {tokenAtual} from '@/lib/auth'
 import {calcularPedidoMinimo} from '@/lib/comprasCotacaoAssistida'
 import type {ComprasAcessos} from '@/lib/comprasPermissoesServer'
+import CarrinhosFluxoAprovado from '@/components/compras/CarrinhosFluxoAprovado'
 
 type Cliente={id:string;nome:string}
 type Obra={id:string;cliente_id:string;nome:string}
 type Produto={id:string;codigo:string|null;nome:string;categoria:string|null;unidade:string|null;foto_url:string|null}
 type Fornecedor={id:string;nome:string;pedido_minimo:number|null}
-type Sol={id:string;solicitante_id:string;solicitante_nome:string;destino:'obra'|'estoque';cliente_id:string|null;obra_id:string|null;status:string;created_at:string}
+type Sol={id:string;solicitante_id:string;solicitante_nome:string;destino:'obra'|'estoque';cliente_id:string|null;obra_id:string|null;status:string;created_at:string;observacoes?:string|null}
 type Item={id:string;solicitacao_id:string;ordem:number;destino:'obra'|'estoque';cliente_id:string|null;obra_id:string|null;categoria:string;descricao:string;quantidade_necessaria:number|null;unidade:string;produto_id:string|null;status:string;foto_url:string|null;identificacao_status:string}
 type Cart={id:string;fornecedor_id:string;status:string;pedido_emitido_em:string|null;created_at:string}
 type CartLine={id:string;carrinho_id:string;item_id:string;quantidade_obra:number;quantidade_estoque:number;preco_unitario:number|null}
@@ -37,14 +38,45 @@ const moeda=(v:number|null|undefined)=>v==null?'Não informado':Number(v).toLoca
 const dt=(s:string|null)=>s?new Date(s).toLocaleDateString('pt-BR'):'—'
 const stat=(s:string)=>({aguardando_validacao:'Aguardando validação',em_cotacao:'Em cotação',aguardando_minimo:'Aguardando pedido mínimo',comprado:'Comprado',aguardando_entrega:'Aguardando entrega',recebido_parcial:'Recebido parcial',recebido:'Recebido',cancelado:'Cancelado',rascunho:'Carrinho aberto',pedido_emitido:'Pedido comprado'}[s]||s)
 const categorias=[['perfil','Perfil'],['acessorio','Acessório'],['vidro','Vidro'],['produto_pronto','Produto pronto'],['outros','Outros']]
+const situacoesNecessidade=[
+ {id:'aguardando',titulo:'Aguardando análise',classe:'border-rose-200 bg-rose-50',borda:'border-l-rose-400'},
+ {id:'cotacao',titulo:'Em cotação',classe:'border-blue-200 bg-blue-50',borda:'border-l-blue-400'},
+ {id:'aprovacao',titulo:'Aguardando pedido mínimo',classe:'border-amber-200 bg-amber-50',borda:'border-l-amber-400'},
+ {id:'comprado',titulo:'Comprado / aguardando entrega',classe:'border-indigo-200 bg-indigo-50',borda:'border-l-indigo-400'},
+ {id:'recebido',titulo:'Recebido',classe:'border-emerald-200 bg-emerald-50',borda:'border-l-emerald-400'},
+ {id:'cancelado',titulo:'Cancelado / histórico',classe:'border-slate-200 bg-slate-50',borda:'border-l-slate-400'},
+] as const
+function statusColuna(s:string){
+ if(s==='aguardando_validacao')return 'aguardando'
+ if(s==='em_cotacao')return 'cotacao'
+ if(s==='aguardando_minimo')return 'aprovacao'
+ if(['comprado','aguardando_entrega'].includes(s))return 'comprado'
+ if(['recebido_parcial','recebido'].includes(s))return 'recebido'
+ return 'cancelado'
+}
+const colunasFornecedor=[
+ {id:'montagem',titulo:'Em montagem',cor:'bg-amber-50 border-amber-200'},
+ {id:'pronto',titulo:'Pronto para enviar',cor:'bg-emerald-50 border-emerald-200'},
+ {id:'comprado',titulo:'Pedido emitido / aguardando chegada',cor:'bg-blue-50 border-blue-200'},
+ {id:'recebido',titulo:'Recebido',cor:'bg-teal-50 border-teal-200'}
+] as const
+function statusFornecedor(status:string,atingiu:boolean){
+ if(['recebido','recebido_parcial'].includes(status))return 'recebido'
+ if(['pedido_emitido','aguardando_entrega'].includes(status))return 'comprado'
+ return atingiu?'pronto':'montagem'
+}
+
 
 export default function ComprasSolicitacoes(){
  const [d,setD]=useState<Payload|null>(null),[busy,setBusy]=useState(false),[erro,setErro]=useState(''),[msg,setMsg]=useState('')
  const [destino,setDestino]=useState<'obra'|'estoque'>('estoque'),[clienteId,setClienteId]=useState(''),[obraId,setObraId]=useState('')
  const [itens,setItens]=useState<NovoItem[]>([novo()]),[revisar,setRevisar]=useState(false)
+ const [abaPedido,setAbaPedido]=useState<'itens'|'observacoes'|'historico'>('itens')
  const [abrirId,setAbrirId]=useState<string|null>(null),[buscaProduto,setBuscaProduto]=useState('')
+ const [visaoSolicitacoes,setVisaoSolicitacoes]=useState<'kanban'|'lista'>('kanban'),[pedidoAberto,setPedidoAberto]=useState<string|null>(null),[visaoCompras,setVisaoCompras]=useState<'fornecedor'|'cliente'|'lista'>('fornecedor')
  const [qObra,setQObra]=useState(''),[qEstoque,setQEstoque]=useState(''),[preco,setPreco]=useState(''),[fornecedorId,setFornecedorId]=useState(''),[carrinhoId,setCarrinhoId]=useState('')
  const [cot,setCot]=useState<Cotacao|null>(null),[buscando,setBuscando]=useState(false)
+ const [abaProduto,setAbaProduto]=useState<'fornecedores'|'historico'|'estoque'|'informacoes'>('fornecedores')
  const [sugestoes,setSugestoes]=useState<RespostaSugestoes|null>(null),[buscandoSugestoes,setBuscandoSugestoes]=useState(false)
  const [editando,setEditando]=useState<string|null>(null),[editDesc,setEditDesc]=useState(''),[editQtd,setEditQtd]=useState(''),[editDestino,setEditDestino]=useState<'obra'|'estoque'>('estoque'),[editCliente,setEditCliente]=useState(''),[editObra,setEditObra]=useState(''),[editCategoria,setEditCategoria]=useState('acessorio'),[editFoto,setEditFoto]=useState<File|null>(null)
  const request=useCallback(async(url:string,init?:RequestInit)=>{
@@ -60,8 +92,8 @@ export default function ComprasSolicitacoes(){
  const selecionado=d?.itens.find(i=>i.id===abrirId)
  const obra=d?.obras.filter(o=>o.cliente_id===clienteId)||[]
  const produto=d?.produtos.find(p=>p.id===selecionado?.produto_id)
- const meus=d?.acessos?.verProprios||d?.acessos?.editarProprios
- const comprador=!!(d?.acessos?.cotar||d?.acessos?.comprar)
+ const meus=d?.acessos?.verProprios||d?.acessos?.editarProprios||d?.acessos?.solicitar
+ const comprador=!!(d?.acessos?.cotar||d?.acessos?.comprar||d?.acessos?.aprovar)
  const prodFiltrados=useMemo(()=>d?.produtos.filter(p=>(p.nome+' '+p.codigo).toLowerCase().includes(buscaProduto.toLowerCase())).slice(0,30)||[],[d?.produtos,buscaProduto])
  const linhasCart=useMemo(()=>new Map((d?.carrinhos||[]).map(c=>[c.id,(d?.linhas||[]).filter(l=>l.carrinho_id===c.id)])),[d?.carrinhos,d?.linhas])
  async function enviar(){
@@ -117,7 +149,7 @@ export default function ComprasSolicitacoes(){
    setBuscaProduto('');await carregar();await consultarProduto(produtoId)
   }catch(e){setErro(e instanceof Error?e.message:'Não foi possível validar produto')}finally{setBusy(false)}
  }
- function abrir(i:Item){setAbrirId(i.id);setSugestoes(null);setBuscaProduto('');setFornecedorId('');setCarrinhoId('');setPreco('');setQObra(String((i.destino==='obra'?i.quantidade_necessaria:0)||0));setQEstoque('0');void consultarSugestoes(i.id);void consultarProduto(i.produto_id)}
+ function abrir(i:Item){setAbaProduto('fornecedores');setAbrirId(i.id);setSugestoes(null);setBuscaProduto('');setFornecedorId('');setCarrinhoId('');setPreco('');setQObra(String((i.destino==='obra'?i.quantidade_necessaria:0)||0));setQEstoque('0');void consultarSugestoes(i.id);void consultarProduto(i.produto_id)}
  async function adicionarCarrinho(){if(!selecionado||!fornecedorId)return setErro('Selecione um fornecedor')
   try{setBusy(true);setErro('');await request('/api/compras/carrinhos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
    itemId:selecionado.id,fornecedorId,carrinhoId:carrinhoId||null,
@@ -125,6 +157,18 @@ export default function ComprasSolicitacoes(){
   })});setMsg('Item incluído no carrinho do fornecedor');await carregar()
   }catch(e){setErro(e instanceof Error?e.message:'Erro ao adicionar')}
   finally{setBusy(false)}
+ }
+ async function cancelarPedido(s:Sol){
+  if(!(d?.acessos.editarTodos||d?.acessos.editarProprios&&s.solicitante_id===d.usuarioId))return setErro('Sem permissão para excluir o pedido')
+  const motivo=prompt('Motivo para excluir o pedido completo (histórico permanente):','Pedido solicitado incorretamente')
+  if(motivo===null)return
+  if(motivo.trim().length<3)return setErro('Informe o motivo da exclusão')
+  if(!confirm('Confirma cancelar todos os itens deste pedido? O registro permanecerá no histórico. Itens já em carrinho ou compra serão enviados para revisão, sem estornar estoque.'))return
+  try{setBusy(true);setErro('');const resposta=await request('/api/compras/solicitacoes',{
+   method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'cancelar_pedido',solicitacaoId:s.id,motivo})
+  })
+   setMsg(resposta.aviso||'Pedido cancelado com histórico preservado.');await carregar()
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao cancelar pedido')}finally{setBusy(false)}
  }
  async function comprarCart(id:string){
   if(!confirm('Confirmar que o pedido de compra foi emitido para o fornecedor? Isso não registra entrega nem entrada em estoque.'))return
@@ -189,9 +233,28 @@ export default function ComprasSolicitacoes(){
       <button disabled={busy} onClick={()=>void enviar()} className="rounded-lg bg-emerald-700 px-4 py-2 font-bold text-white disabled:opacity-40">{busy?'Enviando...':'Confirmar e enviar um pedido com '+itens.length+' item(ns)'}</button>
     </div>}
    </section>}
-  {(d?.acessos?.consultar||meus||comprador)&&<section className="rounded-2xl border bg-white p-5 shadow-sm"><h2 className="mb-2 text-lg font-bold">{d.acessos.consultar||comprador?'Lista de faltas e solicitações':'Minhas solicitações'}</h2><p className="mb-3 text-xs text-slate-500">Cada solicitação agrupa seus materiais. Cancelamentos e alterações preservam o histórico.</p>
-   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{d.solicitacoes.map(s=><article key={s.id} className="rounded-xl border p-3"><div className="flex items-center justify-between gap-2"><strong className="text-sm">{'Pedido de compra · '+d.itens.filter(i=>i.solicitacao_id===s.id).length+' item(ns)'}</strong><span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] text-blue-700">{stat(s.status)}</span></div><p className="my-2 text-xs text-slate-500">Solicitado por {s.solicitante_nome} · {dt(s.created_at)}</p>
-    {(d.itens.filter(i=>i.solicitacao_id===s.id)).map(i=><div key={i.id} className="border-t py-2"><div className="flex gap-2">{(i.foto_url||d.produtos.find(p=>p.id===i.produto_id)?.foto_url)?<img src={i.foto_url||d.produtos.find(p=>p.id===i.produto_id)?.foto_url||''} alt={i.descricao} className="h-12 w-12 rounded border object-contain"/>:<div className="flex h-12 w-12 items-center rounded border border-dashed p-1 text-[9px] text-slate-400">Foto pendente</div>}
+  {(d?.acessos?.consultar||meus||comprador)&&<section id="lista-necessidades" className="rounded-2xl border bg-white p-5 shadow-sm">
+   <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold">{d.acessos.consultar||comprador?'Lista de Compra / Necessidades':'Minhas solicitações'}</h2><p className="text-xs text-slate-500">Um card por pedido, vários materiais e destinos diferentes. Clique no card para abrir itens, observações e histórico.</p></div>
+    <div className="flex rounded-xl border bg-slate-100 p-1 text-xs font-semibold"><button onClick={()=>{setVisaoSolicitacoes('kanban');setPedidoAberto(null)}} className={'rounded-lg px-3 py-2 '+(visaoSolicitacoes==='kanban'?'bg-white text-blue-700 shadow-sm':'text-slate-500')}>Kanban</button><button onClick={()=>{setVisaoSolicitacoes('lista');setPedidoAberto(null)}} className={'rounded-lg px-3 py-2 '+(visaoSolicitacoes==='lista'?'bg-white text-blue-700 shadow-sm':'text-slate-500')}>Lista</button></div>
+   </div>
+   {visaoSolicitacoes==='kanban'&&<div className="flex gap-3 overflow-x-auto pb-3">{situacoesNecessidade.filter(c=>c.id!=='cancelado'||d.solicitacoes.some(s=>statusColuna(s.status)==='cancelado')).map(c=>{
+    const pedidos=d.solicitacoes.filter(s=>statusColuna(s.status)===c.id)
+    return <div key={c.id} className={'min-w-[215px] flex-1 rounded-xl border p-2 '+c.classe}><div className="mb-3 flex items-center justify-between gap-2 p-1"><h3 className="text-xs font-bold">{c.titulo}</h3><span className="rounded-full bg-white px-2 py-1 text-xs font-semibold">{pedidos.length}</span></div>
+     <div className="space-y-2">{pedidos.map(s=>{const iss=d.itens.filter(i=>i.solicitacao_id===s.id),primeiro=iss.find(i=>i.destino==='obra')
+      const lugar=primeiro?(d.clientes.find(c=>c.id===primeiro.cliente_id)?.nome||'Cliente')+' / '+(d.obras.find(o=>o.id===primeiro.obra_id)?.nome||'Obra'):'Estoque'
+      return <button key={s.id} type="button" onClick={()=>{setPedidoAberto(s.id);setAbaPedido('itens');setVisaoSolicitacoes('lista')}} className={'w-full rounded-lg border border-l-4 bg-white p-3 text-left shadow-sm transition hover:shadow-md '+c.borda}>
+       <b className="block truncate text-xs">{lugar}</b><span className="mt-1 block text-[11px] text-slate-600">{iss.length} material(is) · {dt(s.created_at)}</span><span className="mt-1 block text-[11px] text-slate-500">Solicitado por {s.solicitante_nome}</span>
+       <div className="mt-2 space-y-1 border-t pt-2">{iss.slice(0,3).map(i=><div className="flex items-center gap-2" key={i.id}>{i.foto_url||d.produtos.find(p=>p.id===i.produto_id)?.foto_url?<img alt={'Foto '+i.descricao} src={i.foto_url||d.produtos.find(p=>p.id===i.produto_id)?.foto_url||''} className="h-7 w-7 shrink-0 rounded border object-contain"/>:<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-dashed text-center text-[7px] text-amber-600">Sem foto</span>}<span className="truncate text-[10px]">{i.descricao}</span></div>)}{iss.length>3&&<p className="text-[10px] text-slate-500">+ {iss.length-3} materiais</p>}</div><span className="mt-2 block text-[11px] font-semibold text-blue-700">Abrir pedido →</span>
+      </button>})}{!pedidos.length&&<p className="rounded-lg border border-dashed border-slate-200 bg-white/80 p-3 text-center text-xs text-slate-400">Nenhum pedido</p>}</div>
+    </div>
+   })}</div>}
+   {visaoSolicitacoes==='lista'&&<>{pedidoAberto&&<button className="mb-3 rounded-lg border px-3 py-2 text-xs font-semibold text-blue-700" onClick={()=>{setPedidoAberto(null);setVisaoSolicitacoes('kanban')}}>← Voltar ao Kanban de necessidades</button>}
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{d.solicitacoes.filter(s=>!pedidoAberto||s.id===pedidoAberto).map(s=><article key={s.id} className="rounded-xl border p-3"><div className="flex items-center justify-between gap-2"><strong className="text-sm">{'Pedido de compra · '+d.itens.filter(i=>i.solicitacao_id===s.id).length+' item(ns)'}</strong><span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] text-blue-700">{stat(s.status)}</span></div><p className="my-2 text-xs text-slate-500">Solicitado por {s.solicitante_nome} · {dt(s.created_at)}</p>
+    {(d.acessos.editarTodos||d.acessos.editarProprios&&s.solicitante_id===d.usuarioId)&&<div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2"><span className="w-full text-[11px] font-medium text-slate-600">Ações do pedido completo</span><button onClick={()=>{const i=d.itens.find(i=>i.solicitacao_id===s.id&&i.status==='ativo');if(!i)return;setEditando(i.id);setEditDesc(i.descricao);setEditQtd(i.quantidade_necessaria==null?'':String(i.quantidade_necessaria));setEditDestino(i.destino);setEditCliente(i.cliente_id||'');setEditObra(i.obra_id||'');setEditCategoria(i.categoria);setEditFoto(null);setPedidoAberto(s.id)}} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800">Editar pedido (por item)</button><button disabled={busy||d.itens.every(i=>i.solicitacao_id!==s.id||i.status!=='ativo')} onClick={()=>void cancelarPedido(s)} className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 disabled:opacity-40">Excluir pedido completo</button></div>}
+    <div className="mb-3 flex border-b text-xs font-semibold">{([['itens','Itens ('+d.itens.filter(i=>i.solicitacao_id===s.id).length+')'],['observacoes','Observações'],['historico','Histórico']] as const).map(([aba,texto])=><button key={aba} type="button" onClick={()=>setAbaPedido(aba)} className={'border-b-2 px-3 py-2 '+(abaPedido===aba?'border-blue-600 text-blue-700':'border-transparent text-slate-500')}>{texto}</button>)}</div>
+    {abaPedido==='observacoes'&&<div className="rounded-lg bg-slate-50 p-4 text-xs text-slate-600">{s.observacoes||'Nenhuma observação registrada neste pedido.'}</div>}
+    {abaPedido==='historico'&&<div className="space-y-2 rounded-lg bg-slate-50 p-3">{d.historico.filter(e=>e.solicitacao_id===s.id).map(e=><div className="border-b py-1 text-[11px]" key={e.id}><b>{dt(e.created_at)} · {e.autor_nome}</b><p>{e.detalhe}</p></div>)}{!d.historico.some(e=>e.solicitacao_id===s.id)&&<p className="text-xs text-slate-500">Nenhum evento registrado.</p>}</div>}
+    {abaPedido==='itens'&&<div>{(d.itens.filter(i=>i.solicitacao_id===s.id)).map(i=><div key={i.id} className="border-t py-2"><div className="flex gap-2">{(i.foto_url||d.produtos.find(p=>p.id===i.produto_id)?.foto_url)?<img src={i.foto_url||d.produtos.find(p=>p.id===i.produto_id)?.foto_url||''} alt={i.descricao} className="h-12 w-12 rounded border object-contain"/>:<div className="flex h-12 w-12 items-center rounded border border-dashed p-1 text-[9px] text-slate-400">Foto pendente</div>}
      <div className="min-w-0 flex-1"><p className="text-xs font-semibold">{i.descricao}</p><p className="text-[11px] text-slate-500">{i.categoria} · {i.quantidade_necessaria||'Quantidade a definir'} {i.unidade} · {i.destino==='estoque'?'Estoque':(d.clientes.find(c=>c.id===i.cliente_id)?.nome||'Cliente')+' / '+(d.obras.find(o=>o.id===i.obra_id)?.nome||'Obra')} {i.status==='cancelado'?'· Excluído':i.status==='cancelamento_solicitado'?' · Exclusão pendente':''}</p></div></div>
      {(d.acessos.consultar||comprador)&&d.linhas.filter(l=>l.item_id===i.id).map(l=>{
       const ca=d.carrinhos.find(c=>c.id===l.carrinho_id)
@@ -218,11 +281,11 @@ export default function ComprasSolicitacoes(){
        <FotoItem foto={editFoto}/>
        <button disabled={busy} className="rounded bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40" onClick={()=>void alterarItem('editar',i.id,{categoria:editCategoria,descricao:editDesc,quantidade_necessaria:editQtd||null,destino:editDestino,cliente_id:editDestino==='obra'?editCliente:null,obra_id:editDestino==='obra'?editObra:null})}>Salvar alterações com histórico</button>
        <button className="ml-2 text-xs" onClick={()=>setEditando(null)}>Voltar</button></div>}
-    </div>)}
-    {d.historico.some(e=>e.solicitacao_id===s.id)&&<details className="mt-2 text-[11px] text-slate-500"><summary className="cursor-pointer">Histórico de alterações</summary>{d.historico.filter(e=>e.solicitacao_id===s.id).slice(0,30).map(e=><p key={e.id}>{dt(e.created_at)} · {e.autor_nome} · {e.detalhe}</p>)}</details>}
-   </article>)}{!d.solicitacoes.length&&<p className="text-sm text-slate-500">Nenhuma solicitação visível para seu perfil.</p>}</div>
+    </div>)}</div>}
+    {abaPedido==='itens'&&d.historico.some(e=>e.solicitacao_id===s.id)&&<details className="mt-2 text-[11px] text-slate-500"><summary className="cursor-pointer">Últimas alterações deste pedido</summary>{d.historico.filter(e=>e.solicitacao_id===s.id).slice(0,30).map(e=><p key={e.id}>{dt(e.created_at)} · {e.autor_nome} · {e.detalhe}</p>)}</details>}
+   </article>)}{!d.solicitacoes.length&&<p className="text-sm text-slate-500">Nenhuma solicitação visível para seu perfil.</p>}</div></>}
   </section>}
-  {comprador&&selecionado&&<section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-bold">Identificar material e escolher fornecedor</h2><p className="text-sm text-slate-600">{selecionado.descricao}</p></div><button className="rounded-lg border px-3 py-1.5 text-xs" onClick={()=>{setAbrirId(null);setSugestoes(null)}}>Fechar</button></div>
+  {comprador&&selecionado&&<section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-bold">Card do produto / Escolha do fornecedor</h2><p className="text-sm text-slate-600">{selecionado.descricao}</p></div><button className="rounded-lg border px-3 py-1.5 text-xs" onClick={()=>{setAbrirId(null);setSugestoes(null)}}>Fechar</button></div>
    <div className="grid gap-4 lg:grid-cols-2"><div className="space-y-3"><h3 className="font-semibold">1. Conferir o produto cadastrado</h3>{selecionado.foto_url&&<img src={selecionado.foto_url} alt="Foto enviada na solicitação" className="h-32 w-32 rounded-lg border object-contain"/>}
     <input className="w-full rounded-xl border p-3 text-sm" placeholder="Pesquisar pelo nome ou código" value={buscaProduto} onChange={e=>setBuscaProduto(e.target.value)}/>
     <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
@@ -243,24 +306,21 @@ export default function ComprasSolicitacoes(){
    </div><div className="space-y-3"><h3 className="font-semibold">2. Estoque e fornecedores</h3>
     {!selecionado.produto_id||selecionado.identificacao_status!=='validado'?<p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">O produto precisa de identificação validada antes da compra.</p>:null}
     {buscando&&<p className="text-sm">Consultando estoque e fornecedores...</p>}
-    {cot&&<><div className="rounded-xl border bg-slate-50 p-3 text-sm"><b>Estoque físico: {cot.estoque.fisico}</b> · Reservado: {cot.estoque.reservado} · Disponível: {cot.estoque.disponivel}</div><p className="text-xs font-semibold">Fornecedores relacionados ({cot.fornecedores.length})</p>
-     <div className="max-h-64 space-y-2 overflow-auto">{cot.fornecedores.map(f=><button key={f.id} type="button" className={'block w-full rounded-xl border p-3 text-left text-xs '+(fornecedorId===f.id?'border-blue-500 bg-blue-50':'')} onClick={()=>{setFornecedorId(f.id);setCarrinhoId('');setPreco(String(f.ultimoPrecoPago??f.precoCatalogo??''))}}><b>{f.nome}{f.preferencial?' · Preferencial':''}</b><p>Última compra: {dt(f.ultimaCompra)} · Preço pago: {moeda(f.ultimoPrecoPago)}</p><p>Pedido mínimo: {moeda(f.pedidoMinimo)}</p></button>)}{!cot.fornecedores.length&&<p className="text-xs">Nenhum fornecedor vinculado: selecione ou cadastre um abaixo.</p>}</div></>}
+    <div className="flex items-center gap-3 rounded-xl border p-3">{produto?.foto_url||selecionado.foto_url?<img src={produto?.foto_url||selecionado.foto_url||''} alt={'Foto real do produto '+selecionado.descricao} className="h-20 w-20 shrink-0 rounded-lg border object-contain"/>:<span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border border-dashed text-center text-[10px] text-amber-700">Foto pendente no cadastro</span>}
+     <div className="text-xs"><b className="text-sm">{produto?.nome||selecionado.descricao}</b><p className="text-slate-500">Código: {produto?.codigo||'Aguardando validação'}</p><p>Categoria: {categorias.find(x=>x[0]===selecionado.categoria)?.[1]||selecionado.categoria}</p><p>Quantidade necessária: {selecionado.quantidade_necessaria||'A definir'} {selecionado.unidade}</p></div></div>
+    <div className="flex flex-wrap gap-1 rounded-xl border bg-slate-100 p-1">{([['fornecedores','Fornecedores'],['historico','Histórico de compras'],['estoque','Estoque'],['informacoes','Informações']] as const).map(([valor,nome])=><button key={valor} type="button" onClick={()=>setAbaProduto(valor)} className={'rounded-lg px-2.5 py-2 text-xs font-semibold '+(abaProduto===valor?'bg-white text-blue-700 shadow-sm':'text-slate-600')}>{nome}</button>)}</div>
+    {abaProduto==='fornecedores'&&cot&&<div className="overflow-auto rounded-xl border"><table className="w-full min-w-[420px] text-left text-xs"><thead className="bg-slate-50"><tr>{['Fornecedor','Última compra','Último valor','Pedido mínimo','Selecionar'].map(t=><th className="p-2" key={t}>{t}</th>)}</tr></thead><tbody>{cot.fornecedores.map(f=><tr key={f.id} className={'border-t '+(fornecedorId===f.id?'bg-blue-50':'')}><td className="p-2 font-semibold">{f.nome}{f.preferencial?' ★':''}</td><td className="p-2">{dt(f.ultimaCompra)}</td><td className="p-2">{moeda(f.ultimoPrecoPago)}</td><td className="p-2">{moeda(f.pedidoMinimo)}</td><td className="p-2"><button type="button" className="rounded-lg border border-blue-200 px-2 py-1 font-semibold text-blue-700" onClick={()=>{setFornecedorId(f.id);setCarrinhoId('');setPreco(String(f.ultimoPrecoPago??f.precoCatalogo??''))}}>{fornecedorId===f.id?'Selecionado':'Escolher'}</button></td></tr>)}{!cot.fornecedores.length&&<tr><td colSpan={5} className="p-4 text-center text-slate-500">Sem fornecedor vinculado. Escolha ou cadastre abaixo.</td></tr>}</tbody></table></div>}
+    {abaProduto==='historico'&&<div className="rounded-xl border p-3 text-xs">{cot?.fornecedores?.filter(f=>f.ultimaCompra).length?cot.fornecedores.filter(f=>f.ultimaCompra).map(f=><p key={f.id} className="border-b py-2"><b>{f.nome}</b> · Última compra {dt(f.ultimaCompra)} · Valor pago {moeda(f.ultimoPrecoPago)}</p>):<p className="text-slate-500">Não há histórico de compra vinculado ao produto.</p>}</div>}
+    {abaProduto==='estoque'&&<div className="rounded-xl border bg-blue-50 p-4 text-xs"><b>Estoque físico: {cot?.estoque.fisico??'Não identificado'}</b><p className="mt-1">Reservado: {cot?.estoque.reservado??0} · Disponível: {cot?.estoque.disponivel??'—'}</p><p className="mt-2 text-slate-600">Consulta informativa. Não movimenta nem reserva materiais.</p></div>}
+    {abaProduto==='informacoes'&&<div className="rounded-xl border p-3 text-xs"><b>{produto?.codigo||'Sem código'} · {produto?.nome||selecionado.descricao}</b><p>Categoria: {selecionado.categoria} · Unidade {selecionado.unidade}</p><p>Solicitado: {selecionado.destino==='obra'?(d.clientes.find(x=>x.id===selecionado.cliente_id)?.nome||'Cliente')+' / '+(d.obras.find(x=>x.id===selecionado.obra_id)?.nome||'Obra'):'Estoque'}</p><p className="mt-2 text-amber-700">Confira código e imagem real antes de confirmar.</p></div>}
     <label className="block text-xs font-semibold">Fornecedor<select className="mt-1 w-full rounded-lg border p-2" value={fornecedorId} onChange={e=>{setFornecedorId(e.target.value);setCarrinhoId('');setPreco('')}}><option value="">Selecionar</option>{d.fornecedores.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}</select></label><Link href="/cadastro/fornecedores" className="text-xs font-semibold text-blue-700 underline">+ Cadastrar fornecedor, se não existir</Link>
     <label className="block text-xs">Usar carrinho existente deste fornecedor<select className="mt-1 w-full rounded-lg border p-2" value={carrinhoId} onChange={e=>setCarrinhoId(e.target.value)}><option value="">Criar carrinho novo</option>{d.carrinhos.filter(c=>c.fornecedor_id===fornecedorId&&c.status==='rascunho').map(c=><option key={c.id} value={c.id}>Carrinho {c.id.slice(0,8)} · {dt(c.created_at)}</option>)}</select></label>
     <div className="grid grid-cols-3 gap-2"><label className="text-xs">Qtde. obra<input className="mt-1 w-full rounded-lg border p-2" type="number" min="0" step="any" value={qObra} onChange={e=>setQObra(e.target.value)}/></label><label className="text-xs">Extra estoque<input className="mt-1 w-full rounded-lg border p-2" type="number" min="0" step="any" value={qEstoque} onChange={e=>setQEstoque(e.target.value)}/></label><label className="text-xs">Preço unitário<input className="mt-1 w-full rounded-lg border p-2" type="number" min="0" step="0.01" value={preco} onChange={e=>setPreco(e.target.value)}/></label></div>
     <button disabled={busy||!selecionado.produto_id||selecionado.identificacao_status!=='validado'} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" onClick={()=>void adicionarCarrinho()}>Adicionar ao carrinho do fornecedor</button>
    </div></div>
   </section>}
-  {comprador&&<section className="rounded-2xl border bg-white p-5 shadow-sm"><h2 className="mb-1 text-lg font-bold">Carrinhos por fornecedor</h2><p className="mb-3 text-xs text-slate-500">Vermelho: abaixo de 80% do mínimo · Amarelo: próximo do mínimo · Verde: pedido mínimo atingido. Compra e recebimento têm confirmações distintas.</p>
-   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{d!.carrinhos.map(c=>{const f=d!.fornecedores.find(x=>x.id===c.fornecedor_id),linhas=linhasCart.get(c.id)||[]
-    const sim=linhas.map(l=>({necessidadeId:l.item_id,descricao:d!.itens.find(i=>i.id===l.item_id)?.descricao||'Produto',fornecedorId:c.fornecedor_id,quantidadeObra:l.quantidade_obra,quantidadeEstoque:l.quantidade_estoque,precoUnitario:l.preco_unitario,unidade:'UN'}))
-    const resumo=calcularPedidoMinimo(sim,{id:c.fornecedor_id,nome:f?.nome||'Fornecedor',pedido_minimo:f?.pedido_minimo??0})
-    const cor=c.status!=='rascunho'?'border-slate-300':resumo.atingiuMinimo?'border-emerald-400':resumo.subtotal>=resumo.minimo*0.8&&resumo.minimo>0?'border-amber-400':'border-red-400'
-    return <article key={c.id} className={'rounded-xl border-2 bg-white p-4 '+cor}><div className="flex justify-between gap-2"><b className="text-sm">{f?.nome||'Fornecedor'}</b><span className="text-xs">{stat(c.status)}</span></div><div className="mt-2 space-y-1 text-xs">{linhas.map(l=><p key={l.id} className="border-t py-1">{d!.itens.find(i=>i.id===l.item_id)?.descricao||'Item'} · obra {l.quantidade_obra} · estoque {l.quantidade_estoque}</p>)}</div>
-    <p className="mt-2 text-xs">Subtotal: <b>{moeda(resumo.subtotal)}</b> · Mínimo: {moeda(resumo.minimo)}</p>{c.status==='rascunho'&&<p className="text-xs font-bold">{resumo.falta>0?'Faltam '+moeda(resumo.falta):'Pedido mínimo atingido'}</p>}
-    {c.status==='rascunho'&&d!.acessos.comprar&&<button disabled={busy||!resumo.atingiuMinimo} onClick={()=>void comprarCart(c.id)} className="mt-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">Confirmar pedido comprado</button>}
-    {c.status==='pedido_emitido'&&<p className="mt-2 text-xs text-slate-600">Comprado em {dt(c.pedido_emitido_em)} · Aguardando NF e conferência física</p>}
-   </article>})}{!d!.carrinhos.length&&<p className="text-sm text-slate-500">Nenhum carrinho criado ainda. Abra uma solicitação e valide os produtos.</p>}</div>
-  </section>}
+  {comprador&&<CarrinhosFluxoAprovado carrinhos={d!.carrinhos} linhas={d!.linhas} itens={d!.itens} fornecedores={d!.fornecedores} produtos={d!.produtos} clientes={d!.clientes} obras={d!.obras}
+   podeComprar={d!.acessos.comprar} ocupado={busy} onComprar={id=>void comprarCart(id)}
+   onAdicionarMais={()=>{setPedidoAberto(null);setVisaoSolicitacoes('kanban');document.getElementById('lista-necessidades')?.scrollIntoView({behavior:'smooth',block:'start'})}}/>}
  </div></main>
 }
