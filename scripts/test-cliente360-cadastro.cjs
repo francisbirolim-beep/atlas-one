@@ -41,7 +41,7 @@ assert.match(r.validarCadastroObra({...fo,numero_endereco:'12',endereco:''}),/en
 assert.match(r.validarCadastroObra({...fo,cep:'123'}),/CEP/)
 const dash=fs.readFileSync('components/clientes/Cliente360DashboardV2.tsx','utf8')
 const ui=fs.readFileSync('components/clientes/CadastroCliente360.tsx','utf8')
-assert.match(dash,/useState<Aba>\('cadastro'\)/)
+assert.match(dash,/useState<Aba>\('visao'\)/)
 assert.match(dash,/\{id:'cadastro',label:'Cadastro'\}/)
 assert.match(dash,/CadastroCliente360 cliente=\{cliente\} obras=\{obras\}/)
 assert.match(dash,/async function atualizarCadastrosCliente360/)
