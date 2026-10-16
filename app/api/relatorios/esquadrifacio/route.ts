@@ -1,3 +1,4 @@
+import { autorizarRelatorio } from '@/lib/relatoriosPermissoesServer'
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarTenant} from '@/lib/tenantServer'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
@@ -36,7 +37,8 @@ function somarPor<T>(dados:T[],getChave:(row:T)=>string,getValor:(row:T)=>number
 export async function GET(req:NextRequest){
  const u=await autenticarTenant(req)
  if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
- if(u.role!=='master')return NextResponse.json({error:'Relatórios gerenciais reservados ao Master.'},{status:403})
+ const bloqueio=await autorizarRelatorio(req,u,'esquadrifacio')
+ if(bloqueio)return bloqueio
  const inicio=req.nextUrl.searchParams.get('inicio')||''
  const fim=req.nextUrl.searchParams.get('fim')||''
  const dias=(Date.parse(fim+'T12:00:00Z')-Date.parse(inicio+'T12:00:00Z'))/86400000

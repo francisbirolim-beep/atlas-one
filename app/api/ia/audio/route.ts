@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
   try {
     const usuario = await autenticarTenant(req)
     if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+    if(!(await carregarPermissoesIA(usuario)).geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
 
     const form = await req.formData()
     const audio = form.get('audio')

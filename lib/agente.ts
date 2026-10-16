@@ -1,3 +1,5 @@
+import { carregarPermissoesIA, idsClientesPropriosIA } from './ai/permissoesServer'
+import type { AIModulo } from './ai/types'
 import { supabaseAdmin } from './supabaseAdmin'
 import { gerarProximasOcorrencias } from './recorrencia'
 import { chamarProvider } from './ai/providerManager'
@@ -36,15 +38,16 @@ async function buscarSetoresPermitidos(usuarioId: string, empresaId?: string): P
     .map((p: any) => String(p.setor_id))
 }
 
+const FERRAMENTA_DOMINIO: Record<string,AIModulo> = {
+ buscar_orcamentos:'orcamento', buscar_clientes:'comercial', buscar_assistencias:'instalacao',
+ buscar_financeiro:'financeiro', buscar_base_tecnica:'engenharia',
+}
 export async function usuarioPodeUsarFerramenta(nome: string, usuarioId: string, usuarioRole: string, empresaId?: string) {
-  if (usuarioRole === 'master') return true
-  if (nome === 'buscar_financeiro') {
-    return await usuarioPodeAcaoServer({ usuarioId, role: usuarioRole, empresaId, setorId: 'financeiro', acaoId: 'financeiro.ia.consultar', minimo: 'consulta' })
-  }
-  const setoresNecessarios = FERRAMENTA_SETORES[nome]
-  if (!setoresNecessarios?.length) return true
-  const setoresPermitidos = new Set(await buscarSetoresPermitidos(usuarioId, empresaId))
-  return setoresNecessarios.some(setorId => setoresPermitidos.has(setorId))
+ if(!empresaId)return false
+ const acesso=await carregarPermissoesIA({id:usuarioId,role:usuarioRole,empresa_id:empresaId,nome:''})
+ if(!acesso.geral)return false
+ const modulo=FERRAMENTA_DOMINIO[nome]
+ return !modulo||acesso.dominios[modulo].permitido && (nome!=='buscar_base_tecnica'||acesso.dominios[modulo].escopo!=='proprio')
 }
 
 function normalizarBuscaConhecimento(valor: string) {
@@ -65,15 +68,14 @@ async function buscarConhecimentoEspecialistas(
 ) {
   if (!empresaId) return { erro: 'Empresa do usuario nao identificada.' }
 
+  const autorizacao = await carregarPermissoesIA({id:usuarioId,role:usuarioRole,empresa_id:empresaId,nome:''})
   const moduloPedido = String(input?.modulo || '').trim()
-  const setoresPermitidos = usuarioRole === 'master'
-    ? null
-    : new Set(await buscarSetoresPermitidos(usuarioId, empresaId))
+
 
   const especialistasPermitidos = AI_ESPECIALISTAS.filter(especialista => {
     if (moduloPedido && especialista.modulo !== moduloPedido) return false
     if (usuarioRole === 'master') return true
-    return especialista.setorIds.some(id => setoresPermitidos?.has(id))
+    return Boolean(autorizacao.dominios[especialista.modulo]?.permitido && autorizacao.dominios[especialista.modulo].escopo !== 'proprio')
   })
 
   if (!especialistasPermitidos.length) {
@@ -332,6 +334,12 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
     if (!(await usuarioPodeUsarFerramenta(nome, usuarioId, usuarioRole, empresaId))) {
       return { erro: 'Acesso negado: este usuario nao possui permissao ativa no setor necessario para esta consulta.' }
     }
+    if (!empresaId) return {erro:'Empresa não identificada.'}
+    const usuarioIA={id:usuarioId,role:usuarioRole,empresa_id:empresaId,nome:usuarioNome||''}
+    const acessoIA=await carregarPermissoesIA(usuarioIA)
+    const moduloIA=FERRAMENTA_DOMINIO[nome]
+    if(!acessoIA.geral || (moduloIA&&!acessoIA.dominios[moduloIA].permitido))return {erro:'Acesso negado.'}
+    const proprio=Boolean(moduloIA && acessoIA.dominios[moduloIA].escopo==='proprio')
     if (nome === 'buscar_tarefas') {
       let q = supabaseAdmin
         .from('tarefas')
@@ -357,6 +365,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
         .from('orcamentos')
         .select('cliente_nome,tipo_esquadria,status,temperatura,valor_estimado,created_at')
       if (empresaId) q = q.eq('empresa_id', empresaId)
+      if (proprio) q=q.eq('criado_por_id',usuarioId)
       q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.busca_cliente) q = q.ilike('cliente_nome', '%' + input.busca_cliente + '%')
@@ -369,6 +378,11 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
         .from('clientes')
         .select('nome,whatsapp,cidade,origem,responsavel')
       if (empresaId) q = q.eq('empresa_id', empresaId)
+      if (proprio) {
+        const ids=await idsClientesPropriosIA(usuarioIA)
+        if(!ids.length)return {clientes:[]}
+        q=q.in('id',ids)
+      }
       q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.busca) q = q.ilike('nome', '%' + input.busca + '%')
@@ -380,6 +394,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
         .from('assistencias')
         .select('cliente_nome,descricao_problema,status,cidade,created_at')
       if (empresaId) q = q.eq('empresa_id', empresaId)
+      if (proprio) q=q.eq('criado_por_id',usuarioId)
       q = q.order('created_at', { ascending: false })
         .limit(limite)
       if (input && input.status) q = q.eq('status', input.status)
@@ -396,6 +411,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
           .from('financeiro_contas_receber')
           .select('cliente_nome,documento,parcela,total_parcelas,vencimento,valor,valor_pago,status,forma')
         if (empresaId) qReceber = qReceber.eq('empresa_id', empresaId)
+        if (proprio) qReceber=qReceber.eq('criado_por_id',usuarioId)
         if (status) qReceber = qReceber.eq('status', status)
         const { data, error } = await qReceber.order('vencimento', { ascending: true }).limit(limite)
         resultado.contas_receber = error ? { erro: error.message } : data
@@ -406,6 +422,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
           .from('financeiro_contas_pagar')
           .select('fornecedor_nome,documento,parcela,descricao,vencimento,valor,valor_pago,status,forma_pagamento')
         if (empresaId) qPagar = qPagar.eq('empresa_id', empresaId)
+        if (proprio) qPagar=qPagar.eq('criado_por_id',usuarioId)
         if (status) qPagar = qPagar.eq('status', status)
         const { data, error } = await qPagar.order('vencimento', { ascending: true }).limit(limite)
         resultado.contas_pagar = error ? { erro: error.message } : data
@@ -422,7 +439,7 @@ export async function executarFerramenta(nome: string, input: any, usuarioId: st
       return error ? { erro: error.message } : { setores: data }
     }
     if (nome === 'buscar_base_tecnica') {
-      return await buscarBaseTecnicaAgente(input, empresaId)
+      return await buscarBaseTecnicaAgente(input, empresaId, usuarioRole === 'master')
     }
     if (nome === 'buscar_conhecimento_especialistas') {
       return await buscarConhecimentoEspecialistas(input, usuarioId, usuarioRole, empresaId)

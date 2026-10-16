@@ -1,3 +1,4 @@
+import { carregarPermissoesIA } from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   verificarUsuario,
@@ -225,7 +226,8 @@ async function montarContextoAtlas(texto: string, usuario: any) {
       String(usuario?.role || ''),
       String(usuario?.empresa_id || ''),
     )
-    contexto.estimativa_orcamento = permitido
+    const acessoEstimativa=(await carregarPermissoesIA(usuario)).dominios.orcamento
+    contexto.estimativa_orcamento = permitido && acessoEstimativa.escopo !== 'proprio'
       ? await estimarOrcamentoHistorico({ empresaId: usuario.empresa_id, pergunta: texto })
       : { erro: 'Acesso negado: este usuário não possui permissão para consultar valores de orçamentos.' }
   }
@@ -504,9 +506,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
+    const autorizacao=await carregarPermissoesIA(usuario)
+    if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA Geral.'},{status:403})
     const body = await req.json()
     const mensagemTexto = String(body.mensagem || '').trim()
-    const historico = Array.isArray(body.messages) ? body.messages : []
+    let historico = Array.isArray(body.messages) ? body.messages : []
+    if(usuario.role !== 'master') {
+      const conversa=String(body.conversaId||'').trim()
+      const anteriores=conversa ? await supabaseAdmin.from('ai_interacoes').select('pergunta,resposta')
+        .eq('empresa_id',usuario.empresa_id).eq('usuario_id',usuario.id).eq('contexto','atlas_ia_geral')
+        .contains('contexto_json',{conversa_id:conversa,permissoes_assinatura:autorizacao.assinatura})
+        .order('created_at',{ascending:false}).limit(5) : null
+      if(anteriores?.error)throw Error('Não foi possível conferir o histórico da conversa.')
+      historico=[...(anteriores?.data||[])].reverse().flatMap(i=>[
+        {role:'user',content:i.pergunta},{role:'assistant',content:i.resposta},
+      ])
+    }
     const mensagemConsulta = perguntaEfetiva(mensagemTexto, historico)
     const anexo = body.anexo && typeof body.anexo === 'object' ? body.anexo : null
     const conversaSolicitada = String(body.conversaId || '').trim()
@@ -693,6 +708,7 @@ export async function POST(req: NextRequest) {
         modelo: providerId + '/' + modelId,
         contexto_json: {
           conversa_id: conversaId,
+          permissoes_assinatura: autorizacao.assinatura,
           origem: 'atlas_ia_geral',
           provider_id: providerId,
           model_id: modelId,

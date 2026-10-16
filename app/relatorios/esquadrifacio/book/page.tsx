@@ -1,4 +1,5 @@
 'use client'
+import {autorizarExportacaoRelatorio} from '@/components/relatorios/RelatoriosAcesso'
 import {useEffect,useMemo,useState} from 'react'
 import Link from 'next/link'
 import {ArrowLeft,BookOpen,Printer,RefreshCw} from 'lucide-react'
@@ -56,7 +57,7 @@ export default function BookPeriodoEsquadrifacio(){
    try{
     const token=await tokenAtual()
     if(!token)throw Error('A sessão expirou. Entre novamente no Atlas.')
-    const p=new URLSearchParams(consulta!)
+    const p=new URLSearchParams({...consulta!,finalidade:'exportar'})
     const headers={Authorization:'Bearer '+token}
     const [r,f]=await Promise.all([
      fetch('/api/relatorios/esquadrifacio?'+p,{headers,signal:controller.signal,cache:'no-store'}),
@@ -91,8 +92,9 @@ export default function BookPeriodoEsquadrifacio(){
   url.searchParams.set('inicio',rascunho.inicio);url.searchParams.set('fim',rascunho.fim)
   window.history.replaceState(null,'',url.pathname+url.search)
  }
- function imprimir(){
+ async function imprimir(){
   if(!apto)return
+  try{await autorizarExportacaoRelatorio('esquadrifacio')}catch(e){setErro(e instanceof Error?e.message:'Impressão não autorizada.');return}
   // O navegador oferece Impressora ou Salvar como PDF. Sem escrever no financeiro/banco.
   window.print()
  }

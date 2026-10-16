@@ -1,3 +1,5 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
+import type {AIModulo} from '@/lib/ai/types'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -11,7 +13,7 @@ async function autenticar(req: NextRequest) {
   if (!authData.user) return null
   const { data } = await supabaseAdmin
     .from('usuarios')
-    .select('id,nome,empresa_id')
+    .select('id,nome,role,empresa_id')
     .eq('id', authData.user.id)
     .maybeSingle()
   return data?.empresa_id ? data : null
@@ -22,6 +24,8 @@ export async function POST(req: NextRequest) {
     const usuario = await autenticar(req)
     if (!usuario) return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 })
 
+    const autorizacao=await carregarPermissoesIA(usuario)
+    if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const body = await req.json()
     const interacaoId = String(body?.interacaoId || '').trim()
     const avaliacao = String(body?.avaliacao || '').trim()
@@ -37,12 +41,15 @@ export async function POST(req: NextRequest) {
 
     const { data: interacao } = await supabaseAdmin
       .from('ai_interacoes')
-      .select('id,pergunta,resposta,contexto,empresa_id')
+      .select('id,pergunta,resposta,contexto,empresa_id,usuario_id')
       .eq('id', interacaoId)
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
 
     if (!interacao) return NextResponse.json({ error: 'Interação não encontrada' }, { status: 404 })
+    if(usuario.role!=='master'&&interacao.usuario_id!==usuario.id)return NextResponse.json({error:'Interação não encontrada'},{status:404})
+    const dominio=String(interacao.contexto||'').replace(/^especialista:/,'') as AIModulo
+    if(usuario.role!=='master'&&dominio in autorizacao.dominios&&!autorizacao.dominios[dominio].permitido)return NextResponse.json({error:'Sem acesso a este domínio.'},{status:403})
 
     const { error } = await supabaseAdmin
       .from('ai_feedback')
@@ -62,7 +69,7 @@ export async function POST(req: NextRequest) {
 
     // Uma correção explícita vira memória ativa. Aprovação simples fica como
     // exemplo supervisionado no histórico, sem lotar a memória com duplicatas.
-    if (avaliacao === 'corrigido' && correcao) {
+    if (avaliacao === 'corrigido' && correcao && usuario.role === 'master') {
       await supabaseAdmin.from('ai_memorias').insert({
         empresa_id: usuario.empresa_id,
         escopo: interacao.contexto || 'comercial',

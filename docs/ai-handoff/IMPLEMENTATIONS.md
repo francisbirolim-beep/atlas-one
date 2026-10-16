@@ -480,3 +480,9 @@ Branch `feat/permissoes-ia-relatorios-20261016`, base `ac03af33`. Sem publicaç�
 - Testes novos cobrem erro de leitura, escopo inválido, teto, tenant, ausência de titularidade e 401/403/503 antes das consultas do relatório. Regressões Cliente 360/cadastros e cálculo de fornecedores executadas.
 - Revisão geral permanece aberta: agentes geral/comercial legados, sessões anteriores, titularidade UUID de clientes/histórico WVetro, totais agregados em escopo próprio, atalhos de estimativa, edição/exportação dos demais relatórios e controles na interface. Este pacote não declara resolvidos esses caminhos.
 - Próximo passo: completar esses controles, validar com usuários de consulta/edição, apresentar prévia e somente então publicar o pacote aprovado.
+
+## 2026-10-16 — Conclusão dos controles de IA e relatórios (PR #863)
+
+Pacote ampliado sobre a main atual `57d8edc7`, preservando os incrementos de Kanban por usuário e identificação assistida de Compras. A lista anterior de pendências de IA/relatórios foi tratada: resolvedor único, titularidade por UUID, agregados e histórico limitados, sessões/histórico vinculados à autorização vigente, feedback/conhecimento/aprendizado protegidos, APIs de relatórios com consulta/edição/exportação e editor aditivo no usuário. Ver `PERMISSOES_IA_RELATORIOS_20261016.md` para critérios, limites e validações.
+
+67 verificações comportamentais e regressões do Cliente 360, cadastros, NF, recebimentos, RLS isolado, Kanbans, relatórios/book e fornecedores aprovadas. Nenhuma permissão real ou migration alterada. Typecheck aprovado; preflight final obrigatório antes da integração. A revisão de IA/relatórios está tecnicamente concluída neste pacote; não extrapolar essa afirmação para todos os módulos do ERP. Próximo passo operacional: validar o commit final no CI e publicar no domínio autorizado com snapshot/rollback, sem mudar configurações de acesso reais.

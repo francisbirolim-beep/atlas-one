@@ -19,7 +19,9 @@ export async function lerAcessoConfigServer(usuarioId:string, empresaId?:string)
     const segura=await consulta.maybeSingle()
     if(!segura.error && segura.data)return segura.data.config
     if(segura.error && !['42P01','PGRST205'].includes(segura.error.code))throw segura.error
-    const {data,error}=await supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave',`acesso_usuario:${usuarioId}`).maybeSingle()
+    let legado=supabaseAdmin.from('configuracoes_gerais').select('valor').eq('chave',`acesso_usuario:${usuarioId}`)
+    if(empresaId)legado=legado.eq('empresa_id',empresaId)
+    const {data,error}=await legado.maybeSingle()
     if(error)throw error
     if(!data?.valor) return null
     return typeof data.valor === 'string' ? JSON.parse(data.valor) : data.valor

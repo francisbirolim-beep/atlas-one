@@ -1,3 +1,4 @@
+import { autorizarRelatorio } from '@/lib/relatoriosPermissoesServer'
 import { NextRequest,NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -7,12 +8,12 @@ export const dynamic='force-dynamic'
 const valido=/^\d{4}-\d{2}-\d{2}$/
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const erro=(mensagem:string,status=400)=>NextResponse.json({error:mensagem},{status})
-async function carregarContas(empresa:string) {
+async function carregarContas(empresa:string,semear=true) {
  const {data,error}=await supabaseAdmin.from('financeiro_plano_contas').select('id,codigo,nome,grupo,ativo').eq('empresa_id',empresa).order('codigo')
  if(error)throw error
  const existentes=new Set((data||[]).map(c=>c.codigo))
  const faltantes=PLANO_CONTAS_PADRAO.filter(c=>!existentes.has(c.codigo)).map(c=>({...c,empresa_id:empresa}))
- if(faltantes.length){
+ if(semear&&faltantes.length){
   const {error:err}=await supabaseAdmin.from('financeiro_plano_contas').upsert(faltantes,{onConflict:'empresa_id,codigo',ignoreDuplicates:true})
   if(err)throw err
   const novo=await supabaseAdmin.from('financeiro_plano_contas').select('id,codigo,nome,grupo,ativo').eq('empresa_id',empresa).order('codigo')
@@ -24,12 +25,13 @@ async function carregarContas(empresa:string) {
 export async function GET(req:NextRequest){
  const u=await autenticarTenant(req)
  if(!u)return erro('Sessão inválida.',401)
- if(u.role!=='master')return erro('Classificação contábil disponível ao Master.',403)
+ const bloqueio=await autorizarRelatorio(req,u,'plano_contas')
+ if(bloqueio)return bloqueio
  const inicio=req.nextUrl.searchParams.get('inicio')||''
  const fim=req.nextUrl.searchParams.get('fim')||''
  if(!valido.test(inicio)||!valido.test(fim)||inicio>fim)return erro('Período inválido.')
  try{
-  const contas=await carregarContas(u.empresa_id)
+  const contas=await carregarContas(u.empresa_id,u.role==='master')
   const {data,error}=await supabaseAdmin.from('financeiro_contas_pagar')
    .select('id,descricao,fornecedor_nome,documento,valor,valor_pago,status,vencimento,data_pagamento')
    .eq('empresa_id',u.empresa_id)
@@ -55,7 +57,8 @@ export async function GET(req:NextRequest){
 export async function POST(req:NextRequest){
  const u=await autenticarTenant(req)
  if(!u)return erro('Sessão inválida.',401)
- if(u.role!=='master')return erro('Classificação contábil disponível ao Master.',403)
+ const bloqueio=await autorizarRelatorio(req,u,'plano_contas',true)
+ if(bloqueio)return bloqueio
  try{
   const body=await req.json()
   const contaPagarId=String(body?.contaPagarId||'').trim()

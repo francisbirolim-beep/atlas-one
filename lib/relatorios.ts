@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { tokenAtual } from './auth'
 
 export type FiltroPeriodoRelatorio = {
   inicio?: string
@@ -23,78 +23,18 @@ export type ResumoMedicao = {
   percentualItensMedidos: number
 }
 
-function dentroPeriodo(dataIso: string | null | undefined, filtro: FiltroPeriodoRelatorio) {
-  if (!dataIso) return false
-  const t = new Date(dataIso).getTime()
-  if (Number.isNaN(t)) return false
-  if (filtro.inicio) {
-    const ini = new Date(`${filtro.inicio}T00:00:00`).getTime()
-    if (t < ini) return false
-  }
-  if (filtro.fim) {
-    const fim = new Date(`${filtro.fim}T23:59:59.999`).getTime()
-    if (t > fim) return false
-  }
-  return true
+
+async function resumo(tipo:'comercial'|'producao',filtro:FiltroPeriodoRelatorio){
+ const token=await tokenAtual()
+ if(!token)throw Error('Entre novamente no Atlas.')
+ const params=new URLSearchParams({tipo,...filtro})
+ const resp=await fetch('/api/relatorios/resumos?'+params,{headers:{Authorization:'Bearer '+token},cache:'no-store'})
+ const json=await resp.json()
+ if(!resp.ok)throw Error(json.error||'Não foi possível carregar o relatório.')
+ return json
 }
-
-export async function carregarResumoComercial(filtro: FiltroPeriodoRelatorio): Promise<ResumoComercial> {
-  const { data } = await supabase
-    .from('orcamentos')
-    .select('id, created_at, valor_estimado, status, coluna_id')
-
-  const { data: colunasVenda } = await supabase
-    .from('kanban_colunas')
-    .select('id')
-    .eq('gera_medicao_final', true)
-
-  const idsVenda = new Set((colunasVenda || []).map((c: any) => c.id))
-  const lista = (data || []).filter((o: any) => dentroPeriodo(o.created_at, filtro))
-  const totalOrcamentos = lista.length
-  const valorOrcado = lista.reduce((s: number, o: any) => s + Number(o.valor_estimado || 0), 0)
-  const aprovados = lista.filter((o: any) => o.status === 'aprovado' || o.status === 'convertido').length
-  const recusados = lista.filter((o: any) => o.status === 'recusado').length
-  const vendidos = lista.filter((o: any) => idsVenda.has(o.coluna_id) || o.status === 'convertido').length
-  const taxaConversao = totalOrcamentos > 0 ? Math.round((vendidos / totalOrcamentos) * 1000) / 10 : 0
-  const ticketMedio = vendidos > 0
-    ? lista.filter((o: any) => idsVenda.has(o.coluna_id) || o.status === 'convertido')
-        .reduce((s: number, o: any) => s + Number(o.valor_estimado || 0), 0) / vendidos
-    : 0
-
-  return { totalOrcamentos, valorOrcado, aprovados, recusados, vendidos, taxaConversao, ticketMedio }
-}
-
-export async function carregarResumoMedicao(filtro: FiltroPeriodoRelatorio): Promise<ResumoMedicao> {
-  const { data: medicoes } = await supabase
-    .from('medicoes_finais')
-    .select('id, created_at')
-
-  const filtradas = (medicoes || []).filter((m: any) => dentroPeriodo(m.created_at, filtro))
-  const ids = filtradas.map((m: any) => m.id)
-
-  if (ids.length === 0) {
-    return { totalMedicoes: 0, medicoesComItens: 0, itensTotal: 0, itensMedidos: 0, percentualItensMedidos: 0 }
-  }
-
-  const { data: itens } = await supabase
-    .from('medicao_itens')
-    .select('id, medicao_id, medido')
-    .in('medicao_id', ids)
-
-  const listaItens = itens || []
-  const medicoesComItens = new Set(listaItens.map((i: any) => i.medicao_id)).size
-  const itensTotal = listaItens.length
-  const itensMedidos = listaItens.filter((i: any) => !!i.medido).length
-  const percentualItensMedidos = itensTotal > 0 ? Math.round((itensMedidos / itensTotal) * 1000) / 10 : 0
-
-  return {
-    totalMedicoes: filtradas.length,
-    medicoesComItens,
-    itensTotal,
-    itensMedidos,
-    percentualItensMedidos,
-  }
-}
+export async function carregarResumoComercial(filtro:FiltroPeriodoRelatorio):Promise<ResumoComercial>{return resumo('comercial',filtro)}
+export async function carregarResumoMedicao(filtro:FiltroPeriodoRelatorio):Promise<ResumoMedicao>{return resumo('producao',filtro)}
 
 export function baixarCsv(nome: string, linhas: (string | number)[][]) {
   const escapar = (v: string | number) => {
