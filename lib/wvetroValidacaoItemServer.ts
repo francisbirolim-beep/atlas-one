@@ -37,7 +37,7 @@ export async function validarItemImportadoWVetro(req:NextRequest,usuario:Usuario
     const i=registro?.resultado_final?.item
     return NextResponse.json({sugestao:i?{tipo_esquadria:i.tipo_esquadria,tipo_outro_texto:i.tipo_outro_texto}:null},{headers:{'Cache-Control':'no-store'}})
   }
-  if(JSON.stringify(snapshotItemWVetro(original))!==JSON.stringify(body.original))return erro('Esta esquadria mudou em outra sessão. Reabra o card para conferir a versão atual.',409)
+  if(!body.original || Object.keys(diferencasItemWVetro(original,body.original)).length)return erro('Esta esquadria mudou em outra sessão. Reabra o card para conferir a versão atual.',409)
   const corrigindo=body.acao==='corrigir_item_importacao'
   let final={...original}
   if(corrigindo){
@@ -46,6 +46,19 @@ export async function validarItemImportadoWVetro(req:NextRequest,usuario:Usuario
       if(!(CAMPOS_ITEM_WVETRO as readonly string[]).includes(campo))return erro('Campo de correção inválido.')
       if(['largura_mm','altura_mm','quantidade'].includes(campo)){
         if(typeof valor!=='number'||!Number.isFinite(valor)||valor<=0||(campo==='quantidade'&&!Number.isInteger(valor)))return erro('Medidas e quantidade devem ser positivas; quantidade deve ser inteira.')
+      }else if(['largura_baixo_mm','largura_meio_mm','largura_cima_mm','altura_direita_mm','altura_meio_mm','altura_esquerda_mm'].includes(campo)){
+        if(valor!==null&&(typeof valor!=='number'||!Number.isFinite(valor)||valor<0))return erro('Medida final inválida.')
+      }else if(campo==='variaveis'){
+        if(valor===null||typeof valor!=='object'||Array.isArray(valor)||Object.keys(valor).length>80||
+          Object.entries(valor).some(([k,v])=>k.length>100||!k.trim()||
+            (v!==null&&!['string','number','boolean'].includes(typeof v))||
+            (typeof v==='string'&&v.length>4000)||
+            (typeof v==='number'&&!Number.isFinite(v))))
+          return erro('Variáveis técnicas inválidas.')
+        // Preservar os metadados internos de importação.
+        for(const chave of Object.keys(original.variaveis||{})){
+          if(chave.startsWith('wvetro_'))(valor as Record<string, any>)[chave]=original.variaveis[chave]
+        }
       }else if(valor!==null&&(typeof valor!=='string'||valor.length>4000))return erro('Texto de correção inválido.')
       final[campo]=valor
     }
@@ -58,8 +71,17 @@ export async function validarItemImportadoWVetro(req:NextRequest,usuario:Usuario
     const {data:catalogo,error}=await db.from('tipologias').select('id,chave,label').eq('chave',final.tipo_esquadria).eq('ativo',true).maybeSingle()
     if(error)throw error
     if(final.tipo_esquadria!=='outro'&&!catalogo)return erro('Tipologia não encontrada. Use a descrição livre.')
-    final={...final,tipologia_id:catalogo?.id||null,configuracao_preset_id:null,configuracao_nome:catalogo?.label||final.tipo_outro_texto,configuracao_validada:false,configuracao_status:'pendente'}
+    final={...final,tipologia_id:catalogo?.id||null,configuracao_preset_id:null,
+      configuracao_nome:diffs.configuracao_nome?final.configuracao_nome:(catalogo?.label||final.tipo_outro_texto),
+      configuracao_validada:false,configuracao_status:'pendente'}
   }
+  // Mudanças técnicas exigem nova homologação da configuração/receita.
+  if(['linha_nome','configuracao_nome','variaveis','folhas','largura_mm','altura_mm',
+    'largura_baixo_mm','largura_meio_mm','largura_cima_mm',
+    'altura_direita_mm','altura_meio_mm','altura_esquerda_mm'].some(c=>c in diffs)){
+    final={...final,configuracao_preset_id:null,configuracao_validada:false,configuracao_status:'pendente'}
+  }
+  if(diffs.linha_nome)final={...final,linha_id:null}
   const agora=new Date().toISOString(),feedbackId=randomUUID()
   const registro={resultado:corrigindo?'corrigido':'correto',snapshot:snapshotItemWVetro(final),validado_em:agora,validado_por_id:usuario.id,validado_por_nome:usuario.nome,feedback_id:feedbackId}
   const validacoes={...(fluxo.validacoes_itens||{}),[original.id]:registro}

@@ -20,7 +20,7 @@ import { lerCorAssistencia } from '@/lib/configGeral'
 import { bateBusca } from '@/lib/texto'
 import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
-import ConferenciaItemWVetro, { TipoImportadoWVetro } from './ConferenciaItemWVetro'
+import ConferenciaItemWVetro, { TipoImportadoWVetro, EditorTecnicoWVetro } from './ConferenciaItemWVetro'
 import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wvetroValidacaoItem'
 import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
 
@@ -636,11 +636,11 @@ setSincronizandoWVetro(false)
 }
 }
 
-async function conferirItemWVetro(itemId:string,modo:'correto'|'corrigir') {
-if(!cardSelecionado||!editando||validandoWVetro)return
+async function conferirItemWVetro(itemId:string,modo:'correto'|'corrigir'):Promise<boolean> {
+if(!cardSelecionado||!editando||validandoWVetro)return false
 const original=cardSelecionado.itens?.find(i=>i.id===itemId)
 const item=editando.itens?.find(i=>i.id===itemId)
-if(!original||!item)return
+if(!original||!item)return false
 setValidandoWVetro(true);setMensagemWVetro('')
 try {
 const token=await tokenAtual()
@@ -661,12 +661,20 @@ setCards(prev=>prev.map(c=>c.id===atualizado.id?atualizado:c))
 setEditando(prev=>prev?{...prev,wvetro_fluxo:fluxoWVetro(atualizado),itens:(prev.itens||[]).map(i=>i.id===itemId?atualizado.itens!.find(s=>s.id===itemId)!:i)}:prev)
 setMensagemWVetro(d.mensagem)
 setHistorico(await listarHistorico(atualizado.id))
+return true
 }catch(e){
 const motivo=e instanceof Error?e.message:'Não foi possível conferir a esquadria.'
 setMensagemWVetro(motivo)
 window.alert('A validação desta esquadria NÃO foi salva. Confira o erro antes de continuar: '+motivo)
+return false
 }
 finally{setValidandoWVetro(false)}
+}
+
+function restaurarItemWVetro(itemId:string) {
+const original=cardSelecionado?.itens?.find(i=>i.id===itemId)
+if(!original)return
+setEditando(prev=>prev?{...prev,itens:(prev.itens||[]).map(i=>i.id===itemId?{...original}:i)}:prev)
 }
 
 function atualizarTipoWVetro(itemId:string,tipo:string,texto:string|null) {
@@ -1750,7 +1758,7 @@ className="w-full border border-slate-300 rounded-xl p-3 text-sm"
 <Trash2 size={13} />
 </button>
 </div>
-{ehOrcamentoWVetro(cardSelecionado)&&<ConferenciaItemWVetro item={item} original={cardSelecionado.itens?.find(it=>it.id===item.id)} fluxo={fluxoWVetro(cardSelecionado)} cardId={cardSelecionado.id} catalogo={tipoLabels} ocupado={validandoWVetro||sincronizandoWVetro} onConfirmar={modo=>conferirItemWVetro(item.id,modo)} onTipo={(tipo,texto)=>atualizarTipoWVetro(item.id,tipo,texto)}/>}
+{ehOrcamentoWVetro(cardSelecionado)&&<ConferenciaItemWVetro item={item} original={cardSelecionado.itens?.find(it=>it.id===item.id)} fluxo={fluxoWVetro(cardSelecionado)} cardId={cardSelecionado.id} catalogo={tipoLabels} ocupado={validandoWVetro||sincronizandoWVetro} onConfirmar={modo=>conferirItemWVetro(item.id,modo)} onTipo={(tipo,texto)=>atualizarTipoWVetro(item.id,tipo,texto)} onCampo={(campo,valor)=>atualizarItemEdit(item.id,campo,valor)} onRestaurar={()=>restaurarItemWVetro(item.id)}/>}
 <label className="block text-xs text-slate-500">Ambiente</label>
 <input
 type="text"
@@ -1786,7 +1794,11 @@ onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
 placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 />
-{(item.linha_nome || item.configuracao_nome || item.tipologia_id || Object.keys(item.variaveis || {}).length > 0) && (
+{ehOrcamentoWVetro(cardSelecionado)
+ ? <EditorTecnicoWVetro item={item} original={cardSelecionado.itens?.find(it=>it.id===item.id)}
+      onCampo={(campo,valor)=>atualizarItemEdit(item.id,campo,valor)}
+      ocupado={validandoWVetro||sincronizandoWVetro}/>
+ : (item.linha_nome || item.configuracao_nome || item.tipologia_id || Object.keys(item.variaveis || {}).length > 0) && (
 <div className={`rounded-xl border p-3 text-xs ${item.configuracao_validada ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
 <div className="flex flex-wrap items-center gap-2 mb-2">
 {item.linha_nome && <span className="rounded-full bg-white px-2 py-1 border border-slate-200">Linha: {item.linha_nome}</span>}
@@ -1959,6 +1971,20 @@ onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
 placeholder="Observação (opcional)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"
 />
+{ehOrcamentoWVetro(cardSelecionado)&&<>
+  <label className="block text-xs text-slate-600">Contramarco da esquadria</label>
+  <select value={item.contramarco||''} onChange={e=>atualizarItemEdit(item.id,'contramarco',e.target.value||null)} className="w-full border border-slate-300 rounded-lg p-2 text-xs">
+    <option value="">Não informado</option>
+    <option value="com">Com contramarco</option>
+    <option value="sem">Sem contramarco</option>
+  </select>
+  <label className="block text-xs text-slate-600">Observação para produção</label>
+  <textarea value={item.observacao_producao||''} onChange={e=>atualizarItemEdit(item.id,'observacao_producao',e.target.value||null)}
+    placeholder="Orientações técnicas para produção" className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"/>
+  <label className="block text-xs text-slate-600">Observação de têmpera</label>
+  <input value={item.observacao_tempera||''} onChange={e=>atualizarItemEdit(item.id,'observacao_tempera',e.target.value||null)}
+    placeholder="Opcional" className="w-full border border-slate-300 rounded-lg p-2 text-xs"/>
+</>}
 </fieldset>
 ))}
 </div>
