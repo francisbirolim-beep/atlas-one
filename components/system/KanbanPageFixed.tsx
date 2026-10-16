@@ -20,7 +20,7 @@ import { lerCorAssistencia } from '@/lib/configGeral'
 import { bateBusca } from '@/lib/texto'
 import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
-import ConferenciaItemWVetro, { TipoImportadoWVetro } from './ConferenciaItemWVetro'
+import ConferenciaItemWVetro, { TipoImportadoWVetro, EditorTecnicoWVetro } from './ConferenciaItemWVetro'
 import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wvetroValidacaoItem'
 import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
 
@@ -1794,7 +1794,11 @@ onChange={e => atualizarItemEdit(item.id, 'folhas', e.target.value || null)}
 placeholder="Quantidade de folhas (ex: 2 ou 2 fixas + 1 móvel)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 />
-{(item.linha_nome || item.configuracao_nome || item.tipologia_id || Object.keys(item.variaveis || {}).length > 0) && (
+{ehOrcamentoWVetro(cardSelecionado)
+ ? <EditorTecnicoWVetro item={item} original={cardSelecionado.itens?.find(it=>it.id===item.id)}
+      onCampo={(campo,valor)=>atualizarItemEdit(item.id,campo,valor)}
+      ocupado={validandoWVetro||sincronizandoWVetro}/>
+ : (item.linha_nome || item.configuracao_nome || item.tipologia_id || Object.keys(item.variaveis || {}).length > 0) && (
 <div className={`rounded-xl border p-3 text-xs ${item.configuracao_validada ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
 <div className="flex flex-wrap items-center gap-2 mb-2">
 {item.linha_nome && <span className="rounded-full bg-white px-2 py-1 border border-slate-200">Linha: {item.linha_nome}</span>}
