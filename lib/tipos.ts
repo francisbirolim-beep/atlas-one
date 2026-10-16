@@ -85,6 +85,9 @@ export interface Cliente {
 }
 
 export interface KanbanColuna {
+      nome_exibicao?: string | null
+      ordem_visual?: number | null
+      personalizada?: boolean
       id: string
       nome: string
       ordem: number
@@ -335,6 +338,9 @@ export interface ProducaoItem {
 }
 
 export interface SetorKanbanColuna {
+      nome_exibicao?: string | null
+      ordem_visual?: number | null
+      personalizada?: boolean
       id: string
       setor_id: string
       nome: string

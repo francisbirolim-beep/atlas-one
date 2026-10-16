@@ -5,7 +5,7 @@ import { ArrowLeft,ArrowUpRight,Check,ChevronRight,Columns3,Fullscreen,MessageSq
 import { tokenAtual } from '@/lib/auth'
 import { QUADROS,indiceConclusaoOperacional,ehColunaConclusaoOperacional,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
 
-type Coluna={id:string,setor:string,nome:string,ordem:number}
+type Coluna={id:string,setor:string,nome:string,ordem:number;nome_exibicao?:string|null;ordem_visual?:number|null}
 type Percentuais={compras?:number;mercadoria?:number;producao?:number;instalacao?:number;financeiro?:number}
 type Card={id:string;numero:number;clienteId:string;cliente:string;obra:string;cidade:string;previsao:string|null;
  percentualGeral:number;percentuais:Percentuais;conclusoes?:Record<string,boolean>;contagens:Record<string,number>;
@@ -13,7 +13,7 @@ type Card={id:string;numero:number;clienteId:string;cliente:string;obra:string;c
 type Posicao={setor:string;venda_obra_id:string;coluna_id:string;updated_at:string}
 type Acesso={usuario_id:string;setor:string;nivel:NivelBoard;responsavel:boolean}
 type Usuario={id:string;nome:string;role:string}
-type Dados={quadros:typeof QUADROS[number][];permissoes:Record<string,NivelBoard>;colunas:Coluna[];
+type Dados={usuarioMaster?:boolean;quadros:typeof QUADROS[number][];permissoes:Record<string,NivelBoard>;colunas:Coluna[];
  posicoes:Posicao[];cards:Card[];nativos?:Record<string,{colunas:Coluna[];cards:Array<{id:string;cliente:string;obra:string;numero:number;cidade:string;coluna_id:string|null;href:string}>}>;funcionarios:Usuario[];acessos:Acesso[];atualizadoEm:string}
 type Comentario={id:string;setor:string;texto:string;usuario_nome:string;created_at:string}
 type Movimento={id:string;setor:string;coluna_anterior_nome:string|null;coluna_nova_nome:string|null;motivo:string|null;usuario_nome:string;created_at:string}
@@ -211,6 +211,7 @@ export default function CentralKanbans(){
    </section>
   }
   const cols=colunas(s)
+  const colsVisuais=[...cols].sort((a,b)=>(a.ordem_visual??a.ordem)-(b.ordem_visual??b.ordem))
   if(!cols.length)return <div className="rounded-xl border bg-white p-4 text-sm text-slate-600">Sem colunas configuradas para {qTitulo(s)}.</div>
   return <section key={s} className={'rounded-2xl border border-slate-200 bg-slate-50 p-3 '+(mini?'min-w-[320px] flex-1':'')}>
    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -218,16 +219,17 @@ export default function CentralKanbans(){
     <div className="flex gap-2">
      {mini&&<button onClick={()=>selecionarQuadro(s)} className="text-xs font-semibold text-blue-700">Abrir quadro ↗</button>}
      {!mini&&pode(s,'administrar')&&<button className="rounded-lg border bg-white px-2 py-1.5 text-xs" onClick={()=>setConfig(!config)}><Settings2 size={14} className="inline"/> Configurar</button>}
+     {!mini&&dados?.usuarioMaster&&<Link href="/kanban/configuracao-colunas" className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-800">Personalizar colunas</Link>}
     </div>
    </div>
    <div className={'flex gap-3 overflow-x-auto pb-4 '+(mini?'max-h-[70vh]':'min-h-[370px]')}>
-    {cols.map(col=>{
+    {colsVisuais.map(col=>{
      const itens=cardsVisiveis.filter(c=>origCard(c,s)===col.id)
      return <div key={col.id} onDragOver={e=>{if(pode(s,'movimentar'))e.preventDefault()}}
       onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('text/plain');if(id&&arrastado?.setor===s)void mover(id,s,col.id);setArrastado(null)}}
       className="min-h-32 w-[245px] shrink-0 rounded-xl border border-slate-200 bg-slate-100/80 p-2 md:w-[280px]">
       <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-800">
-       <span>{col.nome}</span><span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-800">{itens.length}</span>
+       <span>{col.nome_exibicao||col.nome}</span><span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-800">{itens.length}</span>
       </div>
       <div className="space-y-2">{itens.map(c=>cardVisual(c,s,mini))}</div>
      </div>
