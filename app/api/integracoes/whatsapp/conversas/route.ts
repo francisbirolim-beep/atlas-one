@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
     const { data: config } = await supabaseAdmin
       .from('atendimento_configuracoes')
-      .select('numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao')
+      .select('numero_principal,setor_padrao,usuario_padrao_id,triagem_privada_ativa,ativo,modo_integracao')
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
 
