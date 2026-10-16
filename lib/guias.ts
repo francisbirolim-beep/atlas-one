@@ -9,6 +9,7 @@ import {
   PackageSearch,
   PackageCheck,
   ReceiptText,
+  ClipboardList,
   Ruler,
   BarChart3,
   BookOpen,
@@ -52,6 +53,7 @@ export const GUIAS: Guia[] = [
   { href: '/compras', label: 'Pedido de compra', icon: ShoppingCart, grupo: 'Compras' },
   { href: '/compras/notas', label: 'Notas fiscais', icon: ReceiptText, grupo: 'Compras' },
   { href: '/compras/entrada', label: 'Entrada de NF', icon: FileText, grupo: 'Compras' },
+  { href: '/compras/entrada-manual', label: 'Entrada Manual', icon: ClipboardList, grupo: 'Compras' },
   { href: '/estoque', label: 'Estoque', icon: PackageSearch, grupo: 'Compras' },
   { href: '/cadastro/fornecedores', label: 'Fornecedores', icon: Building2, grupo: 'Compras' },
 
