@@ -1,3 +1,4 @@
+import { restringirEscopoIA } from '@/lib/ai/acessoDominio'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
@@ -133,7 +134,7 @@ async function resolverAcesso(usuario: UsuarioTenant, modulo: AIModulo): Promise
   // A permissão do Atlas é o teto. Configuração específica da IA só pode restringir,
   // nunca liberar um setor que o usuário não possua no sistema.
   const escopoBase: EscopoIA = modulo === 'comercial' ? 'proprio' : 'setor'
-  const { data: override } = await supabaseAdmin
+  const { data: override, error: erroOverride } = await supabaseAdmin
     .from('ia_acessos_dominio')
     .select('escopo,permitido')
     .eq('empresa_id', usuario.empresa_id)
@@ -141,14 +142,15 @@ async function resolverAcesso(usuario: UsuarioTenant, modulo: AIModulo): Promise
     .eq('dominio', modulo)
     .maybeSingle()
 
+  if (erroOverride) throw new Error('Não foi possível conferir as restrições da IA.')
+
   if (override) {
-    const escopoConfigurado = String(override.escopo || 'nenhum') as EscopoIA
+    const escopoConfigurado = restringirEscopoIA(escopoBase, override)
     if (override.permitido !== true || escopoConfigurado === 'nenhum') {
       return { permitido: false, escopo: 'nenhum', origem: 'configurado', motivo: 'Domínio restringido pelo Master.' }
     }
 
-    const ordem: Record<EscopoIA, number> = { nenhum: 0, proprio: 1, setor: 2, empresa: 3 }
-    const escopo = ordem[escopoConfigurado] < ordem[escopoBase] ? escopoConfigurado : escopoBase
+    const escopo = escopoConfigurado
     return {
       permitido: true,
       escopo,
@@ -162,14 +164,15 @@ async function resolverAcesso(usuario: UsuarioTenant, modulo: AIModulo): Promise
 
 async function acessoAuxiliar(usuario: UsuarioTenant, dominio: string) {
   if (usuario.role === 'master') return true
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('ia_acessos_dominio')
     .select('escopo,permitido')
     .eq('empresa_id', usuario.empresa_id)
     .eq('usuario_id', usuario.id)
     .eq('dominio', dominio)
     .maybeSingle()
-  return Boolean(data?.permitido && data?.escopo && data.escopo !== 'nenhum')
+  if (error) throw new Error('Não foi possível conferir as restrições da IA.')
+  return restringirEscopoIA('empresa', data || { permitido: false }) !== 'nenhum'
 }
 
 async function auditarAcesso(

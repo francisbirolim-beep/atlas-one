@@ -1,3 +1,4 @@
+import { restringirEscopoIA } from '@/lib/ai/acessoDominio'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { UsuarioTenant } from '@/lib/tenantServer'
 import { AI_ESPECIALISTAS } from '@/lib/ai/specialists'
@@ -9,13 +10,6 @@ export type EscopoAtlas = 'nenhum' | 'proprio' | 'setor' | 'empresa'
 export type AcessoAtlas = {
   permitido: boolean
   escopo: EscopoAtlas
-}
-
-const ORDEM_ESCOPO: Record<EscopoAtlas, number> = {
-  nenhum: 0,
-  proprio: 1,
-  setor: 2,
-  empresa: 3,
 }
 
 const STOPWORDS = new Set([
@@ -123,7 +117,7 @@ async function carregarAcessos(usuario: UsuarioTenant): Promise<Record<AIModulo,
     return resultado
   }
 
-  const [{ data: permissoes }, { data: overrides }] = await Promise.all([
+  const [{ data: permissoes, error: erroPermissoes }, { data: overrides, error: erroOverrides }] = await Promise.all([
     supabaseAdmin
       .from('permissoes')
       .select('setor_id,nivel')
@@ -135,6 +129,8 @@ async function carregarAcessos(usuario: UsuarioTenant): Promise<Record<AIModulo,
       .eq('empresa_id', usuario.empresa_id)
       .eq('usuario_id', usuario.id),
   ])
+
+  if (erroPermissoes || erroOverrides) throw new Error('Não foi possível conferir as restrições da IA.')
 
   const setores = new Set(
     (permissoes || [])
@@ -157,7 +153,7 @@ async function carregarAcessos(usuario: UsuarioTenant): Promise<Record<AIModulo,
       continue
     }
 
-    const configurado = String(override.escopo || 'nenhum') as EscopoAtlas
+    const configurado = restringirEscopoIA(base, override)
     if (override.permitido !== true || configurado === 'nenhum') {
       resultado[especialista.modulo] = { permitido: false, escopo: 'nenhum' }
       continue
@@ -165,7 +161,7 @@ async function carregarAcessos(usuario: UsuarioTenant): Promise<Record<AIModulo,
 
     resultado[especialista.modulo] = {
       permitido: true,
-      escopo: ORDEM_ESCOPO[configurado] < ORDEM_ESCOPO[base] ? configurado : base,
+      escopo: configurado,
     }
   }
 
@@ -174,14 +170,15 @@ async function carregarAcessos(usuario: UsuarioTenant): Promise<Record<AIModulo,
 
 async function acessoAuxiliar(usuario: UsuarioTenant, dominio: 'custos_precos' | 'fornecedores') {
   if (usuario.role === 'master') return true
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('ia_acessos_dominio')
     .select('escopo,permitido')
     .eq('empresa_id', usuario.empresa_id)
     .eq('usuario_id', usuario.id)
     .eq('dominio', dominio)
     .maybeSingle()
-  return Boolean(data?.permitido && data?.escopo && data.escopo !== 'nenhum')
+  if (error) throw new Error('Não foi possível conferir as restrições da IA.')
+  return restringirEscopoIA('empresa', data || { permitido: false }) !== 'nenhum'
 }
 
 async function contar(table: string, empresaId?: string, filtros: Record<string, any> = {}) {
@@ -209,6 +206,7 @@ type BuscaTabelaOpts = {
 }
 
 async function buscarTabela(opts: BuscaTabelaOpts) {
+  if (opts.escopo === 'nenhum' || (opts.escopo === 'proprio' && (!opts.proprioColumn || !opts.proprioValue))) return []
   const limite = Math.max(1, Math.min(opts.limit || 10, 20))
   const resultados = new Map<string, any>()
 

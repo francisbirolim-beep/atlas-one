@@ -1,3 +1,4 @@
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 // Relatório de leitura: nunca escreve no CMV nem altera custos.
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarTenant} from '@/lib/tenantServer'
@@ -14,6 +15,17 @@ const lotes=<T,>(valores:T[],tamanho:number)=>Array.from({length:Math.ceil(valor
 export async function GET(req:NextRequest){
  const usuario=await autenticarTenant(req)
  if(!usuario)return erro('Sessão inválida.',401)
+ try{
+  const params={usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id}
+  const [relatorios,compras]=await Promise.all([
+   usuarioPodeAcaoServer({...params,setorId:'relatorios',acaoId:'admin.bi.consultar'}),
+   usuarioPodeAcaoServer({...params,setorId:'compras',acaoId:'compras.geral.consultar'}),
+  ])
+  if(!relatorios||!compras)return erro('Você não possui acesso a este relatório de compras.',403)
+ }catch{
+  return erro('Não foi possível conferir as permissões.',503)
+ }
+
  const inicio=req.nextUrl.searchParams.get('inicio')||''
  const fim=req.nextUrl.searchParams.get('fim')||''
  const referencia=req.nextUrl.searchParams.get('referencia')||'compra'
