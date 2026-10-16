@@ -1131,6 +1131,10 @@ setValidandoIA(false)
 
 async function salvarCard() {
 if (!editando || !cardSelecionado) return
+if(ehOrcamentoWVetro(cardSelecionado)){
+const pendentes=(editando.itens||[]).map((i,idx)=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))==='pendente'?idx+1:0).filter(Boolean)
+if(pendentes.length){alert('Esquadrias ainda pendentes: '+pendentes.join(', ')+'. As demais estão salvas.');return}
+}
 if(ehOrcamentoWVetro(cardSelecionado)&&(editando.itens||[]).some(i=>{
  const original=cardSelecionado.itens?.find(o=>o.id===i.id)
  return original&&Object.keys(diferencasItemWVetro(original,i)).length>0
