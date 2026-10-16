@@ -653,6 +653,8 @@ correcao:modo==='corrigir'?Object.fromEntries(Object.entries(diffs).map(([c,v])=
 })})
 const d=await r.json();if(!r.ok)throw new Error(d.error||'Não foi possível conferir a esquadria.')
 const atualizado=d.orcamento as OrcamentoRapido
+const gravado=atualizado?.itens?.find(i=>i.id===itemId)
+if(!gravado||statusItemWVetro(gravado,fluxoWVetro(atualizado))==='pendente')throw new Error('A gravação desta esquadria não foi confirmada no banco.')
 setCardSelecionado(atualizado)
 setCards(prev=>prev.map(c=>c.id===atualizado.id?atualizado:c))
 // Preservar os rascunhos de todas as demais esquadrias e os campos gerais.
