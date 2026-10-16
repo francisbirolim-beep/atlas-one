@@ -9,6 +9,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { nomeCadastroIncompleto, registrarPendenciaCadastro } from '@/lib/cadastroPendenciasServer'
 import { normalizarCidadeMargem, resolverMargemOrcamentoPorCidade } from '@/lib/orcamentoMargensCidadeServer'
 import { nomesClientesCompativeis, normalizarNomeClienteWVetro } from '@/lib/wvetroClienteIdentidade'
+import { reconciliarSincronizacaoWVetro } from '@/lib/wvetroPreservacaoSincronizacao'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -205,7 +206,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
+    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,updated_at,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
 
@@ -578,18 +579,16 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         }
         const anterior = obj(existente.wvetro_fluxo)
         const mesmoPayload = txt(anterior?.payload_hash) === registro.payloadHash
-        const manterValidacao =
-          mesmoPayload &&
-          txt(anterior?.validacao_status).toLowerCase() === 'validado'
-        const fluxoAtualizado = manterValidacao
-          ? {
-              ...fluxo,
-              validacao_status: 'validado',
-              validado_em: anterior?.validado_em || null,
-              validado_por_id: anterior?.validado_por_id || null,
-              validado_por_nome: anterior?.validado_por_nome || null,
-            }
-          : fluxo
+        const preservado = reconciliarSincronizacaoWVetro(existente, itens, fluxo, mesmoPayload)
+        if (preservado.bloqueado) {
+          // Nova versão do documento não pode apagar correções validadas por uma pessoa.
+          resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'revisao_humana_necessaria', cliente: nome, itens: itens.length })
+          semAlteracao += 1
+          continue
+        }
+        const fluxoAtualizado = preservado.fluxo
+        const itensAtualizados = preservado.itens
+        const primeiroAtualizado = itensAtualizados[0] || primeiro
         const clienteJaVinculado = clienteResolvido.pendencia ? !existente.cliente_id : (!cliente?.id || existente.cliente_id === cliente.id)
         const anexosAtualizados = anexosComPdfWVetro(existente.anexos, p, numeroW)
         const precisaAtualizarPdf = anexosAtualizados.length !== arr(existente.anexos).length
@@ -618,11 +617,11 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           cliente_nome: nome,
           cliente_whatsapp: telefoneCliente(p) || null,
           cliente_id: cliente?.id || (clienteResolvido.pendencia ? null : existente.cliente_id || null),
-          itens,
-          tipo_esquadria: primeiro.tipo_esquadria || 'outro',
-          largura_mm: primeiro.largura_mm || null,
-          altura_mm: primeiro.altura_mm || null,
-          quantidade: primeiro.quantidade || 1,
+          itens: itensAtualizados,
+          tipo_esquadria: primeiroAtualizado.tipo_esquadria || 'outro',
+          largura_mm: primeiroAtualizado.largura_mm || null,
+          altura_mm: primeiroAtualizado.altura_mm || null,
+          quantidade: primeiroAtualizado.quantidade || 1,
           acabamento: txt(p.Cor, p.Acabamento) || null,
           cidade: cidadeOrcamento || existente.cidade || null,
           valor_estimado: valor > 0 ? valor : null,
@@ -641,8 +640,16 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
             margem_regra_cidade_id: regraMargem.regraId,
           } : {}),
         }
-        const { error } = await supabaseAdmin.from('orcamentos').update(patch).eq('id', existente.id).eq('empresa_id', usuario.empresa_id)
+        let escrita = supabaseAdmin.from('orcamentos').update(patch).eq('id', existente.id).eq('empresa_id', usuario.empresa_id)
+        // Não sobrescrever uma validação que chegou enquanto a sincronização processava o lote.
+        escrita = existente.updated_at ? escrita.eq('updated_at', existente.updated_at) : escrita.is('updated_at', null)
+        const { data: salvo, error } = await escrita.select('id').maybeSingle()
         if (error) throw error
+        if (!salvo) {
+          resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'alterado_durante_sincronizacao', cliente: nome })
+          semAlteracao += 1
+          continue
+        }
         atualizados += 1
         resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'atualizado', cliente: nome, itens: itens.length })
       } else {
