@@ -30,14 +30,36 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}) {
       pode('financeiro') ? supabase.from('financeiro_recebimentos').select('*').eq('cliente_id',clienteId).order('data_recebimento',{ascending:false}).order('created_at',{ascending:false}) : Promise.resolve({data:[],error:null}),
       pode('documentos') ? supabase.from('cliente_documentos').select('*').eq('cliente_id',clienteId).order('created_at',{ascending:false}) : Promise.resolve({data:[],error:null}),
     ])
-    if(c.error||!c.data)return NextResponse.json({error:'Cliente não encontrado ou acesso não liberado.'},{status:404})
+    if(c.error){
+      console.error('[cliente360/painel] falha na consulta principal', {code:c.error.code||'desconhecido',message:c.error.message})
+      return NextResponse.json({error:'Não foi possível carregar o cadastro do cliente. Tente novamente.'},{status:503})
+    }
+    if(!c.data)return NextResponse.json({error:'Cliente não encontrado ou acesso não liberado.'},{status:404})
     const outras=[os,orc,wvh,wvf,wvo,ass,med,comp,int,cr,rec,docs]
-    if(outras.some(r=>r.error))throw new Error('Falha ao carregar dados autorizados.')
+    const nomes=['Obras','Orçamentos','Histórico comercial W.Vetro','Histórico financeiro W.Vetro','Histórico operacional W.Vetro','Assistências','Medições','Compras','Interações','Contas a receber','Recebimentos','Documentos']
+    // Falhas em seções independentes não derrubam o cadastro inteiro.
+    // Só consultamos grupos autorizados e não alteramos RLS ou permissões.
+    const avisos:string[]=[]
+    outras.forEach((resultado,index)=>{
+      if(!resultado.error)return
+      avisos.push(nomes[index])
+      console.error('[cliente360/painel] seção indisponível',{
+        secao:nomes[index],code:resultado.error.code||'desconhecido',message:resultado.error.message,
+      })
+    })
     const cliente=c.data as unknown as Record<string,unknown>
     if(!pode('observacoes'))delete cliente.observacoes
-    const ids=(rec.data||[]).map((r:{id:string})=>r.id)
+    const ids=(rec.error?[]:rec.data||[]).map((r:{id:string})=>r.id)
     const alo=ids.length ? await supabase.from('financeiro_recebimento_alocacoes').select('*').in('recebimento_id',ids).order('created_at',{ascending:true}) : {data:[],error:null}
-    if(alo.error)throw alo.error
-    return NextResponse.json({acesso,cliente,obras:os.data||[],orcamentos:orc.data||[],wvetroHistorico:wvh.data||[],wvetroFinanceiro:wvf.data||[],wvetroOperacional:wvo.data||[],assistencias:ass.data||[],medicoes:med.data||[],compras:comp.data||[],interacoes:int.data||[],contas:cr.data||[],recebimentos:rec.data||[],documentos:docs.data||[],alocacoes:alo.data||[]},{headers:{'Cache-Control':'no-store'}})
-  }catch{return NextResponse.json({error:'Não foi possível carregar o painel e conferir as autorizações. Tente novamente.'},{status:503})}
+    if(alo.error){
+      avisos.push('Alocações financeiras')
+      console.error('[cliente360/painel] seção indisponível',{
+        secao:'Alocações financeiras',code:alo.error.code||'desconhecido',message:alo.error.message,
+      })
+    }
+    return NextResponse.json({acesso,cliente,avisos,obras:os.data||[],orcamentos:orc.data||[],wvetroHistorico:wvh.data||[],wvetroFinanceiro:wvf.data||[],wvetroOperacional:wvo.data||[],assistencias:ass.data||[],medicoes:med.data||[],compras:comp.data||[],interacoes:int.data||[],contas:cr.data||[],recebimentos:rec.data||[],documentos:docs.data||[],alocacoes:alo.error?[]:alo.data||[]},{headers:{'Cache-Control':'no-store'}})
+  }catch(error){
+    console.error('[cliente360/painel] falha inesperada',{error})
+    return NextResponse.json({error:'Não foi possível carregar o painel e conferir as autorizações. Tente novamente.'},{status:503})
+  }
 }
