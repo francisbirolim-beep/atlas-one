@@ -653,7 +653,11 @@ setCards(prev=>prev.map(c=>c.id===atualizado.id?atualizado:c))
 setEditando(prev=>prev?{...prev,wvetro_fluxo:fluxoWVetro(atualizado),itens:(prev.itens||[]).map(i=>i.id===itemId?atualizado.itens!.find(s=>s.id===itemId)!:i)}:prev)
 setMensagemWVetro(d.mensagem)
 setHistorico(await listarHistorico(atualizado.id))
-}catch(e){setMensagemWVetro(e instanceof Error?e.message:'Não foi possível conferir a esquadria.')}
+}catch(e){
+const motivo=e instanceof Error?e.message:'Não foi possível conferir a esquadria.'
+setMensagemWVetro(motivo)
+window.alert('A validação desta esquadria NÃO foi salva. Confira o erro antes de continuar: '+motivo)
+}
 finally{setValidandoWVetro(false)}
 }
 
