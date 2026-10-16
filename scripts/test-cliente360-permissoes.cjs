@@ -26,11 +26,14 @@ assert.equal(p.podeCliente360({...basico,setores:{compras:'edicao'},acoes:{'comp
 assert.equal(JSON.stringify(p.normalizarMatrizCliente360({financeiro:'admin',compras:'oculto',inexistente:'edicao'})),JSON.stringify({compras:'oculto'}))
 let consultas=[]
 let falharTabela=null
+let clienteExiste=true
+let comprasConsultar=true
+let filtrosAdmin=[]
 function query(tabela){
  consultas.push(tabela)
  const q={}
  for(const metodo of ['select','eq','or','order','limit','in'])q[metodo]=()=>q
- const retorno=()=>({data:tabela==='clientes'?{id:'cliente-1',nome:'Cliente de teste',observacoes:'Restrito'}:[],error:tabela===falharTabela?{message:'Falha simulada'}:null})
+ const retorno=()=>({data:tabela==='clientes'?(clienteExiste?{id:'cliente-1',nome:'Cliente de teste',observacoes:'Restrito'}:null):[],error:tabela===falharTabela?{message:'Falha simulada'}:null})
  q.maybeSingle=async()=>retorno()
  q.then=(a,b)=>Promise.resolve(retorno()).then(a,b)
  return q
@@ -39,7 +42,17 @@ let usuario={id:'usuario-1',nome:'Vendedor',role:'funcionario',empresa_id:'empre
 let contexto=vendedor
 const route=carregar('app/api/clientes/[id]/painel/route.ts',{
  'next/server':{NextResponse:{json:(data,options={})=>({data,status:options.status||200,headers:options.headers})}},
- '@supabase/supabase-js':{createClient:()=>({from:query})},
+ '@supabase/supabase-js':{createClient:()=>({from:tabela=>{
+  assert.notEqual(tabela,'compras_necessidades','Tabela privada nunca usa token do navegador')
+  return query(tabela)
+ }})},
+ '@/lib/supabaseAdmin':{supabaseAdmin:{from:tabela=>{
+  assert.equal(tabela,'compras_necessidades','Admin limitado à tabela privada de Compras')
+  const q=query(tabela)
+  q.eq=(coluna,valor)=>{filtrosAdmin.push([coluna,valor]);return q}
+  return q
+ }}},
+ '@/lib/comprasPermissoesServer':{obterComprasAcessos:async()=>({consultar:comprasConsultar})},
  '@/lib/tenantServer':{autenticarTenant:async()=>usuario},
  '@/lib/cliente360AcessoServer':{contextoCliente360Server:async()=>contexto},
  '@/lib/cliente360Permissoes':p,
@@ -62,6 +75,22 @@ const req={headers:{get:()=> 'Bearer token-de-teste'}}
  resp=await route.GET(req,{params:{id:'cliente-1'}})
  assert.equal(resp.status,200)
  assert.ok(consultas.includes('financeiro_contas_receber'),'Master preserva consulta financeira')
+ assert.equal(JSON.stringify(filtrosAdmin),JSON.stringify([['empresa_id','empresa-1'],['cliente_id','cliente-1']]),'Compras limitadas à empresa autenticada e cliente validado')
+ clienteExiste=false;consultas=[];filtrosAdmin=[]
+ resp=await route.GET(req,{params:{id:'cliente-1'}})
+ assert.equal(resp.status,404)
+ assert.equal(filtrosAdmin.length,0,'Cliente inacessível não dispara consulta administrativa')
+ clienteExiste=true
+ contexto={...basico,setores:{compras:'consulta'},acoes:{'compras.geral.consultar':'oculto','compras.geral.ver_proprios':'consulta'}}
+ comprasConsultar=false;consultas=[]
+ resp=await route.GET(req,{params:{id:'cliente-1'}})
+ assert.equal(resp.status,200)
+ assert.ok(!consultas.includes('compras_necessidades'),'Acesso aos próprios pedidos não libera necessidades legadas gerais')
+ assert.equal(resp.data.compras.length,0)
+ contexto={...basico,role:'master'};comprasConsultar=true
+ falharTabela='compras_necessidades'
+ resp=await route.GET(req,{params:{id:'cliente-1'}})
+ assert.equal(resp.status,503,'Falha real de Compras continua fechada')
  falharTabela='financeiro_contas_receber'
  resp=await route.GET(req,{params:{id:'cliente-1'}})
  assert.equal(resp.status,503,'Falha de consulta não produz sucesso falso')
