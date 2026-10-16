@@ -468,6 +468,12 @@ setCards(prev => prev.map(c => (c.coluna_id === col.id ? { ...c, coluna_id: dest
 async function abrirCard(card: OrcamentoRapido) {
 const agoraIso = new Date().toISOString()
 let cardAberto = card
+if(ehOrcamentoWVetro(card)){
+const {data,error}=await supabase.from('orcamentos').select('*').eq('id',card.id).maybeSingle()
+if(error||!data){window.alert('Não foi possível atualizar o status das validações. Reabra o card.');return}
+cardAberto=data as OrcamentoRapido
+setCards(prev=>prev.map(c=>c.id===card.id?cardAberto:c))
+}
 
 if (!card.orcamento_finalizado_em && !card.orcamento_iniciado_em) {
 const { error } = await supabase
