@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, ClipboardList, ImageOff, Loader2, PackageCheck, Plus, Search, Trash2 } from 'lucide-react'
-import { tokenAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
+import { listarFornecedores } from '@/lib/fornecedores'
+import { uploadFotoProduto } from '@/lib/upload'
 
 type Produto = { id: string; codigo: string | null; nome: string; unidade: string | null; custo: number | null; foto_url: string | null }
 type Cliente = { id: string; nome: string; cidade?: string | null }
@@ -22,6 +25,17 @@ type Item = {
 type Historico = { id: string; fornecedor_nome: string; numero_romaneio: string; data_documento: string; criado_por_nome: string }
 type HistoricoItem = { id: string; entrada_id: string; descricao: string; quantidade: number; unidade: string | null; produto?: { foto_url?: string | null; codigo?: string | null } | null }
 type Consulta = (params: Record<string, string>) => Promise<any>
+type FormaPrevista = 'boleto' | 'pix' | 'cheque'
+type Parcela = { vencimento: string; forma: FormaPrevista; valor: string }
+type NovoProduto = { nome: string; categoria: 'produto' | 'perfil' | 'acessorio' | 'vidro' | 'outro'; unidade: string; custo: string; fornecedorId: string }
+type FornecedorCadastro = { id: string; nome: string }
+const produtoInicial = (): NovoProduto => ({ nome: '', categoria: 'produto', unidade: 'unidade', custo: '', fornecedorId: '' })
+const dividirCentavos = (total: number, quantidade: number): string[] => {
+  const centavos = Math.max(0, Math.round(total * 100))
+  const base = Math.floor(centavos / quantidade)
+  return Array.from({ length: quantidade }, (_, i) =>
+    ((base + (i < centavos % quantidade ? 1 : 0)) / 100).toFixed(2).replace('.', ','))
+}
 
 const input = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
 const numeroBR = (texto: string) => { const s=texto.trim(); return Number(s.includes(',') ? s.replace(/\./g,'').replace(',','.') : s) }
@@ -94,7 +108,15 @@ export default function EntradaManualPage() {
   const [fornecedor,setFornecedor]=useState('')
   const [numeroRomaneio,setNumeroRomaneio]=useState('')
   const [dataDocumento,setDataDocumento]=useState(dataHoje)
-  const [vencimento,setVencimento]=useState('')
+  const [parcelas,setParcelas]=useState<Parcela[]>([{ vencimento: '', forma: 'boleto', valor: '' }])
+  const [valoresEditados,setValoresEditados]=useState(false)
+  const [podeCriarProduto,setPodeCriarProduto]=useState(false)
+  const [fornecedoresCadastro,setFornecedoresCadastro]=useState<FornecedorCadastro[]>([])
+  const [cadastroProdutoAberto,setCadastroProdutoAberto]=useState(false)
+  const [novoProduto,setNovoProduto]=useState<NovoProduto>(produtoInicial)
+  const [fotoNovoProduto,setFotoNovoProduto]=useState<File|null>(null)
+  const [salvandoProduto,setSalvandoProduto]=useState(false)
+  const [erroProduto,setErroProduto]=useState('')
   const [observacoes,setObservacoes]=useState('')
   const [clientePadrao,setClientePadrao]=useState<Cliente|null>(null)
   const [obraPadrao,setObraPadrao]=useState('')
@@ -107,7 +129,7 @@ export default function EntradaManualPage() {
   const [permissao,setPermissao]=useState(false)
   const [consultando,setConsultando]=useState(true)
   const [erro,setErro]=useState('')
-  const [sucesso,setSucesso]=useState<{ entradaId: string; contaPagarId?: string; valorTotal?: number; duplicado?: boolean }|null>(null)
+  const [sucesso,setSucesso]=useState<{ entradaId: string; contaPagarId?: string; valorTotal?: number; parcelasRegistradas?: number; duplicado?: boolean }|null>(null)
   const [chaveIdempotencia,setChaveIdempotencia]=useState('')
   const [historico,setHistorico]=useState<Historico[]>([])
   const [historicoItens,setHistoricoItens]=useState<HistoricoItem[]>([])
@@ -132,6 +154,17 @@ export default function EntradaManualPage() {
       .finally(()=>{if(ativo)setConsultando(false)})
     return ()=>{ativo=false}
   },[consultar])
+  useEffect(()=>{
+    let ativo = true
+    usuarioAtual().then(async usuario => {
+      const acesso = await carregarAcessoCadastro(usuario)
+      if (!ativo || !podeAcaoCadastro(acesso, 'produtos', 'criar')) return
+      setPodeCriarProduto(true)
+      const registros = await listarFornecedores(true)
+      if (ativo) setFornecedoresCadastro(registros.map(f => ({ id: f.id, nome: f.nome })))
+    }).catch(() => {})
+    return () => { ativo = false }
+  },[])
   useEffect(()=>{
     const p=new URLSearchParams(window.location.search)
     const clienteId=p.get('cliente') || '',obraId=p.get('obra') || ''
@@ -179,15 +212,101 @@ export default function EntradaManualPage() {
     const q=numeroBR(i.quantidade),c=numeroBR(i.custoUnitario)
     return s+(Number.isFinite(q)&&Number.isFinite(c)?q*c:0)
   },0),[itens])
+  useEffect(()=>{
+    if (valoresEditados) return
+    const valores = dividirCentavos(total, parcelas.length)
+    setParcelas(anteriores => anteriores.map((p, i) =>
+      p.valor === valores[i] ? p : { ...p, valor: valores[i] }))
+  },[total, parcelas.length, valoresEditados])
+  const somaParcelas = parcelas.reduce((s, p) => {
+    const valor = numeroBR(p.valor)
+    return s + (Number.isFinite(valor) ? Math.round(valor * 100) : 0)
+  },0) / 100
+  const parcelasConferem = Math.round(somaParcelas * 100) === Math.round(total * 100)
 
   function limpar(){
-    setFornecedor('');setNumeroRomaneio('');setDataDocumento(dataHoje());setVencimento('');setObservacoes('')
+    setFornecedor('');setNumeroRomaneio('');setDataDocumento(dataHoje());setObservacoes('')
+    setParcelas([{ vencimento: '', forma: 'boleto', valor: '' }]);setValoresEditados(false)
     setItens([]);setProdutoBusca('');setErro('');setSucesso(null);setChaveIdempotencia('')
+  }
+  function alterarQuantidadeParcelas(valor: number) {
+    const quantidade = Math.min(36, Math.max(1, valor))
+    setParcelas(anteriores => Array.from({ length: quantidade }, (_, i) =>
+      anteriores[i] || { vencimento: '', forma: 'boleto' as FormaPrevista, valor: '' }))
+    setValoresEditados(false)
+    setErro('')
+  }
+  function alterarParcela(indice: number, campos: Partial<Parcela>) {
+    setParcelas(anteriores => anteriores.map((p, n) => n === indice ? { ...p, ...campos } : p))
+    if (campos.valor !== undefined) setValoresEditados(true)
+    setErro('')
+  }
+  function abrirCadastroProduto() {
+    if (!podeCriarProduto) return
+    const coincidente = fornecedoresCadastro.find(f =>
+      f.nome.trim().toLowerCase() === fornecedor.trim().toLowerCase())
+    setNovoProduto({ ...produtoInicial(), nome: produtoBusca.trim(),
+      fornecedorId: coincidente?.id || '' })
+    setFotoNovoProduto(null)
+    setErroProduto('')
+    setCadastroProdutoAberto(true)
+  }
+  async function cadastrarProdutoRapido(evento: React.FormEvent<HTMLFormElement>) {
+    evento.preventDefault()
+    if (!podeCriarProduto || salvandoProduto) return
+    const nome = novoProduto.nome.trim()
+    const unidade = novoProduto.unidade.trim()
+    const exigeFoto = ['perfil','acessorio'].includes(novoProduto.categoria)
+    const custo = novoProduto.custo.trim() ? numeroBR(novoProduto.custo) : null
+    setErroProduto('')
+    if (!nome || !unidade) return setErroProduto('Informe nome e unidade do produto.')
+    if (novoProduto.custo.trim() && (custo === null || !Number.isFinite(custo) || custo < 0))
+      return setErroProduto('O custo informado é inválido.')
+    if (exigeFoto && !fotoNovoProduto)
+      return setErroProduto('Perfis e acessórios precisam ter uma imagem do produto.')
+    setSalvandoProduto(true)
+    try {
+      const usuario = await usuarioAtual()
+      const acesso = await carregarAcessoCadastro(usuario)
+      if (!podeAcaoCadastro(acesso,'produtos','criar'))
+        throw new Error('Seu usuário não tem permissão para cadastrar produtos.')
+      const fotoUrl = fotoNovoProduto ? await uploadFotoProduto(fotoNovoProduto) : null
+      if (fotoNovoProduto && !fotoUrl) throw new Error('Não foi possível enviar a foto do produto.')
+      const token = await tokenAtual()
+      if (!token) throw new Error('Sessão expirada.')
+      const resposta = await fetch('/api/compras/entrada-manual/produto', {
+        method: 'POST',
+        headers: { Authorization:`Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome, categoria:novoProduto.categoria, unidade, custo,
+          fornecedorId:novoProduto.fornecedorId || null, fotoUrl,
+        }),
+      })
+      const dados = await resposta.json().catch(() => ({}))
+      if (!resposta.ok || !dados.produto)
+        throw new Error(dados.error || 'Não foi possível cadastrar o produto.')
+      adicionarProduto(dados.produto as Produto)
+      setCadastroProdutoAberto(false)
+      setNovoProduto(produtoInicial())
+      setFotoNovoProduto(null)
+    } catch (erro) {
+      setErroProduto(erro instanceof Error ? erro.message : 'Erro ao cadastrar produto.')
+    } finally {
+      setSalvandoProduto(false)
+    }
   }
   async function salvar(){
     setErro('')
     if(!fornecedor.trim()||!numeroRomaneio.trim()||!dataDocumento)return setErro('Informe fornecedor, número e data do romaneio.')
     if(!itens.length)return setErro('Selecione ao menos um produto cadastrado.')
+    if(!parcelasConferem)return setErro('A soma das parcelas precisa ser igual ao total do romaneio.')
+    for (const [n, parcela] of parcelas.entries()) {
+      const valor = numeroBR(parcela.valor)
+      if (!parcela.vencimento || !/^\d{4}-\d{2}-\d{2}$/.test(parcela.vencimento))
+        return setErro(`Parcela ${n+1}: informe a data de vencimento.`)
+      if (!Number.isFinite(valor) || valor <= 0 || Math.abs(valor * 100 - Math.round(valor * 100)) > 0.00001)
+        return setErro(`Parcela ${n+1}: informe um valor válido.`)
+    }
     if(requerEstoque&&!localId)return setErro('Escolha o Estoque Geral para os produtos destinados ao estoque.')
     const enviados=[]
     for(const [n,i] of itens.entries()){
@@ -217,7 +336,9 @@ export default function EntradaManualPage() {
       const token=await tokenAtual();if(!token)throw new Error('Sessão expirada.')
       const r=await fetch('/api/compras/entrada-manual',{
         method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({fornecedor,numeroRomaneio,dataDocumento,vencimento:vencimento||null,
+        body:JSON.stringify({fornecedor,numeroRomaneio,dataDocumento,
+          parcelas: parcelas.map(p=>({ vencimento:p.vencimento, forma:p.forma,
+            valor:Math.round(numeroBR(p.valor)*100)/100 })),
           observacoes,chaveIdempotencia:chave,itens:enviados}),
       })
       const dados=await r.json().catch(()=>({}))
@@ -244,7 +365,7 @@ export default function EntradaManualPage() {
          <CheckCircle2 size={36} className="text-emerald-600"/>
          <h2 className="mt-3 text-xl font-semibold">Romaneio registrado</h2>
          <p className="mt-2 text-sm text-slate-600">Romaneio {numeroRomaneio} · {fornecedor}. {sucesso.duplicado?'Esta entrada já estava registrada: sem duplicidade.':'Distribuição por produto concluída, com registro financeiro vinculado.'}</p>
-         {!sucesso.duplicado&&<p className="mt-2 text-sm">Valor do Contas a Pagar: <strong>{real(Number(sucesso.valorTotal||0))}</strong></p>}
+         {!sucesso.duplicado&&<p className="mt-2 text-sm">Total no Contas a Pagar: <strong>{real(Number(sucesso.valorTotal||0))}</strong> · {sucesso.parcelasRegistradas || parcelas.length} parcela(s) vinculada(s) ao romaneio.</p>}
          <div className="mt-4 flex flex-wrap gap-2">
            <Link href="/financeiro/contas-pagar" className="rounded-xl border px-4 py-2 text-sm font-semibold text-blue-700">Ver Contas a Pagar</Link>
            {obraPadrao&&<Link href={`/obras/${obraPadrao}`} className="rounded-xl border px-4 py-2 text-sm font-semibold text-blue-700">Ver obra</Link>}
@@ -257,10 +378,35 @@ export default function EntradaManualPage() {
             <Campo titulo="Fornecedor *"><input className={input} value={fornecedor} maxLength={200} onChange={e=>setFornecedor(e.target.value)} placeholder="Fornecedor"/></Campo>
             <Campo titulo="Número do romaneio *"><input className={input} value={numeroRomaneio} maxLength={100} onChange={e=>setNumeroRomaneio(e.target.value)} placeholder="Nº ou referência"/></Campo>
             <Campo titulo="Data do romaneio *"><input className={input} type="date" value={dataDocumento} onChange={e=>setDataDocumento(e.target.value)}/></Campo>
-            <Campo titulo="Vencimento (Contas a Pagar)"><input className={input} type="date" value={vencimento} onChange={e=>setVencimento(e.target.value)}/></Campo>
+            <Campo titulo="Quantidade de parcelas *"><select className={input} value={parcelas.length} onChange={e=>alterarQuantidadeParcelas(Number(e.target.value))}>
+              {Array.from({length:36},(_,i)=><option key={i+1} value={i+1}>{i+1} {i===0?'parcela':'parcelas'}</option>)}
+            </select></Campo>
+          </div>
+          <div className="mt-5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Parcelas no Contas a Pagar</h3>
+              <button type="button" className="text-xs font-semibold text-blue-700 underline" onClick={()=>setValoresEditados(false)}>
+                Dividir valores igualmente
+              </button>
+            </div>
+            {parcelas.map((parcela,indice)=><div key={indice} className="grid gap-3 rounded-xl border bg-slate-50 p-3 sm:grid-cols-[80px_1fr_1fr_1fr] sm:items-end">
+              <strong className="pb-2 text-sm">{indice+1}/{parcelas.length}</strong>
+              <Campo titulo="Vencimento *"><input type="date" className={input} value={parcela.vencimento}
+                onChange={e=>alterarParcela(indice,{vencimento:e.target.value})}/></Campo>
+              <Campo titulo="Forma de pagamento *"><select className={input} value={parcela.forma}
+                onChange={e=>alterarParcela(indice,{forma:e.target.value as FormaPrevista})}>
+                <option value="boleto">Boleto</option><option value="pix">Pix</option><option value="cheque">Cheque</option>
+              </select></Campo>
+              <Campo titulo="Valor (R$) *"><input className={input} inputMode="decimal" value={parcela.valor}
+                onChange={e=>alterarParcela(indice,{valor:e.target.value})}/></Campo>
+            </div>)}
+            <p className={`text-sm ${parcelasConferem?'text-slate-600':'font-semibold text-red-700'}`}>
+              Soma das parcelas: <strong>{real(somaParcelas)}</strong> · Total do romaneio: <strong>{real(total)}</strong>
+              {!parcelasConferem?' — confira os valores antes de salvar.':''}
+            </p>
           </div>
           <div className="mt-4"><Campo titulo="Observações"><textarea className={input} rows={2} maxLength={2000} value={observacoes} onChange={e=>setObservacoes(e.target.value)} placeholder="Romaneio, conferência ou avarias"/></Campo></div>
-          <p className="mt-3 text-xs text-slate-600">Ao confirmar, uma conta será aberta pelo valor total. Sem vencimento, ficará como pendente de vencimento.</p>
+          <p className="mt-3 text-xs text-slate-600">Cada parcela gera um título próprio, com vencimento, forma prevista e valor. A forma efetiva de pagamento será registrada na baixa financeira.</p>
         </section>
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
           <h2 className="font-semibold">2. Buscar os produtos recebidos</h2>
@@ -273,7 +419,58 @@ export default function EntradaManualPage() {
                 <Foto src={p.foto_url} nome={p.nome}/><span className="flex-1"><strong className="block text-sm">{p.nome}</strong><span className="text-xs text-slate-500">{p.codigo||'Sem código'} · {p.unidade||'UN'}</span></span><Plus size={17}/></button>)}
             </div>}
           </div>
-          <p className="mt-2 text-xs text-slate-500">Não encontrou o produto? <Link href="/cadastro/produtos" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 underline">Abra o cadastro de produtos em outra aba</Link> e depois pesquise novamente aqui.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={abrirCadastroProduto} disabled={!podeCriarProduto}
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50">
+              <Plus size={16}/>Cadastrar produto
+            </button>
+            <p className="text-xs text-slate-500">{podeCriarProduto
+              ? 'Não encontrou? Cadastre aqui e o produto entrará automaticamente no romaneio.'
+              : 'Para cadastrar produtos, o usuário precisa da permissão de criação no Cadastro.'}</p>
+          </div>
+          {cadastroProdutoAberto&&<form onSubmit={cadastrarProdutoRapido} className="mt-4 space-y-4 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="font-semibold">Cadastrar novo produto</h3>
+              <button type="button" onClick={()=>setCadastroProdutoAberto(false)} className="text-sm font-medium text-slate-600">Cancelar</button>
+            </div>
+            {erroProduto&&<p role="alert" className="text-sm font-semibold text-red-700">{erroProduto}</p>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Campo titulo="Nome do produto *"><input className={input} value={novoProduto.nome} maxLength={200}
+                onChange={e=>setNovoProduto(v=>({...v,nome:e.target.value}))} placeholder="Como o produto será identificado"/></Campo>
+              <Campo titulo="Categoria *"><select className={input} value={novoProduto.categoria}
+                onChange={e=>setNovoProduto(v=>({...v,categoria:e.target.value as NovoProduto['categoria']}))}>
+                <option value="produto">Produto</option><option value="perfil">Perfil</option>
+                <option value="acessorio">Acessório</option><option value="vidro">Vidro</option><option value="outro">Outro</option>
+              </select></Campo>
+              <Campo titulo="Fornecedor vinculado"><select className={input} value={novoProduto.fornecedorId}
+                onChange={e=>setNovoProduto(v=>({...v,fornecedorId:e.target.value}))}>
+                <option value="">Sem fornecedor vinculado</option>
+                {fornecedoresCadastro.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+              </select></Campo>
+              <Campo titulo="Unidade *"><input className={input} value={novoProduto.unidade}
+                onChange={e=>setNovoProduto(v=>({...v,unidade:e.target.value}))} placeholder="unidade, metro, barra..."/></Campo>
+              <Campo titulo="Custo técnico (R$)"><input className={input} inputMode="decimal" value={novoProduto.custo}
+                onChange={e=>setNovoProduto(v=>({...v,custo:e.target.value}))} placeholder="Pode informar no romaneio"/></Campo>
+              <Campo titulo="Imagem do produto (obrigatória para perfil/acessório)">
+                <input type="file" accept="image/*" className={input} onChange={e=>setFotoNovoProduto(e.target.files?.[0]||null)}/>
+              </Campo>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" className="text-xs font-semibold text-blue-700 underline"
+                onClick={()=>listarFornecedores(true).then(fs=>setFornecedoresCadastro(fs.map(f=>({id:f.id,nome:f.nome}))))}>
+                Atualizar fornecedores
+              </button>
+              <Link href="/cadastro/fornecedores" target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-blue-700 underline">
+                Cadastrar fornecedor na área de cadastros
+              </Link>
+            </div>
+            <p className="text-xs text-slate-600">O Atlas gera um código MAN- automático, mantém a imagem vinculada ao perfil ou acessório e adiciona o produto nesta entrada.</p>
+            <button type="submit" disabled={salvandoProduto}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+              {salvandoProduto?<Loader2 size={16} className="animate-spin"/>:<Plus size={16}/>}
+              {salvandoProduto?'Cadastrando...':'Salvar produto e adicionar ao romaneio'}
+            </button>
+          </form>}
           {itens.length===0?<div className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500"><ClipboardList size={25} className="mx-auto mb-2"/>Nenhum produto adicionado.</div>:
             <div className="mt-4 space-y-4">{itens.map((i,index)=>{
               const q=numeroBR(i.quantidade),qo=numeroBR(i.quantidadeObra)

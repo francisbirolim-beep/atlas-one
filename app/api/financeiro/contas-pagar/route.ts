@@ -18,7 +18,7 @@ export async function GET(req:NextRequest){
  try{
   const limite=limiteSeguro(req.nextUrl.searchParams.get('limit'),300,1000)
   const status=req.nextUrl.searchParams.get('status')
-  let q=supabaseAdmin.from('financeiro_contas_pagar').select('id,nf_id,fornecedor_id,fornecedor_nome,documento,parcela,descricao,data_emissao,vencimento,valor,status,data_pagamento,valor_pago,forma_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(limite)
+  let q=supabaseAdmin.from('financeiro_contas_pagar').select('id,nf_id,fornecedor_id,fornecedor_nome,documento,parcela,descricao,data_emissao,vencimento,valor,status,data_pagamento,valor_pago,forma_pagamento,forma_pagamento_prevista,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(limite)
   if(status)q=q.eq('status',status)
   const {data,error}=await q;if(error)throw error
   return NextResponse.json({ok:true,contas:data||[]})
