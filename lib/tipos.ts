@@ -155,6 +155,16 @@ foto_larguras_url?: string | null
 produto_id?: string | null
       preco_unit?: number | null
       preco_total?: number | null
+      // Dados técnicos importados do W.Vetro, opcionais nas outras origens.
+      linha_id?: string | null
+      linha_nome?: string | null
+      tipologia_id?: string | null
+      configuracao_preset_id?: string | null
+      configuracao_nome?: string | null
+      configuracao_validada?: boolean
+      configuracao_status?: string | null
+      modo_configuracao?: string | null
+      variaveis?: Record<string, string | number | boolean | null>
 }
 
 export interface OrcamentoRapido {
