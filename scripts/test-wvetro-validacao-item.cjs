@@ -67,6 +67,34 @@ const request=(acao,correcao={},itemId='i1',original)=>server.validarItemImporta
  assert.equal(p.statusItemWVetro({...row.itens[0],largura_mm:1500},row.wvetro_fluxo),'pendente','Editar invalida conferência antiga')
  r=await request('validar_item_importacao',{},'i2')
  assert.equal(r.status,200);assert.equal(row.wvetro_fluxo.validacao_status,'validado');assert.equal(packageCalls,1)
+ // Conferências legadas (com os 11 campos antigos) não podem ser invalidadas pela ampliação do editor.
+ reset()
+ const antigo=p.snapshotItemWVetro(item)
+ for(const campo of ['linha_nome','configuracao_nome','variaveis','observacao_tempera','largura_baixo_mm','largura_meio_mm','largura_cima_mm','altura_direita_mm','altura_meio_mm','altura_esquerda_mm'])delete antigo[campo]
+ row.wvetro_fluxo.validacoes_itens={i1:{resultado:'correto',snapshot:antigo}}
+ assert.equal(p.statusItemWVetro(row.itens[0],row.wvetro_fluxo),'validado','Não invalida orçamento 384 e demais confirmações legadas')
+ // Linha, configuração, variáveis e observação técnica são corrigíveis isoladamente.
+ reset()
+ row.itens[0].variaveis.wvetro_importado='sim'
+ r=await request('corrigir_item_importacao',{
+  linha_nome:'Linha Gold',configuracao_nome:'Fixo Gold',
+  variaveis:{vidro:'laminado',wvetro_importado:'nao'},
+  observacao_producao:'Reforço lateral',observacao_tempera:'vidro temperado',
+ })
+ assert.equal(r.status,200)
+ assert.equal(row.itens[0].linha_nome,'Linha Gold')
+ assert.equal(row.itens[0].configuracao_nome,'Fixo Gold')
+ assert.equal(row.itens[0].variaveis.vidro,'laminado')
+ assert.equal(row.itens[0].variaveis.wvetro_importado,'sim','Metadados não podem ser sobrescritos')
+ assert.equal(row.itens[0].configuracao_validada,false)
+ assert.equal(row.itens[0].configuracao_status,'pendente')
+ assert.deepEqual(row.itens[1],outro,'Outra esquadria inalterada')
+ assert.equal(p.statusItemWVetro(row.itens[0],row.wvetro_fluxo),'corrigido')
+ assert.equal(p.statusItemWVetro({...row.itens[0],linha_nome:'Suprema'},row.wvetro_fluxo),'pendente')
+ assert.ok(feedback.at(-1).diferencas.variaveis)
+ reset()
+ r=await request('corrigir_item_importacao',{variaveis:['inválido']})
+ assert.equal(r.status,400)
  reset();r=await request('corrigir_item_importacao',{tipo_esquadria:'outro',tipo_outro_texto:'Porta especial livre'})
  assert.equal(r.status,200);assert.equal(row.itens[0].tipo_outro_texto,'Porta especial livre')
  reset();r=await request('corrigir_item_importacao',{ambiente:'Cozinha'})
