@@ -49,7 +49,7 @@ function ClienteObra({
   const [resultados,setResultados] = useState<Cliente[]>([])
   const [obras,setObras] = useState<Obra[]>([])
   const [erro,setErro] = useState('')
-  useEffect(() => { setBusca(cliente?.nome || '') },[cliente?.id,cliente?.nome])
+  useEffect(() => { if (cliente) setBusca(cliente.nome) },[cliente?.id,cliente?.nome])
   useEffect(() => {
     if (cliente || busca.trim().length < 3) { setResultados([]); return }
     let ativo=true
