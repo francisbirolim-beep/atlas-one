@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
       .order('nome'),
     supabaseAdmin
       .from('atendimento_whatsapp_grupos')
-      .select('id,whatsapp_canal_id,grupo_jid,nome,participantes,ativo,sincronizado_em')
+      .select('id,whatsapp_canal_id,grupo_jid,nome,participantes,ativo,sincronizado_em,triagem_privada_ativa,triagem_tempo_minutos,triagem_destinos')
       .eq('empresa_id', usuario.empresa_id)
       .eq('ativo', true)
       .order('nome'),
@@ -84,11 +84,22 @@ export async function GET(req: NextRequest) {
     } : null
     erroConfig = legado.error
   }
+  let gruposFinais: any[] | null = gruposResp.data
+  let erroGrupos: any = gruposResp.error
+  if (erroGrupos && /triagem_(privada_ativa|tempo_minutos|destinos)/.test(String(erroGrupos.message || ''))) {
+    const legado = await supabaseAdmin.from('atendimento_whatsapp_grupos')
+      .select('id,whatsapp_canal_id,grupo_jid,nome,participantes,ativo,sincronizado_em')
+      .eq('empresa_id', usuario.empresa_id).eq('ativo', true).order('nome')
+    gruposFinais = (legado.data || []).map(g => ({
+      ...g, triagem_privada_ativa: false, triagem_tempo_minutos: 10, triagem_destinos: [],
+    }))
+    erroGrupos = legado.error
+  }
   const erro =
     erroConfig ||
     regrasResp.error ||
     usuariosResp.error ||
-    gruposResp.error ||
+    erroGrupos ||
     gruposAutomacaoResp.error ||
     canaisResp.error ||
     permissoesResp.error ||
@@ -103,7 +114,7 @@ export async function GET(req: NextRequest) {
     configuracao: configuracaoFinal || null,
     regras: regrasResp.data || [],
     usuarios: usuariosResp.data || [],
-    grupos: gruposResp.data || [],
+    grupos: gruposFinais || [],
     gruposAutomacao: gruposAutomacaoResp.data || [],
     canais: canaisResp.data || [],
     permissoes: permissoesResp.data || [],
