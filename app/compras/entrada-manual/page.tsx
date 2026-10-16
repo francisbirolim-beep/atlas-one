@@ -273,6 +273,7 @@ export default function EntradaManualPage() {
                 <Foto src={p.foto_url} nome={p.nome}/><span className="flex-1"><strong className="block text-sm">{p.nome}</strong><span className="text-xs text-slate-500">{p.codigo||'Sem código'} · {p.unidade||'UN'}</span></span><Plus size={17}/></button>)}
             </div>}
           </div>
+          <p className="mt-2 text-xs text-slate-500">Não encontrou o produto? <Link href="/cadastro/produtos" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-700 underline">Abra o cadastro de produtos em outra aba</Link> e depois pesquise novamente aqui.</p>
           {itens.length===0?<div className="mt-5 rounded-xl border border-dashed p-8 text-center text-sm text-slate-500"><ClipboardList size={25} className="mx-auto mb-2"/>Nenhum produto adicionado.</div>:
             <div className="mt-4 space-y-4">{itens.map((i,index)=>{
               const q=numeroBR(i.quantidade),qo=numeroBR(i.quantidadeObra)
