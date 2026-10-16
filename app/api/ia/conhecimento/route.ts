@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
@@ -53,25 +54,15 @@ async function niveisDoModulo(usuario: UsuarioTenant, modulo: AIModulo) {
 
 async function podeAcessarModulo(usuario: UsuarioTenant, modulo: AIModulo, validar = false) {
   if (usuario.role === 'master') return true
+  const acesso=(await carregarPermissoesIA(usuario)).dominios[modulo]
+  if(!acesso?.permitido || (validar && acesso.escopo==='proprio'))return false
   const niveis = await niveisDoModulo(usuario, modulo)
   return validar ? niveis.includes('edicao') : niveis.some(n => n === 'consulta' || n === 'edicao')
 }
 
 async function modulosPermitidos(usuario: UsuarioTenant) {
-  if (usuario.role === 'master') return AI_ESPECIALISTAS.map(e => e.modulo)
-  const { data } = await supabaseAdmin
-    .from('permissoes')
-    .select('setor_id,nivel')
-    .eq('empresa_id', usuario.empresa_id)
-    .eq('usuario_id', usuario.id)
-  const setores = new Set(
-    (data || [])
-      .filter((p: any) => ['consulta', 'edicao'].includes(String(p.nivel)))
-      .map((p: any) => String(p.setor_id)),
-  )
-  return AI_ESPECIALISTAS
-    .filter(e => e.setorIds.some(id => setores.has(id)))
-    .map(e => e.modulo)
+ const acesso=await carregarPermissoesIA(usuario)
+ return AI_ESPECIALISTAS.filter(e=>acesso.dominios[e.modulo].permitido).map(e=>e.modulo)
 }
 
 function extensao(nome: string, mediaType: string) {
@@ -282,7 +273,9 @@ export async function GET(req: NextRequest) {
       validarMap.set(modulo, await podeAcessarModulo(usuario, modulo, true))
     }
 
-    const itens = await Promise.all((data || []).map(async (item: any) => ({
+    const autorizacao=await carregarPermissoesIA(usuario)
+    const visiveis=(data||[]).filter(item=>usuario.role==='master'||autorizacao.dominios[item.modulo as AIModulo]?.escopo!=='proprio'||item.criado_por_id===usuario.id)
+    const itens = await Promise.all(visiveis.map(async (item: any) => ({
       ...(await assinarFonte(item)),
       pode_validar: Boolean(validarMap.get(item.modulo as AIModulo)),
     })))

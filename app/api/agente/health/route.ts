@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { verificarUsuario } from '@/lib/agente'
 import { statusOpenCode } from '@/lib/ai/opencode'
@@ -9,6 +10,7 @@ export async function GET(req: NextRequest) {
   try {
     const usuario = await verificarUsuario(req.headers.get('authorization') || '')
     if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    if(!(await carregarPermissoesIA(usuario)).geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
 
     const [openCode, runtimes] = await Promise.all([
       statusOpenCode(),

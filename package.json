@@ -34,7 +34,8 @@
     "postinstall": "node scripts/patch-baileys-pairing.mjs",
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs",
     "test:supabase-terminadores": "node scripts/test-supabase-terminadores-historicos.cjs",
-    "test:cliente360-permissoes": "node scripts/test-cliente360-permissoes.cjs"
+    "test:cliente360-permissoes": "node scripts/test-cliente360-permissoes.cjs",
+    "test:ia-relatorios": "node scripts/test-ia-relatorios-permissoes.cjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

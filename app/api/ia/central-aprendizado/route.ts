@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import pdfParse from 'pdf-parse'
@@ -78,16 +79,14 @@ function ext(nome:string,mime:string){
 async function log(usuario:UsuarioTenant,evento:string,entradaId?:string|null,candidatoId?:string|null,detalhe:any={}){
   await supabaseAdmin.from('ai_aprendizado_eventos').insert({empresa_id:usuario.empresa_id,entrada_id:entradaId||null,candidato_id:candidatoId||null,usuario_id:usuario.id,usuario_nome:usuario.nome||null,evento,detalhe})
 }
-async function podeValidar(usuario:UsuarioTenant,c:any){
-  if(usuario.role==='master')return true
-  const {data}=await supabaseAdmin.from('permissoes').select('setor_id,nivel').eq('empresa_id',usuario.empresa_id).eq('usuario_id',usuario.id).eq('nivel','edicao')
-  const ed=new Set((data||[]).map((p:any)=>String(p.setor_id)))
-  const modulo=String(c?.modulo||'')
-  if(modulo){
-    const e=especialistaDoModulo(modulo as AIModulo)
-    return Boolean(e?.setorIds.some(id=>ed.has(id)))
-  }
-  return ['compras','engenharia'].some(m=>especialistaDoModulo(m as AIModulo)?.setorIds.some(id=>ed.has(id)))
+async function podeValidar(usuario:UsuarioTenant,c:any,snapshot?:Awaited<ReturnType<typeof carregarPermissoesIA>>){
+ if(usuario.role==='master')return true
+ const acesso=snapshot||await carregarPermissoesIA(usuario)
+ const dominio=String(c?.modulo||(c?.tipo==='fornecedor'?'compras':'engenharia'))
+ if(!acesso.edicoes[dominio])return false
+ if(c?.tipo==='produto')return Boolean(acesso.edicoes.catalogo_produto)
+ if(c?.tipo==='fornecedor')return Boolean(acesso.edicoes.catalogo_fornecedor)
+ return true
 }
 async function lerPdfCatalogo(b:Buffer){
   const paginas:Array<{pagina:number;texto:string}>=[]
@@ -536,6 +535,7 @@ async function copiarFonte(usuario:UsuarioTenant,entrada:any,fornecedorId:string
   return doc?.id||null
 }
 async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornecedorId?:string|null;documentoId?:string|null}){
+  if(!await podeValidar(usuario,c))throw Error('Sem permissão para aplicar aprendizado neste destino.')
   if(c.tipo==='fornecedor'){
     if(c.destino_id){await supabaseAdmin.from('ai_aprendizado_entradas').update({fornecedor_id_sugerido:c.destino_id,updated_at:new Date().toISOString()}).eq('empresa_id',usuario.empresa_id).eq('id',entrada.id);await copiarFonte(usuario,entrada,c.destino_id);return c.destino_id}
     const d=c.dados||{}, cnpj=dig(d.cnpj_cpf), nome=txt(d.nome,220)
@@ -660,6 +660,14 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
   const {data:lista}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('*')
     .eq('empresa_id',usuario.empresa_id).eq('entrada_id',entradaId)
     .in('status',['pendente','corrigido','aprovado']).order('created_at',{ascending:true})
+  if(usuario.role!=='master'){
+    const snapshot=await carregarPermissoesIA(usuario)
+    const autorizados=await Promise.all((lista||[]).map(c=>podeValidar(usuario,c,snapshot)))
+    if(autorizados.some(ok=>!ok)){
+      await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'aguardando_validacao',updated_at:new Date().toISOString()}).eq('empresa_id',usuario.empresa_id).eq('id',entradaId)
+      return {aplicados:0,pendentes:(lista||[]).length}
+    }
+  }
   let aplicados=0
 
   for(const c of (lista||[]).filter((x:any)=>x.tipo==='fornecedor')){
@@ -713,10 +721,14 @@ async function concluir(empresaId:string,entradaId:string){
 export async function GET(req:NextRequest){
   try{
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
+    const autorizacao=await carregarPermissoesIA(u)
+    if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const entradaId=txt(req.nextUrl.searchParams.get('entradaId'),80), status=txt(req.nextUrl.searchParams.get('status'),40)
     let q=supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(200);if(entradaId)q=q.eq('id',entradaId)
+    if(u.role!=='master')q=q.eq('criado_por_id',u.id)
     const {data:entradas,error:e1}=await q;if(e1)throw e1
     let qc=supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(3000);if(entradaId)qc=qc.eq('entrada_id',entradaId);if(['pendente','aprovado','rejeitado','corrigido','aplicado'].includes(status))qc=qc.eq('status',status)
+    if(u.role!=='master')qc=qc.in('entrada_id',(entradas||[]).map(e=>e.id))
     const {data:candidatos,error:e2}=await qc;if(e2)throw e2
     // Comparação estrita de código e categoria: nenhuma imagem é inferida por nome parecido.
     // Consulta em lotes para evitar URL demasiadamente grande no PostgREST.
@@ -744,7 +756,7 @@ export async function GET(req:NextRequest){
       const unico=correspondencias.length===1?correspondencias[0]:null
       return {
         ...c,
-        pode_validar:await podeValidar(u,c),
+        pode_validar:await podeValidar(u,c,autorizacao),
         codigo_verificavel:c.tipo==='produto'?Boolean(ehCodigoCatalogo(codigo)):true,
         foto_cadastro:unico?.foto_url||null,
         produto_cadastro:unico?{id:unico.id,codigo:unico.codigo,nome:unico.nome,categoria:unico.categoria}:null,
@@ -772,6 +784,8 @@ export async function POST(req:NextRequest){
   let id:string|null=null
   try{
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
+    const autorizacao=await carregarPermissoesIA(u)
+    if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const token=(req.headers.get('authorization')||'').replace(/^Bearer\s+/i,'').trim(), body=await req.json()
     const tipo=TIPOS.has(txt(body?.tipo,40))?txt(body.tipo,40):'outro', descricao=txt(body?.descricao,12000), titulo=txt(body?.titulo,180)
     const a=anexo(body?.anexo) || await anexoRemoto(body?.arquivo,u)
@@ -808,21 +822,29 @@ export async function POST(req:NextRequest){
 export async function PATCH(req:NextRequest){
   try{
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
+    const autorizacao=await carregarPermissoesIA(u)
+    if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const b=await req.json(),acao=txt(b?.acao,40)
     if(acao==='mapear_catalogo'){
+      if(!await podeValidar(u,{tipo:'produto',modulo:'engenharia'})||!await podeValidar(u,{tipo:'fornecedor',modulo:'compras'}))return NextResponse.json({error:'Sem permissão para alterar este catálogo.'},{status:403})
+
       const entradaId=txt(b?.entrada_id,80)
       if(!entradaId)return NextResponse.json({error:'Catálogo não informado.'},{status:400})
       const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).maybeSingle()
       if(!entrada)return NextResponse.json({error:'Catálogo não encontrado.'},{status:404})
+      if(u.role!=='master'&&entrada.criado_por_id!==u.id)return NextResponse.json({error:'Material não encontrado.'},{status:404})
       if(!['catalogo','tabela_preco'].includes(String(entrada.tipo)))return NextResponse.json({error:'Somente catálogo ou tabela pode ter imagens preparadas.'},{status:400})
       const mapa=await remapearCatalogoExistente(u,entrada)
       return NextResponse.json({mensagem:'Catálogo preparado: '+mapa.mapeados+' de '+mapa.total+' item(ns) foram ligados à página correta para gerar o recorte visual.',...mapa})
     }
     if(acao==='reprocessar_entrada'){
+      if(!await podeValidar(u,{tipo:'produto',modulo:'engenharia'})||!await podeValidar(u,{tipo:'fornecedor',modulo:'compras'}))return NextResponse.json({error:'Sem permissão para alterar este catálogo.'},{status:403})
+
       const entradaId=txt(b?.entrada_id,80)
       if(!entradaId)return NextResponse.json({error:'Catálogo não informado.'},{status:400})
       const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).maybeSingle()
       if(!entrada)return NextResponse.json({error:'Catálogo não encontrado.'},{status:404})
+      if(u.role!=='master'&&entrada.criado_por_id!==u.id)return NextResponse.json({error:'Material não encontrado.'},{status:404})
       if(!['catalogo','tabela_preco'].includes(String(entrada.tipo)))return NextResponse.json({error:'Somente catálogo ou tabela de preço pode ser reprocessado por esta ação.'},{status:400})
       await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'analisando',erro:null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId)
       await remapearCatalogoExistente(u,entrada)
@@ -837,6 +859,7 @@ export async function PATCH(req:NextRequest){
     const id=txt(b?.id,80);if(!id)return NextResponse.json({error:'Candidato não informado.'},{status:400})
     const {data:c}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle();if(!c)return NextResponse.json({error:'Candidato não encontrado.'},{status:404});if(!(await podeValidar(u,c)))return NextResponse.json({error:'Sem permissão para validar.'},{status:403})
     const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',c.entrada_id).maybeSingle();if(!entrada)return NextResponse.json({error:'Entrada não encontrada.'},{status:404})
+      if(u.role!=='master'&&entrada.criado_por_id!==u.id)return NextResponse.json({error:'Material não encontrado.'},{status:404})
     if(acao==='salvar_imagem_catalogo'){
       if(c.tipo!=='produto')return NextResponse.json({error:'Imagem só pode ser vinculada a produto.'},{status:400})
       const dataUrl=String(b?.imagem||'')

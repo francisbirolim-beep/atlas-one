@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { verificarUsuario } from '@/lib/agente'
 import { transcreverAudioGratis } from '@/lib/ai/transcricaoGratis'
@@ -12,6 +13,7 @@ export async function POST(req: NextRequest) {
       const authHeader = req.headers.get('authorization') || ''
       const usuario = await verificarUsuario(authHeader)
       if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+      if(!(await carregarPermissoesIA(usuario)).geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     }
 
     const entrada = await req.formData()

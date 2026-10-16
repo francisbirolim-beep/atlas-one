@@ -10,7 +10,7 @@ type Classificacao = {conta_pagar_id:string;plano_conta_id:string;classificado_e
 const moeda=(v:number)=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const grupoOrdem:GrupoConta[]=['receita','cmv','tributo','despesa_operacional','despesa_financeira','estoque','investimento','transferencia']
 
-export default function PlanoContasGerencial({inicio,fim,onClassificado}:{inicio:string;fim:string;onClassificado?:()=>void}){
+export default function PlanoContasGerencial({inicio,fim,onClassificado,podeEditar=false}:{inicio:string;fim:string;onClassificado?:()=>void;podeEditar?:boolean}){
  const [contas,setContas]=useState<Conta[]>([])
  const [titulos,setTitulos]=useState<Titulo[]>([])
  const [classificacoes,setClassificacoes]=useState<Classificacao[]>([])
@@ -41,6 +41,7 @@ export default function PlanoContasGerencial({inicio,fim,onClassificado}:{inicio
  }
  useEffect(()=>{void carregar()},[])
  async function salvar(titulo:Titulo){
+  if(!podeEditar)return
   const valor=draft[titulo.id]??indice.get(titulo.id)??''
   setSalvando(titulo.id);setErro('');setMensagem('')
   try{
@@ -64,7 +65,7 @@ export default function PlanoContasGerencial({inicio,fim,onClassificado}:{inicio
    <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold">Títulos classificados: {classificadas} / {titulos.length}</span>
    <label className="flex items-center gap-2"><input type="checkbox" checked={somentePendentes} onChange={e=>setSomentePendentes(e.target.checked)}/> Mostrar só pendentes</label>
    <button type="button" onClick={()=>setMostrarContas(x=>!x)} className="flex items-center gap-1 font-bold text-blue-700">{mostrarContas?<ChevronDown size={15}/>:<ChevronRight size={15}/>} Ver plano de contas ({contas.length})</button>
-   <span className="flex items-center gap-1 text-slate-500"><ShieldCheck size={14}/> Uso gerencial · Master</span>
+   <span className="flex items-center gap-1 text-slate-500"><ShieldCheck size={14}/> Uso gerencial · {podeEditar?'Edição autorizada':'Somente consulta'}</span>
   </div>
   {periodoAtivo!==atual&&<p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">O período foi alterado. Clique em “Atualizar títulos” para consultar as novas datas.</p>}
   {erro&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{erro}</p>}
@@ -73,7 +74,7 @@ export default function PlanoContasGerencial({inicio,fim,onClassificado}:{inicio
   <div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[780px] text-xs"><thead className="bg-slate-50 text-left uppercase text-slate-500"><tr><th className="p-3">Título / fornecedor</th><th className="p-3">Vencimento</th><th className="p-3 text-right">Valor / pago</th><th className="p-3">Classificar como</th><th className="p-3 text-right">Ação</th></tr></thead><tbody>{linhas.map(t=>{
    const original=indice.get(t.id)||''
    const valor=draft[t.id]??original
-   return <tr key={t.id} className="border-t"><td className="p-3"><b className="text-slate-800">{t.descricao||t.documento||'Conta a pagar'}</b><p className="mt-1 text-slate-500">{t.fornecedor_nome||'Fornecedor não informado'} · {t.status||'sem status'}</p></td><td className="p-3">{t.vencimento||'—'}</td><td className="p-3 text-right tabular-nums"><b>{moeda(Number(t.valor||0))}</b><p className="text-slate-500">Pago {moeda(Number(t.valor_pago||0))}</p></td><td className="p-3"><select value={valor} onChange={e=>setDraft(prev=>({...prev,[t.id]:e.target.value}))} className="w-full max-w-[280px] rounded-lg border bg-white p-2"><option value="">Não classificado</option>{grupoOrdem.map(g=><optgroup key={g} label={TITULOS_GRUPOS[g]}>{contas.filter(c=>c.grupo===g&&c.ativo).map(c=><option key={c.id} value={c.id}>{c.codigo} · {c.nome}</option>)}</optgroup>)}</select></td><td className="p-3 text-right"><button type="button" disabled={salvando!==null||valor===original} onClick={()=>void salvar(t)} className="rounded-lg bg-slate-900 px-3 py-2 font-bold text-white disabled:cursor-default disabled:opacity-40">{salvando===t.id?'Salvando...':'Salvar'}</button></td></tr>
+   return <tr key={t.id} className="border-t"><td className="p-3"><b className="text-slate-800">{t.descricao||t.documento||'Conta a pagar'}</b><p className="mt-1 text-slate-500">{t.fornecedor_nome||'Fornecedor não informado'} · {t.status||'sem status'}</p></td><td className="p-3">{t.vencimento||'—'}</td><td className="p-3 text-right tabular-nums"><b>{moeda(Number(t.valor||0))}</b><p className="text-slate-500">Pago {moeda(Number(t.valor_pago||0))}</p></td><td className="p-3"><select disabled={!podeEditar} value={valor} onChange={e=>setDraft(prev=>({...prev,[t.id]:e.target.value}))} className="w-full max-w-[280px] rounded-lg border bg-white p-2"><option value="">Não classificado</option>{grupoOrdem.map(g=><optgroup key={g} label={TITULOS_GRUPOS[g]}>{contas.filter(c=>c.grupo===g&&c.ativo).map(c=><option key={c.id} value={c.id}>{c.codigo} · {c.nome}</option>)}</optgroup>)}</select></td><td className="p-3 text-right"><button type="button" disabled={!podeEditar||salvando!==null||valor===original} onClick={()=>void salvar(t)} className="rounded-lg bg-slate-900 px-3 py-2 font-bold text-white disabled:cursor-default disabled:opacity-40">{salvando===t.id?'Salvando...':'Salvar'}</button></td></tr>
   })}{!linhas.length&&<tr><td colSpan={5} className="p-5 text-center text-slate-500">{carregando?'Carregando títulos...':'Nenhum título encontrado neste período.'}</td></tr>}</tbody></table></div>
   <p className="text-xs text-slate-500">Compras de estoque, máquinas, transferências e adiantamentos não entram como despesa operacional da DRE. Uma conta pode ser desclassificada selecionando “Não classificado” e salvando. O resultado líquido depende da conciliação contábil por competência.</p>
  </section>

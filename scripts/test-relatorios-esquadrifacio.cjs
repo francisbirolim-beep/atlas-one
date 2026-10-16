@@ -22,7 +22,7 @@ for(const file of ['components/Sidebar.tsx','components/system/MobileNavigationC
  assert.match(fs.readFileSync(file,'utf8'),/\/relatorios\/esquadrifacio/)
 }
 const api=fs.readFileSync('app/api/relatorios/esquadrifacio/route.ts','utf8')
-assert.match(api,/u\.role!=='master'/)
+assert.match(api,/autorizarRelatorio\(req,u,'esquadrifacio'\)/)
 assert.match(api,/\.eq\('empresa_id',empresa\)/)
 assert.doesNotMatch(api,/\.insert\(|\.update\(|\.delete\(|\.upsert\(|\.rpc\(/)
 assert.match(api,/fornecedoresCmv/)

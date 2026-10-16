@@ -1,3 +1,4 @@
+import { carregarPermissoesIA } from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
@@ -109,67 +110,8 @@ type AcessoIA = {
   motivo: string
 }
 
-async function resolverAcesso(usuario: UsuarioTenant, modulo: AIModulo): Promise<AcessoIA> {
-  if (usuario.role === 'master') {
-    return { permitido: true, escopo: 'empresa', origem: 'master', motivo: 'Usuário Master.' }
-  }
-
-  const especialista = especialistaDoModulo(modulo)
-  if (!especialista?.setorIds.length) {
-    return { permitido: false, escopo: 'nenhum', origem: 'negado', motivo: 'Especialista sem setor configurado.' }
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from('permissoes')
-    .select('setor_id,nivel')
-    .eq('empresa_id', usuario.empresa_id)
-    .eq('usuario_id', usuario.id)
-    .in('setor_id', especialista.setorIds)
-
-  if (error || !(data || []).some(p => ['consulta', 'edicao'].includes(String(p.nivel)))) {
-    return { permitido: false, escopo: 'nenhum', origem: 'negado', motivo: 'Usuário sem acesso ao setor deste especialista.' }
-  }
-
-  // A permissão do Atlas é o teto. Configuração específica da IA só pode restringir,
-  // nunca liberar um setor que o usuário não possua no sistema.
-  const escopoBase: EscopoIA = modulo === 'comercial' ? 'proprio' : 'setor'
-  const { data: override } = await supabaseAdmin
-    .from('ia_acessos_dominio')
-    .select('escopo,permitido')
-    .eq('empresa_id', usuario.empresa_id)
-    .eq('usuario_id', usuario.id)
-    .eq('dominio', modulo)
-    .maybeSingle()
-
-  if (override) {
-    const escopoConfigurado = String(override.escopo || 'nenhum') as EscopoIA
-    if (override.permitido !== true || escopoConfigurado === 'nenhum') {
-      return { permitido: false, escopo: 'nenhum', origem: 'configurado', motivo: 'Domínio restringido pelo Master.' }
-    }
-
-    const ordem: Record<EscopoIA, number> = { nenhum: 0, proprio: 1, setor: 2, empresa: 3 }
-    const escopo = ordem[escopoConfigurado] < ordem[escopoBase] ? escopoConfigurado : escopoBase
-    return {
-      permitido: true,
-      escopo,
-      origem: 'configurado',
-      motivo: 'Permissão herdada do Atlas com restrição adicional da IA.',
-    }
-  }
-
-  return { permitido: true, escopo: escopoBase, origem: 'setor', motivo: 'Permissão herdada do setor do Atlas.' }
-}
-
 async function acessoAuxiliar(usuario: UsuarioTenant, dominio: string) {
-  if (usuario.role === 'master') return true
-  const { data } = await supabaseAdmin
-    .from('ia_acessos_dominio')
-    .select('escopo,permitido')
-    .eq('empresa_id', usuario.empresa_id)
-    .eq('usuario_id', usuario.id)
-    .eq('dominio', dominio)
-    .maybeSingle()
-  return Boolean(data?.permitido && data?.escopo && data.escopo !== 'nenhum')
+ return Boolean((await carregarPermissoesIA(usuario)).auxiliares[dominio])
 }
 
 async function auditarAcesso(
@@ -194,6 +136,7 @@ async function auditarAcesso(
 }
 
 async function validarSessao(usuario: UsuarioTenant, modulo: AIModulo, sessionId: string | null) {
+  const autorizacao = await carregarPermissoesIA(usuario)
   const id = String(sessionId || '').trim()
   if (!id) return null
   const { data } = await supabaseAdmin
@@ -202,7 +145,7 @@ async function validarSessao(usuario: UsuarioTenant, modulo: AIModulo, sessionId
     .eq('empresa_id', usuario.empresa_id)
     .eq('usuario_id', usuario.id)
     .eq('contexto', contextoId(modulo))
-    .contains('contexto_json', { opencode_session_id: id })
+    .contains('contexto_json', { opencode_session_id: id, ...(usuario.role === 'master' ? {} : {permissoes_assinatura: autorizacao.assinatura}) })
     .limit(1)
   return data?.length ? id : null
 }
@@ -550,20 +493,22 @@ export async function POST(req: NextRequest) {
 
     const especialista = especialistaDoModulo(modulo)
     if (!especialista) return NextResponse.json({ error: 'Especialista não configurado.' }, { status: 404 })
+    const autorizacao = await carregarPermissoesIA(usuario)
+    const acesso = autorizacao.dominios[modulo]
+    if (!acesso.permitido) return NextResponse.json({error:'Você não possui acesso a estes dados no Atlas IA.'},{status:403})
     const anexoPreparado = await prepararAnexo(anexo)
     const perguntaRegistrada = [
       pergunta || 'Analisar arquivo anexado',
       anexo ? `[Anexo: ${anexo.nome}]` : '',
       audio ? `[Áudio: ${audio.duracaoSeg}s · transcrição automática]` : '',
     ].filter(Boolean).join('\n')
-    const acesso = await resolverAcesso(usuario, modulo)
     await auditarAcesso(usuario, modulo, acesso, perguntaRegistrada)
     if (!acesso.permitido) {
       return NextResponse.json({ error: 'Você não possui acesso a estes dados no Atlas IA.' }, { status: 403 })
     }
 
     const pedidoEstimativa = detectarConsultaEstimativaOrcamento(pergunta)
-    if (modulo === 'orcamento' && pedidoEstimativa.solicitado) {
+    if (modulo === 'orcamento' && pedidoEstimativa.solicitado && acesso.escopo !== 'proprio') {
       const inicioEstimativa = Date.now()
       const estimativa = await estimarOrcamentoHistorico({
         empresaId: usuario.empresa_id,
@@ -629,10 +574,10 @@ export async function POST(req: NextRequest) {
     const accessToken = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
     const sessionId = await validarSessao(usuario, modulo, String(body?.sessionId || '') || null)
     const [dados, contextoAtlasGlobal, setores, memoria] = await Promise.all([
-      dadosRecentes(usuario, modulo, acesso.escopo),
+      usuario.role === 'master' ? dadosRecentes(usuario, modulo, acesso.escopo) : Promise.resolve({escopo_aplicado:acesso.escopo}),
       montarContextoAtlasGlobal({ usuario, especialistaAtual: modulo, pergunta }),
       instrucoesSetor(usuario, modulo),
-      memoriaEspecialista(usuario, modulo),
+      usuario.role === 'master' ? memoriaEspecialista(usuario, modulo) : Promise.resolve({memorias:[],exemplos:[]}),
     ])
 
     const system = [
@@ -765,6 +710,7 @@ export async function POST(req: NextRequest) {
           modulo,
           especialista: especialista.nome,
           opencode_session_id: resultado.sessionId,
+          permissoes_assinatura: autorizacao.assinatura,
           provider_id: resultado.providerId,
           model_id: resultado.modelId,
           orquestrador: 'opencode',

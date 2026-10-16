@@ -1,3 +1,4 @@
+import { carregarPermissoesIA, idsClientesPropriosIA } from '@/lib/ai/permissoesServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import type { UsuarioTenant } from '@/lib/tenantServer'
 import { AI_ESPECIALISTAS } from '@/lib/ai/specialists'
@@ -9,13 +10,6 @@ export type EscopoAtlas = 'nenhum' | 'proprio' | 'setor' | 'empresa'
 export type AcessoAtlas = {
   permitido: boolean
   escopo: EscopoAtlas
-}
-
-const ORDEM_ESCOPO: Record<EscopoAtlas, number> = {
-  nenhum: 0,
-  proprio: 1,
-  setor: 2,
-  empresa: 3,
 }
 
 const STOPWORDS = new Set([
@@ -114,74 +108,10 @@ function variantesTermo(termo: string) {
 }
 
 async function carregarAcessos(usuario: UsuarioTenant): Promise<Record<AIModulo, AcessoAtlas>> {
-  const resultado = {} as Record<AIModulo, AcessoAtlas>
-
-  if (usuario.role === 'master') {
-    for (const especialista of AI_ESPECIALISTAS) {
-      resultado[especialista.modulo] = { permitido: true, escopo: 'empresa' }
-    }
-    return resultado
-  }
-
-  const [{ data: permissoes }, { data: overrides }] = await Promise.all([
-    supabaseAdmin
-      .from('permissoes')
-      .select('setor_id,nivel')
-      .eq('empresa_id', usuario.empresa_id)
-      .eq('usuario_id', usuario.id),
-    supabaseAdmin
-      .from('ia_acessos_dominio')
-      .select('dominio,escopo,permitido')
-      .eq('empresa_id', usuario.empresa_id)
-      .eq('usuario_id', usuario.id),
-  ])
-
-  const setores = new Set(
-    (permissoes || [])
-      .filter((p: any) => ['consulta', 'edicao'].includes(String(p.nivel || '')))
-      .map((p: any) => String(p.setor_id)),
-  )
-  const mapaOverride = new Map((overrides || []).map((o: any) => [String(o.dominio), o]))
-
-  for (const especialista of AI_ESPECIALISTAS) {
-    const possuiSetor = especialista.setorIds.some(id => setores.has(id))
-    if (!possuiSetor) {
-      resultado[especialista.modulo] = { permitido: false, escopo: 'nenhum' }
-      continue
-    }
-
-    const base: EscopoAtlas = especialista.modulo === 'comercial' ? 'proprio' : 'setor'
-    const override: any = mapaOverride.get(especialista.modulo)
-    if (!override) {
-      resultado[especialista.modulo] = { permitido: true, escopo: base }
-      continue
-    }
-
-    const configurado = String(override.escopo || 'nenhum') as EscopoAtlas
-    if (override.permitido !== true || configurado === 'nenhum') {
-      resultado[especialista.modulo] = { permitido: false, escopo: 'nenhum' }
-      continue
-    }
-
-    resultado[especialista.modulo] = {
-      permitido: true,
-      escopo: ORDEM_ESCOPO[configurado] < ORDEM_ESCOPO[base] ? configurado : base,
-    }
-  }
-
-  return resultado
+ return (await carregarPermissoesIA(usuario)).dominios
 }
-
 async function acessoAuxiliar(usuario: UsuarioTenant, dominio: 'custos_precos' | 'fornecedores') {
-  if (usuario.role === 'master') return true
-  const { data } = await supabaseAdmin
-    .from('ia_acessos_dominio')
-    .select('escopo,permitido')
-    .eq('empresa_id', usuario.empresa_id)
-    .eq('usuario_id', usuario.id)
-    .eq('dominio', dominio)
-    .maybeSingle()
-  return Boolean(data?.permitido && data?.escopo && data.escopo !== 'nenhum')
+ return Boolean((await carregarPermissoesIA(usuario)).auxiliares[dominio])
 }
 
 async function contar(table: string, empresaId?: string, filtros: Record<string, any> = {}) {
@@ -206,15 +136,19 @@ type BuscaTabelaOpts = {
   proprioValue?: string
   order?: string
   limit?: number
+  idsPermitidos?: string[]
 }
 
 async function buscarTabela(opts: BuscaTabelaOpts) {
+  if (opts.escopo === 'nenhum' || (opts.escopo === 'proprio' && (!opts.proprioColumn || !opts.proprioValue))) return []
+  if (opts.idsPermitidos && !opts.idsPermitidos.length) return []
   const limite = Math.max(1, Math.min(opts.limit || 10, 20))
   const resultados = new Map<string, any>()
 
   const aplicarBase = (query: any) => {
     let q = query
     if (opts.empresaId) q = q.eq('empresa_id', opts.empresaId)
+    if (opts.idsPermitidos) q = q.in('id', opts.idsPermitidos)
     for (const [coluna, valor] of Object.entries(opts.filtros || {})) {
       if (valor !== undefined && valor !== null) q = q.eq(coluna, valor)
     }
@@ -306,7 +240,7 @@ async function contextoTecnicoSeguro(usuario: UsuarioTenant, pergunta: string, t
     }),
     buscarTabela({
       table: 'wvetro_referencias_tipologias',
-      select: 'id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,ocorrencias,status_mapeamento,chave,largura_min_mm,largura_max_mm,altura_min_mm,altura_max_mm,ambientes_observados,nomes_observados',
+      select: 'id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url,ocorrencias,status_mapeamento,chave,largura_min_mm,largura_max_mm,altura_min_mm,altura_max_mm'+(usuario.role==='master'?',ambientes_observados,nomes_observados':''),
       searchColumns: ['linha_raw','modelo_raw','chave'],
       termos,
       order: 'ocorrencias',
@@ -386,9 +320,10 @@ async function contextoComercial(usuario: UsuarioTenant, acesso: AcessoAtlas, te
     searchColumns: ['nome','cidade','bairro','origem','responsavel','observacoes'],
     termos,
     empresaId,
-    escopo: acesso.escopo,
-    proprioColumn: 'responsavel',
-    proprioValue: usuario.nome,
+    escopo: acesso.escopo === 'proprio' ? 'setor' : acesso.escopo,
+    proprioColumn: 'id',
+    proprioValue: undefined,
+    idsPermitidos: acesso.escopo === 'proprio' ? await idsClientesPropriosIA(usuario) : undefined,
     order: 'updated_at',
     limit: 12,
   })
@@ -498,7 +433,7 @@ async function contextoCompras(usuario: UsuarioTenant, acesso: AcessoAtlas, term
     order: 'updated_at',
     limit: 15,
   })
-  const fornecedores = fornecedoresLiberados
+  const fornecedores = fornecedoresLiberados && acesso.escopo !== 'proprio'
     ? await buscarTabela({
         table: 'fornecedores',
         select: 'id,nome,cidade,contato,ativo,pedido_minimo,frete_gratis_minimo,prazo_medio_dias,condicao_pagamento_padrao,prazo_entrega_dias,observacoes_comerciais,updated_at',
@@ -520,6 +455,7 @@ async function contextoCompras(usuario: UsuarioTenant, acesso: AcessoAtlas, term
 
 async function contextoEstoque(usuario: UsuarioTenant, acesso: AcessoAtlas, termos: string[], podeCustos: boolean) {
   if (!acesso.permitido) return null
+  if (acesso.escopo === 'proprio') return {escopo:acesso.escopo,produtos:[],saldos:[],sobras:[]}
   const empresaId = usuario.empresa_id
   const produtos = await buscarTabela({
     table: 'produtos',
@@ -564,7 +500,7 @@ async function contextoProducao(usuario: UsuarioTenant, acesso: AcessoAtlas, ter
     order: 'updated_at',
     limit: 15,
   })
-  return { escopo: acesso.escopo, ordens, total_ordens: await contar('ordens_producao', empresaId) }
+  return { escopo: acesso.escopo, ordens, total_ordens: await contar('ordens_producao', empresaId, acesso.escopo === 'proprio' ? {criado_por_id:usuario.id} : {}) }
 }
 
 async function contextoInstalacaoQualidade(usuario: UsuarioTenant, acesso: AcessoAtlas, termos: string[]) {
@@ -616,8 +552,8 @@ async function contextoFinanceiro(usuario: UsuarioTenant, acesso: AcessoAtlas, t
     escopo: acesso.escopo,
     contas_receber: receber,
     contas_pagar: pagar,
-    total_titulos_receber: await contar('financeiro_contas_receber', empresaId),
-    total_titulos_pagar: await contar('financeiro_contas_pagar', empresaId),
+    total_titulos_receber: await contar('financeiro_contas_receber', empresaId, acesso.escopo === 'proprio' ? {criado_por_id:usuario.id} : {}),
+    total_titulos_pagar: await contar('financeiro_contas_pagar', empresaId, acesso.escopo === 'proprio' ? {criado_por_id:usuario.id} : {}),
   }
 }
 
@@ -629,6 +565,9 @@ async function contextoRh(usuario: UsuarioTenant, acesso: AcessoAtlas, termos: s
     searchColumns: ['nome','role'],
     termos,
     empresaId: usuario.empresa_id,
+    escopo: acesso.escopo,
+    proprioColumn: 'id',
+    proprioValue: usuario.id,
     order: 'created_at',
     limit: 15,
   })
@@ -678,8 +617,8 @@ async function contextoHistoricoWvetro(
   const empresaId = usuario.empresa_id
   const resultado: Record<string, any> = {}
 
-  if (acessos.orcamento?.permitido || acessos.gestao?.permitido) {
-    const acesso = acessos.orcamento?.permitido ? acessos.orcamento : acessos.gestao
+  if (acessos.orcamento?.permitido && acessos.orcamento.escopo !== 'proprio') {
+    const acesso = acessos.orcamento
     const selectOrc = podeCustos
       ? 'id,wvetro_numero,cliente_nome,cidade,obra_nome,vendedor_nome,situacao,data_emissao,data_venda,valor_bruto,valor_total,custo_com_sobra,custo_sem_sobra,total_m2,itens_qtd,match_status,match_metodo,capturado_em'
       : 'id,wvetro_numero,cliente_nome,cidade,obra_nome,vendedor_nome,situacao,data_emissao,data_venda,valor_bruto,valor_total,total_m2,itens_qtd,match_status,match_metodo,capturado_em'
@@ -698,7 +637,7 @@ async function contextoHistoricoWvetro(
     })
   }
 
-  if (acessos.financeiro?.permitido) {
+  if (acessos.financeiro?.permitido && acessos.financeiro.escopo !== 'proprio') {
     resultado.financeiro = await buscarTabela({
       table: 'wvetro_historico_financeiro',
       select: 'id,titulo_id_wvetro,fonte_wvetro,tipo_titulo,origem_titulo,documento,pessoa_razao,orcamento_wvetro,data_emissao,data_vencimento,data_baixa,valor_titulo,valor_recebido,valor_saldo,grupo_custo_descricao,centro_custo_descricao,tipo_lancamento,usuario_wvetro,status_vinculo',
@@ -710,7 +649,7 @@ async function contextoHistoricoWvetro(
     })
   }
 
-  if (acessos.producao?.permitido || acessos.instalacao?.permitido || acessos.qualidade?.permitido) {
+  if (['producao','instalacao','qualidade'].every(m => acessos[m as AIModulo]?.permitido && acessos[m as AIModulo].escopo !== 'proprio')) {
     resultado.operacional = await buscarTabela({
       table: 'wvetro_historico_operacional',
       select: 'id,tipo_registro,chave_externa,numero_wvetro,data_programacao,data_inicio,data_termino,status_vinculo,equipe_nome,observacao,quantidade_prevista,quantidade_realizada,orcamentos_wvetro,projetos',
@@ -722,7 +661,7 @@ async function contextoHistoricoWvetro(
     })
   }
 
-  if (acessos.compras?.permitido || acessos.estoque?.permitido) {
+  if (['compras','estoque'].every(m => acessos[m as AIModulo]?.permitido && acessos[m as AIModulo].escopo !== 'proprio')) {
     const selectSuprimentos = podeCustos
       ? 'id,tipo_registro,chave_externa,data_referencia,data_lancamento,documento,pessoa_nome,produto_codigo,produto_descricao,produto_tipo,cor_nome,local_estoque,movimento_tipo,quantidade,valor_unitario,valor_total,nota_numero,fornecedor_nome,data_emissao,data_entrada,valor_contabil,valor_produto,valor_frete,finalizada,resumo,produto_atlas_id,produto_vinculo_status'
       : 'id,tipo_registro,chave_externa,data_referencia,data_lancamento,documento,pessoa_nome,produto_codigo,produto_descricao,produto_tipo,cor_nome,local_estoque,movimento_tipo,quantidade,nota_numero,fornecedor_nome,data_emissao,data_entrada,finalizada,resumo,produto_atlas_id,produto_vinculo_status'
@@ -754,10 +693,11 @@ export async function montarContextoAtlasGlobal(params: {
 }) {
   const { usuario, especialistaAtual, pergunta } = params
   const termos = termosBusca(pergunta)
-  const acessos = await carregarAcessos(usuario)
+  const autorizacao = await carregarPermissoesIA(usuario)
+  const acessos = autorizacao.dominios
   const amplo = ehConsultaAmpla(pergunta)
-  const podeCustos = await acessoAuxiliar(usuario, 'custos_precos')
-  const fornecedoresLiberados = await acessoAuxiliar(usuario, 'fornecedores')
+  const podeCustos = Boolean(autorizacao.auxiliares.custos_precos)
+  const fornecedoresLiberados = Boolean(autorizacao.auxiliares.fornecedores)
 
   const tocados = new Set<AIModulo>([especialistaAtual])
   for (const especialista of AI_ESPECIALISTAS) {
@@ -779,7 +719,7 @@ export async function montarContextoAtlasGlobal(params: {
   const add = (nome: string, promessa: Promise<any>) => jobs.push(promessa.then(valor => [nome, valor]))
 
   // Catálogo técnico sem preços/custos é conhecimento operacional compartilhado e pode ser consultado por qualquer usuário.
-  if (perguntaTecnica(pergunta) || amplo || especialistaAtual === 'engenharia' || especialistaAtual === 'orcamento' || especialistaAtual === 'producao') {
+  if (['engenharia','orcamento','producao'].some(m => acessos[m as AIModulo]?.permitido && acessos[m as AIModulo].escopo !== 'proprio') && (perguntaTecnica(pergunta) || amplo || especialistaAtual === 'engenharia' || especialistaAtual === 'orcamento' || especialistaAtual === 'producao')) {
     add('catalogo_tecnico', contextoTecnicoSeguro(usuario, pergunta, termos))
   }
 
@@ -803,7 +743,7 @@ export async function montarContextoAtlasGlobal(params: {
   }
 
   const pedidoEstimativa = detectarConsultaEstimativaOrcamento(pergunta)
-  if (pedidoEstimativa.solicitado && acessos.orcamento?.permitido) {
+  if (pedidoEstimativa.solicitado && acessos.orcamento?.permitido && acessos.orcamento.escopo !== 'proprio') {
     add('estimativa_orcamento_historica', estimarOrcamentoHistorico({
       empresaId: usuario.empresa_id,
       pergunta,

@@ -1,4 +1,5 @@
 'use client'
+import { useRelatoriosAcesso, autorizarExportacaoRelatorio } from '@/components/relatorios/RelatoriosAcesso'
 
 import { Fragment, useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -44,7 +45,10 @@ function LinhaGrafico({rotulo,previsto,realizado,escala}:{rotulo:string;previsto
  return <div className="space-y-1.5 border-b border-slate-100 pb-3 last:border-0"><b className="text-xs text-slate-700">{rotulo}</b><div className="grid grid-cols-[65px_1fr_auto] items-center gap-2 text-xs"><span className="text-slate-500">Previsto</span><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{width:`${Math.max(0,100*previsto/escala)}%`}}/></div><span className="tabular-nums text-slate-600">{moeda(previsto)}</span><span className="text-slate-500">Realizado</span><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-amber-500" style={{width:`${Math.max(0,100*realizado/escala)}%`}}/></div><span className="tabular-nums text-slate-600">{moeda(realizado)}</span></div></div>
 }
 export default function RelatoriosPage(){
- const [setor,setSetor]=useState<Setor>('obras')
+ const acessos=useRelatoriosAcesso()
+ const podeSetor=(id:Setor)=>acessos[id].consultar||(id==='financeiro'&&acessos.plano_contas.consultar)
+ const inicial=setores.find(s=>podeSetor(s.id))?.id||'obras'
+ const [setor,setSetor]=useState<Setor>(inicial)
  const [periodo,setPeriodo]=useState(iniciarMes)
  const [inicio,setInicio]=useState(periodo.inicio)
  const [fim,setFim]=useState(periodo.fim)
@@ -57,6 +61,7 @@ export default function RelatoriosPage(){
  const [financeiro,setFinanceiro]=useState<FinanceiroRelatorioDados|null>(null)
  const [aberto,setAberto]=useState<string|null>(null)
  async function carregar(s:Setor=setor){
+  if(!podeSetor(s)){setErro('Relatório não autorizado.');return}
   if(inicio>fim){setErro('Confira as datas do período.');return}
   setErro('');setCarregando(true)
   try{
@@ -67,7 +72,7 @@ export default function RelatoriosPage(){
     if(!resp.ok)throw new Error(json.error||'Não foi possível carregar as obras.')
     setDados(json as RelatorioObras)
    }
-   if(s==='financeiro'){
+   if(s==='financeiro'&&acessos.financeiro.consultar){
     const token=await tokenAtual();if(!token)throw new Error('Entre novamente no Atlas.')
     const resp=await fetch(`/api/relatorios/financeiro?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
     const json=await resp.json()
@@ -76,14 +81,16 @@ export default function RelatoriosPage(){
    }
    if(s==='comercial')setComercial(await carregarResumoComercial({inicio,fim}))
    if(s==='producao')setMedicao(await carregarResumoMedicao({inicio,fim}))
-  }catch(e){setErro(e instanceof Error?e.message:'Erro ao carregar relatório.')}
+  }catch(e){setDados(null);setFinanceiro(null);setComercial(vazioComercial);setMedicao(vazioMedicao);setErro(e instanceof Error?e.message:'Erro ao carregar relatório.')}
   finally{setCarregando(false)}
  }
- useEffect(()=>{void carregar('obras')},[])
- function selecionar(s:Setor){setSetor(s);setBusca('');if(s==='comercial'||s==='producao'||s==='financeiro'||(s==='obras'&&!dados))void carregar(s)}
+ useEffect(()=>{const proximo=podeSetor(setor)?setor:inicial;setSetor(proximo);void carregar(proximo)},[acessos])
+ function selecionar(s:Setor){if(!podeSetor(s))return;setSetor(s);setBusca('');if(s==='comercial'||s==='producao'||s==='financeiro'||(s==='obras'&&!dados))void carregar(s)}
  const obras=(dados?.obras||[]).filter(o=>[o.cliente,o.cidade,String(o.orcamento),String(o.numero)].join(' ').toLowerCase().includes(busca.toLowerCase()))
  const escala=Math.max(1,...obras.slice(0,8).flatMap(x=>[x.previsto||0,x.realizado]))
- function exportar(){
+ async function exportar(){
+  try{
+  await autorizarExportacaoRelatorio(setor)
   if(setor==='obras'){
    if(!dados)return
    baixarCsv('atlas-relatorio-obras-cmv.csv',[
@@ -116,26 +123,29 @@ export default function RelatoriosPage(){
     ['Indicador','Valor'],['Medições',medicao.totalMedicoes],['Medições com itens',medicao.medicoesComItens],['Itens para medir',medicao.itensTotal],['Itens medidos',medicao.itensMedidos],['Conclusão (%)',medicao.percentualItensMedidos]
    ])
   }
+  }catch(e){setErro(e instanceof Error?e.message:'Exportação não autorizada.')}
  }
+ async function imprimir(){try{await autorizarExportacaoRelatorio(setor);window.print()}catch(e){setErro(e instanceof Error?e.message:'Impressão não autorizada.')}}
+ if(!podeSetor(setor))return <main className="space-y-4 p-6"><h1 className="text-2xl font-bold">Central de Relatórios</h1>{acessos.esquadrifacio.consultar&&<Link className="block text-blue-700 underline" href="/relatorios/esquadrifacio">Relatórios gerenciais Esquadrifácio</Link>}{acessos.fornecedores.consultar&&<Link className="block text-blue-700 underline" href="/relatorios/fornecedores">Análise de fornecedores</Link>}</main>
  return <div className="min-h-screen bg-slate-50"><style>{`@media print { .atlas-sidebar-shell, .atlas-sidebar-nav, .atlas-topbar, .atlas-mobile-navigation, .atlas-app-content header {display:none!important} .atlas-app-content{height:auto!important;overflow:visible!important} .atlas-app-main{padding:0!important;min-height:auto!important} body{background:white!important} }`}</style><main className="mx-auto max-w-7xl space-y-5 px-3 py-6 md:px-6">
    <div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Gestão · Atlas One</p><h1 className="mt-1 text-2xl font-bold text-slate-900">Central de Relatórios</h1><p className="mt-1 text-sm text-slate-500">Um único lugar para consultar os relatórios por setor. Novos relatórios serão incorporados aqui.</p></div>
-   <Link href="/relatorios/fornecedores" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-400"><div><b className="text-sm text-slate-900">Análise de Fornecedores · Perfis</b><p className="mt-1 text-xs text-slate-600">Comprado × recebido em kg, datas, diferenças, alertas e ranking por fornecedor</p></div><span className="text-xs font-bold text-blue-700">Abrir relatório →</span></Link>
-   <Link href="/relatorios/esquadrifacio" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 transition hover:border-blue-500 print:hidden">
-    <div><b className="text-sm text-slate-900">Esquadrifácio · Relatórios gerenciais individuais</b><p className="mt-1 text-xs text-slate-600">31 visões: DRE, fluxo de caixa, vendas, metas, Curva ABC, clientes, produtos, cidades, compras e margem · acesso Master</p></div>
+   {acessos.fornecedores.consultar&&<Link href="/relatorios/fornecedores" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-400"><div><b className="text-sm text-slate-900">Análise de Fornecedores · Perfis</b><p className="mt-1 text-xs text-slate-600">Comprado × recebido em kg, datas, diferenças, alertas e ranking por fornecedor</p></div><span className="text-xs font-bold text-blue-700">Abrir relatório →</span></Link>}
+   {acessos.esquadrifacio.consultar&&<Link href="/relatorios/esquadrifacio" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 transition hover:border-blue-500 print:hidden">
+    <div><b className="text-sm text-slate-900">Esquadrifácio · Relatórios gerenciais individuais</b><p className="mt-1 text-xs text-slate-600">31 visões: DRE, fluxo de caixa, vendas, metas, Curva ABC, clientes, produtos, cidades, compras e margem · acesso autorizado</p></div>
     <span className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Abrir todos os relatórios →</span>
-   </Link>
+   </Link>}
    <p className="text-xs text-slate-500">Os futuros fechamentos mensais serão compilados dos relatórios individuais após homologação. O arquivo histórico aprovado permanece preservado.</p>
    <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7 print:hidden">
-    {setores.map(({id,nome,descricao,Icon})=><button key={id} type="button" aria-pressed={setor===id} onClick={()=>selecionar(id)} className={`min-w-0 rounded-xl border p-3 text-left transition ${setor===id?'border-blue-600 bg-blue-50 shadow-sm':'border-slate-200 bg-white hover:border-blue-300'}`}><Icon size={19} className={setor===id?'text-blue-700':'text-slate-500'}/><b className="mt-2 block text-xs text-slate-900">{nome}</b><span className="mt-0.5 block text-[11px] text-slate-500">{descricao}</span></button>)}
+    {setores.filter(s=>podeSetor(s.id)).map(({id,nome,descricao,Icon})=><button key={id} type="button" aria-pressed={setor===id} onClick={()=>selecionar(id)} className={`min-w-0 rounded-xl border p-3 text-left transition ${setor===id?'border-blue-600 bg-blue-50 shadow-sm':'border-slate-200 bg-white hover:border-blue-300'}`}><Icon size={19} className={setor===id?'text-blue-700':'text-slate-500'}/><b className="mt-2 block text-xs text-slate-900">{nome}</b><span className="mt-0.5 block text-[11px] text-slate-500">{descricao}</span></button>)}
    </div>
-   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 print:hidden"><label className="font-semibold" htmlFor="tipo-relatorio">Tipo de relatório</label><select id="tipo-relatorio" value={setor} onChange={e=>selecionar(e.target.value as Setor)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="obras">Obras — Previsto × realizado / CMV</option><option value="comercial">Comercial — Resumo de orçamentos e vendas</option><option value="financeiro">Financeiro — DRE prévia, fluxo e títulos</option><option value="producao">Produção — Resumo de Medição Final</option><option value="compras">Compras — Consultas do setor</option><option value="engenharia">Engenharia — Consultas do setor</option><option value="assistencia">Assistência — Consultas do setor</option></select></div>
+   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 print:hidden"><label className="font-semibold" htmlFor="tipo-relatorio">Tipo de relatório</label><select id="tipo-relatorio" value={setor} onChange={e=>selecionar(e.target.value as Setor)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">{setores.filter(s=>podeSetor(s.id)).map(s=><option key={s.id} value={s.id}>{s.nome} — {s.descricao}</option>)}</select></div>
    <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 print:border-0 print:p-0">
     <div className="flex flex-wrap items-end gap-3 print:hidden">
      <label className="text-xs font-semibold text-slate-600">De<input type="date" value={inicio} onChange={e=>setInicio(e.target.value)} className="mt-1 block rounded-lg border p-2 text-sm"/></label>
      <label className="text-xs font-semibold text-slate-600">Até<input type="date" value={fim} onChange={e=>setFim(e.target.value)} className="mt-1 block rounded-lg border p-2 text-sm"/></label>
      <button onClick={()=>void carregar()} disabled={carregando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{carregando?'Carregando...':'Aplicar período'}</button>
     </div>
-    <div className="flex gap-2 print:hidden">{['obras','comercial','producao','financeiro'].includes(setor)&&<button disabled={carregando||setor==='obras'&&!dados} onClick={exportar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Download size={15}/> CSV / Excel</button>}<button onClick={()=>window.print()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Printer size={15}/> Imprimir / PDF</button></div>
+    <div className="flex gap-2 print:hidden">{acessos[setor].exportar&&['obras','comercial','producao','financeiro'].includes(setor)&&<button disabled={carregando||setor==='obras'&&!dados} onClick={exportar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Download size={15}/> CSV / Excel</button>}<button disabled={!acessos[setor].exportar} onClick={()=>void imprimir()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Printer size={15}/> Imprimir / PDF</button></div>
     <p className="hidden text-sm text-slate-600 print:block">Período: {inicio} a {fim} · Data de confirmação da venda (Obras)</p>
    </div>
    {erro&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
@@ -153,7 +163,7 @@ export default function RelatoriosPage(){
    </section>}
    {setor==='comercial'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios Comerciais</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Orçamentos" valor={formatarNumero(comercial.totalOrcamentos)}/><Kpi nome="Valor orçado" valor={formatarMoeda(comercial.valorOrcado)}/><Kpi nome="Vendidos" valor={formatarNumero(comercial.vendidos)}/><Kpi nome="Conversão" valor={formatarPercentual(comercial.taxaConversao,1)}/><Kpi nome="Aprovados" valor={formatarNumero(comercial.aprovados)}/><Kpi nome="Recusados" valor={formatarNumero(comercial.recusados)}/><Kpi nome="Ticket médio" valor={formatarMoeda(comercial.ticketMedio)}/></div><Modulo nome="Orçamentos e funil" texto="Consultar os orçamentos e o andamento comercial." href="/orcamento/pesquisar"/></section>}
    {setor==='producao'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios de Produção</h2><p className="text-xs text-slate-500">Resumo existente de Medição Final</p><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Medições" valor={formatarNumero(medicao.totalMedicoes)}/><Kpi nome="Medições com itens" valor={formatarNumero(medicao.medicoesComItens)}/><Kpi nome="Itens para medir" valor={formatarNumero(medicao.itensTotal)}/><Kpi nome="Itens medidos" valor={formatarNumero(medicao.itensMedidos)}/><Kpi nome="Conclusão de itens" valor={formatarPercentual(medicao.percentualItensMedidos,1)}/></div><Modulo nome="Quadro de Produção" texto="Acompanhar os cards, etapas e liberações." href="/producao"/></section>}
-   {setor==='financeiro'&&<><FinanceiroRelatorio dados={financeiro} carregando={carregando}/><PlanoContasGerencial inicio={inicio} fim={fim} onClassificado={()=>void carregar("financeiro")}/><div className="grid gap-3 md:grid-cols-3 print:hidden"><Modulo nome="Contas a receber" texto="Acessar títulos e recebimentos detalhados" href="/financeiro/contas-receber"/><Modulo nome="Contas a pagar" texto="Acessar obrigações e pagamentos detalhados" href="/financeiro/contas-pagar"/><Modulo nome="Caixa" texto="Acessar os movimentos do balcão" href="/balcao/caixa"/></div></>}
+   {setor==='financeiro'&&<>{acessos.financeiro.consultar&&<FinanceiroRelatorio dados={financeiro} carregando={carregando}/>}{acessos.plano_contas.consultar&&<PlanoContasGerencial podeEditar={acessos.plano_contas.editar} inicio={inicio} fim={fim} onClassificado={()=>void carregar("financeiro")}/>}<div className="grid gap-3 md:grid-cols-3 print:hidden"><Modulo nome="Contas a receber" texto="Acessar títulos e recebimentos detalhados" href="/financeiro/contas-receber"/><Modulo nome="Contas a pagar" texto="Acessar obrigações e pagamentos detalhados" href="/financeiro/contas-pagar"/><Modulo nome="Caixa" texto="Acessar os movimentos do balcão" href="/balcao/caixa"/></div></>}
    {setor==='compras'&&<Catalogo setor="Compras / Estoque" itens={[['Compras','Consultar os pedidos e materiais','/compras'],['Notas fiscais','Consultar os documentos de compra','/compras/notas'],['Estoque','Consultar o estoque disponível','/estoque']]}/>}
    {setor==='engenharia'&&<Catalogo setor="Engenharia" itens={[['Engenharia','Consultar receitas, materiais e plano de corte','/engenharia']]}/>}
    {setor==='assistencia'&&<Catalogo setor="Assistência" itens={[['Assistências','Consultar os atendimentos e manutenções','/assistencias']]}/>}

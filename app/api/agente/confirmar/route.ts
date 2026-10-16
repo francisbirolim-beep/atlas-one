@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   verificarUsuario,
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
     }
 
+    if(!(await carregarPermissoesIA(usuario)).geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const body = await req.json()
     const historico = Array.isArray(body.messages) ? body.messages : []
     const toolUseId = body.toolUseId

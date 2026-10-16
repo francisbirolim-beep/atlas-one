@@ -44,6 +44,8 @@ import {
   type Cadastro360Id,
   type CadastrosUsuarioConfig,
 } from '@/lib/cadastrosUsuario'
+import IARelatoriosPermissoesEditor from '@/components/IARelatoriosPermissoesEditor'
+import {IDS_IA_RELATORIOS} from '@/lib/iaRelatoriosAcoes'
 import Cliente360PermissoesEditor from '@/components/Cliente360PermissoesEditor'
 import { matrizCompletaCliente360 } from '@/lib/cliente360Permissoes'
 import WhatsAppUsuarioPermissoes from '@/components/WhatsAppUsuarioPermissoes'
@@ -299,7 +301,7 @@ export default function UsuariosSenhasPage() {
   }
 
   function aplicarNivelTodos(nivel: NivelPermissao) {
-    setAcessoConfig(prev=>({...prev,cliente360:matrizCompletaCliente360(nivel)}))
+    setAcessoConfig(prev=>({...prev,cliente360:matrizCompletaCliente360(nivel),acoes:{...prev.acoes,...Object.fromEntries(IDS_IA_RELATORIOS.map(id=>[id,nivel]))}}))
     const alteracoesAcoes = Object.fromEntries(blocosPermissoes.flatMap(bloco => bloco.itens.flatMap(item => item.acoes.map(acao => [acao.id, nivel])))) as Record<string, NivelPermissao>
     setAcessoConfig(prev => ({ ...prev, acoes: { ...prev.acoes, ...alteracoesAcoes } }))
     setPermissoesSetores(prev => ({
@@ -620,6 +622,7 @@ export default function UsuariosSenhasPage() {
                       </div>
 
                       <Cliente360PermissoesEditor valor={acessoConfig.cliente360} onChange={cliente360=>setAcessoConfig(prev=>({...prev,cliente360}))}/>
+                      <IARelatoriosPermissoesEditor acoes={acessoConfig.acoes} onChange={acoes=>setAcessoConfig(prev=>({...prev,acoes}))}/>
                       {blocosPermissoes.map(bloco => {
                         const aberto = !!blocosAbertos[bloco.id]
                         const acoesBloco = bloco.itens.flatMap(item => item.acoes.map(acao => nivelAcao(item, acao.id)))

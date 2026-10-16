@@ -1,3 +1,4 @@
+import { autorizarRelatorio } from '@/lib/relatoriosPermissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -39,8 +40,8 @@ function summarizeByMonth(rows:any[],timeKey:string,value:(row:any)=>number,inic
 export async function GET(req:NextRequest){
  const usuario=await autenticarTenant(req)
  if(!usuario)return NextResponse.json({error:'Sessão inválida.'},{status:401})
- // Custos agregados e margens: apenas Master até existir permissão específica de relatórios.
- if(usuario.role!=='master')return NextResponse.json({error:'Relatório financeiro gerencial disponível para Master.'},{status:403})
+ const bloqueio=await autorizarRelatorio(req,usuario,'financeiro')
+ if(bloqueio)return bloqueio
  const inicio=req.nextUrl.searchParams.get('inicio')||''
  const fim=req.nextUrl.searchParams.get('fim')||''
  if(!valid.test(inicio)||!valid.test(fim)||inicio>fim||Date.parse(fim+'T00:00:00Z')-Date.parse(inicio+'T00:00:00Z')>366*86400000){

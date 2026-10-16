@@ -468,3 +468,21 @@ Branch `feat/permissoes-etapas-20261015`, base inicial `302b0b2f`, atualizado so
 ## 2026-10-16 — Publicação incremental de permissões autorizada
 
 Francis autorizou publicar somente o incremento do Cliente 360 em atlasonesystem.com. Base de produção a1aa8e88; alterações e recebimento integrado preservados. Migration aplicada 20261016042736, com seed igual ao legado, RLS e RPC exclusiva do backend; teste transacional real concluído e desfeito. Histórico prévio restaurado com conteúdo exato, sem reexecutá-lo. Demais etapas de IA/relatórios/ações internas continuam pendentes. Autorização atual substitui o bloqueio de publicação do rascunho inicial para este incremento, sem declarar revisão geral concluída.
+
+
+## 2026-10-16 — IA e relatório de fornecedores: candidato de segurança
+
+Branch `feat/permissoes-ia-relatorios-20261016`, base `ac03af33`. Sem publicação.
+- Especialista e contexto federado bloqueiam consultas se a leitura das restrições de IA falha; escopos desconhecidos são negados, sem ampliar o teto do setor.
+- Busca federada com escopo próprio e sem coluna/valor de titularidade retorna vazio antes de consultar a tabela.
+- Relatório de fornecedores exige as ações existentes `admin.bi.consultar` no setor Relatórios e `compras.geral.consultar` no setor Compras; Master preservado. Falha de verificação retorna 503 antes de consultar custos.
+- Nenhuma migration, permissão real, dado operacional ou tela aprovada alterada. Rollback: reverter este commit; banco permanece igual.
+- Testes novos cobrem erro de leitura, escopo inválido, teto, tenant, ausência de titularidade e 401/403/503 antes das consultas do relatório. Regressões Cliente 360/cadastros e cálculo de fornecedores executadas.
+- Revisão geral permanece aberta: agentes geral/comercial legados, sessões anteriores, titularidade UUID de clientes/histórico WVetro, totais agregados em escopo próprio, atalhos de estimativa, edição/exportação dos demais relatórios e controles na interface. Este pacote não declara resolvidos esses caminhos.
+- Próximo passo: completar esses controles, validar com usuários de consulta/edição, apresentar prévia e somente então publicar o pacote aprovado.
+
+## 2026-10-16 — Conclusão dos controles de IA e relatórios (PR #863)
+
+Pacote ampliado sobre a main atual `57d8edc7`, preservando os incrementos de Kanban por usuário e identificação assistida de Compras. A lista anterior de pendências de IA/relatórios foi tratada: resolvedor único, titularidade por UUID, agregados e histórico limitados, sessões/histórico vinculados à autorização vigente, feedback/conhecimento/aprendizado protegidos, APIs de relatórios com consulta/edição/exportação e editor aditivo no usuário. Ver `PERMISSOES_IA_RELATORIOS_20261016.md` para critérios, limites e validações.
+
+67 verificações comportamentais e regressões do Cliente 360, cadastros, NF, recebimentos, RLS isolado, Kanbans, relatórios/book e fornecedores aprovadas. Nenhuma permissão real ou migration alterada. Typecheck aprovado; preflight final obrigatório antes da integração. A revisão de IA/relatórios está tecnicamente concluída neste pacote; não extrapolar essa afirmação para todos os módulos do ERP. Próximo passo operacional: validar o commit final no CI e publicar no domínio autorizado com snapshot/rollback, sem mudar configurações de acesso reais.

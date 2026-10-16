@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -177,6 +178,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (acao === 'diario_chat') {
+      if(!(await carregarPermissoesIA(usuario)).geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
       const mensagem = txt(body?.mensagem, 5000)
       if (!mensagem) return NextResponse.json({ error: 'Digite uma mensagem.' }, { status: 400 })
 

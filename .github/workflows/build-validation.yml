@@ -92,5 +92,8 @@ jobs:
       - name: Supabase live-hash guard self-test
         run: npm run test:supabase-hashes
 
+      - name: IA and reports authorization regression
+        run: npm run test:ia-relatorios
+
       - name: Build
         run: npm run build

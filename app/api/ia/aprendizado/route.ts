@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
@@ -80,6 +81,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
+    const autorizacao=await carregarPermissoesIA(usuario)
+    if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const dominio = texto(body.dominio, 60).toLowerCase()
     const tipo = texto(body.tipo, 80).toLowerCase()
     if (!dominio || !tipo) {
@@ -127,6 +130,8 @@ export async function GET(req: NextRequest) {
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
 
   try {
+    const autorizacao=await carregarPermissoesIA(usuario)
+    if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const dominio = texto(req.nextUrl.searchParams.get('dominio'), 60).toLowerCase()
     const tipo = texto(req.nextUrl.searchParams.get('tipo'), 80).toLowerCase()
     const limite = Math.min(Math.max(Number(req.nextUrl.searchParams.get('limite')) || 8, 1), 30)
@@ -152,7 +157,8 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(1500)
 
-    if (dominio !== 'cmv_wvetro') query = query.eq('usuario_id', usuario.id)
+    const compartilhar=dominio==='cmv_wvetro'&&autorizacao.dominios.orcamento.permitido&&autorizacao.dominios.orcamento.escopo!=='proprio'&&autorizacao.auxiliares.custos_precos
+    if (!compartilhar) query = query.eq('usuario_id', usuario.id)
 
     const { data, error } = await query
     if (error) throw new Error(error.message)

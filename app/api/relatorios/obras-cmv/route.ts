@@ -1,3 +1,4 @@
+import { autorizarRelatorio } from '@/lib/relatoriosPermissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -38,8 +39,8 @@ async function selecionar<T = any>(tabela: string, campos: string, coluna: strin
 export async function GET(req: NextRequest) {
   const u = await autenticarTenant(req)
   if (!u) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
-  // Relatório gerencial consolidado com custos e margens: restringir ao Master até existir permissão específica de relatórios.
-  if (u.role !== 'master') return NextResponse.json({ error: 'Relatório gerencial disponível para o Master.' }, { status: 403 })
+  const bloqueio=await autorizarRelatorio(req,u,'obras')
+  if(bloqueio)return bloqueio
   const inicio = req.nextUrl.searchParams.get('inicio') || ''
   const fim = req.nextUrl.searchParams.get('fim') || ''
   const valido = /^\d{4}-\d{2}-\d{2}$/

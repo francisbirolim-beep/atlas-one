@@ -1,4 +1,5 @@
 'use client'
+import {useRelatoriosAcesso,autorizarExportacaoRelatorio} from '@/components/relatorios/RelatoriosAcesso'
 import {useEffect,useMemo,useState} from 'react'
 import Link from 'next/link'
 import {ArrowLeft,BarChart3,BookOpen,Download,Printer,Search} from 'lucide-react'
@@ -43,6 +44,7 @@ function abc<T>(linhas:T[],getValor:(l:T)=>number){
  return linhas.map(l=>{const v=getValor(l);acumulado+=v;const fatia=total?100*v/total:0,ac=total?100*acumulado/total:0;return {l,participacao:fatia,acumulada:ac,classe:ac<=80?'A':ac<=95?'B':'C'}})
 }
 export default function RelatoriosEsquadrifacio(){
+ const acessos=useRelatoriosAcesso()
  const [periodo,setPeriodo]=useState(inicial)
  const [atualizacao,setAtualizacao]=useState(0)
  const [grupo,setGrupo]=useState('Todos')
@@ -131,7 +133,9 @@ export default function RelatoriosEsquadrifacio(){
   return null
  }
  const tabela=relatorioRows()
- function exportar(){
+ async function imprimir(){try{await autorizarExportacaoRelatorio('esquadrifacio');window.print()}catch(e){setErro(e instanceof Error?e.message:'Impressão não autorizada.')}}
+ async function exportar(){
+  try{await autorizarExportacaoRelatorio('esquadrifacio')}catch(e){setErro(e instanceof Error?e.message:'Exportação não autorizada.');return}
   if(!tabela)return
   const header=tabela.imagens?tabela.colunas.filter((_,i)=>i!==1):tabela.colunas
   const body=tabela.imagens?tabela.linhas.map(row=>row.filter((_,i)=>i!==1)):tabela.linhas
@@ -146,7 +150,7 @@ export default function RelatoriosEsquadrifacio(){
     <p className="mt-1 text-sm text-slate-600">31 visões do fechamento de referência, organizadas por assunto. Consulte cada relatório antes de compilar o fechamento mensal.</p>
    </div><div className="relatorios-acoes flex flex-wrap gap-2">
     {validarPeriodoBook(periodo.inicio,periodo.fim)&&<Link href={'/relatorios/esquadrifacio/book?inicio='+encodeURIComponent(periodo.inicio)+'&fim='+encodeURIComponent(periodo.fim)} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white"><BookOpen size={17}/> Gerar Book do Período</Link>}
-    <button disabled={!tabela} onClick={exportar} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/> Excel / CSV</button><button onClick={()=>window.print()} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Printer size={15}/> Imprimir / PDF</button></div></div>
+    <button disabled={!acessos.esquadrifacio.exportar||!tabela} onClick={exportar} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50"><Download size={15}/> Excel / CSV</button><button disabled={!acessos.esquadrifacio.exportar} onClick={()=>void imprimir()} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Printer size={15}/> Imprimir / PDF</button></div></div>
    <section className="relatorios-acoes flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4">
     <label className="text-xs font-bold">Data inicial<input className="mt-1 block rounded-lg border px-3 py-2 text-sm" type="date" value={periodo.inicio} onChange={e=>setPeriodo(p=>({...p,inicio:e.target.value}))}/></label>
     <label className="text-xs font-bold">Data final<input className="mt-1 block rounded-lg border px-3 py-2 text-sm" type="date" value={periodo.fim} onChange={e=>setPeriodo(p=>({...p,fim:e.target.value}))}/></label>

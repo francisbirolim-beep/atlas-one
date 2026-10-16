@@ -1,3 +1,5 @@
+import { POST as especialistaPOST } from '@/app/api/ia/especialista/route'
+import { carregarPermissoesIA } from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { consultarOpenCode, statusOpenCode } from '@/lib/ai/opencode'
@@ -97,6 +99,16 @@ export async function POST(req: NextRequest) {
 
     const accessToken = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
     const body = await req.json()
+    const autorizacao=await carregarPermissoesIA({...usuario,nome:usuario.nome||'',role:usuario.role||'funcionario'})
+    if(!autorizacao.dominios.comercial.permitido)return NextResponse.json({error:'Sem acesso à IA Comercial.'},{status:403})
+    if(usuario.role !== 'master') {
+      const resposta=await especialistaPOST(new NextRequest(new URL('/api/ia/especialista',req.url),{
+        method:'POST',headers:req.headers,body:JSON.stringify({...body,modulo:'comercial'}),
+      }))
+      const json=await resposta.json()
+      return NextResponse.json({...json,orquestrador:'opencode',motor:'freellmapi'},{status:resposta.status})
+    }
+
     const pergunta = String(body?.pergunta || '').trim()
 
     if (!pergunta) return NextResponse.json({ error: 'Digite uma pergunta' }, { status: 400 })

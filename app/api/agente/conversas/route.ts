@@ -1,3 +1,4 @@
+import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { criarConversaAgente, validarConversaAgente, verificarUsuario } from '@/lib/agente'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -15,8 +16,34 @@ export async function GET(req: NextRequest) {
   try {
     const usuario = await verificarUsuario(req.headers.get('authorization') || '')
     if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    if(!(await carregarPermissoesIA(usuario)).geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
 
     const conversaId = String(req.nextUrl.searchParams.get('id') || '').trim()
+    if(usuario.role!=='master'){
+      const acesso=await carregarPermissoesIA(usuario)
+      if(conversaId&&!await validarConversaAgente(conversaId,usuario.id,usuario.empresa_id))
+        return NextResponse.json({error:'Conversa não encontrada para este usuário.'},{status:404})
+      let q=supabaseAdmin.from('ai_interacoes').select('id,pergunta,resposta,created_at,contexto_json')
+        .eq('empresa_id',usuario.empresa_id).eq('usuario_id',usuario.id).eq('contexto','atlas_ia_geral')
+        .contains('contexto_json',{permissoes_assinatura:acesso.assinatura})
+      if(conversaId)q=q.contains('contexto_json',{conversa_id:conversaId})
+      const {data,error}=await q.order('created_at',{ascending:false}).limit(conversaId?200:400)
+      if(error)throw error
+      const historico=[...(data||[])].reverse()
+      if(conversaId)return NextResponse.json({conversaId,mensagens:historico.flatMap(i=>[
+        {id:i.id+'-user',papel:'user',conteudo:i.pergunta,created_at:i.created_at},
+        {id:i.id+'-assistant',papel:'assistant',conteudo:i.resposta,created_at:i.created_at},
+      ])},{headers:{'Cache-Control':'no-store'}})
+      const grupos=new Map<string,any>()
+      for(const i of historico){
+        const id=String(i.contexto_json?.conversa_id||'')
+        if(!id)continue
+        const anterior=grupos.get(id)
+        grupos.set(id,{id,titulo:anterior?.titulo||tituloConversa(i.pergunta),preview:String(i.resposta||'').slice(0,90),createdAt:anterior?.createdAt||i.created_at,updatedAt:i.created_at,mensagens:(anterior?.mensagens||0)+2})
+      }
+      return NextResponse.json({conversas:Array.from(grupos.values()).reverse().slice(0,40)},{headers:{'Cache-Control':'no-store'}})
+    }
+
     if (conversaId) {
       const validada = await validarConversaAgente(conversaId, usuario.id, usuario.empresa_id)
       if (!validada) return NextResponse.json({ error: 'Conversa não encontrada para este usuário.' }, { status: 404 })
@@ -91,6 +118,7 @@ export async function POST(req: NextRequest) {
   try {
     const usuario = await verificarUsuario(req.headers.get('authorization') || '')
     if (!usuario) return NextResponse.json({ error: 'Nao autenticado' }, { status: 401 })
+    if(!(await carregarPermissoesIA(usuario)).geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
 
     const conversaId = await criarConversaAgente(usuario.id, usuario.empresa_id)
     return NextResponse.json({ conversaId }, { status: 201 })

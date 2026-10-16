@@ -1,4 +1,5 @@
 'use client'
+import {useRelatoriosAcesso,autorizarExportacaoRelatorio} from '@/components/relatorios/RelatoriosAcesso'
 
 import {useEffect,useMemo,useState} from 'react'
 import Link from 'next/link'
@@ -31,6 +32,7 @@ function Card({nome,valor,obs}:{nome:string;valor:string;obs?:string}){
  return <div className="rounded-xl border bg-white p-4"><p className="text-xs font-semibold uppercase text-slate-500">{nome}</p><p className="mt-1 text-xl font-bold text-slate-900">{valor}</p>{obs&&<p className="mt-1 text-xs text-slate-500">{obs}</p>}</div>
 }
 export default function AnaliseFornecedores(){
+ const acessos=useRelatoriosAcesso()
  const hoje=useMemo(mesAtual,[])
  const [inicio,setInicio]=useState(hoje.inicio)
  const [fim,setFim]=useState(hoje.fim)
@@ -91,7 +93,9 @@ export default function AnaliseFornecedores(){
   const difValor=conferidas.reduce((s,l)=>s+(l.valorDiferenca||0),0)
   return {conferidas:conferidas.length,pendentes:linhas.length-conferidas.length,percentual:comprado?(recebido-comprado)/comprado*100:null,difValor}
  },[linhas])
- function exportar(){
+ async function imprimir(){try{await autorizarExportacaoRelatorio('fornecedores');window.print()}catch(e){setErro(e instanceof Error?e.message:'Impressão não autorizada.')}}
+ async function exportar(){
+  try{await autorizarExportacaoRelatorio('fornecedores')}catch(e){setErro(e instanceof Error?e.message:'Exportação não autorizada.');return}
   baixarCsv('atlas-analise-fornecedores-perfis.csv',[
    ['Fornecedor','Cliente / obra','Nº venda','Data(s) compra','Data(s) recebimento','Nota / Romaneio','Peso comprado (kg)','Peso recebido (kg)','Diferença (kg)','Diferença (%)','Valor comprado (R$)','Valor recebido (R$)','Diferença valor (R$)','Situação'],
    ...linhas.map(l=>[l.fornecedor,l.cliente,l.numero||'',datas(l.datasCompra),datas(l.datasRecebimento),l.documentos.join(' / '),l.pesoComprado,l.pesoRecebido,l.pesoDiferenca??'',l.percentual??'',l.valorComprado,l.valorRecebido,l.valorDiferenca??'',status(l.percentual,l.situacao,atencao,critico).texto])
@@ -99,7 +103,7 @@ export default function AnaliseFornecedores(){
  }
  return <div className="min-h-screen bg-slate-50"><style>{`@media print {.atlas-sidebar-shell,.atlas-sidebar-nav,.atlas-topbar,.atlas-mobile-navigation,.print-hide{display:none!important}.atlas-app-content{height:auto!important;overflow:visible!important}.atlas-app-main{padding:0!important;min-height:auto!important}body{background:white!important}}`}</style>
   <main className="mx-auto max-w-7xl space-y-5 px-3 py-6 md:px-6">
-   <div className="flex flex-wrap items-start justify-between gap-3"><div><Link href="/relatorios" className="print-hide mb-2 inline-flex items-center gap-1 text-sm font-semibold text-blue-700"><ArrowLeft size={15}/> Central de Relatórios</Link><h1 className="text-2xl font-bold text-slate-900">Análise de Fornecedores · Perfis</h1><p className="mt-1 text-sm text-slate-600">Peso comprado × recebido, variação em quilos, porcentagem e valor, por fornecedor e obra.</p></div><div className="print-hide flex gap-2"><button type="button" onClick={exportar} disabled={!linhas.length} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-40"><Download size={15}/> CSV / Excel</button><button type="button" onClick={()=>window.print()} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Printer size={15}/> Imprimir / PDF</button></div></div>
+   <div className="flex flex-wrap items-start justify-between gap-3"><div><Link href="/relatorios" className="print-hide mb-2 inline-flex items-center gap-1 text-sm font-semibold text-blue-700"><ArrowLeft size={15}/> Central de Relatórios</Link><h1 className="text-2xl font-bold text-slate-900">Análise de Fornecedores · Perfis</h1><p className="mt-1 text-sm text-slate-600">Peso comprado × recebido, variação em quilos, porcentagem e valor, por fornecedor e obra.</p></div><div className="print-hide flex gap-2"><button type="button" onClick={exportar} disabled={!acessos.fornecedores.exportar||!linhas.length} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-40"><Download size={15}/> CSV / Excel</button><button type="button" disabled={!acessos.fornecedores.exportar} onClick={()=>void imprimir()} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Printer size={15}/> Imprimir / PDF</button></div></div>
    <section className="print-hide space-y-3 rounded-xl border bg-white p-4"><div className="flex flex-wrap items-end gap-3">
     <label className="text-xs font-semibold text-slate-600">Período por<select value={referencia} onChange={e=>setReferencia(e.target.value as ReferenciaPeriodo)} className="mt-1 block rounded-lg border px-2 py-2 text-sm"><option value="compra">Data da compra</option><option value="recebimento">Data do recebimento</option><option value="movimento">Compra ou recebimento</option></select></label>
     <label className="text-xs font-semibold text-slate-600">De<input type="date" value={inicio} onChange={e=>setInicio(e.target.value)} className="mt-1 block rounded-lg border px-2 py-2 text-sm"/></label>
