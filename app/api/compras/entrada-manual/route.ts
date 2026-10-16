@@ -121,8 +121,8 @@ export async function POST(req: NextRequest) {
   const fornecedor = String(p.fornecedor || '').trim()
   const numero = String(p.numeroRomaneio || '').trim()
   if (!fornecedor || fornecedor.length > 200 || !numero || numero.length > 100) return falha('Informe o fornecedor e o número do romaneio.')
-  if (typeof p.dataDocumento !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(p.dataDocumento)) return falha('Informe a data do romaneio.')
-  if (p.vencimento && (typeof p.vencimento !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(p.vencimento))) return falha('Vencimento inválido.')
+  if (typeof p.dataDocumento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.dataDocumento)) return falha('Informe a data do romaneio.')
+  if (p.vencimento && (typeof p.vencimento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.vencimento))) return falha('Vencimento inválido.')
   const itens = p.itens
   if (!Array.isArray(itens) || itens.length < 1 || itens.length > 100) return falha('Informe de 1 a 100 produtos.')
   const inteiro4 = (valor: number) => Math.round(valor * 10000)
