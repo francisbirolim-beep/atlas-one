@@ -1,4 +1,4 @@
--- Candidata: aplicar somente após validar em banco isolado. Nenhum acesso existente é zerado.
+-- Validada em PostgreSQL isolado. Nenhum acesso existente é zerado.
 begin;
 create table public.usuario_acessos_etapas (
   usuario_id uuid primary key references public.usuarios(id) on delete cascade,
@@ -26,4 +26,24 @@ create policy acesso_usuario_legado_write_guard on public.configuracoes_gerais
 as restrictive for all to authenticated
 using (chave not like 'acesso_usuario:%' or chave='acesso_usuario:'||auth.uid()::text or private.is_master_atlas())
 with check (chave not like 'acesso_usuario:%' or private.is_master_atlas());
+-- Gravação atômica pelo backend. Mantém leitores legados e rollback coerentes.
+create function public.salvar_acesso_usuario_etapas_backend(
+  p_usuario_id uuid, p_empresa_id uuid, p_config jsonb
+) returns void language plpgsql security invoker set search_path='' as $$
+begin
+  if jsonb_typeof(p_config) <> 'object' or not exists(
+    select 1 from public.usuarios u where u.id=p_usuario_id and u.empresa_id=p_empresa_id and u.role <> 'master'
+  ) then
+    raise exception 'Usuário ou configuração inválidos';
+  end if;
+  insert into public.usuario_acessos_etapas(usuario_id,empresa_id,config,updated_at)
+  values(p_usuario_id,p_empresa_id,p_config,now())
+  on conflict(usuario_id) do update set empresa_id=excluded.empresa_id,config=excluded.config,updated_at=excluded.updated_at;
+  insert into public.configuracoes_gerais(chave,valor,empresa_id,updated_at)
+  values('acesso_usuario:'||p_usuario_id::text,p_config::text,p_empresa_id,now())
+  on conflict(chave) do update set valor=excluded.valor,empresa_id=excluded.empresa_id,updated_at=excluded.updated_at;
+end;
+$$;
+revoke all on function public.salvar_acesso_usuario_etapas_backend(uuid,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.salvar_acesso_usuario_etapas_backend(uuid,uuid,jsonb) to service_role;
 commit;

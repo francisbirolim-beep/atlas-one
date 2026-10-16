@@ -653,6 +653,7 @@ export default function ComprasPage() {
               Adicionar necessidade (avançado)
             </button>}
             {dados?.acessos?.consultar && <Link href="/compras/solicitacoes" className="rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold">Lista de faltas / Carrinhos</Link>}
+            {(dados?.acessos?.receber||dados?.acessos?.conferir) && <Link href="/compras/recebimento-integrado" className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-800">Recebimento por obra / estoque</Link>}
           </div>
         </header>
         {erro && (

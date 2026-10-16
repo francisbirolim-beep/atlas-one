@@ -1,7 +1,7 @@
 # Permissões por usuário e etapa — revisão iniciada em 15/10/2026
 
 Branch: `feat/permissoes-etapas-20261015`. Base inicial: `302b0b2f`; reconciliado com a main atual `f891d3a5`. Sincronização W.Vetro autorizada, cards novos de compras e edições/exclusões da main foram preservados. Leitores de permissão de Compras e remoção de item da Medição agora usam também a configuração protegida.
-Status: **primeiro incremento implementado; revisão geral ainda incompleta; não publicar**.
+Status: **publicação do primeiro incremento autorizada explicitamente em 16/10/2026. Revisão geral ainda incompleta.**
 
 ## Escopo implementado
 
@@ -16,7 +16,7 @@ Status: **primeiro incremento implementado; revisão geral ainda incompleta; nã
 - Leitores cliente/servidor consultam o armazenamento protegido e mantêm compatibilidade de leitura com configurações antigas. Falhas reais de consulta bloqueiam a leitura em vez de recuperar permissões amplas.
 - Seleção de usuários ignora respostas atrasadas de seleção anterior. Falha ao salvar configuração segura não altera o teto dos setores.
 
-## Limitações que impedem publicação como revisão completa
+## Limitações: este incremento não é a revisão completa
 
 | Área | Próximo trabalho obrigatório |
 | --- | --- |
@@ -83,3 +83,12 @@ O repositório contém 137 arquivos `app/api/**/route.ts`. Esta contagem orienta
 | tarefas | 1 |
 | usuarios | 1 |
 | vendas | 13 |
+
+
+## Publicação incremental autorizada — 16/10/2026
+
+- Usuário autorizou expressamente publicar em `atlasonesystem.com`.
+- Reconciliado com produção `a1aa8e88` (#859), preservando recebimento integrado de compras/NF/obra/estoque.
+- Snapshot das configurações e permissões atuais preservado antes da migration; deployment anterior `dpl_J1AtojtRyD6Ur15J8o7HhTFBo16g`.
+- Gravação nova usa RPC exclusiva do backend, transacional, e mantém a configuração legada igual à nova para compatibilidade e rollback.
+- Restante da varredura de IA, relatórios e ações internas continua pendente; a publicação não equivale à conclusão da revisão geral.
