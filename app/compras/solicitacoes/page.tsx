@@ -1,5 +1,5 @@
 'use client'
-import {useCallback,useEffect,useMemo,useState} from 'react'
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import Link from 'next/link'
 import {tokenAtual} from '@/lib/auth'
 import {calcularPedidoMinimo} from '@/lib/comprasCotacaoAssistida'
@@ -71,6 +71,7 @@ export default function ComprasSolicitacoes(){
  const [d,setD]=useState<Payload|null>(null),[busy,setBusy]=useState(false),[erro,setErro]=useState(''),[msg,setMsg]=useState('')
  const [destino,setDestino]=useState<'obra'|'estoque'>('estoque'),[clienteId,setClienteId]=useState(''),[obraId,setObraId]=useState('')
  const [itens,setItens]=useState<NovoItem[]>([novo()]),[revisar,setRevisar]=useState(false)
+ const origemClienteAplicada=useRef(false)
  const [abaPedido,setAbaPedido]=useState<'itens'|'observacoes'|'historico'>('itens')
  const [abrirId,setAbrirId]=useState<string|null>(null),[buscaProduto,setBuscaProduto]=useState('')
  const [visaoSolicitacoes,setVisaoSolicitacoes]=useState<'kanban'|'lista'>('kanban'),[pedidoAberto,setPedidoAberto]=useState<string|null>(null),[visaoCompras,setVisaoCompras]=useState<'fornecedor'|'cliente'|'lista'>('fornecedor')
@@ -89,6 +90,20 @@ export default function ComprasSolicitacoes(){
   finally{setBusy(false)}
  },[request])
  useEffect(()=>{void carregar()},[carregar])
+ // Cliente 360 -> Pedido de compra: reutiliza o formulário aprovado, sem passar
+ // pelo Compras 360 legado. A obra continua sob escolha e validação do usuário.
+ useEffect(()=>{
+  if(!d||origemClienteAplicada.current)return
+  origemClienteAplicada.current=true
+  const params=new URLSearchParams(window.location.search)
+  const clienteOrigem=params.get('cliente')
+  if(!clienteOrigem||!d.clientes.some(c=>c.id===clienteOrigem))return
+  const obraOrigem=params.get('obra')
+  const obraValida=obraOrigem&&d.obras.some(o=>o.id===obraOrigem&&o.cliente_id===clienteOrigem)?obraOrigem:''
+  setItens(atuais=>atuais.map((item,index)=>index===0&&item.cliente_id===''&&item.obra_id===''&&item.descricao.trim()===''
+   ?{...item,modo:'obra',cliente_id:clienteOrigem,obra_id:obraValida}:item))
+ },[d])
+
  const selecionado=d?.itens.find(i=>i.id===abrirId)
  const obra=d?.obras.filter(o=>o.cliente_id===clienteId)||[]
  const produto=d?.produtos.find(p=>p.id===selecionado?.produto_id)
