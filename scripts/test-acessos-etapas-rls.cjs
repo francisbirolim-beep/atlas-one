@@ -23,7 +23,7 @@ const {PGlite}=require(process.env.ATLAS_PGLITE_MODULE||'@electric-sql/pglite')
  insert into public.usuarios(id,empresa_id) values('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001'),('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002');
  insert into public.configuracoes_gerais(chave,valor) values('acesso_usuario:20000000-0000-0000-0000-000000000001','{"crmEscopo":"proprios","acoes":{"financeiro.geral.consultar":"oculto"}}');
  `)
- await db.exec(fs.readFileSync('supabase/migrations/20261016001422_permissoes_etapas_usuario_v1.sql','utf8'))
+ await db.exec(fs.readFileSync('supabase/migrations/20261016042736_permissoes_etapas_usuario_v1_20261016.sql','utf8'))
  assert.equal((await db.query('select count(*)::int n from public.usuario_acessos_etapas')).rows[0].n,1,'Migra configuração legada')
  await db.exec(`set role authenticated;set test.uid='20000000-0000-0000-0000-000000000001';set test.empresa='10000000-0000-0000-0000-000000000001';set test.master='false';`)
  assert.equal((await db.query('select * from public.usuario_acessos_etapas')).rows.length,1,'Usuário lê o próprio acesso')
