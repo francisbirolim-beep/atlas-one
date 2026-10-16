@@ -2123,6 +2123,16 @@ Deno.serve(async (req) => {
       return reply({ ok: true, item });
     }
 
+    if (req.method === "GET" && url.searchParams.get("mode") === "triagem") {
+      // O gateway ja opera autenticado para esta empresa; nao faz acesso entre tenants.
+      if (!gatewayToken) return reply({ error: "Gateway nao autorizado." }, 401);
+      const { data, error } = await db.rpc("whatsapp_escalonar_triagem", {
+        p_empresa_id: config.empresa_id,
+      });
+      if (error) throw error;
+      return reply({ ok: true, transferidas: Number(data || 0) });
+    }
+
     if (req.method === "GET" && url.searchParams.get("mode") === "channels") {
       const { data, error } = await db
         .from("atendimento_whatsapp_canais")

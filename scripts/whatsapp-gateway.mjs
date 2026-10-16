@@ -1120,10 +1120,27 @@ async function connectChannel(channel) {
   }
 }
 
+let ultimaVerificacaoTriagemEm = 0
+async function verificarTriagemPeriodica() {
+  if (shuttingDown || Date.now() - ultimaVerificacaoTriagemEm < 60_000) return
+  ultimaVerificacaoTriagemEm = Date.now()
+  try {
+    const resultado = await atlas('mode=triagem', { method: 'GET' })
+    if (Number(resultado?.transferidas || 0) > 0) {
+      console.log('[gateway] triagem: ' + resultado.transferidas + ' conversa(s) escalonada(s).')
+    }
+  } catch (error) {
+    // A entrega e o recebimento de mensagens continuam mesmo se a triagem falhar.
+    console.warn('[gateway] triagem:', error instanceof Error ? error.message : String(error))
+  }
+}
+
 async function refreshChannels() {
   if (shuttingDown) return
   try {
     const allChannels = await listChannels()
+    // Repasse automatico nao bloqueia a conexao nem exige Vercel Cron pago.
+    void verificarTriagemPeriodica()
     pausedChannels.clear()
     for (const c of allChannels) if (c.conexao_pausada === true) pausedChannels.add(c.id)
     const channels = allChannels.filter(c => !pausedChannels.has(c.id))

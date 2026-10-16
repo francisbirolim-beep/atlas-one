@@ -1,8 +1,7 @@
 {
   "crons": [
     {"path": "/api/backup", "schedule": "0 6 * * *"},
-    {"path": "/api/integracoes/wvetro/atualizacao-diaria", "schedule": "30 23 * * *"},
-    {"path": "/api/integracoes/whatsapp/triagem", "schedule": "* * * * *"}
+    {"path": "/api/integracoes/wvetro/atualizacao-diaria", "schedule": "30 23 * * *"}
   ],
   "git": {"deploymentEnabled": false}
 }
