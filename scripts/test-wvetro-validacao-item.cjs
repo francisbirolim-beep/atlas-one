@@ -13,12 +13,13 @@ function query(table){
  q.update=v=>{op='update';payload=v;return q}
  q.insert=v=>{op='insert';payload=v;return q}
  q.delete=()=>{op='delete';return q}
- q.eq=(c,v)=>{conditions.push([c,v]);filters.push([table,c,v]);return q}
+ q.eq=(c,v)=>{assert.ok(String(v).length<4096,'URL de filtro não pode incluir JSON grande');conditions.push([c,v]);filters.push([table,c,v]);return q}
+ q.is=(c,v)=>{conditions.push([c,v]);filters.push([table,c,v]);return q}
  for(const method of ['order','limit','contains'])q[method]=()=>q
  function run(){
   if(table==='orcamentos'){
    assert.ok(conditions.some(([c,v])=>c==='empresa_id'&&v==='e1'),'Tenant sempre filtrado')
-   if(op==='update'){if(conflict)return {data:null,error:null};Object.assign(row,payload)}
+   if(op==='update'){if(conflict||conditions.some(([c,v])=>c==='updated_at'&&v!==row.updated_at))return {data:null,error:null};Object.assign(row,payload)}
    return {data:clone(row),error:null}
   }
   if(table==='ai_orcamento_feedback'){
@@ -52,6 +53,8 @@ const request=(acao,correcao={},itemId='i1',original)=>server.validarItemImporta
  assert.equal(r.status,200);assert.equal(p.statusItemWVetro(row.itens[0],row.wvetro_fluxo),'validado')
  assert.equal(p.statusItemWVetro(row.itens[1],row.wvetro_fluxo),'pendente')
  assert.equal(row.wvetro_fluxo.validacao_status,'aguardando');assert.equal(packageCalls,0)
+ assert.ok(filters.some(([t,c,v])=>t==='orcamentos'&&c==='updated_at'&&v==='t0'),'CAS compacto mantém versão anterior')
+ assert.ok(!filters.some(([t,c])=>t==='orcamentos'&&(c==='itens'||c==='wvetro_fluxo')),'sem JSON grande na URL')
  assert.deepEqual(row.itens[1],outro);assert.equal(row.valor_estimado,999)
  const snapshot=row.wvetro_fluxo.validacoes_itens.i1.snapshot
  row.wvetro_fluxo.validacoes_itens.i1.snapshot=Object.fromEntries(Object.entries(snapshot).reverse())
@@ -76,6 +79,11 @@ const request=(acao,correcao={},itemId='i1',original)=>server.validarItemImporta
  reset();scope='proprio';row.criado_por_id='outro';r=await request('validar_item_importacao');assert.equal(r.status,404)
  reset();conflict=true;r=await request('corrigir_item_importacao',{ambiente:'Nova'});assert.equal(r.status,409);assert.equal(row.itens[0].ambiente,'Sala');assert.equal(feedback.length,0,'Conflito remove feedback não aplicado')
  reset();feedbackFail=true;await assert.rejects(request('corrigir_item_importacao',{ambiente:'Nova'}));assert.equal(row.itens[0].ambiente,'Sala')
+ reset();row.updated_at=null;r=await request('validar_item_importacao');assert.equal(r.status,200);assert.ok(filters.some(([t,c,v])=>t==='orcamentos'&&c==='updated_at'&&v===null),'CAS para timestamps legados nulos')
+ reset();row.wvetro_fluxo.payload_bruto={dados:'x'.repeat(200000)};row.itens=Array.from({length:18},(_,i)=>({...clone(item),id:'i'+(i+1)}))
+ for(let i=1;i<=18;i++){r=await request('validar_item_importacao',{},'i'+i);assert.equal(r.status,200)}
+ assert.equal(row.wvetro_fluxo.validacao_status,'validado');assert.equal(Object.keys(row.wvetro_fluxo.validacoes_itens).length,18)
+ assert.equal(packageCalls,1,'pacote técnico apenas quando concluir 18 itens')
  reset();scope='proprio';r=await request('sugerir_item_importacao');assert.equal(r.status,200);assert.ok(filters.some(([t,c,v])=>t==='ai_orcamento_feedback'&&c==='usuario_id'&&v==='u1'))
  console.log('PASS: conferência individual, correções só por campo, texto livre, catálogo, JSONB, preservação, escopo, erros, concorrência e aprendizado.')
 })().catch(e=>{console.error(e);process.exitCode=1})
