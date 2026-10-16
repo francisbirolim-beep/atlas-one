@@ -57,7 +57,7 @@ export async function validarItemImportadoWVetro(req:NextRequest,usuario:Usuario
           return erro('Variáveis técnicas inválidas.')
         // Preservar os metadados internos de importação.
         for(const chave of Object.keys(original.variaveis||{})){
-          if(chave.startsWith('wvetro_'))valor[chave]=original.variaveis[chave]
+          if(chave.startsWith('wvetro_'))(valor as Record<string, any>)[chave]=original.variaveis[chave]
         }
       }else if(valor!==null&&(typeof valor!=='string'||valor.length>4000))return erro('Texto de correção inválido.')
       final[campo]=valor
