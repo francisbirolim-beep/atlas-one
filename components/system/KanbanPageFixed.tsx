@@ -20,6 +20,8 @@ import { lerCorAssistencia } from '@/lib/configGeral'
 import { bateBusca } from '@/lib/texto'
 import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
+import ConferenciaItemWVetro, { TipoImportadoWVetro } from './ConferenciaItemWVetro'
+import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wvetroValidacaoItem'
 import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
 
 let tipoLabels: Record<string, string> = {}
@@ -124,6 +126,7 @@ function ehOrcamentoWVetro(card: OrcamentoRapido | null | undefined): boolean {
 
 function wvetroAguardandoValidacao(card: OrcamentoRapido | null | undefined): boolean {
   if (!ehOrcamentoWVetro(card)) return false
+  if(fluxoWVetro(card).validacao_por_item)return !(card?.itens||[]).length || (card?.itens||[]).some(i=>statusItemWVetro(i,fluxoWVetro(card))==='pendente')
   return String(fluxoWVetro(card).validacao_status || 'aguardando').toLowerCase() !== 'validado'
 }
 
@@ -627,6 +630,37 @@ setSincronizandoWVetro(false)
 }
 }
 
+async function conferirItemWVetro(itemId:string,modo:'correto'|'corrigir') {
+if(!cardSelecionado||!editando||validandoWVetro)return
+const original=cardSelecionado.itens?.find(i=>i.id===itemId)
+const item=editando.itens?.find(i=>i.id===itemId)
+if(!original||!item)return
+setValidandoWVetro(true);setMensagemWVetro('')
+try {
+const token=await tokenAtual()
+if(!token)throw new Error('Sessão expirada.')
+const diffs=diferencasItemWVetro(original,item)
+const r=await fetch('/api/integracoes/wvetro/orcamentos/kanban',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({
+acao:modo==='correto'?'validar_item_importacao':'corrigir_item_importacao',
+cardId:cardSelecionado.id,itemId,original:snapshotItemWVetro(original),
+correcao:modo==='corrigir'?Object.fromEntries(Object.entries(diffs).map(([c,v])=>[c,v.depois])):undefined
+})})
+const d=await r.json();if(!r.ok)throw new Error(d.error||'Não foi possível conferir a esquadria.')
+const atualizado=d.orcamento as OrcamentoRapido
+setCardSelecionado(atualizado)
+setCards(prev=>prev.map(c=>c.id===atualizado.id?atualizado:c))
+// Preservar os rascunhos de todas as demais esquadrias e os campos gerais.
+setEditando(prev=>prev?{...prev,wvetro_fluxo:fluxoWVetro(atualizado),itens:(prev.itens||[]).map(i=>i.id===itemId?atualizado.itens!.find(s=>s.id===itemId)!:i)}:prev)
+setMensagemWVetro(d.mensagem)
+setHistorico(await listarHistorico(atualizado.id))
+}catch(e){setMensagemWVetro(e instanceof Error?e.message:'Não foi possível conferir a esquadria.')}
+finally{setValidandoWVetro(false)}
+}
+
+function atualizarTipoWVetro(itemId:string,tipo:string,texto:string|null) {
+setEditando(prev=>prev?{...prev,itens:(prev.itens||[]).map(i=>i.id===itemId?{...i,tipo_esquadria:tipo as TipoEsquadria,tipo_outro_texto:texto}:i)}:prev)
+}
+
 async function validarImportacaoWVetro(modo: 'correto' | 'corrigir') {
 if (!cardSelecionado || !editando || validandoWVetro) return
 setValidandoWVetro(true)
@@ -1093,6 +1127,13 @@ setValidandoIA(false)
 
 async function salvarCard() {
 if (!editando || !cardSelecionado) return
+if(ehOrcamentoWVetro(cardSelecionado)&&(editando.itens||[]).some(i=>{
+ const original=cardSelecionado.itens?.find(o=>o.id===i.id)
+ return original&&Object.keys(diferencasItemWVetro(original,i)).length>0
+})){
+ alert('Registre as alterações usando “Corrigir e ensinar” na esquadria alterada. Os demais campos continuam preservados nesta ficha.')
+ return
+}
 setSalvando(true)
 
 const colunaAnterior = cardSelecionado.coluna_id
@@ -1112,6 +1153,7 @@ temperatura: editando.temperatura,
 arquiteto_nome: editando.arquiteto_nome,
 arquiteto_contato: editando.arquiteto_contato,
 itens: editando.itens,
+...(fluxoWVetro(cardSelecionado).validacao_por_item?{wvetro_fluxo:{...fluxoWVetro(cardSelecionado),validacao_status:(editando.itens||[]).length&&(editando.itens||[]).every(i=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))!=='pendente')?'validado':'aguardando'}}:{}),
 valor_estimado: editando.valor_estimado,
 tipo_esquadria: editando.itens?.[0]?.tipo_esquadria || editando.tipo_esquadria,
 largura_mm: editando.itens?.[0]?.largura_mm ?? editando.largura_mm,
@@ -1460,42 +1502,10 @@ Card adicionado em {new Date(cardSelecionado.kanban_entrada_em || cardSelecionad
 )}
 </div>
 {ehOrcamentoWVetro(cardSelecionado) && (
-<div className={`rounded-xl border p-3 ${wvetroAguardandoValidacao(cardSelecionado) ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
-<div className="flex flex-wrap items-center justify-between gap-2">
-<div>
-<p className={`text-xs font-bold ${wvetroAguardandoValidacao(cardSelecionado) ? 'text-amber-800' : 'text-emerald-800'}`}>
-W.Vetro #{numeroWVetroCard(cardSelecionado)} · {wvetroAguardandoValidacao(cardSelecionado) ? 'Aguardando conferência' : 'Validado'}
-</p>
-<p className="mt-1 text-[11px] text-slate-600">
-{wvetroAguardandoValidacao(cardSelecionado)
-? 'Confira valor, tipologias, perfis, acessórios, vidros e arquivos importados. Se estiver certo, valide. Se ajustar qualquer informação, use “Corrigir e ensinar” para a IA aprender.'
-: fluxoWVetro(cardSelecionado).validacao_resultado === 'corrigido'
-? `Corrigido e aprendido pela IA por ${String(fluxoWVetro(cardSelecionado).validado_por_nome || 'usuário')} em ${formatarDataBR(fluxoWVetro(cardSelecionado).validado_em)}.`
-: `Conferido e registrado como exemplo correto por ${String(fluxoWVetro(cardSelecionado).validado_por_nome || 'usuário')} em ${formatarDataBR(fluxoWVetro(cardSelecionado).validado_em)}.`}
-</p>
-</div>
-{wvetroAguardandoValidacao(cardSelecionado) && (
-<div className="grid grid-cols-2 gap-2">
-<button
-type="button"
-onClick={() => void validarImportacaoWVetro('correto')}
-disabled={validandoWVetro || sincronizandoWVetro}
-className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
->
-{validandoWVetro ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-{validandoWVetro ? 'Registrando...' : '✓ Está correto'}
-</button>
-<button
-type="button"
-onClick={() => void validarImportacaoWVetro('corrigir')}
-disabled={validandoWVetro || sincronizandoWVetro}
-className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
->
-{validandoWVetro ? 'Registrando...' : 'Corrigir e ensinar'}
-</button>
-</div>
-)}
-</div>
+<div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+<p className="text-xs font-bold text-blue-900">W.Vetro #{numeroWVetroCard(cardSelecionado)} · Conferência por esquadria</p>
+<p className="mt-1 text-xs text-slate-600">{(cardSelecionado.itens||[]).filter(i=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))!=='pendente').length} de {(cardSelecionado.itens||[]).length} esquadrias conferidas. Use “Está certo” ou “Corrigir e ensinar” em cada item abaixo.</p>
+{!(cardSelecionado.itens||[]).length&&<p className="mt-1 text-xs text-amber-800">Não há esquadrias importadas para conferir. Sincronize os itens antes de validar.</p>}
 </div>
 )}
 {cardSelecionado.ia_criado && (
@@ -1709,13 +1719,15 @@ className="w-full border border-slate-300 rounded-xl p-3 text-sm"
 </button>
 </div>
 {(editando.itens || []).map((item, i) => (
-<div key={item.id} className="bg-slate-50 rounded-xl p-3 space-y-2">
+<fieldset disabled={validandoWVetro||sincronizandoWVetro} key={item.id} className="bg-slate-50 rounded-xl p-3 space-y-2">
 <div className="flex items-center justify-between">
 <span className="text-xs text-slate-400">Esquadria {i + 1}</span>
 <button onClick={() => removerItemEdit(item.id)} className="p-1 text-red-400 hover:text-red-600">
 <Trash2 size={13} />
 </button>
 </div>
+{ehOrcamentoWVetro(cardSelecionado)&&<ConferenciaItemWVetro item={item} original={cardSelecionado.itens?.find(it=>it.id===item.id)} fluxo={fluxoWVetro(cardSelecionado)} cardId={cardSelecionado.id} catalogo={tipoLabels} ocupado={validandoWVetro||sincronizandoWVetro} onConfirmar={modo=>conferirItemWVetro(item.id,modo)} onTipo={(tipo,texto)=>atualizarTipoWVetro(item.id,tipo,texto)}/>}
+<label className="block text-xs text-slate-500">Ambiente</label>
 <input
 type="text"
 value={item.ambiente || ''}
@@ -1723,6 +1735,7 @@ onChange={e => atualizarItemEdit(item.id, 'ambiente', e.target.value || null)}
 placeholder="Ambiente (ex: Sala, Quarto 1, Cozinha...)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 />
+{ehOrcamentoWVetro(cardSelecionado)?<TipoImportadoWVetro item={item} catalogo={tipoLabels} onTipo={(tipo,texto)=>atualizarTipoWVetro(item.id,tipo,texto)}/>:<>
 <select
 value={item.tipo_esquadria}
 onChange={e => atualizarItemEdit(item.id, 'tipo_esquadria', e.target.value as TipoEsquadria)}
@@ -1741,6 +1754,7 @@ placeholder="Qual é o tipo de esquadria?"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs"
 />
 )}
+</>}
 <input
 type="text"
 value={item.folhas || ''}
@@ -1921,7 +1935,7 @@ onChange={e => atualizarItemEdit(item.id, 'descricao', e.target.value)}
 placeholder="Observação (opcional)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-14"
 />
-</div>
+</fieldset>
 ))}
 </div>
 

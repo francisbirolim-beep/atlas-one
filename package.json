@@ -35,7 +35,8 @@
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs",
     "test:supabase-terminadores": "node scripts/test-supabase-terminadores-historicos.cjs",
     "test:cliente360-permissoes": "node scripts/test-cliente360-permissoes.cjs",
-    "test:ia-relatorios": "node scripts/test-ia-relatorios-permissoes.cjs"
+    "test:ia-relatorios": "node scripts/test-ia-relatorios-permissoes.cjs",
+    "test:wvetro-validacao-item": "node scripts/test-wvetro-validacao-item.cjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

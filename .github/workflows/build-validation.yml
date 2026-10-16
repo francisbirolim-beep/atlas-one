@@ -92,6 +92,9 @@ jobs:
       - name: Supabase live-hash guard self-test
         run: npm run test:supabase-hashes
 
+      - name: W.Vetro per-item supervised validation
+        run: npm run test:wvetro-validacao-item
+
       - name: IA and reports authorization regression
         run: npm run test:ia-relatorios
 

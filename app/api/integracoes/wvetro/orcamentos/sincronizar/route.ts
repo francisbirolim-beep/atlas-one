@@ -583,12 +583,13 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         const fluxoAtualizado = manterValidacao
           ? {
               ...fluxo,
+              ...(mesmoPayload && anterior?.validacao_por_item ? {validacao_por_item:true,validacoes_itens:anterior.validacoes_itens} : {}),
               validacao_status: 'validado',
               validado_em: anterior?.validado_em || null,
               validado_por_id: anterior?.validado_por_id || null,
               validado_por_nome: anterior?.validado_por_nome || null,
             }
-          : fluxo
+          : {...fluxo,...(mesmoPayload && anterior?.validacao_por_item ? {validacao_por_item:true,validacoes_itens:anterior.validacoes_itens} : {})}
         const clienteJaVinculado = clienteResolvido.pendencia ? !existente.cliente_id : (!cliente?.id || existente.cliente_id === cliente.id)
         const anexosAtualizados = anexosComPdfWVetro(existente.anexos, p, numeroW)
         const precisaAtualizarPdf = anexosAtualizados.length !== arr(existente.anexos).length
@@ -617,11 +618,11 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           cliente_nome: nome,
           cliente_whatsapp: telefoneCliente(p) || null,
           cliente_id: cliente?.id || (clienteResolvido.pendencia ? null : existente.cliente_id || null),
-          itens,
-          tipo_esquadria: primeiro.tipo_esquadria || 'outro',
-          largura_mm: primeiro.largura_mm || null,
-          altura_mm: primeiro.altura_mm || null,
-          quantidade: primeiro.quantidade || 1,
+          itens: mesmoPayload && anterior?.validacao_por_item ? existente.itens : itens,
+          tipo_esquadria: mesmoPayload && anterior?.validacao_por_item ? existente.tipo_esquadria : primeiro.tipo_esquadria || 'outro',
+          largura_mm: mesmoPayload && anterior?.validacao_por_item ? existente.largura_mm : primeiro.largura_mm || null,
+          altura_mm: mesmoPayload && anterior?.validacao_por_item ? existente.altura_mm : primeiro.altura_mm || null,
+          quantidade: mesmoPayload && anterior?.validacao_por_item ? existente.quantidade : primeiro.quantidade || 1,
           acabamento: txt(p.Cor, p.Acabamento) || null,
           cidade: cidadeOrcamento || existente.cidade || null,
           valor_estimado: valor > 0 ? valor : null,
