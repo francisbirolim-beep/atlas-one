@@ -90,6 +90,7 @@ export default function ComprasSolicitacoes(){
   finally{setBusy(false)}
  },[request])
  useEffect(()=>{void carregar()},[carregar])
+ useEffect(()=>{if(!abrirId)return;const timer=window.setTimeout(()=>document.getElementById('produto-para-validar')?.scrollIntoView({behavior:'smooth',block:'start'}),80);return ()=>window.clearTimeout(timer)},[abrirId])
  const selecionado=d?.itens.find(i=>i.id===abrirId)
  const obra=d?.obras.filter(o=>o.cliente_id===clienteId)||[]
  const produto=d?.produtos.find(p=>p.id===selecionado?.produto_id)
@@ -303,7 +304,7 @@ export default function ComprasSolicitacoes(){
     {abaPedido==='itens'&&d.historico.some(e=>e.solicitacao_id===s.id)&&<details className="mt-2 text-[11px] text-slate-500"><summary className="cursor-pointer">Últimas alterações deste pedido</summary>{d.historico.filter(e=>e.solicitacao_id===s.id).slice(0,30).map(e=><p key={e.id}>{dt(e.created_at)} · {e.autor_nome} · {e.detalhe}</p>)}</details>}
    </article>)}{!d.solicitacoes.length&&<p className="text-sm text-slate-500">Nenhuma solicitação visível para seu perfil.</p>}</div></>}
   </section>}
-  {comprador&&selecionado&&<section className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-bold">Card do produto / Escolha do fornecedor</h2><p className="text-sm text-slate-600">{selecionado.descricao}</p></div><button className="rounded-lg border px-3 py-1.5 text-xs" onClick={()=>{setAbrirId(null);setSugestoes(null)}}>Fechar</button></div>
+  {comprador&&selecionado&&<section id="produto-para-validar" className="rounded-2xl border border-blue-200 bg-white p-5 shadow-sm"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><h2 className="text-lg font-bold">Validação do material · Pedido #{selecionado.solicitacao_id.slice(0,8)}</h2><p className="text-sm text-slate-600">{selecionado.descricao}</p></div><button className="rounded-lg border px-3 py-1.5 text-xs" onClick={()=>{setAbrirId(null);setSugestoes(null)}}>Fechar</button></div>
    <div className="grid gap-4 lg:grid-cols-2"><div className="space-y-3"><h3 className="font-semibold">1. Conferir o produto cadastrado</h3>{selecionado.foto_url&&<img src={selecionado.foto_url} alt="Foto enviada na solicitação" className="h-32 w-32 rounded-lg border object-contain"/>}
     <input className="w-full rounded-xl border p-3 text-sm" placeholder="Pesquisar pelo nome ou código" value={buscaProduto} onChange={e=>setBuscaProduto(e.target.value)}/>
     <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-3">
