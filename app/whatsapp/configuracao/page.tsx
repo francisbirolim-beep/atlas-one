@@ -10,6 +10,7 @@ type CanalResumo = {
   id: string
   nome: string
   numero_declarado?: string | null
+  numero_conectado?: string | null
   principal?: boolean
   gateway_status?: string | null
 }
@@ -402,13 +403,15 @@ export default function ConfiguracaoWhatsAppPage() {
           <div className="mb-3">
             <h2 className="font-bold text-slate-900">Grupos do WhatsApp e automações</h2>
             <p className="text-xs text-slate-500">
-              Defina responsável, automações e quem pode ver ou atuar em cada grupo. "Só acompanhar" permite leitura sem responder, reagir, transferir ou finalizar.
+              Somente grupos de números conectados aparecem aqui. Grupos desconectados e suas configurações permanecem guardados. "Só acompanhar" permite leitura sem atuar.
             </p>
           </div>
           <div className="space-y-3">
             {grupos.length===0&&(
               <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-slate-400">
-                Nenhum grupo sincronizado ainda. Com o gateway conectado, os grupos do número aparecerão aqui automaticamente.
+                {canais.some(c=>c.gateway_status==='connected')
+                  ? 'Nenhum grupo sincronizado para os números conectados. Os grupos aparecem após a sincronização.'
+                  : 'Nenhum WhatsApp conectado. Abra Gerenciar números para conectar um celular.'}
               </div>
             )}
             {grupos.map(g=>{
@@ -422,7 +425,7 @@ export default function ConfiguracaoWhatsAppPage() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold text-slate-900">{g.nome}</p>
                         <p className="truncate text-[11px] text-slate-500">
-                          {canal?.nome||'WhatsApp'}{canal?.principal?' · Principal':''} · {g.participantes||0} participantes
+                          {canal?.nome||'WhatsApp'}{canal?.numero_conectado?` · ${canal.numero_conectado}`:''}{canal?.principal?' · Principal':''} · {g.participantes||0} participantes
                         </p>
                       </div>
                     </div>
