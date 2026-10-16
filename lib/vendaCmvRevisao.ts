@@ -1,7 +1,7 @@
 // Revisão humana do custo previsto W.Vetro. Nunca altera o CMV realizado ou o dado de origem.
-export const CATEGORIAS_CMV_REVISAO = ['total','perfil','perfil_uso','sobra','acessorio','vidro','perda','mao_obra','instalacao','frete','outros'] as const
+export const CATEGORIAS_CMV_REVISAO = ['total','total_uso','perfil','perfil_uso','sobra','acessorio','vidro','perda','mao_obra','instalacao','frete','outros'] as const
 export type CategoriaCmvRevisao = (typeof CATEGORIAS_CMV_REVISAO)[number]
-export type PrevisaoCmvBase = {categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;perfil_previsao?:number|null;perfil_previsao_fonte?:string|null;perda_fonte?:'wvetro'|'conciliacao_wvetro'|null}
+export type PrevisaoCmvBase = {categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;total_uso?:number|null;total_com_sobra?:number|null;perfil_previsao?:number|null;perfil_previsao_fonte?:string|null;perda_fonte?:'wvetro'|'conciliacao_wvetro'|null}
 export type RevisaoCmv = {
  versao:1;venda_id:string;orcamento_id:string;numero_wvetro:string;categoria:CategoriaCmvRevisao
  acao:'validado'|'corrigido';valor_origem:number|null;valor_revisado:number
@@ -9,7 +9,8 @@ export type RevisaoCmv = {
 }
 export const centavos=(valor:number)=>Math.round((valor+Number.EPSILON)*100)/100
 export function custoPrevistoOriginal(p:PrevisaoCmvBase,c:CategoriaCmvRevisao):number|null{
- if(c==='total')return p.total
+ if(c==='total')return p.total_com_sobra??p.total
+ if(c==='total_uso')return p.total_uso??null
  if(c==='perfil_uso')return p.categorias.perfil
  if(c==='sobra')return p.categorias.sobra
  if(c==='perfil')return p.perfil_previsao??(p.categorias.perfil===null||p.categorias.sobra===null?null:centavos(p.categorias.perfil+p.categorias.sobra))
@@ -59,7 +60,7 @@ export function custoRevisado(p:PrevisaoCmvBase,revisoes:Partial<Record<Categori
  // conhecidas. Correções de categorias sem base não entram aqui: exigem validar o total.
  let delta=0
  for(const c of CATEGORIAS_CMV_REVISAO){
-  if(c==='total'||c==='perfil_uso'||c==='sobra')continue
+  if(c==='total'||c==='total_uso'||c==='perfil_uso'||c==='sobra')continue
   const original=custoPrevistoOriginal(p,c)
   const ajuste=revisoes[c]
   if(original!==null){

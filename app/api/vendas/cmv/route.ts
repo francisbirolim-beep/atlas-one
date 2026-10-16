@@ -22,7 +22,7 @@ function numerico(v:unknown):number|null{
 const txt=(v:unknown,max=300)=>String(v??'').trim().slice(0,max)
 const erro=(m:string,status=400)=>NextResponse.json({error:m},{status})
 async function vendaVerificada(empresaId:string,id:string){
- const {data,error}=await supabaseAdmin.from('vendas_obras').select('id,orcamento_id,empresa_id').eq('id',id).eq('empresa_id',empresaId).maybeSingle()
+ const {data,error}=await supabaseAdmin.from('vendas_obras').select('id,orcamento_id,empresa_id,valor_venda').eq('id',id).eq('empresa_id',empresaId).maybeSingle()
  if(error)throw error
  return data
 }
@@ -43,9 +43,14 @@ export async function GET(req:NextRequest){
   const fluxo=(orcamento?.wvetro_fluxo||{}) as Record<string,any>
   const numeroWvetro=txt(fluxo.numero||fluxo.numero_wvetro,50)
   let extra:Record<string,unknown>={}
+  let vendaValorWvetro:number|null=null
   if(numeroWvetro){
-   const {data}=await supabaseAdmin.from('wvetro_orcamentos_historico').select('custo_sem_sobra,custo_com_sobra').eq('empresa_id',usuario.empresa_id).eq('wvetro_numero',numeroWvetro).maybeSingle()
-   if(data)extra=data
+   const {data}=await supabaseAdmin.from('wvetro_orcamentos_historico') .select('custo_sem_sobra,custo_com_sobra,valor_total').eq('empresa_id',usuario.empresa_id).eq('wvetro_numero',numeroWvetro).maybeSingle()
+   if(data){extra=data;vendaValorWvetro=data.valor_total===null?null:Number(data.valor_total)}
+  }
+  if(vendaValorWvetro===null&&fluxo.valor_total_wvetro!=null){
+   const valor=Number(fluxo.valor_total_wvetro)
+   if(Number.isFinite(valor)&&valor>=0)vendaValorWvetro=valor
   }
   const previsto=extrairPrevisaoWVetro({...extra,...fluxo})
   const {data:memorias,error:erroMemorias}=await supabaseAdmin.from('agente_memorias')
@@ -95,7 +100,17 @@ export async function GET(req:NextRequest){
   // Não modificar nem migrar automaticamente o banco enquanto a prévia é testada.
   const {error:erroEtapa}=await supabaseAdmin.from('venda_cmv_lancamentos').select('etapa_cmv').eq('empresa_id',usuario.empresa_id).limit(0)
   const etapasDisponiveis=!erroEtapa
-  return NextResponse.json({ok:true,numeroWvetro,previsto,lancamentos:ativos,excluidos,historicoLancamentos:trilha,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0,etapasDisponiveis})
+  const {data:revisoesVenda}=await supabaseAdmin.from('venda_obra_revisoes')
+   .select('depois,criado_por_nome,created_at,justificativa').eq('empresa_id',usuario.empresa_id)
+   .eq('venda_obra_id',vendaId).order('created_at',{ascending:false}).limit(40)
+  const historicoValorVenda=(revisoesVenda||[]).flatMap(linha=>{
+   const registro=(linha.depois as any)?.conferencia_valor_venda
+   if(!registro||registro.fonte!=='W.Vetro')return []
+   return [{anterior:Number(registro.valor_anterior),novo:Number(registro.valor_conferido),
+    acao:String(registro.acao),usuario:String(linha.criado_por_nome||''),em:linha.created_at,
+    justificativa:String(linha.justificativa||'')}]
+  }).slice(0,10)
+  return NextResponse.json({ok:true,vendaValorAtual:Number(venda.valor_venda??0),vendaValorWvetro,historicoValorVenda,numeroWvetro,previsto,lancamentos:ativos,excluidos,historicoLancamentos:trilha,revisoes,historicoRevisoes,feedbackIA:totalFeedback??0,etapasDisponiveis})
  }catch(e){
   console.error('Falha ao carregar CMV da venda:',e)
   return erro('Não foi possível carregar o CMV. Confira se a migração de lançamentos foi aplicada.',500)

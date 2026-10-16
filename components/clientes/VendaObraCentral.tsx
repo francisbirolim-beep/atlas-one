@@ -489,6 +489,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const recebido=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Number(c.valor_pago||0),0)
   const saldoContas=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
   const aReceber=contas.length?saldoContas:Math.max(0,valorVenda-recebido)
+  const totalTitulosAtivos=contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Number(c.valor||0),0)
+  const valorVendaDifereFinanceiro=contas.some(c=>c.status!=='cancelado')&&Math.abs(totalTitulosAtivos-valorVenda)>0.01
   const margemPrevista=valorVenda>0&&custoPrevistoBase>0?((valorVenda-custoPrevistoBase)/valorVenda)*100:0
   const markup=valorVenda>0&&custoPrevistoBase>0?(valorVenda/custoPrevistoBase):0
 
@@ -1140,6 +1142,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
       </div>
 
+      {valorVendaDifereFinanceiro&&<div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">A venda está em {moeda(valorVenda)}, mas os títulos financeiros ativos somam {moeda(totalTitulosAtivos)}. Confira e concilie o Financeiro; nenhuma parcela ou recebimento foi alterado automaticamente.</div>}
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Progresso titulo="Venda" valor={100} detalhe="Orçamento confirmado e venda criada" ativo={painelEtapa==='venda'} onClick={()=>setPainelEtapa(painelEtapa==='venda'?null:'venda')}/>
         <Progresso titulo="Financeiro" valor={pct(Math.max(0,valorVenda-aReceber),valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`} ativo={painelEtapa==='financeiro'} onClick={()=>setPainelEtapa(painelEtapa==='financeiro'?null:'financeiro')}/>
@@ -1321,7 +1324,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           acessorio:custosPorCategoria.acessorios.realizado,
           vidro:custosPorCategoria.vidro.realizado,
           outros:custosPorCategoria.outros.realizado,
-        }} onMudanca={(totalRealizado,previstoRevisado)=>{
+        }} onVendaAtualizada={()=>{void carregar()}} onMudanca={(totalRealizado,previstoRevisado)=>{
           setRealizadoCmvManual(totalRealizado)
           setPrevisaoCmvRevisada({vendaId,valor:previstoRevisado})
         }}/>}
