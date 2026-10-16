@@ -1139,9 +1139,10 @@ setSalvando(true)
 const colunaAnterior = cardSelecionado.coluna_id
 const mudouColuna = colunaAnterior !== editando.coluna_id
 
-const { error } = await supabase
+const { data: salvo, error } = await supabase
 .from('orcamentos')
 .update({
+...(ehOrcamentoWVetro(cardSelecionado) ? { updated_at: new Date().toISOString() } : {}),
 cliente_nome: editando.cliente_nome,
 cliente_whatsapp: editando.cliente_whatsapp,
 cidade: editando.cidade,
@@ -1163,9 +1164,16 @@ coluna_id: editando.coluna_id,
 coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
 })
 .eq('id', cardSelecionado.id)
+.select('id')
+.maybeSingle()
 
 setSalvando(false)
-if (!error) {
+if (error || !salvo) {
+const aviso = error?.message || 'Este orçamento foi alterado em outra sessão. Reabra o card antes de salvar.'
+setMensagemWVetro(aviso)
+alert('Não foi possível salvar o orçamento. Suas alterações continuam nesta tela. ' + aviso)
+return
+}
 if (mudouColuna && editando.coluna_id) {
 executarAutomacoesColuna(editando.coluna_id, {
 cliente_nome: editando.cliente_nome,
@@ -1181,7 +1189,6 @@ const resumo = resumoMudancas(cardSelecionado, editando)
 await registrarHistorico(cardSelecionado.id, usuario, 'Editou o orçamento', resumo)
 setCardSelecionado(null)
 setEditando(null)
-}
 }
 
 if (carregando) {
