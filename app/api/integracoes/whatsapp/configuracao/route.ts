@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTenant } from '@/lib/tenantServer'
+import {
+  filtrarConfiguracoesDeGruposVisiveis,
+  filtrarGruposDosCanaisConectados,
+  idsCanaisWhatsAppConectados,
+} from '@/lib/whatsappGruposSessaoAtiva'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,7 +58,7 @@ export async function GET(req: NextRequest) {
       .eq('tipo', 'orcamento'),
     supabaseAdmin
       .from('atendimento_whatsapp_canais')
-      .select('id,nome,numero_declarado,principal,gateway_status')
+      .select('id,nome,numero_declarado,numero_conectado,principal,gateway_status')
       .eq('empresa_id', usuario.empresa_id)
       .eq('ativo', true),
     supabaseAdmin
@@ -109,16 +114,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: erro.message }, { status: 500 })
   }
 
+  // Grupos de aparelhos desconectados nao devem aparecer na configuracao.
+  // Nenhum registro e excluido: se o numero reconectar, suas regras reaparecem.
+  const canaisConectados = idsCanaisWhatsAppConectados(canaisResp.data || [])
+  const gruposVisiveis = filtrarGruposDosCanaisConectados(gruposFinais || [], canaisConectados)
+  const idsGruposVisiveis = new Set(gruposVisiveis.map(grupo => grupo.id))
+
   return NextResponse.json({
     ok: true,
     configuracao: configuracaoFinal || null,
     regras: regrasResp.data || [],
     usuarios: usuariosResp.data || [],
-    grupos: gruposFinais || [],
-    gruposAutomacao: gruposAutomacaoResp.data || [],
+    grupos: gruposVisiveis,
+    gruposAutomacao: filtrarConfiguracoesDeGruposVisiveis(gruposAutomacaoResp.data || [], idsGruposVisiveis),
     canais: canaisResp.data || [],
     permissoes: permissoesResp.data || [],
-    gruposPermissoes: gruposPermissoesResp.data || [],
+    gruposPermissoes: filtrarConfiguracoesDeGruposVisiveis(gruposPermissoesResp.data || [], idsGruposVisiveis),
   })
 }
 
@@ -210,20 +221,38 @@ export async function PUT(req: NextRequest) {
     }
 
     const gruposAutomacao = Array.isArray(body?.gruposAutomacao) ? body.gruposAutomacao : []
-    const { data: gruposPermitidos, error: gruposPermitidosError } = await supabaseAdmin
-      .from('atendimento_whatsapp_grupos')
-      .select('id')
+    const { data: canaisAtivos, error: canaisAtivosError } = await supabaseAdmin
+      .from('atendimento_whatsapp_canais')
+      .select('id,gateway_status')
       .eq('empresa_id', usuario.empresa_id)
       .eq('ativo', true)
+    if (canaisAtivosError) throw canaisAtivosError
+    const idsCanaisConectados = [...idsCanaisWhatsAppConectados(canaisAtivos || [])]
+    const { data: gruposPermitidos, error: gruposPermitidosError } = idsCanaisConectados.length
+      ? await supabaseAdmin
+          .from('atendimento_whatsapp_grupos')
+          .select('id')
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('ativo', true)
+          .in('whatsapp_canal_id', idsCanaisConectados)
+      : { data: [] as { id: string }[], error: null }
     if (gruposPermitidosError) throw gruposPermitidosError
 
     const idsPermitidos = new Set((gruposPermitidos || []).map(g => g.id))
-    const { error: limparAutomacoesError } = await supabaseAdmin
-      .from('atendimento_whatsapp_grupo_automacoes')
-      .delete()
-      .eq('empresa_id', usuario.empresa_id)
-      .eq('tipo', 'orcamento')
-    if (limparAutomacoesError) throw limparAutomacoesError
+    // Salvar configuracoes gerais nunca pode apagar automacoes de celulares
+    // desconectados. Atualize apenas os grupos conectados enviados pela tela.
+    const idsParaAtualizar = [...new Set(gruposAutomacao
+      .map((item: any) => String(item?.grupoId || ''))
+      .filter((id: string) => idsPermitidos.has(id)))]
+    if (idsParaAtualizar.length) {
+      const { error: limparAutomacoesError } = await supabaseAdmin
+        .from('atendimento_whatsapp_grupo_automacoes')
+        .delete()
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('tipo', 'orcamento')
+        .in('grupo_id', idsParaAtualizar)
+      if (limparAutomacoesError) throw limparAutomacoesError
+    }
 
     const linhasAutomacao = gruposAutomacao
       .filter((item: any) => item?.ativo === true && idsPermitidos.has(String(item?.grupoId || '')))
