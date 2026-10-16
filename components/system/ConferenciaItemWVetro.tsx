@@ -84,7 +84,7 @@ export default function ConferenciaItemWVetro({item,original,fluxo,cardId,catalo
       disabled={ocupado} className="min-w-0 rounded-lg border border-slate-300 bg-white p-2 text-xs"/>
      <button type="button" disabled={ocupado||!novaVariavel.trim()||novaVariavel.trim().startsWith('wvetro_')} onClick={()=>{
        const chave=novaVariavel.trim().replace(/\s+/g,'_')
-       if(chave.length>100||Object.hasOwn(item.variaveis||{},chave))return
+       if(chave.length>100||Object.prototype.hasOwnProperty.call(item.variaveis||{},chave))return
        onCampo('variaveis',{...(item.variaveis||{}),[chave]:novoValor})
        setNovaVariavel('');setNovoValor('')
      }} className="rounded-lg bg-blue-100 px-2 text-xs text-blue-900 disabled:opacity-40">Adicionar</button>
