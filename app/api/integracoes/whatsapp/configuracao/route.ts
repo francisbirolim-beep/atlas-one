@@ -68,8 +68,24 @@ export async function GET(req: NextRequest) {
       .order('created_at'),
   ])
 
+  // Compatibilidade de leitura com o banco anterior: a migração da triagem
+  // fica pendente até a aprovação, sem interromper as telas já existentes.
+  let configuracaoFinal: any = configResp.data
+  let erroConfig: any = configResp.error
+  if (erroConfig && /triagem_(privada_ativa|tempo_minutos|destinos)/.test(String(erroConfig.message || ''))) {
+    const legado = await supabaseAdmin.from('atendimento_configuracoes')
+      .select('empresa_id,numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao,gateway_status,gateway_qr_data_url,gateway_qr_updated_at,gateway_connected_jid,gateway_last_seen_at,gateway_device_name')
+      .eq('empresa_id', usuario.empresa_id).maybeSingle()
+    configuracaoFinal = legado.data ? {
+      ...legado.data,
+      triagem_privada_ativa: false,
+      triagem_tempo_minutos: 10,
+      triagem_destinos: [],
+    } : null
+    erroConfig = legado.error
+  }
   const erro =
-    configResp.error ||
+    erroConfig ||
     regrasResp.error ||
     usuariosResp.error ||
     gruposResp.error ||
@@ -84,7 +100,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    configuracao: configResp.data || null,
+    configuracao: configuracaoFinal || null,
     regras: regrasResp.data || [],
     usuarios: usuariosResp.data || [],
     grupos: gruposResp.data || [],

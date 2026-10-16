@@ -36,11 +36,19 @@ export async function GET(req: NextRequest) {
       .order('nome')
     const usuarios = (usuariosRaw || []) as { id: string; nome: string; role?: string | null; cargo?: string | null }[]
 
-    const { data: config } = await supabaseAdmin
+    const configResp = await supabaseAdmin
       .from('atendimento_configuracoes')
       .select('numero_principal,setor_padrao,usuario_padrao_id,triagem_privada_ativa,ativo,modo_integracao')
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
+    let config: any = configResp.data
+    if (configResp.error && /triagem_privada_ativa/.test(String(configResp.error.message || ''))) {
+      const legado = await supabaseAdmin.from('atendimento_configuracoes')
+        .select('numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao')
+        .eq('empresa_id', usuario.empresa_id).maybeSingle()
+      if (legado.error) throw legado.error
+      config = legado.data ? { ...legado.data, triagem_privada_ativa: false } : null
+    } else if (configResp.error) throw configResp.error
 
     const { data: canaisRaw } = await supabaseAdmin
       .from('atendimento_whatsapp_canais')
