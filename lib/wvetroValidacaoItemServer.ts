@@ -70,11 +70,13 @@ export async function validarItemImportadoWVetro(req:NextRequest,usuario:Usuario
   const contexto={origem_aprendizado:'wvetro_importacao_item',numero_wvetro:String(fluxo.numero||fluxo.numero_wvetro),item_id:original.id,modelo_wvetro:modelo,linha_wvetro:linha}
   const {error:feedbackErro}=await db.from('ai_orcamento_feedback').insert({id:feedbackId,empresa_id:usuario.empresa_id,orcamento_id:alvo.id,intake_id:null,avaliacao:corrigindo?'corrigido':'validado',resultado_original:{...contexto,item:snapshotItemWVetro(original)},resultado_final:{...contexto,item:snapshotItemWVetro(final)},diferencas:diffs,usuario_id:usuario.id,usuario_nome:usuario.nome})
   if(feedbackErro)throw feedbackErro
-  // CAS do JSON impede perder correções de outros itens/sessões, mesmo com updated_at legado nulo.
+  // O payload W.Vetro contém centenas de KB; comparar os JSONs inteiros via URL
+  // faz a requisição ultrapassar limites HTTP e impede a gravação por esquadria.
+  // CAS pelo updated_at mantém a proteção contra escritas concorrentes sem URL gigante.
   const patch:any={itens:novosItens,wvetro_fluxo:novoFluxo,updated_at:agora}
   if(indice===0&&corrigindo)for(const c of ['tipo_esquadria','largura_mm','altura_mm','quantidade'])patch[c]=final[c]
-  let q=db.from('orcamentos').update(patch).eq('empresa_id',usuario.empresa_id).eq('id',alvo.id).eq('itens',JSON.stringify(itens)).eq('wvetro_fluxo',JSON.stringify(fluxo))
-  if(alvo.updated_at)q=q.eq('updated_at',alvo.updated_at)
+  let q=db.from('orcamentos').update(patch).eq('empresa_id',usuario.empresa_id).eq('id',alvo.id)
+  q=alvo.updated_at?q.eq('updated_at',alvo.updated_at):q.is('updated_at',null)
   const {data:atualizado,error:salvarErro}=await q.select('*').maybeSingle()
   if(salvarErro||!atualizado){
     const limpeza=await db.from('ai_orcamento_feedback').delete().eq('empresa_id',usuario.empresa_id).eq('id',feedbackId)
