@@ -468,15 +468,21 @@ setCards(prev => prev.map(c => (c.coluna_id === col.id ? { ...c, coluna_id: dest
 async function abrirCard(card: OrcamentoRapido) {
 const agoraIso = new Date().toISOString()
 let cardAberto = card
+if(ehOrcamentoWVetro(card)){
+const {data,error}=await supabase.from('orcamentos').select('*').eq('id',card.id).maybeSingle()
+if(error||!data){window.alert('Não foi possível atualizar o status das validações. Reabra o card.');return}
+cardAberto=data as OrcamentoRapido
+setCards(prev=>prev.map(c=>c.id===card.id?cardAberto:c))
+}
 
-if (!card.orcamento_finalizado_em && !card.orcamento_iniciado_em) {
+if (!cardAberto.orcamento_finalizado_em && !cardAberto.orcamento_iniciado_em) {
 const { error } = await supabase
 .from('orcamentos')
 .update({ orcamento_iniciado_em: agoraIso })
 .eq('id', card.id)
 
 if (!error) {
-cardAberto = { ...card, orcamento_iniciado_em: agoraIso }
+cardAberto = { ...cardAberto, orcamento_iniciado_em: agoraIso }
 setCards(prev => prev.map(c => (c.id === card.id ? cardAberto : c)))
 }
 }
@@ -647,6 +653,8 @@ correcao:modo==='corrigir'?Object.fromEntries(Object.entries(diffs).map(([c,v])=
 })})
 const d=await r.json();if(!r.ok)throw new Error(d.error||'Não foi possível conferir a esquadria.')
 const atualizado=d.orcamento as OrcamentoRapido
+const gravado=atualizado?.itens?.find(i=>i.id===itemId)
+if(!gravado||statusItemWVetro(gravado,fluxoWVetro(atualizado))==='pendente')throw new Error('A gravação desta esquadria não foi confirmada no banco.')
 setCardSelecionado(atualizado)
 setCards(prev=>prev.map(c=>c.id===atualizado.id?atualizado:c))
 // Preservar os rascunhos de todas as demais esquadrias e os campos gerais.
@@ -1131,6 +1139,10 @@ setValidandoIA(false)
 
 async function salvarCard() {
 if (!editando || !cardSelecionado) return
+if(ehOrcamentoWVetro(cardSelecionado)){
+const pendentes=(editando.itens||[]).map((i,idx)=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))==='pendente'?idx+1:0).filter(Boolean)
+if(pendentes.length){alert('Esquadrias ainda pendentes: '+pendentes.join(', ')+'. As demais estão salvas.');return}
+}
 if(ehOrcamentoWVetro(cardSelecionado)&&(editando.itens||[]).some(i=>{
  const original=cardSelecionado.itens?.find(o=>o.id===i.id)
  return original&&Object.keys(diferencasItemWVetro(original,i)).length>0
@@ -1516,6 +1528,7 @@ Card adicionado em {new Date(cardSelecionado.kanban_entrada_em || cardSelecionad
 <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
 <p className="text-xs font-bold text-blue-900">W.Vetro #{numeroWVetroCard(cardSelecionado)} · Conferência por esquadria</p>
 <p className="mt-1 text-xs text-slate-600">{(cardSelecionado.itens||[]).filter(i=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))!=='pendente').length} de {(cardSelecionado.itens||[]).length} esquadrias conferidas. Use “Está certo” ou “Corrigir e ensinar” em cada item abaixo.</p>
+{(cardSelecionado.itens||[]).some(i=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))==='pendente')&&<p role="status" className="mt-2 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-800">Faltam confirmar: esquadrias {(cardSelecionado.itens||[]).map((i,idx)=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))==='pendente'?idx+1:null).filter(x=>x!==null).join(', ')}. As demais estão salvas.</p>}
 {!(cardSelecionado.itens||[]).length&&<p className="mt-1 text-xs text-amber-800">Não há esquadrias importadas para conferir. Sincronize os itens antes de validar.</p>}
 </div>
 )}

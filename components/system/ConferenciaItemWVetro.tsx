@@ -25,11 +25,11 @@ export default function ConferenciaItemWVetro({item,original,fluxo,cardId,catalo
  }
  const [sugestao,setSugestao]=useState<{tipo:string;texto:string|null;nome:string}|null>(null)
  return <div className="rounded-lg border border-blue-200 bg-white p-3 space-y-2">
-  <p className="text-xs font-semibold text-slate-800">Conferência desta esquadria · {mudou?'Alterações ainda não registradas':estado==='pendente'?'Pendente':estado==='corrigido'?'Corrigida':'Validada'}</p>
+  <p className="text-xs font-semibold text-slate-800">Conferência desta esquadria · {mudou?'Alterações ainda não registradas':estado==='pendente'?'Pendente':estado==='corrigido'?'Corrigida e salva':'Validada e salva · não repetir'}</p>
   <p className="text-xs text-slate-600">Confira ambiente, tipologia, medidas e quantidade abaixo. Corrija somente o que estiver errado.</p>
   {mudou&&<p className="text-xs text-blue-700">Campos alterados: {Object.keys(diffs).map(c=>({tipo_esquadria:'tipologia',tipo_outro_texto:'descrição da tipologia',largura_mm:'largura',altura_mm:'altura'}[c]||c)).join(', ')}.</p>}
   <div className="flex flex-wrap gap-2">
-   <button type="button" disabled={ocupado||!original||mudou} onClick={()=>void onConfirmar('correto')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Está certo</button>
+   <button type="button" disabled={ocupado||!original||mudou||estado!=='pendente'} onClick={()=>void onConfirmar('correto')} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Está certo</button>
    <button type="button" disabled={ocupado||!original||!mudou} onClick={()=>void onConfirmar('corrigir')} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{ocupado?'Registrando…':'Corrigir e ensinar'}</button>
    <button type="button" disabled={ocupado||buscando||!original} onClick={()=>void buscarAprendizado()} className="rounded-lg border px-3 py-2 text-xs text-blue-800 disabled:opacity-40">{buscando?'Consultando…':'Ver aprendizado'}</button>
   </div>
