@@ -4,9 +4,9 @@ const vm = require('node:vm')
 const ts = require('typescript')
 const src = fs.readFileSync('lib/whatsappGruposSessaoAtiva.ts','utf8')
 const js = ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText
-const exports = {}
-vm.runInNewContext(js,{exports})
-const {idsCanaisWhatsAppConectados,filtrarGruposDosCanaisConectados,filtrarConfiguracoesDeGruposVisiveis} = exports
+const moduleExports = {}
+vm.runInNewContext(js,{exports:moduleExports})
+const {idsCanaisWhatsAppConectados,filtrarGruposDosCanaisConectados,filtrarConfiguracoesDeGruposVisiveis} = moduleExports
 const canais = [
   {id:'atual',gateway_status:'connected'},
   {id:'antigo',gateway_status:'disconnected'},
