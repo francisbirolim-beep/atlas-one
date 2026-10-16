@@ -233,6 +233,45 @@ export async function PATCH(req:NextRequest){
    return NextResponse.json({ok:true,acao:'identificado',aprendizado:resultado?.aprendizado===true,
     corrigiuSugestaoAnterior:resultado?.corrigiuSugestaoAnterior===true})
   }
+  if(b.acao==='corrigir_referencia'){
+   // Somente quem pode validar produtos pode corrigir a referência que será aprendida.
+   // Não concede edição do pedido inteiro nem modifica o catálogo global.
+   if(!comprador)return falha('Sem permissão para corrigir a identificação',403)
+   if(item.status!=='ativo')return falha('Item cancelado ou em revisão',409)
+   if(!['aguardando_validacao','em_cotacao','aguardando_minimo'].includes(sol.status))
+    return falha('Compra já emitida: solicite revisão antes de corrigir a identificação',409)
+   const descricao=str(b.descricao,500)
+   const categoria=str(b.categoria,40)
+   if(descricao.length<2||!categorias.has(categoria))return falha('Descrição ou categoria inválida')
+   const foto=form?.get('foto')
+   if(foto&&(!(foto instanceof File)||foto.size<1||foto.size>5*1024*1024||!fotosValidas[foto.type]))
+    return falha('Foto deve ser JPG, PNG ou WEBP, até 5 MB')
+   if(descricao===item.descricao&&categoria===item.categoria&&!(foto instanceof File))
+    return falha('Informe ao menos uma correção de descrição, categoria ou imagem')
+   const {data:usado,error:euso}=await db.from('compras_carrinho_itens').select('id')
+    .eq('empresa_id',u.empresa_id).eq('item_id',item.id).limit(1)
+   if(euso)throw euso
+   if(usado?.length)return falha('Material já está no carrinho. Não é possível alterar a referência sem revisar a compra.',409)
+   let novoPath:string|null=null
+   if(foto instanceof File){
+    novoPath=u.empresa_id+'/'+sol.id+'/'+randomUUID()+fotosValidas[foto.type]
+    const {error:eUpload}=await db.storage.from('compras-solicitacoes').upload(novoPath,
+     Buffer.from(await foto.arrayBuffer()),{contentType:foto.type,upsert:false})
+    if(eUpload)throw eUpload
+   }
+   const {error:eAtualiza}=await db.from('compras_solicitacao_itens').update({
+    descricao,categoria,produto_id:null,identificacao_status:'pendente',identificacao_por_id:null,
+    ...(novoPath?{foto_path:novoPath}:{}),
+    atualizado_por_id:u.id,updated_at:new Date().toISOString()
+   }).eq('empresa_id',u.empresa_id).eq('id',item.id).eq('status','ativo')
+   if(eAtualiza){
+    if(novoPath)await db.storage.from('compras-solicitacoes').remove([novoPath])
+    throw eAtualiza
+   }
+   // Histórico de alterações é mantido pelo mesmo mecanismo de auditoria da edição existente.
+   return NextResponse.json({ok:true,acao:'referencia_corrigida',historicoPreservado:true,
+    aviso:'Referência corrigida. Confirme o produto do catálogo para registrar o aprendizado.'})
+  }
   if(!edita)return falha('Sem permissão para editar este pedido',403)
   if(b.acao==='cancelar'){
    if(item.status==='cancelado')return NextResponse.json({ok:true,estado:'cancelado',historicoPreservado:true})
