@@ -47,6 +47,7 @@ import {
 import Cliente360PermissoesEditor from '@/components/Cliente360PermissoesEditor'
 import { matrizCompletaCliente360 } from '@/lib/cliente360Permissoes'
 import WhatsAppUsuarioPermissoes from '@/components/WhatsAppUsuarioPermissoes'
+import KanbanColunasPermissoesEditor from '@/components/KanbanColunasPermissoesEditor'
 
 function normalizar(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
@@ -581,6 +582,13 @@ export default function UsuariosSenhasPage() {
                 </section>
 
                 <WhatsAppUsuarioPermissoes
+                  usuarioId={usuarioSelecionado.id}
+                  usuarioNome={usuarioSelecionado.nome}
+                  usuarioRole={usuarioSelecionado.role}
+                />
+
+                <KanbanColunasPermissoesEditor
+                  key={usuarioSelecionado.id}
                   usuarioId={usuarioSelecionado.id}
                   usuarioNome={usuarioSelecionado.nome}
                   usuarioRole={usuarioSelecionado.role}
