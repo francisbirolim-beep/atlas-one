@@ -229,7 +229,7 @@ export default function SetorDetalhe() {
             </div>
           ) : (
             <div className="flex gap-4 overflow-x-auto pb-4">
-              {colunas.map((col) => {
+              {[...colunas].sort((a,b)=>(a.ordem_visual??a.ordem)-(b.ordem_visual??b.ordem)).map((col) => {
                 const cardsColuna = itensDaColuna(col.id)
                 return (
                   <div
@@ -243,7 +243,7 @@ export default function SetorDetalhe() {
                   >
                     <div className="flex items-center justify-between mb-3 px-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-slate-700">{col.nome}</span>
+                        <span className="font-semibold text-sm text-slate-700">{col.nome_exibicao||col.nome}</span>
                         <span className="text-xs text-slate-400">{cardsColuna.length}</span>
                       </div>
                       {editavel && (

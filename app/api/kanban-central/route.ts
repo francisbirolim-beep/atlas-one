@@ -40,7 +40,7 @@ async function verificaVenda(empresa:string,id:string){
 }
 const acesso=(mapa:Record<string,NivelBoard>,setor:string,min:NivelBoard='visualizar')=>ids.has(setor)&&peso[mapa[setor]||'oculto']>=peso[min]
 async function semearColunas(empresa:string,setores:string[]){
- const r=await db.from('central_kanban_colunas').select('id,empresa_id,setor,nome,ordem')
+ const r=await db.from('central_kanban_colunas').select('id,empresa_id,setor,nome,ordem,nome_exibicao,ordem_visual')
    .eq('empresa_id',empresa).order('ordem',{ascending:true})
  if(r.error)throw r.error
  const tem=new Set((r.data||[]).map(x=>x.setor))
@@ -49,7 +49,7 @@ async function semearColunas(empresa:string,setores:string[]){
    const insert=await db.from('central_kanban_colunas').upsert(linhas,{onConflict:'empresa_id,setor,nome',ignoreDuplicates:true})
    if(insert.error)throw insert.error
  }
- const again=await db.from('central_kanban_colunas').select('id,empresa_id,setor,nome,ordem')
+ const again=await db.from('central_kanban_colunas').select('id,empresa_id,setor,nome,ordem,nome_exibicao,ordem_visual')
    .eq('empresa_id',empresa).order('ordem',{ascending:true})
  if(again.error)throw again.error
  return again.data||[]
@@ -195,7 +195,7 @@ export async function GET(req:NextRequest){
    nativos.assistencia={colunas:cc.data||[],cards:(ca.data||[]).map(x=>({id:x.id,cliente:x.cliente_nome||'Cliente',obra:'Assistência técnica',numero:x.numero||0,cidade:x.cidade||'',coluna_id:x.coluna_id,href:'/assistencias'}))}
   }
   const funcionarios=ctx.u.role==='master'?(await db.from('usuarios').select('id,nome,role').eq('empresa_id',ctx.u.empresa_id).order('nome')).data||[]:[]
-  return NextResponse.json({quadros:QUADROS.filter(q=>permitidos.includes(q.id)),permissoes:ctx.mapa,colunas:colunas.filter(c=>permitidos.includes(c.setor)),
+  return NextResponse.json({usuarioMaster:ctx.u.role==='master',quadros:QUADROS.filter(q=>permitidos.includes(q.id)),permissoes:ctx.mapa,colunas:colunas.filter(c=>permitidos.includes(c.setor)),
     posicoes, cards, nativos, funcionarios,acessos:acessos.data||[],atualizadoEm:new Date().toISOString()}, {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('central kanban GET',e);return erro('Não foi possível carregar a Central de Kanbans.',500)}
 }
@@ -222,14 +222,14 @@ export async function POST(req:NextRequest){
    const nome=txt(body.nome,80)
    if(nome.length<2)return erro('Informe o nome da coluna.')
    if(body.id){
-    const rr=await db.from('central_kanban_colunas').update({nome}).eq('id',body.id).eq('setor',setor).eq('empresa_id',empresa_id).select('id').maybeSingle()
+    const rr=await db.from('central_kanban_colunas').update({nome_exibicao:nome}).eq('id',body.id).eq('setor',setor).eq('empresa_id',empresa_id).select('id').maybeSingle()
     if(rr.error)throw rr.error
     if(!rr.data)return erro('Coluna não encontrada.',404)
    }else{
     const cols=await db.from('central_kanban_colunas').select('ordem').eq('empresa_id',empresa_id).eq('setor',setor).order('ordem',{ascending:false}).limit(1)
     if(cols.error)throw cols.error
     const next=numero(cols.data?.[0]?.ordem)+1
-    const r=await db.from('central_kanban_colunas').insert({empresa_id,setor,nome,ordem:next})
+    const r=await db.from('central_kanban_colunas').insert({empresa_id,setor,nome,ordem:next,personalizada:true})
     if(r.error)throw r.error
    }
    return NextResponse.json({ok:true})
@@ -244,8 +244,9 @@ export async function POST(req:NextRequest){
    if(cols.error||usos.error)throw(cols.error||usos.error)
    if((cols.data||[]).length<=1)return erro('O quadro precisa de pelo menos uma coluna.')
    if(usos.data?.length)return erro('Esta coluna possui cards. Mova os cards antes de excluir.')
-   const r=await db.from('central_kanban_colunas').delete().eq('empresa_id',empresa_id).eq('setor',setor).eq('id',body.id).select('id')
+   const r=await db.from('central_kanban_colunas').delete().eq('empresa_id',empresa_id).eq('setor',setor).eq('id',body.id).eq('personalizada',true).select('id')
    if(r.error)throw r.error
+   if(!r.data?.length)return erro('Etapa original protegida ou coluna inexistente.',409)
    return NextResponse.json({ok:true})
   }
   if(acao==='comentario'){

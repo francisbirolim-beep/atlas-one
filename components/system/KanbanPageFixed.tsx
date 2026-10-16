@@ -1247,7 +1247,7 @@ Limpar filtros
 </div>
 
 <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-4 sm:mx-0 sm:gap-4 sm:px-0">
-{colunas.map((col, index) => {
+{[...colunas].sort((a,b)=>(a.ordem_visual??a.ordem)-(b.ordem_visual??b.ordem)).map((col, index) => {
 const cardsColuna = cardsDaColuna(col.id, index)
 return (
 <div
@@ -1261,7 +1261,7 @@ colunaArrastando === col.id ? 'ring-2 ring-brand-navy bg-brand-navyLight' : ''
 >
 <div className="flex items-center justify-between mb-3 px-1">
 <div className="flex items-center gap-2">
-<h3 className="font-medium text-slate-700 text-sm">{col.nome}</h3>
+<h3 className="font-medium text-slate-700 text-sm">{col.nome_exibicao||col.nome}</h3>
 <span className="text-xs bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-full">
 {cardsColuna.length}
 </span>
