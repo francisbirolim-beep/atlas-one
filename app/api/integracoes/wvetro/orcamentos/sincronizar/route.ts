@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
-import { autenticarMasterWVetro, type UsuarioWVetro } from '@/lib/wvetroAcessoServer'
+import { autenticarMasterWVetro, autenticarUsuarioWVetro, type UsuarioWVetro } from '@/lib/wvetroAcessoServer'
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { autenticarSchedulerWVetro } from '@/lib/wvetroSchedulerServer'
 import { consultarRecursoOperacionalWVetro } from '@/lib/wvetroOperacionalConsultaServer'
 import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacionalServer'
@@ -583,13 +584,12 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         const fluxoAtualizado = manterValidacao
           ? {
               ...fluxo,
-              ...(mesmoPayload && anterior?.validacao_por_item ? {validacao_por_item:true,validacoes_itens:anterior.validacoes_itens} : {}),
               validacao_status: 'validado',
               validado_em: anterior?.validado_em || null,
               validado_por_id: anterior?.validado_por_id || null,
               validado_por_nome: anterior?.validado_por_nome || null,
             }
-          : {...fluxo,...(mesmoPayload && anterior?.validacao_por_item ? {validacao_por_item:true,validacoes_itens:anterior.validacoes_itens} : {})}
+          : fluxo
         const clienteJaVinculado = clienteResolvido.pendencia ? !existente.cliente_id : (!cliente?.id || existente.cliente_id === cliente.id)
         const anexosAtualizados = anexosComPdfWVetro(existente.anexos, p, numeroW)
         const precisaAtualizarPdf = anexosAtualizados.length !== arr(existente.anexos).length
@@ -618,11 +618,11 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           cliente_nome: nome,
           cliente_whatsapp: telefoneCliente(p) || null,
           cliente_id: cliente?.id || (clienteResolvido.pendencia ? null : existente.cliente_id || null),
-          itens: mesmoPayload && anterior?.validacao_por_item ? existente.itens : itens,
-          tipo_esquadria: mesmoPayload && anterior?.validacao_por_item ? existente.tipo_esquadria : primeiro.tipo_esquadria || 'outro',
-          largura_mm: mesmoPayload && anterior?.validacao_por_item ? existente.largura_mm : primeiro.largura_mm || null,
-          altura_mm: mesmoPayload && anterior?.validacao_por_item ? existente.altura_mm : primeiro.altura_mm || null,
-          quantidade: mesmoPayload && anterior?.validacao_por_item ? existente.quantidade : primeiro.quantidade || 1,
+          itens,
+          tipo_esquadria: primeiro.tipo_esquadria || 'outro',
+          largura_mm: primeiro.largura_mm || null,
+          altura_mm: primeiro.altura_mm || null,
+          quantidade: primeiro.quantidade || 1,
           acabamento: txt(p.Cor, p.Acabamento) || null,
           cidade: cidadeOrcamento || existente.cidade || null,
           valor_estimado: valor > 0 ? valor : null,
@@ -714,9 +714,48 @@ export async function GET(req: NextRequest) {
     return sincronizar(req, usuarioCron, dias)
   }
 
-  const usuario = await autenticarMasterWVetro(req)
-  if (!usuario) return NextResponse.json({ error: 'Acesso restrito ao Master.' }, { status: 401 })
+  const usuario = await autenticarUsuarioWVetro(req)
+  if (!usuario) return NextResponse.json({ error: 'Sessão inválida ou sem acesso à integração W.Vetro.' }, { status: 401 })
   const clienteId = String(req.nextUrl.searchParams.get('clienteId') || '').trim()
+
+  // Listagem global e sincronização global continuam exclusivas do Master.
+  // Para quem edita orçamentos, esta leitura só atende um cliente da própria empresa.
+  if (usuario.role !== 'master') {
+    if (!clienteId) {
+      return NextResponse.json({ error: 'Listagem geral W.Vetro restrita ao Master.' }, { status: 403 })
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clienteId)) {
+      return NextResponse.json({ error: 'Cliente inválido.' }, { status: 400 })
+    }
+    let autorizado = false
+    try {
+      autorizado = await usuarioPodeAcaoServer({
+        usuarioId: usuario.id,
+        role: usuario.role,
+        setorId: 'fazer-orcamento-msanfyvj',
+        acaoId: 'comercial.orcamento.editar',
+        empresaId: usuario.empresa_id,
+        minimo: 'edicao',
+      })
+    } catch {
+      return NextResponse.json({ error: 'Não foi possível conferir a permissão de sincronização.' }, { status: 503 })
+    }
+    if (!autorizado) {
+      return NextResponse.json({ error: 'Sem permissão para consultar os orçamentos sincronizados.' }, { status: 403 })
+    }
+    const { data: cliente, error: clienteError } = await supabaseAdmin
+      .from('clientes')
+      .select('id')
+      .eq('id', clienteId)
+      .eq('empresa_id', usuario.empresa_id)
+      .maybeSingle()
+    if (clienteError) {
+      return NextResponse.json({ error: 'Não foi possível conferir o cliente.' }, { status: 503 })
+    }
+    if (!cliente) {
+      return NextResponse.json({ error: 'Cliente não encontrado nesta empresa.' }, { status: 404 })
+    }
+  }
   let query = supabaseAdmin
     .from('orcamentos')
     .select('id,numero,cliente_id,cliente_nome,valor_estimado,updated_at,wvetro_fluxo,itens')
