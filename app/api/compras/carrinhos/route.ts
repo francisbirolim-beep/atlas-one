@@ -23,7 +23,7 @@ export async function POST(req:NextRequest){
   ])
   if(itR.error||forR.error)throw itR.error||forR.error
   const item=itR.data,forn=forR.data
-  if(!item||item.status==='cancelado'||!forn)return erro('Item ou fornecedor inválido')
+  if(!item||item.status!=='ativo'||!forn)return erro('Item cancelado ou com exclusão pendente. Revise a solicitação antes de incluir no carrinho.',409)
   if(!item.produto_id||item.identificacao_status!=='validado')return erro('O comprador deve identificar e validar o produto antes da cotação')
   let carrinhoId=String(b.carrinhoId||'')
   if(carrinhoId){
@@ -86,6 +86,12 @@ export async function PATCH(req:NextRequest){
   if(linhasR.error||fornR.error)throw linhasR.error||fornR.error
   if(!fornR.data||!(linhasR.data||[]).length)return erro('Carrinho sem fornecedor ou itens')
   const linhas=linhasR.data||[]
+  // Item com cancelamento solicitado jamais pode ser comprado automaticamente.
+  const {data:itensAtivos,error:eia}=await db.from('compras_solicitacao_itens')
+   .select('id,status').eq('empresa_id',u.empresa_id).in('id',linhas.map(x=>x.item_id))
+  if(eia)throw eia
+  if((itensAtivos||[]).length!==linhas.length||(itensAtivos||[]).some(x=>x.status!=='ativo'))
+   return erro('Carrinho contém material excluído ou com exclusão solicitada. Revise antes de confirmar a compra.',409)
   if(linhas.some(x=>x.preco_unitario===null))return erro('Confirme todos os preços do pedido')
   const total=linhas.reduce((s,x)=>s+(Number(x.quantidade_obra)+Number(x.quantidade_estoque))*Number(x.preco_unitario),0)
   const minimo=Number(fornR.data.pedido_minimo||0)
@@ -103,11 +109,10 @@ export async function PATCH(req:NextRequest){
   for(const sid of solicitacoes){
    const [solR,itR]=await Promise.all([
     db.from('compras_solicitacoes').select('id,destino,status').eq('empresa_id',u.empresa_id).eq('id',sid).maybeSingle(),
-    db.from('compras_solicitacao_itens').select('id,quantidade_necessaria').eq('empresa_id',u.empresa_id).eq('solicitacao_id',sid).eq('status','ativo')
+    db.from('compras_solicitacao_itens').select('id,quantidade_necessaria,destino').eq('empresa_id',u.empresa_id).eq('solicitacao_id',sid).eq('status','ativo')
    ])
    if(solR.error||itR.error)throw solR.error||itR.error
    if(!solR.data||!itR.data?.length)continue
-   const destino=solR.data.destino
    const {data:links,error:el}=await db.from('compras_carrinho_itens').select('item_id,carrinho_id,quantidade_obra,quantidade_estoque')
     .eq('empresa_id',u.empresa_id).in('item_id',itR.data.map(x=>x.id))
    if(el)throw el
@@ -117,7 +122,7 @@ export async function PATCH(req:NextRequest){
    const emitidos=new Set((carts.data||[]).filter(c=>!['rascunho','cancelado'].includes(c.status)).map(c=>c.id))
    const completos=itR.data.every(it=>{
     const comprado=(links||[]).filter(l=>l.item_id===it.id&&emitidos.has(l.carrinho_id))
-    if(destino==='estoque')return comprado.some(l=>Number(l.quantidade_estoque)>0)
+    if(it.destino==='estoque')return comprado.some(l=>Number(l.quantidade_estoque)>0)
     return comprado.reduce((acc,l)=>acc+Number(l.quantidade_obra),0)>=Number(it.quantidade_necessaria)
    })
    const {error:estatus}=await db.from('compras_solicitacoes').update({status:completos?'comprado':'em_cotacao',
