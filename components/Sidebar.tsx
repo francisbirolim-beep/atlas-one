@@ -7,6 +7,7 @@ import {
   Bot,
   BarChart3,
   ReceiptText,
+  ClipboardList,
   BookOpen,
   Eye,
   ChevronDown,
@@ -39,6 +40,7 @@ export default function Sidebar() {
   const [usuario, setUsuario] = useState<Usuario | null>(() => usuarioCacheLocal())
   const [tema, setTema] = useState<TemaAtlas>('escuro')
   const [podeLancarNF, setPodeLancarNF] = useState(false)
+  const [podeReceberManual, setPodeReceberManual] = useState(false)
   const [podeVerCadastros, setPodeVerCadastros] = useState(false)
   const [busca, setBusca] = useState('')
   const [adminAberto, setAdminAberto] = useState(false)
@@ -67,6 +69,21 @@ export default function Sidebar() {
         if (ativo) setPodeLancarNF(setores.compras === 'edicao' && (!especifica || especifica === 'edicao'))
       })
       .catch(() => { if (ativo) setPodeLancarNF(false) })
+    return () => { ativo = false }
+  }, [usuario?.id, usuario?.role])
+
+  // Nova entrada por romaneio: usar apenas a permissão de receber mercadoria.
+  // Não muda a autorização existente da entrada de NF.
+  useEffect(() => {
+    if (!usuario?.id) { setPodeReceberManual(false); return }
+    if (usuario.role === 'master') { setPodeReceberManual(true); return }
+    let ativo = true
+    void Promise.all([listarPermissoesUsuario(usuario.id), lerAcessoUsuarioConfig(usuario)])
+      .then(([setores, acesso]) => {
+        const especifica = acesso.acoes?.['compras.recebimento.receber']
+        if (ativo) setPodeReceberManual(setores.recebimento === 'edicao' && (!especifica || especifica === 'edicao'))
+      })
+      .catch(() => { if (ativo) setPodeReceberManual(false) })
     return () => { ativo = false }
   }, [usuario?.id, usuario?.role])
 
@@ -140,12 +157,13 @@ export default function Sidebar() {
   const inicioCombina = !termo || correspondePesquisaAtlas(termo, 'Início', 'Geral', '/')
   const balcaoCombina = !termo || correspondePesquisaAtlas(termo, 'Venda Balcão', 'Geral', '/balcao')
   const entradaNfCombina = podeLancarNF && (!termo || correspondePesquisaAtlas(termo, 'Entrada de Nota Fiscal', 'Compras', '/compras/entrada'))
+  const entradaManualCombina = podeReceberManual && (!termo || correspondePesquisaAtlas(termo, 'Entrada Manual Romaneio', 'Compras', '/compras/entrada-manual'))
   const relatoriosCombina = !termo || correspondePesquisaAtlas(termo, 'Relatórios', 'Geral', '/relatorios')
   const consultoriaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Esquadrifácio', 'Relatórios gerenciais', '/relatorios/esquadrifacio'))
   const iaCombina = !termo || correspondePesquisaAtlas(termo, 'IA Atlas', 'Inteligência Artificial', '/atlas-ia')
   const supervisaoIaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
   const mostrarAdmin = usuario?.role === 'master' && (adminAberto || !!termo)
-  const semResultados = !inicioCombina && !balcaoCombina && !entradaNfCombina && !relatoriosCombina && !consultoriaCombina && !iaCombina && !supervisaoIaCombina
+  const semResultados = !inicioCombina && !balcaoCombina && !entradaNfCombina && !entradaManualCombina && !relatoriosCombina && !consultoriaCombina && !iaCombina && !supervisaoIaCombina
     && gruposVisiveis.length === 0
     && atalhosVisiveis.length === 0
     && (!usuario || usuario.role !== 'master' || adminVisiveis.length === 0)
@@ -184,6 +202,12 @@ export default function Sidebar() {
           {entradaNfCombina && (
             <Link href="/compras/entrada" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/compras/entrada') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
               <ReceiptText size={18} className="shrink-0" /><span>Entrada de NF</span>
+            </Link>
+          )}
+
+          {entradaManualCombina && (
+            <Link href="/compras/entrada-manual" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/compras/entrada-manual') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
+              <ClipboardList size={18} className="shrink-0" /><span>Entrada Manual</span>
             </Link>
           )}
 

@@ -1,6 +1,7 @@
 'use client'
 
 import VendaBarrasWVetro from '@/components/clientes/VendaBarrasWVetro'
+import ObraEntradasManuais from '@/components/clientes/ObraEntradasManuais'
 import VendaListaCompraWVetro from '@/components/clientes/VendaListaCompraWVetro'
 import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
@@ -1484,6 +1485,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <p className="mt-3 text-[11px] text-slate-500">Regra: Perfis e Acessórios devem exibir código, descrição e imagem técnica. Quando a imagem estiver ausente, o Atlas sinaliza o cadastro pendente sem bloquear o acompanhamento da compra.</p>
           </Box>
         </>}
+        {aba==='materiais'&&venda.obra_id&&<ObraEntradasManuais obraId={venda.obra_id} clienteId={clienteId}/>}
+
         {aba==='materiais'&&<Box titulo="Lista de materiais para comprar · Barras Utilizadas WVetro">
           <VendaBarrasWVetro modo="lista" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>{setEditorCortesAberto(false);setAba('producao')}}/>
           <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Perfis desta obra em barras inteiras, não peças do plano de corte. Imprima a conferência do estoque, corrija a quantidade, selecione todos ou individualmente e clique em Validar para que apareçam em Falta comprar na aba Compras. O plano de corte continua em Produção.</p>
