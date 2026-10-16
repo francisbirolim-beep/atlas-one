@@ -2515,6 +2515,13 @@ export async function assumirConversa(conversaId: string, usuario: UsuarioTenant
     throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para atender.')
   }
   const reabrindo = conversa.status === 'finalizado'
+  // Depois do repasse, mesmo quem tem permissao geral no grupo so assume
+  // se estiver entre os destinatarios escolhidos. Master mantem supervisao.
+  if (conversa.whatsapp_chat_tipo === 'grupo' && conversa.triagem_escalonada_em &&
+      !conversa.responsavel_id && usuario.role !== 'master' &&
+      !(conversa.triagem_destinos || []).includes(usuario.id)) {
+    throw new Error('Esta conversa foi escalonada para outros atendentes.')
+  }
   if (!reabrindo && conversa.responsavel_id && conversa.responsavel_id !== usuario.id && usuario.role !== 'master') {
     throw new Error('Esta conversa já está com outro atendente.')
   }

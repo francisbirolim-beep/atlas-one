@@ -1932,7 +1932,7 @@ async function processGroupBudgetIntake(
 async function groupPrimaryOwner(empresaId: string, channelId: string, groupJid: string | null) {
   if (!groupJid) return null;
   const { data: group } = await db.from("atendimento_whatsapp_grupos")
-    .select("id")
+    .select("id,triagem_privada_ativa,triagem_tempo_minutos,triagem_destinos")
     .eq("empresa_id", empresaId)
     .eq("whatsapp_canal_id", channelId)
     .eq("grupo_jid", groupJid)
@@ -1976,6 +1976,9 @@ async function groupPrimaryOwner(empresaId: string, channelId: string, groupJid:
     id: userId,
     nome: await userName(userId),
     grupoId: group.id,
+    triagemPrivadaAtiva: group.triagem_privada_ativa === true && !delegation,
+    triagemTempoMinutos: Number(group.triagem_tempo_minutos || 10),
+    triagemDestinos: Array.isArray(group.triagem_destinos) ? group.triagem_destinos : [],
     delegacaoFimEm: delegation?.fim_em || null,
     delegacaoExpiradaDestinoId: expiredDelegation?.destino_usuario_id || null,
   };
@@ -2030,6 +2033,11 @@ async function conversationForInbound(
     ownerId = config.usuario_padrao_id;
     sector = config.setor_padrao || null;
   }
+  const triagemGrupoAtiva = isGroup && principal?.triagemPrivadaAtiva === true &&
+    Boolean(ownerId) && principal.triagemDestinos?.length > 0;
+  const triagemAplicavel = triagemAtiva || triagemGrupoAtiva;
+  const tempoTriagem = triagemGrupoAtiva ? principal.triagemTempoMinutos : Number(config.triagem_tempo_minutos || 10);
+  const destinosTriagem = triagemGrupoAtiva ? principal.triagemDestinos : (config.triagem_destinos || []);
   if (!ownerName || triagemAtiva) ownerName = await userName(ownerId);
   const displayName = isGroup ? (grupoNome || nome || "Grupo WhatsApp") : (nome || customer?.nome || null);
 
@@ -2050,8 +2058,16 @@ async function conversationForInbound(
         .eq("ativo", true)
         .lte("fim_em", new Date().toISOString());
     }
-    const escalada = triagemAtiva && Boolean(existing.triagem_escalonada_em);
-    const iniciarNovaTriagem = triagemAtiva && existing.status === 'finalizado';
+    const escalada = Boolean(existing.triagem_escalonada_em) && (triagemAplicavel || isGroup);
+    // No grupo, toda nova rodada de atendimento precisa ter prazo, inclusive
+    // após a pessoa ter assumido e receber outra mensagem.
+    // Conversas transferidas manualmente não voltam ao principal por este fluxo.
+    const iniciarNovaTriagem = triagemAplicavel && (
+      existing.status === 'finalizado' ||
+      (!existing.triagem_prazo_em && !existing.triagem_escalonada_em &&
+        existing.responsavel_id === ownerId &&
+        (isGroup || existing.status === 'aguardando'))
+    );
     const keepExistingOwner = escalada && !iniciarNovaTriagem ? null
       : iniciarNovaTriagem ? ownerId
       : usarPrincipalDoGrupo ? ownerId : (existing.responsavel_id || ownerId);
@@ -2071,9 +2087,9 @@ async function conversationForInbound(
       responsavel_nome: keepExistingOwnerName,
       setor: existing.setor || sector || null,
       triagem_prazo_em: iniciarNovaTriagem
-        ? new Date(Date.now() + Number(config.triagem_tempo_minutos || 10) * 60000).toISOString()
+        ? new Date(Date.now() + tempoTriagem * 60000).toISOString()
         : (existing.triagem_prazo_em || null),
-      triagem_destinos: iniciarNovaTriagem ? (config.triagem_destinos || []) : (existing.triagem_destinos || []),
+      triagem_destinos: iniciarNovaTriagem ? destinosTriagem : (existing.triagem_destinos || []),
       triagem_escalonada_em: iniciarNovaTriagem ? null : (existing.triagem_escalonada_em || null),
       status: "aguardando",
       updated_at: new Date().toISOString(),
@@ -2098,9 +2114,9 @@ async function conversationForInbound(
     responsavel_id: ownerId,
     responsavel_nome: ownerName,
     setor: sector,
-    triagem_prazo_em: triagemAtiva
-      ? new Date(Date.now() + Number(config.triagem_tempo_minutos || 10) * 60000).toISOString() : null,
-    triagem_destinos: triagemAtiva ? (config.triagem_destinos || []) : [],
+    triagem_prazo_em: triagemAplicavel
+      ? new Date(Date.now() + tempoTriagem * 60000).toISOString() : null,
+    triagem_destinos: triagemAplicavel ? destinosTriagem : [],
   }).select("*").single();
   if (error) throw error;
   return data;

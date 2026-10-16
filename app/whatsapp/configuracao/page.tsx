@@ -30,6 +30,9 @@ type GrupoWhatsApp = {
   nome: string
   participantes: number
   sincronizado_em?: string | null
+  triagem_privada_ativa?: boolean
+  triagem_tempo_minutos?: number
+  triagem_destinos?: string[]
 }
 type GrupoAutomacao = {
   grupoId: string
@@ -76,6 +79,8 @@ export default function ConfiguracaoWhatsAppPage() {
   const [triagemPrivadaAtiva,setTriagemPrivadaAtiva]=useState(false)
   const [triagemTempoMinutos,setTriagemTempoMinutos]=useState(10)
   const [triagemDestinos,setTriagemDestinos]=useState<string[]>([])
+  const [triagemGrupoSalvando,setTriagemGrupoSalvando]=useState<string|null>(null)
+  const [triagemGrupoSalvo,setTriagemGrupoSalvo]=useState<string|null>(null)
   const [regras,setRegras]=useState<Regra[]>([])
   const [erro,setErro]=useState('')
   const [salvando,setSalvando]=useState(false)
@@ -133,6 +138,31 @@ export default function ConfiguracaoWhatsAppPage() {
 
   function alterarGrupo(grupoId:string,campo:keyof GrupoAutomacao,valor:string|number|boolean){
     setGruposAutomacao(gs=>gs.map(g=>g.grupoId===grupoId?{...g,[campo]:valor}:g))
+  }
+
+  function editarTriagemGrupo(grupoId:string,campos:Partial<GrupoWhatsApp>){
+    setGrupos(anteriores=>anteriores.map(g=>g.id===grupoId?{...g,...campos}:g))
+    setTriagemGrupoSalvo(null)
+  }
+
+  async function salvarTriagemGrupo(grupo:GrupoWhatsApp){
+    if (triagemGrupoSalvando) return
+    setTriagemGrupoSalvando(grupo.id);setTriagemGrupoSalvo(null);setErro('')
+    try {
+      const resp=await fetch('/api/integracoes/whatsapp/grupos/triagem',{
+        method:'PUT',headers:await authHeaders(),
+        body:JSON.stringify({
+          grupoId:grupo.id,ativa:grupo.triagem_privada_ativa===true,
+          tempoMinutos:Number(grupo.triagem_tempo_minutos||10),
+          destinos:grupo.triagem_destinos||[],
+        }),
+      })
+      const json=await resp.json()
+      if(!resp.ok)throw new Error(json.error||'Nao foi possivel salvar triagem do grupo.')
+      setGrupos(lista=>lista.map(g=>g.id===grupo.id?{...g,...json.grupo}:g))
+      setTriagemGrupoSalvo(grupo.id)
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao configurar grupo.')}
+    finally{setTriagemGrupoSalvando(null)}
   }
 
   function permissaoDoGrupo(grupoId:string,usuarioId:string){
@@ -498,6 +528,55 @@ export default function ConfiguracaoWhatsAppPage() {
                     </div>
                   </label>
                 </div>
+
+                <section className="border-t bg-blue-50/40 px-4 py-3 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Prazo e repasse automático deste grupo</p>
+                      <p className="text-xs text-slate-600">Independente do atendimento geral e dos outros grupos. Primeiro defina o responsável principal nas permissões abaixo.</p>
+                    </div>
+                    <label className="flex items-center gap-2 text-xs font-bold">
+                      <input type="checkbox" checked={g.triagem_privada_ativa===true}
+                        onChange={e=>editarTriagemGrupo(g.id,{triagem_privada_ativa:e.target.checked})}/>
+                      Ativar repasse neste grupo
+                    </label>
+                  </div>
+                  {g.triagem_privada_ativa&&<div className="space-y-3">
+                    <label className="block text-xs font-semibold text-slate-800">
+                      Tempo para aceitar o atendimento (minutos)
+                      <input type="number" min={1} max={1440} className="mt-1 block w-32 rounded-lg border bg-white px-3 py-2"
+                        value={g.triagem_tempo_minutos??10}
+                        onChange={e=>editarTriagemGrupo(g.id,{triagem_tempo_minutos:Number(e.target.value)})}/>
+                    </label>
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">Substitutos quando vencer o prazo</p>
+                      <p className="text-xs text-slate-500">Você pode selecionar vários. O primeiro a aceitar assume; o histórico fica preservado.</p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {usuarios.filter(u=>{
+                          const principal=gruposPermissoes.find(p=>p.grupo_id===g.id&&p.responsavel_principal)?.usuario_id
+                          const permissao=gruposPermissoes.find(p=>p.grupo_id===g.id&&p.usuario_id===u.id)
+                          return u.id!==principal&&(u.role==='master'||permissao?.nivel==='atender'||permissao?.nivel==='gerenciar')
+                        }).map(u=><label key={u.id} className="flex items-center gap-2 rounded-lg border bg-white p-2 text-xs">
+                          <input type="checkbox" checked={(g.triagem_destinos||[]).includes(u.id)}
+                            onChange={e=>editarTriagemGrupo(g.id,{triagem_destinos:e.target.checked
+                              ? [...new Set([...(g.triagem_destinos||[]),u.id])]
+                              : (g.triagem_destinos||[]).filter(id=>id!==u.id)})}/>
+                          {u.nome}
+                        </label>)}
+                      </div>
+                      {!gruposPermissoes.some(p=>p.grupo_id===g.id&&p.responsavel_principal)&&
+                        <p className="mt-2 text-xs text-amber-700">Defina primeiro o responsável principal do grupo.</p>}
+                    </div>
+                  </div>}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button type="button" disabled={Boolean(triagemGrupoSalvando)}
+                      onClick={()=>void salvarTriagemGrupo(g)}
+                      className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">
+                      {triagemGrupoSalvando===g.id?'Salvando...':'Salvar apenas este grupo'}
+                    </button>
+                    {triagemGrupoSalvo===g.id&&<span className="text-xs font-semibold text-emerald-700">Configuração do grupo salva.</span>}
+                  </div>
+                </section>
 
                 <details className="border-t bg-slate-50/70">
                   <summary className="cursor-pointer px-4 py-3 text-xs font-bold text-slate-700">
