@@ -475,14 +475,14 @@ cardAberto=data as OrcamentoRapido
 setCards(prev=>prev.map(c=>c.id===card.id?cardAberto:c))
 }
 
-if (!card.orcamento_finalizado_em && !card.orcamento_iniciado_em) {
+if (!cardAberto.orcamento_finalizado_em && !cardAberto.orcamento_iniciado_em) {
 const { error } = await supabase
 .from('orcamentos')
 .update({ orcamento_iniciado_em: agoraIso })
 .eq('id', card.id)
 
 if (!error) {
-cardAberto = { ...card, orcamento_iniciado_em: agoraIso }
+cardAberto = { ...cardAberto, orcamento_iniciado_em: agoraIso }
 setCards(prev => prev.map(c => (c.id === card.id ? cardAberto : c)))
 }
 }
