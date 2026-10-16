@@ -21,6 +21,8 @@ const resumoAuditoria=(evento:{entidade:string;acao:string;antes:unknown;depois:
    return 'Solicitou exclusão do item: '+str(depois.motivo_cancelamento,150)
   if(depois.status==='cancelado'&&antes.status!=='cancelado')
    return 'Excluiu/cancelou o item: '+str(depois.motivo_cancelamento,150)
+  if(depois.identificacao_status==='validado'&&(antes.produto_id!==depois.produto_id||antes.identificacao_status!=='validado'))
+   return antes.produto_id&&antes.produto_id!==depois.produto_id?'Corrigiu a identificação do produto do catálogo':'Confirmou a identificação do produto do catálogo'
   const campos=[['descricao','Descrição'],['categoria','Categoria'],['quantidade_necessaria','Quantidade'],['destino','Destino'],['cliente_id','Cliente'],['obra_id','Obra'],['foto_path','Foto']]
   const mudancas=campos.filter(([k])=>String(antes[k]??'')!==String(depois[k]??'')).map(([k,label])=>
    k==='foto_path'?'Foto substituída':k==='cliente_id'||k==='obra_id'?label+' alterado':label+': '+str(antes[k]??'vazio',70)+' → '+str(depois[k]??'vazio',70))
@@ -189,14 +191,18 @@ export async function PATCH(req:NextRequest){
    if(item.status!=='ativo')return falha('Item excluído ou com exclusão pendente.',409)
    if(!comprador)return falha('Somente o comprador pode validar a identificação',403)
    if(!uuid.test(str(b.produtoId,80)))return falha('Selecione um produto cadastrado')
-   const {data:produto}=await db.from('produtos').select('id').eq('empresa_id',u.empresa_id).eq('id',b.produtoId).maybeSingle()
-   if(!produto)return falha('Produto não encontrado')
-   const {error}=await db.from('compras_solicitacao_itens').update({produto_id:produto.id,identificacao_status:'validado',
-    identificacao_por_id:u.id,atualizado_por_id:u.id,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',item.id)
-   if(error)throw error
-   await db.from('compras_solicitacoes').update({status:'em_cotacao',atualizado_por_id:u.id,updated_at:new Date().toISOString()})
-     .eq('empresa_id',u.empresa_id).eq('id',sol.id).eq('status','aguardando_validacao')
-   return NextResponse.json({ok:true,acao:'identificado'})
+   // Operação atômica: valida o produto, registra a escolha humana e aprende
+   // o texto solicitado. Impede troca após inclusão em carrinho.
+   const {data:resultado,error:eConfirma}=await db.rpc('confirmar_identificacao_compras_v1',{
+    p_empresa:u.empresa_id,p_usuario:u.id,p_item:item.id,p_produto:b.produtoId
+   })
+   if(eConfirma){
+    const mensagem=String(eConfirma.message||'Falha ao validar produto')
+    if(['Material','Produto','Item já','Descrição','Usuário'].some(t=>mensagem.includes(t)))return falha(mensagem,409)
+    throw eConfirma
+   }
+   return NextResponse.json({ok:true,acao:'identificado',aprendizado:resultado?.aprendizado===true,
+    corrigiuSugestaoAnterior:resultado?.corrigiuSugestaoAnterior===true})
   }
   if(!edita)return falha('Sem permissão para editar este pedido',403)
   if(b.acao==='cancelar'){
