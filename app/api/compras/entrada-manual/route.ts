@@ -77,21 +77,32 @@ export async function GET(req: NextRequest) {
       const obraId = req.nextUrl.searchParams.get('obraId')
       const destino = req.nextUrl.searchParams.get('destino')
       if (obraId && !valido(obraId)) return falha('Obra inválida.')
-      if (!obraId && destino !== 'estoque') return falha('Selecione a obra ou o estoque.')
-      let query = db.from('compras_entradas_manuais')
-        .select('id,fornecedor_nome,numero_romaneio,data_documento,destino,cliente_id,obra_id,local_id,created_at,criado_por_nome')
-        .eq('empresa_id', empresa).order('created_at', { ascending: false }).limit(60)
-      query = obraId ? query.eq('obra_id', obraId) : query.eq('destino', 'estoque')
-      const { data, error } = await query
-      if (error) throw error
-      const entradas = data || []
-      const ids = entradas.map(x => x.id)
+      if (!obraId && destino !== 'estoque') return falha('Informe a obra ou o estoque.')
+      const consulta = db.from('compras_entradas_manuais_destinos')
+        .select('id,entrada_id,item_id,destino,quantidade,obra_id,local_id')
+        .eq('empresa_id', empresa).limit(1000)
+      const result = obraId ? await consulta.eq('obra_id', obraId)
+        : await consulta.eq('destino', 'estoque')
+      if (result.error) throw result.error
+      const alocacoes = result.data || []
+      const ids = [...new Set(alocacoes.map(x => x.entrada_id))]
+      const itemIds = [...new Set(alocacoes.map(x => x.item_id))]
       if (!ids.length) return NextResponse.json({ entradas: [], itens: [] })
-      const it = await db.from('compras_entradas_manuais_itens')
-        .select('id,entrada_id,produto_id,descricao,unidade,quantidade,custo_unitario,produto:produtos(foto_url,codigo)')
-        .eq('empresa_id', empresa).in('entrada_id', ids).limit(1000)
-      if (it.error) throw it.error
-      return NextResponse.json({ entradas, itens: it.data || [] })
+      const [rEntradas, rItens] = await Promise.all([
+        db.from('compras_entradas_manuais')
+          .select('id,fornecedor_nome,numero_romaneio,data_documento,destino,created_at,criado_por_nome')
+          .eq('empresa_id', empresa).in('id', ids).order('created_at', { ascending: false }).limit(1000),
+        db.from('compras_entradas_manuais_itens')
+          .select('id,entrada_id,produto_id,descricao,unidade,custo_unitario,produto:produtos(foto_url,codigo)')
+          .eq('empresa_id', empresa).in('id', itemIds).limit(1000),
+      ])
+      if (rEntradas.error || rItens.error) throw rEntradas.error || rItens.error
+      const porId = new Map((rItens.data || []).map(i => [i.id, i]))
+      const itens = alocacoes.flatMap(a => {
+        const item = porId.get(a.item_id)
+        return item ? [{ ...item, id: a.id, quantidade: a.quantidade, entrada_id: a.entrada_id }] : []
+      })
+      return NextResponse.json({ entradas: rEntradas.data || [], itens })
     }
     return falha('Consulta inválida.')
   } catch (error) {
@@ -106,49 +117,57 @@ export async function POST(req: NextRequest) {
   if (!a.podeReceber) return falha('Sem permissão para registrar entrada de mercadoria.', 403)
   const p = await req.json().catch(() => null)
   if (!p || typeof p !== 'object') return falha('Dados inválidos.')
-  const destino = p.destino
-  const clienteId = destino === 'obra' ? p.clienteId : null
-  const obraId = destino === 'obra' ? p.obraId : null
-  const localId = destino === 'estoque' ? p.localId : null
-  const itens = p.itens
   if (!valido(p.chaveIdempotencia)) return falha('Identificador da operação inválido.')
-  if (!['obra', 'estoque'].includes(destino)) return falha('Selecione o destino da mercadoria.')
-  if (destino === 'obra' && (!valido(clienteId) || !valido(obraId))) return falha('Selecione um cliente e uma obra.')
-  if (destino === 'estoque' && !valido(localId)) return falha('Selecione o Estoque Geral.')
   const fornecedor = String(p.fornecedor || '').trim()
   const numero = String(p.numeroRomaneio || '').trim()
   if (!fornecedor || fornecedor.length > 200 || !numero || numero.length > 100) return falha('Informe o fornecedor e o número do romaneio.')
-  if (typeof p.dataDocumento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.dataDocumento)) return falha('Informe a data do documento.')
+  if (typeof p.dataDocumento !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(p.dataDocumento)) return falha('Informe a data do romaneio.')
+  if (p.vencimento && (typeof p.vencimento !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(p.vencimento))) return falha('Vencimento inválido.')
+  const itens = p.itens
   if (!Array.isArray(itens) || itens.length < 1 || itens.length > 100) return falha('Informe de 1 a 100 produtos.')
-  for (const [i, item] of itens.entries()) {
-    if (!valido(item?.produtoId) || !Number.isFinite(Number(item?.quantidade)) || Number(item.quantidade) <= 0 || Number(item.quantidade) > 100000000
-      || (item.custoUnitario !== null && item.custoUnitario !== undefined && item.custoUnitario !== '' && (!Number.isFinite(Number(item.custoUnitario)) || Number(item.custoUnitario) < 0))) {
-      return falha(`Produto ${i + 1}: informe produto, quantidade positiva e custo válido.`)
+  const inteiro4 = (valor: number) => Math.round(valor * 10000)
+  for (const [indice, item] of itens.entries()) {
+    const quantidade = Number(item?.quantidade)
+    const custo = Number(item?.custoUnitario)
+    if (!valido(item?.produtoId) || !Number.isFinite(quantidade) || quantidade <= 0 || quantidade > 100000000
+      || !Number.isFinite(custo) || custo < 0 || custo > 100000000
+      || Math.abs(quantidade * 10000 - inteiro4(quantidade)) > 0.00001
+      || Math.abs(custo * 10000 - inteiro4(custo)) > 0.00001
+      || !Array.isArray(item.destinos) || !item.destinos.length || item.destinos.length > 20
+      || item.custoUnitario === null || item.custoUnitario === undefined || item.custoUnitario === '') {
+      return falha(`Produto ${indice + 1}: informe quantidade, custo e destinos válidos.`)
     }
+    let total = 0
+    for (const destino of item.destinos) {
+      const n = Number(destino?.quantidade)
+      if (!Number.isFinite(n) || n <= 0 || Math.abs(n * 10000 - inteiro4(n)) > 0.00001) {
+        return falha(`Produto ${indice + 1}: confira as quantidades distribuídas.`)
+      }
+      if (destino.destino === 'obra') {
+        if (!valido(destino.clienteId) || !valido(destino.obraId)) return falha(`Produto ${indice + 1}: selecione cliente e obra.`)
+      } else if (destino.destino === 'estoque') {
+        if (!valido(destino.localId)) return falha(`Produto ${indice + 1}: escolha o Estoque Geral.`)
+      } else return falha(`Produto ${indice + 1}: destino inválido.`)
+      total += inteiro4(n)
+    }
+    if (total !== inteiro4(quantidade)) return falha(`Produto ${indice + 1}: a distribuição deve somar exatamente ${quantidade}.`)
   }
   try {
-    const { data, error } = await db.rpc('registrar_entrada_manual_romaneio', {
+    const { data, error } = await db.rpc('registrar_entrada_manual_romaneio_dividido', {
       p_empresa_id: a.usuario.empresa_id,
       p_usuario_id: a.usuario.id,
       p_chave_idempotencia: p.chaveIdempotencia,
       p_fornecedor_nome: fornecedor,
       p_numero_romaneio: numero,
       p_data_documento: p.dataDocumento,
-      p_destino: destino,
-      p_cliente_id: clienteId,
-      p_obra_id: obraId,
-      p_local_id: localId,
       p_observacoes: String(p.observacoes || '').slice(0, 2000),
-      p_itens: itens.map((item: { produtoId: string; quantidade: number; custoUnitario?: number | null }) => ({
-        produtoId: item.produtoId,
-        quantidade: Number(item.quantidade),
-        custoUnitario: item.custoUnitario === null || item.custoUnitario === undefined ? null : Number(item.custoUnitario),
-      })),
+      p_vencimento: p.vencimento || null,
+      p_itens: itens,
     })
     if (error) {
       const msg = String(error.message || '')
       if (/já possuem uma entrada|duplicate key|romaneio.*já/i.test(msg)) return falha('Este fornecedor e número de romaneio já foram registrados. Confira o histórico antes de lançar novamente.', 409)
-      if (/obra não pertence|Local de Estoque|local de Estoque|Produto não encontrado|Quantidade|quantidade|obrigatóri|inválid|não pertence|fornecedor|número do romaneio/i.test(msg)) return falha(msg, 409)
+      if (/obra não pertence|Local de Estoque|local de Estoque|Produto não encontrado|Quantidade|quantidade|obrigatóri|inválid|não pertence|fornecedor|número do romaneio|destino|custo|limite|soma/i.test(msg)) return falha(msg, 409)
       console.error('[entrada manual RPC]', error)
       return falha('Não foi possível salvar o romaneio. Confira se a atualização de banco foi aplicada.', 503)
     }
