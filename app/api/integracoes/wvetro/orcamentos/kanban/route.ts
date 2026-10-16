@@ -8,6 +8,7 @@ import { sincronizar } from '../sincronizar/route'
 import type { UsuarioWVetro } from '@/lib/wvetroAcessoServer'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import { materializarPacoteTecnicoWVetro } from '@/lib/wvetroPacoteTecnicoServer'
+import { houveConferenciaHumanaWVetro } from '@/lib/wvetroPreservacaoSincronizacao'
 import { POST as candidatosClienteWVetro } from '../candidatos-cliente/route'
 
 export const runtime = 'nodejs'
@@ -304,6 +305,10 @@ async function inserirHistorico(orcamentoId: string, usuario: UsuarioTenant, aca
 }
 
 async function mesclarFonteNoCard(empresaId: string, alvo: any, fonte: any, usuario: UsuarioTenant) {
+  const fluxoAlvo = obj(alvo.wvetro_fluxo)
+  if (houveConferenciaHumanaWVetro(fluxoAlvo)) {
+    throw new Error('O orçamento já possui conferências humanas. Reimportação bloqueada para não apagar validações; revise a origem antes.')
+  }
   const fluxoFonte = obj(fonte.wvetro_fluxo)
   const anexos = juntarAnexos(alvo.anexos, fonte.anexos)
   const mesclaItens = mesclarItensPreservandoMedicao(alvo.itens, fonte.itens)
@@ -468,6 +473,19 @@ export async function POST(req: NextRequest) {
     if (acao === 'vincular') {
       const numeroWvetro = txt(body.numeroWvetro)
       if (!numeroWvetro) return NextResponse.json({ error: 'Escolha o orçamento W.Vetro.' }, { status: 400 })
+      const fluxoExistente = obj(alvo.wvetro_fluxo)
+      if (houveConferenciaHumanaWVetro(fluxoExistente)) {
+        const numeroAtual = txt(fluxoExistente.numero, fluxoExistente.numero_wvetro)
+        if (numeroAtual !== numeroWvetro) {
+          return NextResponse.json({error: 'Este orçamento possui esquadrias validadas. A vinculação a outro número exige revisão manual para não apagar as conferências.'}, {status:409})
+        }
+        // Escolher novamente o mesmo W.Vetro não pode reimportar nem apagar aprovações.
+        return NextResponse.json({
+          ok:true, orcamento:alvo, numeroWvetro, ocultadoId:null,
+          divergenciaItens:false,
+          mensagem:'Este W.Vetro já está vinculado. As conferências e correções gravadas foram preservadas; continue apenas os itens pendentes.',
+        }, {headers:{'Cache-Control':'no-store'}})
+      }
 
       let recentes: Awaited<ReturnType<typeof listarRecentes>> | null = null
       try {
