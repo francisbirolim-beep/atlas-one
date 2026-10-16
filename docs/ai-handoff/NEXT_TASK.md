@@ -497,3 +497,8 @@ Branch: `fix/kanban-wvetro-sync-preservacao-v1`
 4. Conferir PDF geral de barras e PDF de um card com apenas uma barra/código.
 5. Repetir com usuário autorizado sem nível Master. Verificar isolamento de empresa e impedimento de upload de PDF com orçamento WVetro divergente.
 6. Só após aprovação funcional, fazer merge manual e deploy de produção.
+
+
+## 2026-10-15 — Permissões por etapa — primeiro incremento, não publicar
+
+Branch `feat/permissoes-etapas-20261015`, base `302b0b2f`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.

@@ -17,6 +17,11 @@ type Props = {
   cliente: ClienteCompleto
   obras: ObraCliente360[]
   onAtualizado: () => Promise<void>
+  podeEditarCliente?: boolean
+  podeEditarObra?: boolean
+  mostrarObras?: boolean
+  mostrarObservacoes?: boolean
+  podeEditarObservacoes?: boolean
 }
 
 const camposCliente: Array<{
@@ -72,7 +77,7 @@ function campoInput(className = '') {
   return 'mt-1 block w-full min-w-0 rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:border-slate-100 disabled:bg-slate-50 disabled:text-slate-600 ' + className
 }
 
-export default function CadastroCliente360({ cliente, obras, onAtualizado }: Props) {
+export default function CadastroCliente360({ cliente, obras, onAtualizado, podeEditarCliente=true, podeEditarObra=true, mostrarObras=true, mostrarObservacoes=true, podeEditarObservacoes=true }: Props) {
   const [formCliente, setFormCliente] = useState<ClienteCadastroEdicao>(() => formularioCliente(cliente))
   const [editarCliente, setEditarCliente] = useState(false)
   const [obraAberta, setObraAberta] = useState<string | null>(null)
@@ -96,13 +101,15 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
   }
   async function salvarCliente(e: React.FormEvent) {
     e.preventDefault()
-    if (salvandoCliente) return
+    if (!podeEditarCliente || salvandoCliente) return
     const validacao = validarCadastroCliente(formCliente)
     if (validacao) { setErroCliente(validacao); return }
     setSalvandoCliente(true); setErroCliente(''); setMensagemCliente('')
     try {
+      const patch: Record<string,unknown>=patchCliente(formCliente)
+      if(!podeEditarObservacoes)delete patch.observacoes
       let consulta = supabase.from('clientes').update({
-        ...patchCliente(formCliente), updated_at: new Date().toISOString(),
+        ...patch, updated_at: new Date().toISOString(),
       }).eq('id', cliente.id)
       if (cliente.updated_at) consulta = consulta.eq('updated_at', cliente.updated_at)
       const {data,error} = await consulta.select('id').maybeSingle()
@@ -117,6 +124,7 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
   }
 
   function abrirObra(obra?: ObraCliente360) {
+    if (!podeEditarObra) return
     if (obraAberta && JSON.stringify(formObra) !== JSON.stringify(
       formularioObra(obras.find(o => o.id === obraAberta)))
       && !window.confirm('Descartar alterações não salvas da obra?')) return
@@ -132,7 +140,7 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
   }
   async function salvarObra(e: React.FormEvent) {
     e.preventDefault()
-    if (!obraAberta || salvandoObra) return
+    if (!podeEditarObra || !obraAberta || salvandoObra) return
     const validacao = validarCadastroObra(formObra)
     if (validacao) { setErroObra(validacao); return }
     setSalvandoObra(true); setErroObra(''); setMensagemObra('')
@@ -174,7 +182,7 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
             <p className="mt-1 text-xs text-slate-500">Dados gerais do cliente. Não são o endereço de nenhuma obra.</p>
           </div>
         </div>
-        {!editarCliente && <button onClick={() => {setErroCliente('');setMensagemCliente('');setEditarCliente(true)}}
+        {podeEditarCliente && !editarCliente && <button onClick={() => {setErroCliente('');setMensagemCliente('');setEditarCliente(true)}}
           className="inline-flex items-center gap-2 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-800">
           <Pencil size={14}/> Editar cadastro
         </button>}
@@ -185,25 +193,25 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
             <label key={campo.chave} className="block min-w-0 text-xs font-semibold text-slate-600">
               {campo.titulo}
               {campo.chave === 'origem' ? (
-                <select value={formCliente.origem} disabled={!editarCliente}
+                <select value={formCliente.origem} disabled={!podeEditarCliente || !editarCliente}
                   onChange={e => setFormCliente(f=>({...f,origem:e.target.value}))} className={campoInput()}>
                   {!origens.some(o=>o.value===formCliente.origem) &&
                     <option value={formCliente.origem}>{formCliente.origem}</option>}
                   {origens.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               ) : <input type={campo.tipo || 'text'} value={formCliente[campo.chave]}
-                disabled={!editarCliente} placeholder={campo.placeholder}
+                disabled={!podeEditarCliente || !editarCliente} placeholder={campo.placeholder}
                 onChange={e => setFormCliente(f=>({...f,[campo.chave]:e.target.value}))}
                 className={campoInput()}/>}
             </label>
           )}
         </div>
-        <label className="mt-3 block text-xs font-semibold text-slate-600">
+        {mostrarObservacoes&&<label className="mt-3 block text-xs font-semibold text-slate-600">
           Observações do cliente
-          <textarea rows={3} value={formCliente.observacoes} disabled={!editarCliente}
+          <textarea rows={3} value={formCliente.observacoes} disabled={!podeEditarObservacoes || !podeEditarCliente || !editarCliente}
             onChange={e => setFormCliente(f=>({...f,observacoes:e.target.value}))}
             className={campoInput()} placeholder="Informações importantes sobre o cliente"/>
-        </label>
+        </label>}
         {erroCliente&&<p role="alert" className="mt-3 text-sm text-red-700">{erroCliente}</p>}
         {mensagemCliente&&<p role="status" className="mt-3 flex items-center gap-2 text-sm text-emerald-700"><CheckCircle2 size={15}/>{mensagemCliente}</p>}
         {editarCliente&&<div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -217,7 +225,7 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
       </form>
     </section>
 
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    {mostrarObras&&<section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div className="flex items-start gap-3">
           <Building2 size={21} className="mt-0.5 text-indigo-700"/>
@@ -228,7 +236,7 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
             </p>
           </div>
         </div>
-        <button type="button" disabled={salvandoObra} onClick={()=>abrirObra()}
+        <button type="button" disabled={!podeEditarObra || salvandoObra} onClick={()=>abrirObra()}
           className="inline-flex items-center gap-2 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
           <Plus size={14}/> Cadastrar nova obra
         </button>
@@ -250,7 +258,7 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
               {obra.responsavel && <p className="mt-1 text-xs text-slate-500">Responsável: {obra.responsavel}</p>}
             </div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={()=>abrirObra(obra)} type="button" disabled={salvandoObra}
+              <button onClick={()=>abrirObra(obra)} type="button" disabled={!podeEditarObra || salvandoObra}
                 className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold text-slate-700">
                 <Pencil size={13}/> Editar cadastro
               </button>
@@ -283,14 +291,14 @@ export default function CadastroCliente360({ cliente, obras, onAtualizado }: Pro
           </label>
           {erroObra&&<p role="alert" className="mt-3 text-sm text-red-700">{erroObra}</p>}
           <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button type="button" disabled={salvandoObra} onClick={fecharObra} className="rounded-lg border bg-white px-4 py-2 text-sm">Cancelar</button>
-            <button type="submit" disabled={salvandoObra}
+            <button type="button" disabled={!podeEditarObra || salvandoObra} onClick={fecharObra} className="rounded-lg border bg-white px-4 py-2 text-sm">Cancelar</button>
+            <button type="submit" disabled={!podeEditarObra || salvandoObra}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
               <Save size={15}/>{salvandoObra?'Salvando...':obraAberta==='nova'?'Salvar nova obra':'Salvar alterações da obra'}
             </button>
           </div>
         </form>}
       </div>
-    </section>
+    </section>}
   </div>
 }

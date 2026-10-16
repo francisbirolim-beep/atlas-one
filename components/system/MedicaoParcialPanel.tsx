@@ -147,7 +147,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
         nivelSetor === 'edicao' &&
         config.acoes?.['producao.medida_final.remover_item'] === 'edicao'
       )
-    })
+    }).catch(()=>{if(ativo)setPodeRemoverItem(false)})
     void carregar()
     return () => { ativo = false }
   }, [carregar])

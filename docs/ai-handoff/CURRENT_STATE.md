@@ -686,3 +686,8 @@ Branch `fix/wvetro-corte-barras-setores-20261013` — preview não publicado em 
 - Perfis e acessórios nas listas de Materiais, Compras, Produção e PDFs: resolver por cadastro ID/código exato com isolamento de empresa, alternativamente desenho técnico do próprio item WVetro.
 - Ausência de foto não pode ser representada por imagem arbitrária; mostrar claramente `Imagem pendente` e exigir completar cadastro, sem apagar registros nem misturar cards.
 - Implementação inicial na lista de barras comerciais WVetro, cards de Compras, lista de corte e PDFs de barras/cortes. Demais fluxos usam esta decisão como requisito de aceitação.
+
+
+## 2026-10-15 — Permissões por etapa — primeiro incremento, não publicar
+
+Branch `feat/permissoes-etapas-20261015`, base `302b0b2f`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.

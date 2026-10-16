@@ -443,3 +443,8 @@ Nenhum merge para `main`.
 
 ## 2026-10-13 — Separação WVetro: lista de corte e barras utilizadas (candidato)
 Novos `VendaListaCorteWVetro`, `VendaBarrasWVetro`, parser posicional PDF WVetro, API de importação/validação e acompanhamento, página de impressão por card e tabela de feedback. Samuel #872: 18 linhas / 31 barras pendentes, preservando 40 cortes. Build, TypeScript e regressão do PDF real validados; falta teste funcional do preview.
+
+
+## 2026-10-15 — Permissões por etapa — primeiro incremento, não publicar
+
+Branch `feat/permissoes-etapas-20261015`, base `302b0b2f`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.

@@ -42,7 +42,7 @@ type ContaVenda = {
   status?: string | null
 }
 
-interface Props { clienteId: string }
+interface Props { clienteId: string; verFinanceiro?: boolean }
 
 function moeda(v?: number | null){
   return Number(v || 0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
@@ -59,7 +59,7 @@ function numeroOrcamento(o?: OrcamentoVenda){
   return o?.wvetro_fluxo?.numero || o?.numero || '—'
 }
 
-export default function VendasCliente360({clienteId}:Props){
+export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
   const [vendas,setVendas]=useState<VendaObra[]>([])
   const [orcamentos,setOrcamentos]=useState<Record<string,OrcamentoVenda>>({})
   const [obras,setObras]=useState<Record<string,ObraVenda>>({})
@@ -67,13 +67,13 @@ export default function VendasCliente360({clienteId}:Props){
   const [carregando,setCarregando]=useState(true)
   const [erro,setErro]=useState('')
 
-  useEffect(()=>{ void carregar() },[clienteId])
+  useEffect(()=>{ void carregar() },[clienteId,verFinanceiro])
 
   async function carregar(){
     setCarregando(true); setErro('')
     const vendasResp = await supabase
       .from('vendas_obras')
-      .select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,custo_previsto,status,confirmado_em,created_at')
+      .select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,status,confirmado_em,created_at')
       .eq('cliente_id',clienteId)
       .order('confirmado_em',{ascending:false})
 
@@ -92,7 +92,7 @@ export default function VendasCliente360({clienteId}:Props){
       obraIds.length
         ? supabase.from('obras').select('id,numero,nome,status').in('id',obraIds)
         : Promise.resolve({data:[],error:null} as any),
-      vendaIds.length
+      verFinanceiro&&vendaIds.length
         ? supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,valor_desconto,status').in('venda_obra_id',vendaIds)
         : Promise.resolve({data:[],error:null} as any),
     ])
@@ -124,10 +124,10 @@ export default function VendasCliente360({clienteId}:Props){
         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Total vendido</p>
         <p className="mt-1 text-xl font-bold text-slate-900">{moeda(totalVendido)}</p>
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      {verFinanceiro&&<div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Saldo a receber</p>
         <p className="mt-1 text-xl font-bold text-brand-teal">{moeda(totalAberto)}</p>
-      </div>
+      </div>}
     </div>
 
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -159,7 +159,7 @@ export default function VendasCliente360({clienteId}:Props){
             <div className="flex items-center justify-between gap-5 sm:justify-end">
               <div className="text-right">
                 <p className="font-bold text-slate-900">{moeda(valor)}</p>
-                <p className="text-xs text-slate-500">{moeda(recebido)} recebido · {moeda(saldo)} saldo</p>
+                {verFinanceiro&&<p className="text-xs text-slate-500">{moeda(recebido)} recebido · {moeda(saldo)} saldo</p>}
               </div>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500"><ChevronRight size={18}/></span>
             </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -44,6 +44,8 @@ import {
   type Cadastro360Id,
   type CadastrosUsuarioConfig,
 } from '@/lib/cadastrosUsuario'
+import Cliente360PermissoesEditor from '@/components/Cliente360PermissoesEditor'
+import { matrizCompletaCliente360 } from '@/lib/cliente360Permissoes'
 import WhatsAppUsuarioPermissoes from '@/components/WhatsAppUsuarioPermissoes'
 
 function normalizar(valor: string) {
@@ -51,6 +53,7 @@ function normalizar(valor: string) {
 }
 
 export default function UsuariosSenhasPage() {
+  const selecaoRef=useRef(0)
   const [carregando, setCarregando] = useState(true)
   const [master, setMaster] = useState(false)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
@@ -129,6 +132,7 @@ export default function UsuariosSenhasPage() {
   const blocosPermissoes = useMemo(() => montarBlocosPermissao(setores), [setores])
 
   async function selecionarUsuario(id: string) {
+    const sequencia=++selecaoRef.current
     setUsuarioId(id)
     setNovaSenha('')
     setConfirmacao('')
@@ -151,12 +155,14 @@ export default function UsuariosSenhasPage() {
     })
     setCarregandoHome(true)
     setCarregandoPermissoes(true)
+    try {
     const [home, cadastros, permissoes, acesso] = await Promise.all([
       lerHomeUsuarioConfig(usuario),
       lerCadastrosUsuarioConfig(usuario),
       listarPermissoesUsuario(usuario.id),
       lerAcessoUsuarioConfig(usuario),
     ])
+    if(sequencia!==selecaoRef.current)return
     setHomeConfig(home)
     setCadastrosConfig(cadastros)
     const mapaSetores = Object.fromEntries(setores.map(s => [s.id, permissoes[s.id] || 'oculto'])) as Record<string, NivelPermissao>
@@ -168,6 +174,7 @@ export default function UsuariosSenhasPage() {
     setAcessoConfig({ ...acesso, acoes: acoesComFallback })
     setCarregandoHome(false)
     setCarregandoPermissoes(false)
+    } catch { if(sequencia!==selecaoRef.current)return; setMsgPermissoes('Não foi possível carregar os acessos. Selecione o usuário novamente.'); setCarregandoHome(false) }
   }
 
   function alternarModulo(config: HomeUsuarioConfig, setConfig: (valor: HomeUsuarioConfig) => void, modulo: HomeModuloId) {
@@ -291,6 +298,7 @@ export default function UsuariosSenhasPage() {
   }
 
   function aplicarNivelTodos(nivel: NivelPermissao) {
+    setAcessoConfig(prev=>({...prev,cliente360:matrizCompletaCliente360(nivel)}))
     const alteracoesAcoes = Object.fromEntries(blocosPermissoes.flatMap(bloco => bloco.itens.flatMap(item => item.acoes.map(acao => [acao.id, nivel])))) as Record<string, NivelPermissao>
     setAcessoConfig(prev => ({ ...prev, acoes: { ...prev.acoes, ...alteracoesAcoes } }))
     setPermissoesSetores(prev => ({
@@ -304,15 +312,17 @@ export default function UsuariosSenhasPage() {
   }
 
   async function salvarAcessosSetores() {
+    if(carregandoPermissoes||salvandoPermissoes)return
     if (!usuarioSelecionado) return
     setSalvandoPermissoes(true)
     setMsgPermissoes('')
-    const [resultado, escoposOk] = await Promise.all([
-      salvarPermissoesUsuario(usuarioSelecionado.id, permissoesSetores),
-      salvarAcessoUsuarioConfig(usuarioSelecionado.id, acessoConfig),
-    ])
+    // Primeiro salva as restrições por ação; só depois altera o teto do setor.
+    // Uma falha no armazenamento seguro não pode ampliar o acesso legado.
+    const escoposOk=await salvarAcessoUsuarioConfig(usuarioSelecionado.id,acessoConfig)
+    if(!escoposOk){setSalvandoPermissoes(false);setMsgPermissoes('Não foi possível salvar os acessos. Nenhum setor foi alterado.');return}
+    const resultado=await salvarPermissoesUsuario(usuarioSelecionado.id,permissoesSetores)
     setSalvandoPermissoes(false)
-    setMsgPermissoes(resultado.error || !escoposOk ? 'Não foi possível salvar todos os acessos.' : 'Acessos por bloco salvos.')
+    setMsgPermissoes(resultado.error ? 'As ações foram salvas, mas os setores não foram atualizados. Recarregue e confira antes de continuar.' : 'Acessos por bloco e Cliente 360 salvos.')
   }
 
   async function salvarSenha(e: React.FormEvent) {
@@ -601,6 +611,7 @@ export default function UsuariosSenhasPage() {
                         </div>
                       </div>
 
+                      <Cliente360PermissoesEditor valor={acessoConfig.cliente360} onChange={cliente360=>setAcessoConfig(prev=>({...prev,cliente360}))}/>
                       {blocosPermissoes.map(bloco => {
                         const aberto = !!blocosAbertos[bloco.id]
                         const acoesBloco = bloco.itens.flatMap(item => item.acoes.map(acao => nivelAcao(item, acao.id)))

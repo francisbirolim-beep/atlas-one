@@ -1,9 +1,11 @@
 import { supabase } from './supabase'
+import { normalizarMatrizCliente360, type MatrizCliente360 } from './cliente360Permissoes'
 import type { NivelPermissao, Usuario } from './tipos'
 
 export type EscopoCRM = 'proprios' | 'todos'
 
 export interface AcessoUsuarioConfig {
+  cliente360?: MatrizCliente360
   crmEscopo: EscopoCRM
   acoes: Record<string, NivelPermissao>
 }
@@ -34,40 +36,48 @@ function normalizarConfig(valor: unknown, role: Usuario['role']): AcessoUsuarioC
     })
   }
   return {
+    cliente360: normalizarMatrizCliente360(bruto.cliente360),
     crmEscopo: bruto.crmEscopo === 'todos' ? 'todos' : 'proprios',
     acoes,
   }
 }
 
 export async function lerAcessoUsuarioConfig(usuario: Pick<Usuario, 'id' | 'role'>): Promise<AcessoUsuarioConfig> {
+  if(usuario.role==='master')return acessoUsuarioPadrao('master')
   try {
+    const segura = await supabase.from('usuario_acessos_etapas').select('config').eq('usuario_id', usuario.id).maybeSingle()
+    if (!segura.error && segura.data) return normalizarConfig(segura.data.config, usuario.role)
+    if (segura.error && !['42P01','PGRST205'].includes(segura.error.code)) throw new Error('Não foi possível conferir as permissões.')
     const { data, error } = await supabase
       .from('configuracoes_gerais')
       .select('valor')
       .eq('chave', chave(usuario.id))
       .maybeSingle()
-    if (error || !data?.valor) return acessoUsuarioPadrao(usuario.role)
+    if (error) throw new Error('Não foi possível conferir as permissões.')
+    if (!data?.valor) return acessoUsuarioPadrao(usuario.role)
     const parsed = typeof data.valor === 'string' ? JSON.parse(data.valor) : data.valor
     return normalizarConfig(parsed, usuario.role)
   } catch {
-    return acessoUsuarioPadrao(usuario.role)
+    throw new Error('Não foi possível conferir as permissões. Atualize para tentar novamente.')
   }
 }
 
 export async function salvarAcessoUsuarioConfig(usuarioId: string, config: AcessoUsuarioConfig): Promise<boolean> {
   const normalizada: AcessoUsuarioConfig = {
     crmEscopo: config.crmEscopo === 'todos' ? 'todos' : 'proprios',
+    cliente360: normalizarMatrizCliente360(config.cliente360),
     acoes: Object.fromEntries(Object.entries(config.acoes || {}).filter(([, nivel]) => nivelValido(nivel))),
   }
-  const { error } = await supabase
-    .from('configuracoes_gerais')
-    .upsert({
-      chave: chave(usuarioId),
-      valor: JSON.stringify(normalizada),
-      updated_at: new Date().toISOString(),
+  const { tokenAtual } = await import('./auth')
+  const token = await tokenAtual()
+  if (!token) return false
+  try {
+    const resp = await fetch('/api/usuarios/acessos-etapas', {
+      method:'PUT', headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify({usuarioId,config:normalizada}),
     })
-  if (error) console.error('Erro ao salvar escopos de acesso:', error)
-  return !error
+    return resp.ok
+  } catch { return false }
 }
 
 export function nivelAcaoConfig(config: AcessoUsuarioConfig, acaoId: string, fallback: NivelPermissao = 'oculto'): NivelPermissao {
