@@ -39,6 +39,7 @@ export default function Sidebar() {
   const [usuario, setUsuario] = useState<Usuario | null>(() => usuarioCacheLocal())
   const [tema, setTema] = useState<TemaAtlas>('escuro')
   const [podeLancarNF, setPodeLancarNF] = useState(false)
+  const [podeReceberManual, setPodeReceberManual] = useState(false)
   const [podeVerCadastros, setPodeVerCadastros] = useState(false)
   const [busca, setBusca] = useState('')
   const [adminAberto, setAdminAberto] = useState(false)
@@ -67,6 +68,21 @@ export default function Sidebar() {
         if (ativo) setPodeLancarNF(setores.compras === 'edicao' && (!especifica || especifica === 'edicao'))
       })
       .catch(() => { if (ativo) setPodeLancarNF(false) })
+    return () => { ativo = false }
+  }, [usuario?.id, usuario?.role])
+
+  // Nova entrada por romaneio: usar apenas a permissão de receber mercadoria.
+  // Não muda a autorização existente da entrada de NF.
+  useEffect(() => {
+    if (!usuario?.id) { setPodeReceberManual(false); return }
+    if (usuario.role === 'master') { setPodeReceberManual(true); return }
+    let ativo = true
+    void Promise.all([listarPermissoesUsuario(usuario.id), lerAcessoUsuarioConfig(usuario)])
+      .then(([setores, acesso]) => {
+        const especifica = acesso.acoes?.['compras.recebimento.receber']
+        if (ativo) setPodeReceberManual(setores.recebimento === 'edicao' && (!especifica || especifica === 'edicao'))
+      })
+      .catch(() => { if (ativo) setPodeReceberManual(false) })
     return () => { ativo = false }
   }, [usuario?.id, usuario?.role])
 
@@ -114,13 +130,13 @@ export default function Sidebar() {
 
   const termo = normalizar(busca)
   const gruposVisiveis = useMemo(() => {
-    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros))
+    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros) && (guia.href !== '/compras/entrada-manual' || podeReceberManual))
     const filtradas = (termo
       ? permitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : permitidas
     ).filter(guia => guia.grupo !== 'Geral')
     return agruparGuias(filtradas)
-  }, [termo, usuario?.role, podeVerCadastros])
+  }, [termo, usuario?.role, podeVerCadastros, podeReceberManual])
 
   const adminVisiveis = useMemo(() => {
     if (!termo) return ITENS_ADMIN
