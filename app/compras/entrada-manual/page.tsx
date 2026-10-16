@@ -154,7 +154,7 @@ export default function EntradaManualPage() {
   },[produtoBusca,consultar])
   useEffect(()=>{
     let ativo=true
-    const filtro=obraPadrao?{tipo:'historico',obraId:obraPadrao}:{tipo:'historico',destino:'estoque'}
+    const filtro: Record<string,string> = obraPadrao?{tipo:'historico',obraId:obraPadrao}:{tipo:'historico',destino:'estoque'}
     consultar(filtro).then(r=>{if(ativo){setHistorico(r.entradas || []);setHistoricoItens(r.itens || [])}})
       .catch(()=>{if(ativo){setHistorico([]);setHistoricoItens([])}})
     return ()=>{ativo=false}
