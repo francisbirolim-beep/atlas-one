@@ -34,7 +34,7 @@ export const GUIAS: Guia[] = [
   { href: '/', label: 'Início', icon: Home, grupo: 'Geral' },
   { href: '/balcao', label: 'Venda Balcão', icon: Store, grupo: 'Geral' },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, grupo: 'Geral' },
-  { href: '/consultoria', label: 'Consultoria', icon: BookOpen, grupo: 'Geral', masterOnly: true },
+  { href: '/relatorios/esquadrifacio', label: 'Esquadrifácio', icon: BookOpen, grupo: 'Geral', masterOnly: true },
 
   { href: '/clientes', label: 'Clientes', icon: Users, grupo: 'Comercial' },
   { href: '/obras', label: 'Obras', icon: Building2, grupo: 'Comercial' },
@@ -61,7 +61,8 @@ export const GUIAS: Guia[] = [
 
   { href: '/assistencias', label: 'Assistências', icon: Wrench, grupo: 'Assistência' },
 
-  { href: '/cadastro', label: 'Cadastros', icon: PackageSearch, grupo: 'Cadastros' },
+  { href: '/cadastros', label: 'Cadastros 360', icon: PackageSearch, grupo: 'Cadastros' },
+  { href: '/cadastro', label: 'Cadastros', icon: Settings, grupo: 'Cadastros', masterOnly: true },
 ]
 
 export const GRUPOS_ORDEM_GUIAS = [

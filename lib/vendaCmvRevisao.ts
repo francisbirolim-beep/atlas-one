@@ -1,7 +1,7 @@
 // Revisão humana do custo previsto W.Vetro. Nunca altera o CMV realizado ou o dado de origem.
 export const CATEGORIAS_CMV_REVISAO = ['total','perfil','perfil_uso','sobra','acessorio','vidro','perda','mao_obra','instalacao','frete','outros'] as const
 export type CategoriaCmvRevisao = (typeof CATEGORIAS_CMV_REVISAO)[number]
-export type PrevisaoCmvBase = {categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;perfil_previsao?:number|null;perfil_previsao_fonte?:string|null}
+export type PrevisaoCmvBase = {categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;perfil_previsao?:number|null;perfil_previsao_fonte?:string|null;perda_fonte?:'wvetro'|'conciliacao_wvetro'|null}
 export type RevisaoCmv = {
  versao:1;venda_id:string;orcamento_id:string;numero_wvetro:string;categoria:CategoriaCmvRevisao
  acao:'validado'|'corrigido';valor_origem:number|null;valor_revisado:number
@@ -19,20 +19,36 @@ export function custoPrevistoOriginal(p:PrevisaoCmvBase,c:CategoriaCmvRevisao):n
 export function revisaoAtual(r:RevisaoCmv|undefined,origem:number|null):boolean{
  return !!r&&r.valor_origem===origem
 }
+// Um subtotal de PERFIS não pode carregar de novo a perda de corte já
+// contabilizada separadamente no resultado com sobra do W.Vetro.
+// Ex.: orçamento #1176: perfis + sobra = 1096,18; perda conciliada = 3,77;
+// centro de custo informado = 1099,95. Preservar a revisão humana no histórico,
+// porém não aumentar o total histórico em 3,77 pela segunda vez.
+export function revisaoPerfilSobrepoePerda(p:PrevisaoCmvBase,revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>):boolean{
+ const r=revisoes.perfil,perfil=custoPrevistoOriginal(p,'perfil'),perda=p.categorias.perda
+ if(!r||!revisaoAtual(r,perfil)||r.acao!=='corrigido')return false
+ if(p.perfil_previsao_fonte!=='uso_mais_sobra_wvetro'||p.perda_fonte!=='conciliacao_wvetro')return false
+ if(perfil===null||perda===null||perda<=0||p.categorias.perfil===null||p.categorias.sobra===null)return false
+ if(centavos(p.categorias.perfil+p.categorias.sobra)!==perfil)return false
+ return centavos(r.valor_revisado)===centavos(perfil+perda)
+}
 export function custoRevisado(p:PrevisaoCmvBase,revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>,categoria:CategoriaCmvRevisao):number|null{
  const origem=custoPrevistoOriginal(p,categoria)
  const revisao=revisoes[categoria]
  if(revisaoAtual(revisao,origem)){
   if(categoria!=='perfil')return revisao!.valor_revisado
+  // Apenas a sobreposição comprovada: correção de perfis igual a perfis + perda
+  // já desdobrada na previsão. Uma revisão explícita do TOTAL continua soberana.
+  if(revisaoPerfilSobrepoePerda(p,revisoes))return origem
   // Uma correção posterior do uso ou da sobra invalida a revisão anterior do subtotal.
   const versaoSubtotal=Date.parse(revisao!.registrado_em)||0
-  const partePosterior=p.perfil_previsao==null&&(['perfil_uso','sobra'] as const).some(c=>{
+  const partePosterior=p.perfil_previsao_fonte!=='despesas_extras_wvetro'&&(['perfil_uso','sobra'] as const).some(c=>{
    const r=revisoes[c];return r&&revisaoAtual(r,custoPrevistoOriginal(p,c))&&(Date.parse(r.registrado_em)||0)>versaoSubtotal
   })
   if(!partePosterior)return revisao!.valor_revisado
  }
  if(categoria==='perfil'){
-  if(p.perfil_previsao!=null)return origem
+  if(p.perfil_previsao_fonte==='despesas_extras_wvetro')return origem
   const uso=custoRevisado(p,revisoes,'perfil_uso')
   const sobra=custoRevisado(p,revisoes,'sobra')
   return uso===null||sobra===null?origem:centavos(uso+sobra)

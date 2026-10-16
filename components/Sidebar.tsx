@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   Bot,
   BarChart3,
+  ReceiptText,
   BookOpen,
   Eye,
   ChevronDown,
@@ -19,6 +20,9 @@ import {
 } from 'lucide-react'
 import { logout, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
+import { listarPermissoesUsuario } from '@/lib/setores'
+import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { agruparGuias, GUIAS } from '@/lib/guias'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
 import { ATALHOS_PESQUISA_ATLAS, correspondePesquisaAtlas } from '@/lib/navegacaoPesquisa'
@@ -34,11 +38,37 @@ export default function Sidebar() {
   const router = useRouter()
   const [usuario, setUsuario] = useState<Usuario | null>(() => usuarioCacheLocal())
   const [tema, setTema] = useState<TemaAtlas>('escuro')
+  const [podeLancarNF, setPodeLancarNF] = useState(false)
+  const [podeVerCadastros, setPodeVerCadastros] = useState(false)
   const [busca, setBusca] = useState('')
   const [adminAberto, setAdminAberto] = useState(false)
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({})
 
   useEffect(() => { void usuarioAtual().then(u => { if (u) setUsuario(u) }) }, [])
+
+  // Atalho operacional: apenas quem recebeu do Master edição em NF/compras.
+  // Mantém o menu do Master exatamente como era.
+  useEffect(() => {
+    if (!usuario?.id) { setPodeVerCadastros(false); return }
+    let ativo = true
+    void carregarAcessoCadastro(usuario).then(acesso => {
+      if (ativo) setPodeVerCadastros(acesso.usuario?.role === 'master' || (acesso.nivel !== 'oculto' &&
+        (['clientes','produtos','linhas','materiais','fornecedores','catalogo_tecnico','historico','produtos_linha','precificacao','unidades','receitas','formulas','campos'] as const).some(id => podeAcaoCadastro(acesso,id))))
+    }).catch(() => { if (ativo) setPodeVerCadastros(false) })
+    return () => { ativo = false }
+  }, [usuario?.id, usuario?.role])
+
+  useEffect(() => {
+    if (!usuario?.id || usuario.role === 'master') { setPodeLancarNF(false); return }
+    let ativo = true
+    void Promise.all([listarPermissoesUsuario(usuario.id), lerAcessoUsuarioConfig(usuario)])
+      .then(([setores, acesso]) => {
+        const especifica = acesso.acoes?.['compras.notas.lancar']
+        if (ativo) setPodeLancarNF(setores.compras === 'edicao' && (!especifica || especifica === 'edicao'))
+      })
+      .catch(() => { if (ativo) setPodeLancarNF(false) })
+    return () => { ativo = false }
+  }, [usuario?.id, usuario?.role])
 
   useEffect(() => {
     if (!usuario?.id) return
@@ -84,13 +114,13 @@ export default function Sidebar() {
 
   const termo = normalizar(busca)
   const gruposVisiveis = useMemo(() => {
-    const permitidas = GUIAS.filter(guia => !guia.masterOnly || usuario?.role === 'master')
+    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros))
     const filtradas = (termo
       ? permitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : permitidas
     ).filter(guia => guia.grupo !== 'Geral')
     return agruparGuias(filtradas)
-  }, [termo, usuario?.role])
+  }, [termo, usuario?.role, podeVerCadastros])
 
   const adminVisiveis = useMemo(() => {
     if (!termo) return ITENS_ADMIN
@@ -105,16 +135,17 @@ export default function Sidebar() {
       .filter(item => !ocupados.has(item.href))
       .filter(item => correspondePesquisaAtlas(termo, item.label, item.grupo, item.descricao, item.palavras, item.href))
       .slice(0, 18)
-  }, [termo, usuario?.role])
+  }, [termo, usuario?.role, podeVerCadastros])
 
   const inicioCombina = !termo || correspondePesquisaAtlas(termo, 'Início', 'Geral', '/')
   const balcaoCombina = !termo || correspondePesquisaAtlas(termo, 'Venda Balcão', 'Geral', '/balcao')
+  const entradaNfCombina = podeLancarNF && (!termo || correspondePesquisaAtlas(termo, 'Entrada de Nota Fiscal', 'Compras', '/compras/entrada'))
   const relatoriosCombina = !termo || correspondePesquisaAtlas(termo, 'Relatórios', 'Geral', '/relatorios')
-  const consultoriaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Consultoria', 'Relatórios', '/consultoria'))
+  const consultoriaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Esquadrifácio', 'Relatórios gerenciais', '/relatorios/esquadrifacio'))
   const iaCombina = !termo || correspondePesquisaAtlas(termo, 'IA Atlas', 'Inteligência Artificial', '/atlas-ia')
   const supervisaoIaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
   const mostrarAdmin = usuario?.role === 'master' && (adminAberto || !!termo)
-  const semResultados = !inicioCombina && !balcaoCombina && !relatoriosCombina && !consultoriaCombina && !iaCombina && !supervisaoIaCombina
+  const semResultados = !inicioCombina && !balcaoCombina && !entradaNfCombina && !relatoriosCombina && !consultoriaCombina && !iaCombina && !supervisaoIaCombina
     && gruposVisiveis.length === 0
     && atalhosVisiveis.length === 0
     && (!usuario || usuario.role !== 'master' || adminVisiveis.length === 0)
@@ -150,6 +181,12 @@ export default function Sidebar() {
             </Link>
           )}
 
+          {entradaNfCombina && (
+            <Link href="/compras/entrada" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/compras/entrada') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
+              <ReceiptText size={18} className="shrink-0" /><span>Entrada de NF</span>
+            </Link>
+          )}
+
           {relatoriosCombina && (
             <Link href="/relatorios" className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/relatorios') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
               <BarChart3 size={18} className="shrink-0" /><span>Relatórios</span>
@@ -157,8 +194,8 @@ export default function Sidebar() {
           )}
 
           {consultoriaCombina && (
-            <Link href="/consultoria" className={`ml-3 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/consultoria') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
-              <BookOpen size={17} className="shrink-0" /><span>Consultoria</span>
+            <Link href="/relatorios/esquadrifacio" className={`ml-3 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${ativo('/relatorios/esquadrifacio') ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}>
+              <BookOpen size={17} className="shrink-0" /><span>Esquadrifácio</span>
             </Link>
           )}
 

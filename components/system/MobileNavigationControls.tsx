@@ -27,6 +27,7 @@ import {
   agruparGuias,
 } from '@/lib/guias'
 import { listarPermissoesUsuario, listarSetores, nivelEfetivo } from '@/lib/setores'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
 import { ATALHOS_PESQUISA_ATLAS, correspondePesquisaAtlas } from '@/lib/navegacaoPesquisa'
 import type { Guia } from '@/lib/guias'
@@ -62,6 +63,7 @@ export default function MobileNavigationControls() {
   const [tema, setTema] = useState<TemaAtlas>('escuro')
   const [setores, setSetores] = useState<Setor[]>([])
   const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
+  const [podeVerCadastros, setPodeVerCadastros] = useState(false)
 
   useEffect(() => {
     let ativo = true
@@ -75,6 +77,11 @@ export default function MobileNavigationControls() {
 
       setUsuario(usuarioLogado)
       setSetores(setoresCadastrados)
+      if (usuarioLogado) {
+        const acesso = await carregarAcessoCadastro(usuarioLogado)
+        if (ativo) setPodeVerCadastros(acesso.usuario?.role === 'master' ||
+          (acesso.nivel !== 'oculto' && (['clientes','produtos','linhas','materiais','fornecedores','catalogo_tecnico','historico','produtos_linha','precificacao','unidades','receitas','formulas','campos'] as const).some(id => podeAcaoCadastro(acesso,id))))
+      }
 
       if (usuarioLogado && usuarioLogado.role !== 'master') {
         const mapa = await listarPermissoesUsuario(usuarioLogado.id)
@@ -139,23 +146,23 @@ export default function MobileNavigationControls() {
   }
 
   const guiasPermitidas = useMemo(() => {
-    if (!usuario) return GUIAS.filter(guia => !guia.masterOnly)
+    if (!usuario) return GUIAS.filter(guia => !guia.masterOnly && guia.href !== '/cadastros')
     if (usuario.role === 'master') return GUIAS
 
     return GUIAS.filter(guia => {
-      if (guia.masterOnly) return false
+      if (guia.masterOnly || (guia.href === '/cadastros' && !podeVerCadastros)) return false
       if (guia.href === '/') return true
       const setor = setores.find(item => item.rota && rotasRelacionadas(guia.href, item.rota))
       return !setor || nivelEfetivo(usuario, setor.id, permissoes) !== 'oculto'
     })
-  }, [permissoes, setores, usuario])
+  }, [permissoes, setores, usuario, podeVerCadastros])
 
   const termo = normalizar(busca)
   const gruposVisiveis = useMemo(() => {
     const filtradas = termo
       ? guiasPermitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : guiasPermitidas
-    return agruparGuias(filtradas.filter(guia => guia.href !== '/relatorios' && guia.href !== '/consultoria'))
+    return agruparGuias(filtradas.filter(guia => guia.href !== '/relatorios' && guia.href !== '/relatorios/esquadrifacio'))
   }, [guiasPermitidas, termo])
 
   const hrefsGuias = useMemo(() => new Set(GUIAS.map(guia => guia.href)), [])
@@ -183,7 +190,7 @@ export default function MobileNavigationControls() {
 
   // Mesmo acesso à IA da barra lateral do computador.
   const relatoriosCombina = !termo || correspondePesquisaAtlas(termo, 'Relatórios', 'Geral', '/relatorios')
-  const consultoriaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Consultoria', 'Relatórios', '/consultoria'))
+  const consultoriaCombina = usuario?.role === 'master' && (!termo || correspondePesquisaAtlas(termo, 'Esquadrifácio', 'Relatórios gerenciais', '/relatorios/esquadrifacio'))
   const iaCombina = !termo || correspondePesquisaAtlas(termo, 'IA Atlas', 'Inteligência Artificial', '/atlas-ia')
   const supervisaoIaCombina = usuario?.role === 'master' &&
     (!termo || correspondePesquisaAtlas(termo, 'Supervisão da IA', 'Inteligência Artificial', '/atlas-ia/supervisao'))
@@ -308,8 +315,8 @@ export default function MobileNavigationControls() {
                   </Link>
                 )}
                 {consultoriaCombina && (
-                  <Link href="/consultoria" onClick={fecharMenu} className={`ml-3 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${ativo('/consultoria') ? 'bg-blue-600 text-white' : 'text-slate-700 active:bg-slate-100'}`}>
-                    <BookOpen size={19}/> Consultoria
+                  <Link href="/relatorios/esquadrifacio" onClick={fecharMenu} className={`ml-3 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${ativo('/relatorios/esquadrifacio') ? 'bg-blue-600 text-white' : 'text-slate-700 active:bg-slate-100'}`}>
+                    <BookOpen size={19}/> Esquadrifácio
                   </Link>
                 )}
                 {(iaCombina || supervisaoIaCombina) && (

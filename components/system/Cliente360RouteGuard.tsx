@@ -22,7 +22,7 @@ export default function Cliente360RouteGuard({children}:{children:React.ReactNod
         if(!resp.ok)throw new Error('Acesso não conferido')
         const ctx=await resp.json() as ContextoCliente360
         if(!ativo)return
-        if(alvo==='central'&&ctx.role!=='master'&&ctx.cliente360){router.replace(`/clientes/${match![1]}`);return}
+        if(alvo==='central'&&ctx.role!=='master'&&ctx.cliente360&&Object.keys(ctx.cliente360).length>0){router.replace(`/clientes/${match![1]}`);return}
         const recurso:RecursoCliente360=alvo==='financeiro'?'financeiro':alvo==='orcamentos-revisoes'?'orcamentos':alvo==='vendas'?'vendas':'visao'
         setEstado({path,permitido:podeCliente360(ctx,recurso)})
       }catch{if(ativo)setEstado({path,permitido:false})}

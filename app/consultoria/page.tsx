@@ -125,9 +125,9 @@ export default function ConsultoriaPage() {
               <ArrowLeft size={14}/> Voltar à Central de Relatórios
             </Link>
             <div className="flex items-center gap-2 text-slate-900">
-              <BookOpen size={22}/><h1 className="text-lg font-bold md:text-xl">Área da Consultoria · Caderno Digital</h1>
+              <BookOpen size={22}/><h1 className="text-lg font-bold md:text-xl">Esquadrifácio · Arquivo histórico do fechamento</h1>
             </div>
-            <p className="mt-1 text-xs text-slate-500">Fechamento de agosto de 2026 · 33 páginas · GR&F / Esquadrifácio</p>
+            <p className="mt-1 text-xs text-slate-500">Arquivo histórico Esquadrifácio · agosto de 2026 · 33 páginas (não é fechamento atual)</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={pendente} onClick={() => void carregar()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">
@@ -140,7 +140,7 @@ export default function ConsultoriaPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-          <span className="inline-flex items-center gap-2"><ShieldCheck size={17}/> Acesso reservado ao Master. Dados históricos; valores manuais da prévia interativa ainda são simulações.</span>
+          <span className="inline-flex items-center gap-2"><ShieldCheck size={17}/> Acesso reservado ao Master. Documento histórico preservado para auditoria. Os relatórios gerenciais atuais ficam na Central de Relatórios.</span>
           <span className="inline-flex items-center gap-1 font-semibold"><FileCheck2 size={15}/> Nenhum lançamento do Financeiro é alterado</span>
         </div>
 

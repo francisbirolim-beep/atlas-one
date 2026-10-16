@@ -444,7 +444,22 @@ Nenhum merge para `main`.
 ## 2026-10-13 — Separação WVetro: lista de corte e barras utilizadas (candidato)
 Novos `VendaListaCorteWVetro`, `VendaBarrasWVetro`, parser posicional PDF WVetro, API de importação/validação e acompanhamento, página de impressão por card e tabela de feedback. Samuel #872: 18 linhas / 31 barras pendentes, preservando 40 cortes. Build, TypeScript e regressão do PDF real validados; falta teste funcional do preview.
 
+## 2026-10-15 — Compras: saldo visível na conferência de NF (candidato local)
+
+- Branch separada a partir da main #842, sem deploy e sem migrations.
+- Conferência de NF exibe imagem cadastrada, estoque físico/reservado/disponível, quantidade projetada de entrada e saldo após recebimento por linha.
+- Mensagem de confirmação agora distingue itens realmente movimentados de pendências de vínculo/conversão. Aviso antigo e incorreto de que a conferência nunca alterava estoque foi atualizado para refletir a RPC já existente.
+- API de recebimento aplica isolamento por empresa ao buscar nota/itens/produtos/saldos e preenche empresa_id ao gravar conferência, itens e fotos, respeitando as migrações de tenant já em vigor.
+- Pendentes: testes autenticados/estoque real em ambiente de homologação e vínculo formal entre pedido de compra e NF. Nenhuma rotina de pedido/cotação original foi alterada.
+
+## 2026-10-15 — Compras: conciliação por item de NF e saldo na entrada (candidato local)
+
+- API e interface para vincular item de NF a necessidade/pedido aprovado com destino Estoque ou Cliente/Obra, incluindo entregas parciais e saldo ainda não vinculado.
+- Migration aditiva `20261015173000_compras_nf_vinculo_pedidos_v1.sql` cria vínculos auditáveis, valida empresa, fornecedor da cotação selecionada, produto, unidade, quantidade máxima e bloqueia desfazer vínculo depois do recebimento físico. **Não aplicada.**
+- Exibição do saldo físico/reservado/disponível e imagem cadastrada do produto já na prévia da NF; produtos, fornecedores e respectivas referências fiscais passam a respeitar a empresa autenticada.
+- Nenhum pedido original, cotação, Kanban, baixa, reserva, custos ou lançamentos existentes foram alterados. Próximo: homologação de integração, XML/PDF/manual e recebimento parcial com notas reais de teste.
+
 
 ## 2026-10-15 — Permissões por etapa — primeiro incremento, não publicar
 
-Branch `feat/permissoes-etapas-20261015`, base `302b0b2f`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.
+Branch `feat/permissoes-etapas-20261015`, base inicial `302b0b2f`, atualizado sobre `f891d3a5`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.

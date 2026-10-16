@@ -20,7 +20,7 @@ const bases: Partial<Record<RecursoCliente360, [string, string][]>> = {
   financeiro: [['financeiro','financeiro.geral.consultar'],['caixa-balcao','financeiro.contas_receber.consultar']],
   medicoes: [['medida-final-msdwtt9y','producao.medida_final.consultar']],
   assistencias: [['assistencia-painel','clientes.assistencia.consultar']],
-  compras: [['compras','compras.geral.consultar']],
+  compras: [['compras','compras.geral.consultar'],['compras','compras.geral.ver_proprios']],
   pedido_orcamento: [['orcamentos','comercial.pedido_orcamento.criar']],
   orcamento_sob_medida: [['fazer-orcamento-msanfyvj','comercial.orcamento.criar']],
   balcao: [['venda-balcao','comercial.balcao.orcamento']],
@@ -43,7 +43,7 @@ export function nivelCliente360(ctx: ContextoCliente360, recurso: RecursoCliente
   let base: NivelPermissao = entradas ? 'oculto' : 'edicao'
   for (const [setor, acao] of entradas || []) {
     const setorNivel=ctx.setores[setor] || 'oculto'
-    const acaoNivel=ctx.acoes[acao] || setorNivel
+    const acaoNivel=ctx.acoes[acao] || (acao==='compras.geral.ver_proprios' ? 'oculto' : setorNivel)
     const efetivo=pesos[acaoNivel]<pesos[setorNivel] ? acaoNivel : setorNivel
     if (pesos[efetivo]>pesos[base]) base=efetivo
   }

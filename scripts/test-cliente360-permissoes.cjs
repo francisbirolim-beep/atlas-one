@@ -22,6 +22,7 @@ assert.equal(p.podeCliente360({...vendedor,acoes:{'comercial.pedido_orcamento.cr
 assert.equal(p.podeCliente360({...basico,cliente360:{financeiro:'edicao'}},'financeiro'),false,'Matriz não amplia setor oculto')
 assert.equal(p.podeCliente360({...basico,setores:{financeiro:'edicao'},cliente360:{financeiro:'consulta'}},'financeiro',true),false,'Somente leitura não edita')
 assert.equal(p.podeCliente360({...basico,setores:{'medida-final-msdwtt9y':'consulta'}},'medicoes'),true,'Setor oficial da Medida Final')
+assert.equal(p.podeCliente360({...basico,setores:{compras:'edicao'},acoes:{'compras.geral.consultar':'oculto','compras.geral.ver_proprios':'consulta'}},'compras'),true,'Solicitante acompanha pedidos próprios sem acesso geral')
 assert.equal(JSON.stringify(p.normalizarMatrizCliente360({financeiro:'admin',compras:'oculto',inexistente:'edicao'})),JSON.stringify({compras:'oculto'}))
 let consultas=[]
 let falharTabela=null

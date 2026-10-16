@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ArrowLeft, ExternalLink, FileText, Loader2, PackageCheck } from 'lucide-react'
 import { useParams } from 'next/navigation'
 import { tokenAtual } from '@/lib/auth'
+import VincularPedidoNota from '@/components/compras/VincularPedidoNota'
 
 type Item = {
   id: string
@@ -100,6 +101,8 @@ export default function DetalheNotaPage() {
             </table>
           </div>
         </section>
+
+        <VincularPedidoNota nfId={nf.id} />
 
         <div className="flex flex-wrap gap-3">
           <Link href={`/compras/recebimentos/${nf.id}`} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"><PackageCheck size={16} /> Conferir mercadoria recebida</Link>

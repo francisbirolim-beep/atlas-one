@@ -91,6 +91,7 @@ type ProdutoCatalogo = {
   id: string
   codigo: string
   nome: string
+  foto_url?: string | null
   unidade: string | null
   custo: number | null
   preco?: number
@@ -174,6 +175,7 @@ export default function EntradaComprasPage() {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [nota, setNota] = useState<Nota | null>(null)
   const [catalogo, setCatalogo] = useState<ProdutoCatalogo[]>([])
+  const [saldos, setSaldos] = useState<Record<string, { fisico: number; reservado: number; disponivel: number; unidade: string | null }>>({})
   const [buscas, setBuscas] = useState<Record<number, string>>({})
   const [cadastros, setCadastros] = useState<Record<number, CadastroNovo>>({})
   const [lendo, setLendo] = useState(false)
@@ -187,6 +189,28 @@ export default function EntradaComprasPage() {
   } | null>(null)
 
   useEffect(() => { carregarCatalogo() }, [])
+  const produtosVinculados = useMemo(
+    () => Array.from(new Set((nota?.itens || []).map(item => item.produtoId).filter((id): id is string => Boolean(id)))).sort().join(','),
+    [nota?.itens],
+  )
+  useEffect(() => {
+    if (!produtosVinculados) { setSaldos({}); return }
+    let ativo = true
+    const consultar = async () => {
+      try {
+        const token = await tokenAtual()
+        if (!token) return
+        const resp = await fetch('/api/compras/nf-entrada/saldos', {
+          method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ produtoIds: produtosVinculados.split(',') }),
+        })
+        const json = await resp.json().catch(() => ({}))
+        if (ativo && resp.ok) setSaldos(json.saldos || {})
+      } catch { /* Saldo informativo; falhas não podem impedir a conferência da NF. */ }
+    }
+    consultar()
+    return () => { ativo = false }
+  }, [produtosVinculados])
 
   async function carregarCatalogo() {
     try {
@@ -347,7 +371,7 @@ export default function EntradaComprasPage() {
     <CheckCircle2 size={44} className="text-emerald-600" /><h1 className="mt-4 text-2xl font-bold">Entrada registrada</h1><p className="mt-2 text-slate-600">{sucesso.numero ? `NF ${sucesso.numero}` : 'Nota'} registrada com {sucesso.itensRegistrados} item(ns).</p>
     <div className="mt-5 grid gap-3 sm:grid-cols-3"><Resumo titulo="Pendentes de vínculo" valor={sucesso.itensPendentes}/><Resumo titulo="Contas a pagar" valor={sucesso.contasPagarGeradas || 0}/><Resumo titulo="Arquivo guardado" valor={sucesso.arquivoGuardado ? 'Sim' : 'Não'}/></div>
     {sucesso.avisos?.length ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{sucesso.avisos.join(' ')}</div> : null}
-    <div className="mt-6 flex flex-wrap gap-3"><Link href={`/compras/recebimentos/${sucesso.nfId}`} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white">Conferir recebimento</Link><Link href="/financeiro/contas-pagar" className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Ver Contas a Pagar</Link><Link href="/compras" className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Central de Compras</Link></div>
+    <div className="mt-6 flex flex-wrap gap-3"><Link href={`/compras/recebimentos/${sucesso.nfId}`} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white">Conferir recebimento</Link><Link href={"/compras/notas/" + sucesso.nfId} className="rounded-xl border border-blue-200 px-4 py-2.5 text-sm font-semibold text-blue-800">Vincular ao pedido / obra</Link><Link href="/financeiro/contas-pagar" className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Ver Contas a Pagar</Link><Link href="/compras" className="rounded-xl border px-4 py-2.5 text-sm font-semibold">Central de Compras</Link></div>
   </div></main>
 
   return <main className="min-h-screen bg-slate-50 p-4 sm:p-6"><div className="mx-auto max-w-7xl space-y-5">
@@ -373,8 +397,12 @@ export default function EntradaComprasPage() {
         <div className="mt-3 grid gap-3 lg:grid-cols-12"><div className="lg:col-span-2"><Campo label="Código fornecedor" value={item.codigoFornecedor} onChange={v=>atualizarItem(index,'codigoFornecedor',v)}/></div><div className="lg:col-span-4"><Campo label="Descrição" value={item.descricao} onChange={v=>atualizarItem(index,'descricao',v)}/></div><div className="lg:col-span-1"><Campo label="Un. compra" value={item.unidade} onChange={v=>atualizarItem(index,'unidade',v)}/></div><div className="lg:col-span-1"><CampoNumero label="Qtde" value={item.quantidade} onChange={v=>atualizarItem(index,'quantidade',v)}/></div><div className="lg:col-span-2"><CampoNumero label="Unitário" value={item.valorUnitario} onChange={v=>atualizarItem(index,'valorUnitario',v)}/></div><div className="lg:col-span-2"><CampoNumero label="Total item" value={item.valorTotal} onChange={v=>atualizarItem(index,'valorTotal',v)}/></div></div>
         <div className="mt-3 grid gap-3 lg:grid-cols-12"><div className="lg:col-span-2"><Campo label="NCM" value={item.ncm} onChange={v=>atualizarItem(index,'ncm',v)}/></div><div className="lg:col-span-2"><Campo label="CFOP" value={item.cfop} onChange={v=>atualizarItem(index,'cfop',v)}/></div><div className="lg:col-span-1"><Campo label="CST" value={item.cst||item.csosn||''} onChange={v=>atualizarItem(index,'cst',v)}/></div><div className="lg:col-span-2"><CampoNumero label="BC ICMS" value={item.baseIcms} onChange={v=>atualizarItem(index,'baseIcms',v)}/></div><div className="lg:col-span-2"><CampoNumero label="ICMS" value={item.valorIcms} onChange={v=>atualizarItem(index,'valorIcms',v)}/></div><div className="lg:col-span-1"><CampoNumero label="% ICMS" value={item.aliquotaIcms} onChange={v=>atualizarItem(index,'aliquotaIcms',v)}/></div><div className="lg:col-span-2"><CampoNumero label="IPI" value={item.valorIpi} onChange={v=>atualizarItem(index,'valorIpi',v)}/></div></div>
         <div className="mt-3 rounded-xl bg-slate-50 p-3"><label className="text-xs font-medium text-slate-500">Produto correspondente no Atlas</label><div className="mt-1 flex gap-2"><input list="catalogo-produtos-atlas" value={buscas[index]??(item.produtoId?`${item.produtoCodigo||''} — ${item.produtoNome||''}`:'')} onChange={e=>vincularProduto(index,e.target.value)} placeholder="Digite código ou escolha um produto..." className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"/>{item.produtoId&&<button onClick={()=>desvincularProduto(index)} className="rounded-lg border px-3 text-xs font-semibold">Desvincular</button>}</div><StatusVinculo status={item.produtoId?'vinculado':item.vinculoStatus||'pendente'}/>
-          {!item.produtoId&&item.candidatos?.length?<div className="mt-2 flex flex-wrap gap-2">{item.candidatos.map(c=><button key={c.id} onClick={()=>vincularProduto(index,`${c.codigo} — ${c.nome}`)} className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs">{c.codigo} — {c.nome}</button>)}</div>:null}
-          {!item.produtoId&&item.sugestoes?.length?<div className="mt-3"><div className="text-xs font-semibold text-blue-700">Sugestões — confirme antes de associar:</div><div className="mt-2 flex flex-wrap gap-2">{item.sugestoes.map(s=><button key={s.id} onClick={()=>vincularProduto(index,`${s.codigo} — ${s.nome}`)} className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-left text-xs text-blue-900"><strong>{s.codigo || 'sem código'}</strong> — {s.nome}<span className="ml-1 text-blue-600">({s.score}% • {s.motivo})</span></button>)}</div></div>:null}
+          {item.produtoId && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-blue-100 bg-white p-3 text-xs">
+            {catalogo.find(p=>p.id===item.produtoId)?.foto_url ? <img src={catalogo.find(p=>p.id===item.produtoId)!.foto_url!} alt={item.produtoNome || item.descricao} loading="lazy" className="h-16 w-16 rounded-lg border bg-white object-contain" /> : <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed p-1 text-center text-[10px] text-slate-500">Imagem não cadastrada</div>}
+            <div><strong>Estoque atual do produto</strong><div className="mt-1 text-slate-600">{saldos[item.produtoId] ? `Físico: ${saldos[item.produtoId].fisico.toLocaleString('pt-BR')} · Reservado: ${saldos[item.produtoId].reservado.toLocaleString('pt-BR')} · Disponível: ${saldos[item.produtoId].disponivel.toLocaleString('pt-BR')} ${saldos[item.produtoId].unidade || item.unidadeEstoque || ''}` : 'Consultando saldo...'} </div><div className="mt-1 text-slate-500">Consulta informativa de todos os locais; a confirmação da NF não movimenta estoque.</div></div>
+          </div>}
+          {!item.produtoId&&item.candidatos?.length?<div className="mt-2 flex flex-wrap gap-2">{item.candidatos.map(c=><button key={c.id} onClick={()=>vincularProduto(index,`${c.codigo} — ${c.nome}`)} className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs">{catalogo.find(p=>p.id===c.id)?.foto_url ? <img src={catalogo.find(p=>p.id===c.id)!.foto_url!} alt={c.nome} loading="lazy" className="h-10 w-10 rounded border bg-white object-contain"/> : <span className="flex h-10 w-10 items-center justify-center rounded border border-dashed bg-white text-[9px]">Sem imagem</span>}<span>{c.codigo} — {c.nome}</span></button>)}</div>:null}
+          {!item.produtoId&&item.sugestoes?.length?<div className="mt-3"><div className="text-xs font-semibold text-blue-700">Sugestões — confirme antes de associar:</div><div className="mt-2 flex flex-wrap gap-2">{item.sugestoes.map(s=><button key={s.id} onClick={()=>vincularProduto(index,`${s.codigo} — ${s.nome}`)} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-left text-xs text-blue-900">{catalogo.find(p=>p.id===s.id)?.foto_url ? <img src={catalogo.find(p=>p.id===s.id)!.foto_url!} alt={s.nome} loading="lazy" className="h-10 w-10 rounded border bg-white object-contain"/> : <span className="flex h-10 w-10 items-center justify-center rounded border border-dashed bg-white text-[9px]">Sem imagem</span>}<span><strong>{s.codigo || 'sem código'}</strong> — {s.nome}<span className="ml-1 text-blue-600">({s.score}% • {s.motivo})</span></span></button>)}</div></div>:null}
           {item.produtoId?<div className="mt-3 grid gap-2 sm:grid-cols-2"><Campo label="Unidade de estoque" value={item.unidadeEstoque||''} onChange={v=>atualizarItem(index,'unidadeEstoque',v)}/><CampoNumero label="Fator: 1 un. compra = X un. estoque" value={item.fatorConversao} onChange={v=>atualizarItem(index,'fatorConversao',v)}/></div>:<div className="mt-3"><button onClick={()=>abrirCadastro(index)} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/>Cadastrar produto a partir da NF</button></div>}
           {cadastros[index]?.aberto&&<CadastroProduto item={item} cfg={cadastros[index]} onChange={p=>mudarCadastro(index,p)} onConfirm={()=>cadastrarProdutoDaNf(index)} onCancel={()=>mudarCadastro(index,{aberto:false})}/>} 
         </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { podeConsultarNF, podeLancarNF } from '@/lib/nfEntradaAcessoServer'
 import { autenticarCompras } from '@/lib/comprasServer'
 
 export const runtime = 'nodejs'
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const usuario = await autenticarCompras(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
+  if (!(await podeConsultarNF(usuario)) && !(await podeLancarNF(usuario))) return NextResponse.json({ error: 'Sem permissão para consultar notas fiscais.' }, { status: 403 })
 
   try {
     const { data: nf, error } = await supabaseAdmin

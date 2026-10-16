@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ChevronRight, History, Pencil, Plus, ShieldAlert, Trash2, Truck } from 'lucide-react'
 import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { listarFornecedores, criarFornecedor, atualizarFornecedor, alternarAtivoFornecedor, excluirFornecedor } from '@/lib/fornecedores'
 import { Fornecedor } from '@/lib/tipos'
 import BuscaAtlasInput from '@/components/system/BuscaAtlasInput'
@@ -32,6 +33,7 @@ function formFornecedor(f:FornecedorComercial):FormFornecedor { return { nome:f.
 export default function Fornecedores() {
   const [carregando,setCarregando]=useState(true)
   const [euSouMaster,setEuSouMaster]=useState<boolean|null>(null)
+  const [acoes,setAcoes]=useState({criar:false,editar:false,excluir:false})
   const [fornecedores,setFornecedores]=useState<FornecedorComercial[]>([])
   const [busca,setBusca]=useState('')
   const [novoAberto,setNovoAberto]=useState(false)
@@ -64,8 +66,11 @@ export default function Fornecedores() {
   async function carregar() {
     setCarregando(true)
     const me=await usuarioAtual()
-    setEuSouMaster(me?.role==='master')
-    if(me?.role==='master') setFornecedores((await listarFornecedores()) as FornecedorComercial[])
+    const acesso=await carregarAcessoCadastro(me)
+    const pode=podeAcaoCadastro(acesso,'fornecedores')
+    setEuSouMaster(pode)
+    setAcoes({criar:podeAcaoCadastro(acesso,'fornecedores','criar'),editar:podeAcaoCadastro(acesso,'fornecedores','editar'),excluir:podeAcaoCadastro(acesso,'fornecedores','excluir')})
+    if(pode) setFornecedores((await listarFornecedores()) as FornecedorComercial[])
     setCarregando(false)
   }
 
@@ -75,27 +80,27 @@ export default function Fornecedores() {
   function campoEd(id:string,c:keyof FormFornecedor,v:string){setEditForm(p=>({...p,[id]:{...p[id],[c]:v}}))}
   function payload(d:FormFornecedor){return{nome:d.nome.trim(),cnpj_cpf:d.cnpj_cpf.trim()||null,contato:d.contato.trim()||null,telefone:d.telefone.trim()||null,whatsapp:d.whatsapp.trim()||null,email:d.email.trim()||null,endereco:d.endereco.trim()||null,cidade:d.cidade.trim()||null,observacoes:d.observacoes.trim()||null,pedido_minimo:numero(d.pedido_minimo),frete_gratis_minimo:numero(d.frete_gratis_minimo),prazo_medio_dias:d.prazo_medio_dias.trim()?Math.max(0,Math.round(numero(d.prazo_medio_dias)||0)):null,condicao_pagamento_padrao:d.condicao_pagamento_padrao.trim()||null,observacoes_comerciais:d.observacoes_comerciais.trim()||null}}
 
-  async function cadastrar(e:React.FormEvent){e.preventDefault();setErro('');setSucesso('');if(!form.nome.trim())return setErro('Preencha o nome do fornecedor.');setSalvando(true);const me=await usuarioAtual();const{error}=await criarFornecedor({...payload(form),criado_por_id:me?.id||null,criado_por_nome:me?.nome||null});setSalvando(false);if(error)return setErro('Erro ao cadastrar fornecedor.');setSucesso(`Fornecedor ${form.nome} cadastrado com sucesso.`);setForm(vazio);setNovoAberto(false);setFornecedores((await listarFornecedores()) as FornecedorComercial[])}
-  async function salvarEd(id:string){const d=editForm[id];if(!d?.nome.trim())return;setSalvandoEdicaoId(id);const{error}=await atualizarFornecedor(id,payload(d));if(error)setErro('Não foi possível salvar o fornecedor.');setFornecedores((await listarFornecedores()) as FornecedorComercial[]);setSalvandoEdicaoId(null);if(!error)setEditandoId(null)}
-  async function alternar(f:FornecedorComercial){await alternarAtivoFornecedor(f.id,!f.ativo);setFornecedores((await listarFornecedores()) as FornecedorComercial[])}
-  async function excluir(f:FornecedorComercial){if(!window.confirm(`Excluir o fornecedor "${f.nome}"? O histórico será preservado.`))return;await excluirFornecedor(f.id);setFornecedores((await listarFornecedores()) as FornecedorComercial[])}
+  async function cadastrar(e:React.FormEvent){e.preventDefault();if(!acoes.criar)return;setErro('');setSucesso('');if(!form.nome.trim())return setErro('Preencha o nome do fornecedor.');setSalvando(true);const me=await usuarioAtual();const{error}=await criarFornecedor({...payload(form),criado_por_id:me?.id||null,criado_por_nome:me?.nome||null});setSalvando(false);if(error)return setErro('Erro ao cadastrar fornecedor.');setSucesso(`Fornecedor ${form.nome} cadastrado com sucesso.`);setForm(vazio);setNovoAberto(false);setFornecedores((await listarFornecedores()) as FornecedorComercial[])}
+  async function salvarEd(id:string){if(!acoes.editar)return;const d=editForm[id];if(!d?.nome.trim())return;setSalvandoEdicaoId(id);const{error}=await atualizarFornecedor(id,payload(d));if(error)setErro('Não foi possível salvar o fornecedor.');setFornecedores((await listarFornecedores()) as FornecedorComercial[]);setSalvandoEdicaoId(null);if(!error)setEditandoId(null)}
+  async function alternar(f:FornecedorComercial){if(!acoes.editar)return;await alternarAtivoFornecedor(f.id,!f.ativo);setFornecedores((await listarFornecedores()) as FornecedorComercial[])}
+  async function excluir(f:FornecedorComercial){if(!acoes.excluir)return;if(!window.confirm(`Excluir o fornecedor "${f.nome}"? O histórico será preservado.`))return;await excluirFornecedor(f.id);setFornecedores((await listarFornecedores()) as FornecedorComercial[])}
 
   if(carregando)return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando...</div>
-  if(!euSouMaster)return <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-center"><ShieldAlert size={40} className="text-slate-300"/><p className="text-slate-500">Só o usuário master pode acessar Fornecedores.</p><Link href="/cadastros" className="text-brand-navy text-sm">Voltar</Link></div>
+  if(!euSouMaster)return <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-center"><ShieldAlert size={40} className="text-slate-300"/><p className="text-slate-500">Seu usuário não tem permissão para consultar Fornecedores.</p><Link href="/cadastros" className="text-brand-navy text-sm">Voltar</Link></div>
 
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
-    <header className="bg-white border-b"><div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-4"><Link href="/cadastros" className="p-2 rounded-lg hover:bg-slate-100"><ArrowLeft size={20}/></Link><Truck size={22} className="text-brand-navy"/><div className="flex-1"><h1 className="text-lg font-bold">Fornecedores</h1><p className="text-sm text-slate-500">Abra o fornecedor para acessar a central completa de relacionamento, compras e catálogos</p></div><Link href="/cadastro/historico" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"><History size={15}/>Histórico</Link><button onClick={()=>setNovoAberto(v=>!v)} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-3 py-2 text-sm font-semibold text-white"><Plus size={15}/>Novo</button></div></header>
+    <header className="bg-white border-b"><div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-4"><Link href="/cadastros" className="p-2 rounded-lg hover:bg-slate-100"><ArrowLeft size={20}/></Link><Truck size={22} className="text-brand-navy"/><div className="flex-1"><h1 className="text-lg font-bold">Fornecedores</h1><p className="text-sm text-slate-500">Abra o fornecedor para acessar a central completa de relacionamento, compras e catálogos</p></div><Link href="/cadastro/historico" className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700"><History size={15}/>Histórico</Link>{acoes.criar&&<button onClick={()=>setNovoAberto(v=>!v)} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-3 py-2 text-sm font-semibold text-white"><Plus size={15}/>Novo</button>}</div></header>
 
     <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
       {erro&&<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
       {sucesso&&<div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{sucesso}</div>}
-      {novoAberto&&<form onSubmit={cadastrar} className="rounded-2xl border bg-white p-4 space-y-3"><h2 className="font-semibold">Novo fornecedor</h2><Form dados={form} onCampo={campo}/><div className="flex gap-2"><button disabled={salvando} className="rounded-xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white">{salvando?'Salvando...':'Cadastrar'}</button><button type="button" onClick={()=>setNovoAberto(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancelar</button></div></form>}
+      {acoes.criar&&novoAberto&&<form onSubmit={cadastrar} className="rounded-2xl border bg-white p-4 space-y-3"><h2 className="font-semibold">Novo fornecedor</h2><Form dados={form} onCampo={campo}/><div className="flex gap-2"><button disabled={salvando} className="rounded-xl bg-brand-navy px-4 py-2.5 text-sm font-semibold text-white">{salvando?'Salvando...':'Cadastrar'}</button><button type="button" onClick={()=>setNovoAberto(false)} className="rounded-xl border px-4 py-2.5 text-sm">Cancelar</button></div></form>}
 
       <section className="rounded-2xl border bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3"><BuscaAtlasInput value={busca} onValueChange={setBusca} placeholder="Buscar fornecedor, condição, cidade, contato..." containerClassName="flex-1" inputClassName="w-full rounded-xl border py-2.5 pr-3 text-sm"/><span className="text-xs text-slate-400">{filtrados.length} resultado(s)</span></div>
         <div className="space-y-2">
           {filtrados.map(f=><div key={f.id} className="rounded-xl border border-slate-200 transition hover:border-slate-300 hover:shadow-sm">
-            {editandoId===f.id ? <div className="space-y-3 p-4"><Form dados={editForm[f.id]||vazio} onCampo={(c,v)=>campoEd(f.id,c,v)}/><div className="flex gap-2"><button onClick={()=>void salvarEd(f.id)} disabled={salvandoEdicaoId===f.id} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white">{salvandoEdicaoId===f.id?'Salvando...':'Salvar'}</button><button onClick={()=>setEditandoId(null)} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button></div></div> : <>
+            {acoes.editar&&editandoId===f.id ? <div className="space-y-3 p-4"><Form dados={editForm[f.id]||vazio} onCampo={(c,v)=>campoEd(f.id,c,v)}/><div className="flex gap-2"><button onClick={()=>void salvarEd(f.id)} disabled={salvandoEdicaoId===f.id} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white">{salvandoEdicaoId===f.id?'Salvando...':'Salvar'}</button><button onClick={()=>setEditandoId(null)} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button></div></div> : <>
               <Link href={`/fornecedores/${f.id}`} className="group flex items-start justify-between gap-4 p-4">
                 <div className="min-w-0 flex-1">
                   <div className={`text-base font-semibold group-hover:text-brand-navy ${f.ativo?'text-slate-800':'text-slate-400 line-through'}`}>{f.nome}</div>
@@ -107,9 +112,9 @@ export default function Fornecedores() {
               </Link>
               <div className="flex flex-wrap items-center gap-4 border-t border-slate-100 px-4 py-2.5 text-xs">
                 <Link href={`/fornecedores/${f.id}`} className="inline-flex items-center gap-1 font-semibold text-brand-navy"><Truck size={12}/>Abrir Fornecedor 360</Link>
-                <button onClick={()=>iniciarEdicao(f)} className="inline-flex items-center gap-1 text-slate-500 hover:text-brand-navy"><Pencil size={12}/>Editar cadastro</button>
-                <button onClick={()=>void alternar(f)} className="text-slate-500">{f.ativo?'Desativar':'Ativar'}</button>
-                <button onClick={()=>void excluir(f)} className="inline-flex items-center gap-1 text-red-500"><Trash2 size={12}/>Excluir</button>
+                {acoes.editar&&<button onClick={()=>iniciarEdicao(f)} className="inline-flex items-center gap-1 text-slate-500 hover:text-brand-navy"><Pencil size={12}/>Editar cadastro</button>}
+                {acoes.editar&&<button onClick={()=>void alternar(f)} className="text-slate-500">{f.ativo?'Desativar':'Ativar'}</button>}
+                {acoes.excluir&&<button onClick={()=>void excluir(f)} className="inline-flex items-center gap-1 text-red-500"><Trash2 size={12}/>Excluir</button>}
               </div>
             </>}
           </div>)}

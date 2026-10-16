@@ -1,3 +1,9 @@
+## 2026-10-15 — Compras: conferência de NF + estoque visível — em branch, NÃO publicada
+
+Branch: `feature/compras-recebimento-estoque-20261015` criada a partir de `main` (#842). Desenvolvimento local **sem deploy nem migração no banco real**. Pedidos com destino cliente/obra ou estoque, importação XML/PDF e entrada manual existentes foram preservados. A entrada da NF passou a consultar saldos do produto vinculado (físico, reservado, disponível), mostrar imagens cadastradas e filtrar produtos/fornecedores pelo `empresa_id` do usuário. A conferência de recebimento apresenta saldo, entrada projetada, saldo após a entrada e pendências; reforçado isolamento da empresa e preenchimento de `empresa_id` nas gravações. A movimentação física continua exclusivamente pela RPC existente `aplicar_estoque_recebimento`, depois da confirmação; avarias não entram no estoque.
+
+Nova conciliação **pedido de compra ↔ item da nota** na tela de detalhe da NF: vínculo manual a necessidade/pedido aprovado, destino estoque ou cliente/obra, quantidades e saldos pendentes, múltiplas NFs para um mesmo pedido e múltiplos pedidos por NF. Nova migração ADITIVA `20261015173000_compras_nf_vinculo_pedidos_v1.sql` cria tabela e gatilhos de validação por empresa, fornecedor/cotação selecionada, produto e unidade compatíveis, além de limites quantitativos e impedimento de exclusão após recebimento. A migração ainda **NÃO foi aplicada**; função de vínculo precisa da migração no ambiente de teste e teste autenticado. Associar pedido à NF não reserva, movimenta ou consome o estoque; esses eventos seguem independentes. Faltam teste funcional com notas/estoque de homologação e aprovação de release.
+
 ## 2026-10-12 — Separação de Materiais por peça aprovada — em desenvolvimento (não publicada)
 
 Branch: `feat/producao-separacao-parcial-20261012`.
@@ -687,7 +693,17 @@ Branch `fix/wvetro-corte-barras-setores-20261013` — preview não publicado em 
 - Ausência de foto não pode ser representada por imagem arbitrária; mostrar claramente `Imagem pendente` e exigir completar cadastro, sem apagar registros nem misturar cards.
 - Implementação inicial na lista de barras comerciais WVetro, cards de Compras, lista de corte e PDFs de barras/cortes. Demais fluxos usam esta decisão como requisito de aceitação.
 
+## 2026-10-13 — Instalação por tipologia da venda, fase inicial
+
+Branch `fix/instalacao-tipologias-venda-20261013` (preview apenas).
+- Caso de validação: cliente `1ffc2956-7b0b-4df4-9557-af0abc0da8ed`, venda `e3ee802a-d65e-413c-9b80-0f3f93f890c0` (#18, orçamento #177). Snapshot vendido tem 1 tipologia, obra_id NULL, nenhuma OP ou checklist preexistente.
+- Origem do problema: aba Instalação interrompia em `!obraId` e nem preparava os itens; agora POST autenticado e idempotente usa snapshot vendido e suporta `obra_id` nulo, sem reescrever registros antigos.
+- UI Instalação: Kanban por tipologia, foto técnica/croqui quando disponível, dimensões, quantidade instalada, pendência de acabamento/cantoneira/arremate, checklist de 4 etapas e confirmação específica da finalização.
+- Fechamento requer checklists, produção, ausência de pendências e obra formalmente vinculada. Progresso de Instalação no resumo reflete unidades efetivamente **finalizadas**, com quantidade instalada fisicamente informada à parte.
+- Testes unitários `scripts/test-instalacao-tipologias-vendidas-20261013.cjs` e `scripts/test-venda-instalacao-producao.cjs`, typecheck e build aprovados.
+- Pendente: preview autenticado e validação funcional da venda #18, em seguida testar venda com várias tipologias e instalação parcial antes do merge em produção.
+
 
 ## 2026-10-15 — Permissões por etapa — primeiro incremento, não publicar
 
-Branch `feat/permissoes-etapas-20261015`, base `302b0b2f`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.
+Branch `feat/permissoes-etapas-20261015`, base inicial `302b0b2f`, atualizado sobre `f891d3a5`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.

@@ -13,10 +13,13 @@ import type { Cliente } from '@/lib/tipos'
 import { criarMedicaoDoOrcamento, criarMedicaoManualCliente, verificarFluxoVendaOrcamento } from '@/lib/medicaoFinal'
 import { useRouter } from 'next/navigation'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { listarPermissoesUsuario } from '@/lib/setores'
+import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import { gerarBasePrecificacao } from '@/lib/orcamentoPrecificacao'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import type { Usuario } from '@/lib/tipos'
 import VendasCliente360 from '@/components/clientes/VendasCliente360'
+import ComprasClienteCards from '@/components/compras/ComprasClienteCards'
 import CadastroCliente360 from '@/components/clientes/CadastroCliente360'
 import {
   adicionarDocumentoCliente,
@@ -178,9 +181,39 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   const [obraMedidaId,setObraMedidaId]=useState('')
   const [orcamentoMedidaId,setOrcamentoMedidaId]=useState('')
   const [sincronizandoWVetro,setSincronizandoWVetro]=useState(false)
+  const [podeSincronizarWVetro,setPodeSincronizarWVetro]=useState(false)
   const [mensagemSyncWVetro,setMensagemSyncWVetro]=useState('')
 
-  useEffect(()=>{void carregar(); void usuarioAtual().then(setUsuario)},[clienteId])
+  useEffect(() => {
+    let ativo = true
+    void carregar()
+    void (async () => {
+      const atual = await usuarioAtual()
+      if (!ativo) return
+      setUsuario(atual)
+      setPodeSincronizarWVetro(false)
+      if (!atual) return
+      if (atual.role === 'master') {
+        setPodeSincronizarWVetro(true)
+        return
+      }
+      try {
+        const [permissoes, config] = await Promise.all([
+          listarPermissoesUsuario(atual.id),
+          lerAcessoUsuarioConfig(atual),
+        ])
+        if (!ativo) return
+        const nivelSetor = permissoes['fazer-orcamento-msanfyvj']
+        const nivelEdicaoOrcamento = config.acoes?.['comercial.orcamento.editar']
+        setPodeSincronizarWVetro(
+          nivelSetor === 'edicao' && (!nivelEdicaoOrcamento || nivelEdicaoOrcamento === 'edicao')
+        )
+      } catch {
+        if (ativo) setPodeSincronizarWVetro(false)
+      }
+    })()
+    return () => { ativo = false }
+  }, [clienteId])
   async function carregar(){
     setCarregando(true);setErro('')
     try {
@@ -206,7 +239,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   }
 
   async function sincronizarWVetroAgora(){
-    if(usuario?.role!=='master')return
+    if(!podeSincronizarWVetro)return
     setSincronizandoWVetro(true);setMensagemSyncWVetro('');setErro('')
     try{
       const token=await tokenAtual()
@@ -325,7 +358,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
 
   return <div className="min-h-screen bg-slate-50">
     <div className="flex flex-wrap justify-end gap-2 border-b bg-emerald-50/70 px-4 py-2">
-      {(usuario?.role==='master'||!acesso.cliente360)&&<Link href={`/clientes/${clienteId}/central?aba=central`} className="rounded-lg border bg-white px-3 py-1.5 text-xs font-bold">Central anterior</Link>}
+      {(usuario?.role==='master'||!acesso.cliente360||Object.keys(acesso.cliente360).length===0)&&<Link href={`/clientes/${clienteId}/central?aba=central`} className="rounded-lg border bg-white px-3 py-1.5 text-xs font-bold">Central anterior</Link>}
       {pode('financeiro')&&pode('receber',true)&&<Link href={`/clientes/${clienteId}/financeiro/recebimento`} className="rounded-lg border bg-white px-3 py-1.5 text-xs font-bold text-emerald-700">Receber por parcelas</Link>}
     </div>
     <header className="border-b bg-white"><div className="mx-auto max-w-7xl px-4 py-5">
@@ -346,7 +379,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
           <div className="grid gap-5 xl:grid-cols-2">{pode('financeiro')&&<Box titulo="Financeiro do cliente" acao={<div className="flex flex-wrap gap-2">{pode('receber',true)&&<button onClick={()=>abrirRecebimento('recebimento')} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Registrar recebimento</button>}{pode('receber',true)&&<button onClick={()=>abrirRecebimento('haver')} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Gerar haver</button>}</div>}><div className="mb-3 flex justify-between text-sm"><span>Recebido {moeda(totalRecebido)}</span><span>A receber {moeda(aReceber)}</span></div><div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-500" style={{width:`${pct}%`}}/></div><button onClick={()=>setAba('financeiro')} className="mt-4 text-sm font-bold text-brand-navy">Ver parcelas</button></Box>}{pode('orcamentos')&&<Box titulo="Últimos orçamentos"><div className="space-y-2">{versoesAtuais.slice(0,5).map(o=><Link href={`/orcamento/${o.id}/composicao`} key={o.id} className="flex items-center justify-between gap-3 rounded-xl border p-3 hover:border-brand-navy"><div className="min-w-0"><div className="flex items-center gap-2"><b>Orçamento #{numeroOrcamento(o)}</b>{ehWVetro(o)&&<span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-bold text-violet-700">W.VETRO</span>}</div><p className="truncate text-xs text-slate-500">{descricaoOrcamento(o)||`${dataBR(o.created_at)} · ${status(o.status)}`}</p></div><b className="whitespace-nowrap">{moeda(valorOrcamento(o))}</b></Link>)}{!versoesAtuais.length&&<p className="text-sm text-slate-400">Nenhum orçamento.</p>}</div></Box>}</div></>}
 
         {aba==='orcamentos'&&pode('orcamentos')&&<div className="space-y-5">
-          <Box titulo="Orçamentos" acao={<div className="flex flex-wrap gap-2">{usuario?.role==='master'&&<button onClick={()=>void sincronizarWVetroAgora()} disabled={sincronizandoWVetro} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50">{sincronizandoWVetro?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoWVetro?'Sincronizando e corrigindo...':'Sincronizar e corrigir W.Vetro'}</button>}{pode('orcamentos')&&<Link href={`/clientes/${cliente.id}/orcamentos-revisoes`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Versões V1/V2/V3</Link>}</div>}>
+          <Box titulo="Orçamentos" acao={<div className="flex flex-wrap gap-2">{podeSincronizarWVetro&&<button onClick={()=>void sincronizarWVetroAgora()} disabled={sincronizandoWVetro} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50">{sincronizandoWVetro?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoWVetro?'Sincronizando e corrigindo...':'Sincronizar e corrigir W.Vetro'}</button>}{pode('orcamentos')&&<Link href={`/clientes/${cliente.id}/orcamentos-revisoes`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Versões V1/V2/V3</Link>}</div>}>
             <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs text-violet-800"><b>Sincronização por cliente.</b> O nome do cliente no W.Vetro é a chave principal. Todos os números de orçamento compatíveis ficam anexados neste mesmo Cliente 360; registros com nome diferente são ignorados.</div>
             {mensagemSyncWVetro&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{mensagemSyncWVetro}</div>}
             <div className="space-y-2">{orcamentos.map(o=>{const w=ehWVetro(o);const descricao=descricaoOrcamento(o);const itens=Array.isArray(o.itens)?o.itens.length:0;return <Link href={`/orcamento/${o.id}/composicao`} key={o.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 transition hover:border-brand-navy hover:shadow-sm ${o.revisao_atual===false?'bg-slate-50 opacity-70':'bg-white'}`}><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-900">Orçamento #{numeroOrcamento(o)}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${w?'bg-violet-100 text-violet-700':'bg-blue-100 text-blue-700'}`}>{w?'W.VETRO':'ATLAS'}</span>{!w&&o.revisao_atual!==false&&<span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">ATUAL</span>}</div>{descricao&&<p className="mt-1 truncate text-sm text-slate-600">{descricao}</p>}<p className="mt-1 text-xs text-slate-400">{dataBR(o.created_at)} · {w?(o.wvetro_fluxo?.situacao?status(o.wvetro_fluxo.situacao):status(o.status)):(o.revisao_tipo?status(o.revisao_tipo):status(o.status))}{itens? ` · ${itens} item(ns)`:''}{w&&o.wvetro_fluxo?.vendedor?` · ${o.wvetro_fluxo.vendedor}`:''}</p></div><div className="flex items-center gap-3"><b className="whitespace-nowrap text-slate-900">{moeda(valorOrcamento(o))}</b><ExternalLink size={15} className="text-slate-400"/></div></Link>})}{!orcamentos.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhum orçamento vinculado a este cliente.</p>}</div>
@@ -362,7 +395,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
 
         {aba==='assistencias'&&pode('assistencias')&&<Box titulo="Assistências" acao={pode('abrir_assistencia',true)&&<Link href={`/assistencia?cliente=${cliente.id}`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Nova assistência</Link>}><div className="space-y-2">{assistencias.map(a=><div key={a.id} className="rounded-xl border p-3"><div className="flex justify-between gap-3"><b>{a.numero?`#${a.numero} · `:''}{a.descricao_problema||'Assistência'}</b><span className="text-xs">{status(a.status)}</span></div><p className="mt-1 text-xs text-slate-500">{dataBR(a.created_at)}</p></div>)}</div></Box>}
 
-        {aba==='compras'&&pode('compras')&&<Box titulo="Compras do cliente"><div className="space-y-2">{compras.map(c=><div key={c.id} className="flex flex-wrap justify-between gap-3 rounded-xl border p-3"><div><b>{c.descricao||c.categoria||'Necessidade de compra'}</b><p className="text-xs text-slate-500">{c.obra_nome||'Sem obra'} · {c.quantidade||0} {c.unidade||''} · prioridade {c.prioridade||'normal'}</p></div><span className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{status(c.status)}</span></div>)}{!compras.length&&<p className="text-sm text-slate-400">Nenhuma necessidade de compra vinculada a este cliente.</p>}</div></Box>}
+        {aba==='compras'&&pode('compras')&&<Box titulo="Compras do cliente"><div className="space-y-2">{compras.map(c=><div key={c.id} className="flex flex-wrap justify-between gap-3 rounded-xl border p-3"><div><b>{c.descricao||c.categoria||'Necessidade de compra'}</b><p className="text-xs text-slate-500">{c.obra_nome||'Sem obra'} · {c.quantidade||0} {c.unidade||''} · prioridade {c.prioridade||'normal'}</p></div><span className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{status(c.status)}</span></div>)}{!compras.length&&<p className="text-sm text-slate-400">Nenhuma necessidade do fluxo anterior.</p>}</div><ComprasClienteCards clienteId={clienteId}/></Box>}
 
         {aba==='documentos'&&pode('documentos')&&<div className="grid gap-5 xl:grid-cols-[340px_1fr]"><Box titulo="Adicionar documento"><fieldset disabled={!pode('documentos',true)} className="space-y-3"><input value={documentoForm.titulo} onChange={e=>setDocumentoForm(f=>({...f,titulo:e.target.value}))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Título"/><select value={documentoForm.obraId} onChange={e=>setDocumentoForm(f=>({...f,obraId:e.target.value}))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">Cliente geral</option>{obras.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select><label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed p-3 text-sm text-slate-500"><Upload size={15}/>{arquivo?.name||'Escolher arquivo'}<input type="file" className="hidden" onChange={e=>setArquivo(e.target.files?.[0]||null)}/></label><textarea value={documentoForm.observacoes} onChange={e=>setDocumentoForm(f=>({...f,observacoes:e.target.value}))} className="w-full rounded-lg border p-3 text-sm" rows={3}/>{pode('documentos',true)&&<button disabled={!arquivo||!documentoForm.titulo.trim()||salvando} onClick={salvarDocumento} className="w-full rounded-lg bg-brand-navy py-2 text-sm font-bold text-white disabled:opacity-40">Salvar</button>}</fieldset></Box><Box titulo="Documentos"><div className="space-y-2">{documentos.map(d=><a key={d.id} href={d.url} target="_blank" rel="noreferrer" className="block rounded-xl border p-3"><b>{d.titulo}</b><p className="text-xs text-slate-500">{d.nome_arquivo||'Arquivo'} · {dataBR(d.created_at)}</p></a>)}</div></Box></div>}
 

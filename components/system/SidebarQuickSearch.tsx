@@ -7,6 +7,7 @@ import { usuarioAtual } from '@/lib/auth'
 import { GUIAS } from '@/lib/guias'
 import { ATALHOS_PESQUISA_ATLAS, pontuarPesquisaAtlas } from '@/lib/navegacaoPesquisa'
 import { listarSetores, listarPermissoesUsuario, nivelEfetivo } from '@/lib/setores'
+import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 
 const ALIASES: Record<string, string> = {
@@ -61,6 +62,7 @@ export default function SidebarQuickSearch() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [setores, setSetores] = useState<Setor[]>([])
   const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
+  const [podeVerCadastros, setPodeVerCadastros] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -74,6 +76,8 @@ export default function SidebarQuickSearch() {
       const mapa = usuario.role === 'master' ? {} : await listarPermissoesUsuario(usuario.id)
       setSetores(lista)
       setPermissoes(mapa)
+      const acesso=await carregarAcessoCadastro(usuario)
+      setPodeVerCadastros(acesso.usuario?.role==='master'||(acesso.nivel!=='oculto' && (['clientes','produtos','linhas','materiais','fornecedores','catalogo_tecnico','historico','precificacao'] as const).some(id=>podeAcaoCadastro(acesso,id))))
     }
     carregar()
   }, [usuario])
@@ -98,7 +102,7 @@ export default function SidebarQuickSearch() {
     if (!usuario) return []
 
     const telas = GUIAS
-      .filter((guia) => !guia.masterOnly || usuario.role === 'master')
+      .filter((guia) => (!guia.masterOnly || usuario.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros))
       .map((guia) => ({
         id: `guia:${guia.href}`,
         titulo: guia.label,
@@ -133,7 +137,7 @@ export default function SidebarQuickSearch() {
     const setoresVisiveis = setores
       .filter((setor) => nivelEfetivo(usuario, setor.id, permissoes) !== 'oculto')
       .map((setor) => {
-        const href = hrefDoSetor(setor)
+        const href = setor.id==='cadastro' && usuario.role!=='master' ? '/cadastros' : hrefDoSetor(setor)
         return {
           id: `setor:${setor.id}`,
           titulo: setor.nome,
@@ -149,7 +153,7 @@ export default function SidebarQuickSearch() {
       if (!mapa.has(item.href)) mapa.set(item.href, item)
     })
     return Array.from(mapa.values())
-  }, [usuario, setores, permissoes])
+  }, [usuario, setores, permissoes, podeVerCadastros])
 
   const resultados = useMemo(() => {
     const q = normalizar(termo)

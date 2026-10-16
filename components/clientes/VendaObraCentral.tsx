@@ -1,6 +1,7 @@
 'use client'
 
 import VendaBarrasWVetro from '@/components/clientes/VendaBarrasWVetro'
+import VendaListaCompraWVetro from '@/components/clientes/VendaListaCompraWVetro'
 import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
@@ -20,6 +21,7 @@ import { adicionarDocumentoCliente } from '@/lib/cliente360'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { adicionarMaterialManual, ajustarMaterial, excluirMaterialDoPacote, gerarPacoteTecnico, recalcularAproveitamentoPacote } from '@/lib/materialPlanejamento'
 import VendaProducaoDetalhada from '@/components/clientes/VendaProducaoDetalhada'
+import VendaProducaoKanbanPreview from '@/components/clientes/VendaProducaoKanbanPreview'
 import VendaLiberacaoOrdens from '@/components/clientes/VendaLiberacaoOrdens'
 import VendaVincularObra from '@/components/clientes/VendaVincularObra'
 import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetalhada'
@@ -29,6 +31,7 @@ import VendaCmvPainel from '@/components/clientes/VendaCmvPainel'
 import { avaliarFluxoVenda, type InstalacaoResumo } from '@/lib/vendaFluxoResumo'
 import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 import { custoRealCompraConfirmada } from '@/lib/vendaCmvRegras'
+import { custoRevisado } from '@/lib/vendaCmvRevisao'
 
 type Venda = {
   id:string
@@ -194,6 +197,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [orcamento,setOrcamento]=useState<Orcamento|null>(null)
   const [contas,setContas]=useState<Conta[]>([])
   const [realizadoCmvManual,setRealizadoCmvManual]=useState(0)
+  const [previsaoCmvRevisada,setPrevisaoCmvRevisada]=useState<{vendaId:string;valor:number|null}|null>(null)
   const [compras,setCompras]=useState<Compra[]>([])
   const [lotesCotacao,setLotesCotacao]=useState<LoteCotacao[]>([])
   const [movendoLoteId,setMovendoLoteId]=useState<string|null>(null)
@@ -209,6 +213,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [documentos,setDocumentos]=useState<Documento[]>([])
   const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
   const [materiaisTecnicos,setMateriaisTecnicos]=useState<MaterialTecnico[]>([])
+  const [sincronizacaoListaCompraKey,setSincronizacaoListaCompraKey]=useState(0)
   const [separacoesMateriais,setSeparacoesMateriais]=useState<SeparacaoMaterial[]>([])
   const [produtosMateriais,setProdutosMateriais]=useState<Record<string,ProdutoMaterial>>({})
   const [categoriaMaterialAberta,setCategoriaMaterialAberta]=useState<'perfil'|'acessorios'|'vidro'|'outros'>('perfil')
@@ -255,7 +260,12 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         const resposta=await fetch('/api/vendas/cmv?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
         if(!resposta.ok)return
         const dados=await resposta.json()
-        if(ativo)setRealizadoCmvManual(((dados.lancamentos||[]) as {valor:number}[]).reduce((s,l)=>s+Number(l.valor||0),0))
+        if(ativo){
+          setRealizadoCmvManual(((dados.lancamentos||[]) as {valor:number;etapa_cmv?:string}[])
+            .filter(l=>l.etapa_cmv!=='recebido').reduce((s,l)=>s+Number(l.valor||0),0))
+          // Uma única fonte para o cartão superior e a aba Custos: aplica as correções humanas auditadas.
+          setPrevisaoCmvRevisada({vendaId,valor:dados.previsto?custoRevisado(dados.previsto,dados.revisoes||{},'total'):null})
+        }
       }catch{}
     })()
     return ()=>{ativo=false}
@@ -471,7 +481,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     return base
   },[materiaisTecnicos,compras,cotacoesCompras])
   const custoPrevistoTecnico=Object.values(custosPorCategoria).reduce((s,c)=>s+c.previsto,0)
-  const custoPrevistoBase=custoPrevisto>0?custoPrevisto:custoPrevistoTecnico
+  const custoPrevistoBase=previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null
+    ?previsaoCmvRevisada.valor:(custoPrevisto>0?custoPrevisto:custoPrevistoTecnico)
   const custoRealizado=Object.values(custosPorCategoria).reduce((s,c)=>s+c.realizado,0)+realizadoCmvManual
   const margemReal=valorVenda>0&&custoRealizado>0?((valorVenda-custoRealizado)/valorVenda)*100:0
   const cmvReal=valorVenda>0&&custoRealizado>0?(custoRealizado/valorVenda)*100:0
@@ -596,8 +607,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     const matches=[...obs.matchAll(/Fornecedor:\s*([^\n]+)/gi)]
     return matches.length?matches[matches.length-1][1].trim():'—'
   }
-  // Materiais é a lista técnica editável; etapas de compra ficam somente na aba Compras.
-  const materiaisTabela=materiaisCategoria
+  // Kanban de acompanhamento técnico: não calcula nem importa barras comerciais WVetro.
+  const materiaisTabela=aba==='materiais'&&filtroSituacaoMaterial!=='todos'?materiaisCategoria.filter(m=>colunaMaterial(m)===filtroSituacaoMaterial):materiaisCategoria
   const idsMateriaisTabela=materiaisTabela.map(m=>m.id)
   const todosMateriaisTabelaSelecionados=idsMateriaisTabela.length>0&&idsMateriaisTabela.every(id=>selecionadosMateriais.includes(id))
 
@@ -609,6 +620,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   const colunaInstalacao=setorPorNome.instalacao
   const itens=(Array.isArray(orcamento?.itens)?orcamento?.itens:Array.isArray(venda?.itens_snapshot)?venda?.itens_snapshot:[])||[]
+  // Instalação deve seguir a fotografia do orçamento efetivamente VENDIDO.
+  const itensInstalacao=(Array.isArray(venda?.itens_snapshot)&&venda.itens_snapshot.length?venda.itens_snapshot:itens)||[]
   const fluxoVenda=avaliarFluxoVenda({
     valorVenda,contas,compras,ordens,instalacoes,
     materiaisPlanejados:materiaisTecnicos.length,
@@ -705,6 +718,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   async function emitirCotacaoCategoria(){
     if(!venda||!pacoteTecnicoId)return
+    if(!selecionadosMateriais.some(id=>materiaisCategoria.some(m=>m.id===id))){
+      setMensagemMateriais('Selecione os materiais individualmente ou use Selecionar todos antes de validar e enviar para Compras.')
+      return
+    }
     const categoria=categoriaMaterialAberta
     if(categoria==='perfil'&&orcamento?.wvetro_fluxo?.numero){
       setMensagemMateriais('Perfis cortados pertencem à Produção. Gere a cotação de compra a partir das barras comerciais do relatório Barras Utilizadas na aba Compras.')
@@ -899,7 +916,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   }
 
   async function substituirMaterialCentral(m:MaterialTecnico){
-    const codigo=window.prompt(`Código do material que substituirá ${m.codigo||m.descricao}:`,'')?.trim()
+    const escopo=window.prompt('Substituição de perfil/acessório: digite OBRA para alterar somente esta venda ou GERAL para solicitar alteração da receita técnica de futuras obras.','OBRA')?.trim().toUpperCase()
+    if(!escopo)return
+    if(escopo==='GERAL'){
+      setErro('Substituição geral não aplicada: é necessário identificar a receita técnica, linha e tipologia na Engenharia e aprovar uma nova versão. Nenhum material foi alterado.')
+      return
+    }
+    if(escopo!=='OBRA'){setErro('Escolha OBRA ou GERAL. Nenhuma substituição foi feita.');return}
+    const codigo=window.prompt(`Código do material que substituirá ${m.codigo||m.descricao} SOMENTE NESTA OBRA:`,'')?.trim()
     if(!codigo)return
     const pr=await supabase.from('produtos').select('id,codigo,nome,unidade,tamanho_barra_mm,foto_url,categoria').ilike('codigo',codigo).limit(5)
     const produto=((pr.data||[]) as ProdutoMaterial[]).find(p=>String(p.codigo||'').toLocaleLowerCase('pt-BR')===codigo.toLocaleLowerCase('pt-BR'))
@@ -1110,7 +1134,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
         <Kpi titulo="Recebido" valor={moeda(recebido)} detalhe={`${pct(recebido,valorVenda).toFixed(0)}% recebido`}/>
         <Kpi titulo="A receber" valor={moeda(aReceber)} destaque/>
-        <Kpi titulo="Custo previsto" valor={custoPrevistoBase>0?moeda(custoPrevistoBase):'—'}/>
+        <Kpi titulo="Custo previsto c/ sobra" valor={custoPrevistoBase>0||previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?moeda(custoPrevistoBase):'—'} detalhe={previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?'Conferido na aba Custos / CMV':undefined}/>
         <Kpi titulo="Custo realizado (parcial)" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% da venda já lançado como custo':'Sem custo real registrado. Cotação não é compra.'}/>
         <Kpi titulo="Margem prevista" valor={custoPrevistoBase>0?margemPrevista.toFixed(1)+'%':'—'}/>
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
@@ -1122,7 +1146,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Progresso titulo="Compras" valor={progressoCompras} detalhe={totalAcompanhar?`${comprasEfetivadas} de ${totalAcompanhar} itens no Kanban comprados` : 'Sem lista de compras'} ativo={painelEtapa==='compras'} onClick={()=>setPainelEtapa(painelEtapa==='compras'?null:'compras')}/>
         <Progresso titulo="Mercadoria recebida" valor={progressoMercadoria} detalhe={totalAcompanhar?`${comprasRecebidas} de ${totalAcompanhar} itens no Kanban Recebido (não atesta NF/estoque)` : 'Sem lista de compras'} ativo={painelEtapa==='mercadoria'} onClick={()=>setPainelEtapa(painelEtapa==='mercadoria'?null:'mercadoria')}/>
         <Progresso titulo="Produção" valor={progressoProducao} detalhe={ordens.length?`${ordensConcluidas} de ${ordens.length} ordem(ns) concluídas`:(setorPorNome.producao?.nome||'Ainda não liberada')} ativo={painelEtapa==='producao'} onClick={()=>setPainelEtapa(painelEtapa==='producao'?null:'producao')}/>
-        <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={fluxoVenda.totalPecas?String(fluxoVenda.quantidadeInstalada)+' de '+String(fluxoVenda.totalPecas)+' peça(s) instaladas':'Aguardando itens de instalação'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
+        <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={fluxoVenda.totalPecas?String(fluxoVenda.quantidadeFinalizada)+' de '+String(fluxoVenda.totalPecas)+' peça(s) finalizadas; '+String(fluxoVenda.quantidadeInstalada)+' instaladas fisicamente':'Aguardando conferência das tipologias'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
       </div>
 
       {painelEtapa&&<section className="mt-4 overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
@@ -1217,7 +1241,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             <div><b className="text-slate-800">{colunaInstalacao?.nome||'Instalação'}</b>
               <p className="text-xs text-slate-500">{fluxoVenda.quantidadeInstalada} de {fluxoVenda.totalPecas} peça(s) instaladas; checklist e pendências conferidos individualmente na aba Instalação.</p>
             </div></div></div>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">{itens.map((item:any,idx:number)=>{
+          <div className="mt-3 grid gap-2 md:grid-cols-2">{itensInstalacao.map((item:any,idx:number)=>{
             const ref=refItemProducaoInstalacao(item,idx)
             const reg=instalacoes.find(i=>i.item_ref===ref)
             return <div key={ref} className="flex items-center justify-between rounded-xl border p-3">
@@ -1297,7 +1321,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           acessorio:custosPorCategoria.acessorios.realizado,
           vidro:custosPorCategoria.vidro.realizado,
           outros:custosPorCategoria.outros.realizado,
-        }} onMudanca={setRealizadoCmvManual}/>}
+        }} onMudanca={(totalRealizado,previstoRevisado)=>{
+          setRealizadoCmvManual(totalRealizado)
+          setPrevisaoCmvRevisada({vendaId,valor:previstoRevisado})
+        }}/>}
 
         {aba==='compras'&&<>
           <VendaBarrasWVetro modo="kanban" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>setAba('producao')}/>
@@ -1459,8 +1486,99 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </>}
         {aba==='materiais'&&<Box titulo="Lista de materiais para comprar · Barras Utilizadas WVetro">
           <VendaBarrasWVetro modo="lista" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>{setEditorCortesAberto(false);setAba('producao')}}/>
-          <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Esta é a relação de barras inteiras para comprar, obtida do relatório Barras Utilizadas. Os cortes e suas medidas permanecem em Produção; o acompanhamento dos pedidos e fornecedores permanece no Kanban de Compras.</p>
+          <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Perfis desta obra em barras inteiras, não peças do plano de corte. Imprima a conferência do estoque, corrija a quantidade, selecione todos ou individualmente e clique em Validar para que apareçam em Falta comprar na aba Compras. O plano de corte continua em Produção.</p>
         </Box>}
+
+        {aba==='materiais'&&(()=>{
+          const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
+          const rotulo=rotuloCategoria(categoriaMaterialAberta)
+          const cotacaoPerfilWVetroBloqueada=Boolean(orcamento?.wvetro_fluxo?.numero)&&categoriaMaterialAberta==='perfil'
+          return <Box titulo="Materiais da obra · Conferência e separação">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
+              <div>
+                <b className="text-sm text-slate-800">Gerencie os materiais por categoria</b>
+                <p className="mt-1 text-xs text-slate-500">Confira código, descrição, quantidade, medidas e sobras. Inclua, substitua ou exclua materiais antes de gerar a lista de cotação por categoria.</p>
+                {mensagemMateriais&&<p className="mt-1 text-[11px] font-semibold text-blue-700">{mensagemMateriais}</p>}
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold"><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">Sobra usada: {totalSobraCategoria.toLocaleString('pt-BR')}</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">A cotar: {totalComprarCategoria.toLocaleString('pt-BR')}</span>{lotesAtivos.find(l=>l.categoria===categoriaMaterialAberta)&&<span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-700">Cotação emitida · confira alterações antes de reemitir</span>}</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={()=>setSincronizacaoListaCompraKey(n=>n+1)} disabled={ocupadoMateriais} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50"><RefreshCw size={13}/> Sincronizar W.Vetro (conferir)</button>
+                {obra?.id&&<Link href={`/obras/${obra.id}/materiais`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><Boxes size={13}/>Editor completo</Link>}
+              </div>
+            </div>
+
+            {Boolean(orcamento?.wvetro_fluxo?.numero)&&
+              <VendaListaCompraWVetro vendaId={venda.id} solicitarSync={sincronizacaoListaCompraKey}/>}
+            <details className="mt-4 rounded-xl border border-slate-200 bg-white" {...(orcamento?.wvetro_fluxo?.numero?{}:{open:true})}>
+              <summary className="cursor-pointer px-4 py-3 text-xs font-bold text-slate-700">Composição técnica e peças de corte — editor existente (não é lista de compra)</summary>
+              <div className="px-4 pb-4">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {([
+                ['perfil','Perfil',materiaisPorCategoria.perfil.length,Boxes],
+                ['acessorios','Acessório',materiaisPorCategoria.acessorios.length,PackageCheck],
+                ['vidro','Vidro',materiaisPorCategoria.vidro.length,FileText],
+                ['outros','Outros',materiaisPorCategoria.outros.length,ClipboardList],
+              ] as const).map(([id,label,total,Icon])=><button key={id} type="button" onClick={()=>{setCategoriaMaterialAberta(id);setFiltroSituacaoMaterial('todos');setSelecionadosMateriais([])}} className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${categoriaMaterialAberta===id?'border-blue-600 bg-blue-600 text-white shadow-sm':'border-slate-200 bg-white text-slate-700 hover:border-blue-300'}`}>
+                <span className={`grid h-9 w-9 place-items-center rounded-lg ${categoriaMaterialAberta===id?'bg-white/15':'bg-slate-100'}`}><Icon size={17}/></span>
+                <div><b className="text-sm">{label} ({total} itens)</b><p className={`mt-0.5 text-[11px] ${categoriaMaterialAberta===id?'text-blue-100':'text-slate-400'}`}>Ver somente {label.toLowerCase()}</p></div>
+              </button>)}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-950">
+              <b>Sequência: conferir → corrigir → separar estoque → validar → Compras.</b>
+              <p className="mt-1">Esta aba não movimenta pedidos. O Kanban de compras está somente na aba Compras, para a mesma venda.</p>
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <div><h3 className="font-bold text-slate-900">Lista de materiais para conferência - {rotulo}</h3><p className="text-xs text-slate-500">Confira os itens que a obra precisa; edite, inclua, substitua, exclua e separe o que existe no estoque antes de liberar para Compras.</p></div>
+              <div className="flex flex-wrap gap-2">
+                {obra?.id&&grupoPdf&&<Link target="_blank" href={`/obras/${obra.id}/materiais/pdf?${pacoteTecnicoId?`pacote=${pacoteTecnicoId}`:`orcamento=${venda.orcamento_id}`}&grupo=${grupoPdf}`} className="inline-flex items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><FileDown size={13}/>Conferir estoque / PDF de {rotulo.toLowerCase()}</Link>}
+                <button type="button" disabled={ocupadoMateriais||!pacoteTecnicoId} onClick={()=>void adicionarMaterialCentral()} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{ocupadoMateriais?<Loader2 size={13} className="animate-spin"/>:<Plus size={13}/>}Adicionar material</button>
+                <button type="button" disabled={cotacaoPerfilWVetroBloqueada||emitindoCotacao||ocupadoMateriais||!pacoteTecnicoId||materiaisCategoria.length===0||totalComprarCategoria<=0||selecionadosMateriais.length===0} title={cotacaoPerfilWVetroBloqueada?'Para comprar perfis comerciais WVetro, utilize o relatório Barras Utilizadas na aba Compras.':undefined} onClick={()=>void emitirCotacaoCategoria()} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{emitindoCotacao?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}{cotacaoPerfilWVetroBloqueada?'Enviar barras acima':'Validar selecionados para Compras'}</button>
+              </div>
+            </div>
+
+            <div ref={listaMateriaisRef} className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-slate-50 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={alternarSelecionarTodos} disabled={!materiaisTabela.length} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40">{todosMateriaisTabelaSelecionados?'Desmarcar todos':'Selecionar todos'}</button>
+                <span className="text-xs font-semibold text-slate-600">{selecionadosMateriais.length} selecionado(s)</span>
+                {filtroSituacaoMaterial!=='todos'&&<button type="button" onClick={()=>setFiltroSituacaoMaterial('todos')} className="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold text-blue-700">Filtro: {filtroSituacaoMaterial==='faltas'?'Falta comprar':filtroSituacaoMaterial==='cotacao'?'Em cotação':filtroSituacaoMaterial==='comprado'?'Comprado':filtroSituacaoMaterial==='entrega'?'Aguardando chegar':'Recebido'} · mostrar todos</button>}
+              </div>
+              <div className="text-[11px] font-medium text-slate-600">Selecione os itens que precisam ser comprados e use “Validar selecionados para Compras” acima.</div>
+            </div>
+
+            <div className="mt-3 overflow-x-auto rounded-xl border">
+              <table className="w-full min-w-[1160px] text-sm">
+                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2.5"><input type="checkbox" aria-label="Selecionar todos os materiais visíveis" checked={todosMateriaisTabelaSelecionados} onChange={alternarSelecionarTodos} className="h-4 w-4"/></th><th>Imagem</th><th>Código</th><th>Descrição / ações</th><th>Quantidade</th><th>Sobra usada</th><th>A comprar</th><th>Unidade</th><th>Medida / corte</th><th>Cor</th><th>Lista técnica</th></tr></thead>
+                <tbody>
+                  {materiaisTabela.map(m=>{const img=imagemMaterial(m);const sobra=quantidadeSobraMaterial(m);const comprar=quantidadeComprarMaterial(m);const itemCotado=lotesAtivos.find(l=>l.categoria===categoriaMaterialAberta)?.itens.find(item=>item.material_id===m.id);const enviado=Boolean(itemCotado&&Math.abs(Number(itemCotado.quantidade_cotar)-comprar)<0.001&&itemCotado.descricao===m.descricao&&itemCotado.codigo===(m.codigo||null));const cotacaoDesatualizada=Boolean(itemCotado&&!enviado);return <tr key={m.id} className="border-t align-middle">
+                    <td className="px-3 py-3"><input type="checkbox" aria-label={`Selecionar ${m.codigo||m.descricao}`} checked={selecionadosMateriais.includes(m.id)} onChange={()=>alternarSelecaoMaterial(m.id)} className="h-4 w-4 cursor-pointer"/></td>
+                    <td className="px-3 py-2"><div className="grid h-12 w-12 place-items-center overflow-hidden rounded-lg border bg-slate-50">{img?<img src={img} alt={m.descricao} className="h-full w-full object-contain p-1"/>:<ImageIcon size={17} className="text-slate-300"/>}</div></td>
+                    <td className="px-3 py-3 font-mono text-xs font-bold text-slate-800">{m.codigo||'—'}</td>
+                    <td className="min-w-[265px] px-3 py-3">
+                      <b className="text-slate-800">{m.descricao}</b>
+                      {m.justificativa_ajuste&&<div className="mt-1 max-w-[330px] text-[10px] text-slate-400">{m.justificativa_ajuste}</div>}
+                      <div role="group" aria-label={`Ações do material ${m.codigo||m.descricao}`} className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <button type="button" disabled={ocupadoMateriais} onClick={()=>void editarMaterialCentral(m)} title="Editar quantidade, descrição ou medida" className="inline-flex h-8 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-40"><Pencil size={12}/>Editar</button>
+                        <button type="button" disabled={ocupadoMateriais} onClick={()=>void substituirMaterialCentral(m)} title="Substituir material" className="inline-flex h-8 items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-40"><Replace size={12}/>Substituir</button>
+                        <button type="button" disabled={ocupadoMateriais} onClick={()=>void excluirMaterialCentral(m)} title="Excluir material desta venda" className="inline-flex h-8 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-40"><Trash2 size={12}/>Excluir</button>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 font-bold text-slate-800">{Number(m.quantidade_ajustada??m.quantidade_tecnica??0).toLocaleString('pt-BR')}</td>
+                    <td className="px-3 py-3 font-bold text-emerald-700">{sobra>0?sobra.toLocaleString('pt-BR'):'—'}</td>
+                    <td className={'px-3 py-3 font-bold '+(comprar>0?'text-amber-700':'text-emerald-700')}>{comprar.toLocaleString('pt-BR')}</td>
+                    <td className="px-3 py-3 text-slate-600">{m.unidade||'UN'}</td>
+                    <td className="px-3 py-3 text-slate-600">{m.comprimento_corte_mm?`${Math.round(Number(m.comprimento_corte_mm))} mm`:m.comprimento_barra_mm?`Barra ${Math.round(Number(m.comprimento_barra_mm))} mm`:'—'}</td>
+                    <td className="px-3 py-3 text-slate-600">{m.cor_ref||'—'}</td>
+                    <td className="px-3 py-3"><span className={`rounded-full px-2 py-1 text-[11px] font-bold ${comprar<=0?'bg-slate-100 text-slate-500':enviado?'bg-blue-100 text-blue-700':'bg-amber-100 text-amber-700'}`}>{comprar<=0?'Sem necessidade':cotacaoDesatualizada?'Reemitir cotação':enviado?'Enviado para cotação':'A validar'}</span></td>
+                  </tr>})}
+                  {!materiaisTabela.length&&<tr><td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-400">Nenhum item de {rotulo.toLowerCase()} neste filtro. Use “Adicionar material”, sincronize com o W.Vetro ou mostre todos os status.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+              </div>
+            </details>
+          </Box>
+        })()}
 
 
         {aba==='tipologias'&&<VendaTipologiasMateriais
@@ -1473,11 +1591,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         />}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
-          <VendaListaCorteWVetro
-            materiais={materiaisTecnicos} obraId={obra?.id||null} pacoteId={pacoteTecnicoId}
-            orcamentoId={venda.orcamento_id} onEditar={()=>setEditorCortesAberto(true)}
-            imagensPorProduto={Object.fromEntries(Object.entries(produtosMateriais).filter(([,p])=>Boolean(p.foto_url)).map(([id,p])=>[id,String(p.foto_url)]))}
-            imagensPorCodigo={Object.fromEntries(Object.values(produtosMateriais).filter(p=>Boolean(p.codigo&&p.foto_url)).map(p=>[String(p.codigo).trim().toUpperCase(),String(p.foto_url)]))}/>
+          <VendaProducaoKanbanPreview
+            ordens={ordens} itens={itens} materiais={materiaisTecnicos} produtosMateriais={produtosMateriais}
+            pacoteId={pacoteTecnicoId} orcamentoId={venda.orcamento_id}
+            onEditarCortes={()=>setEditorCortesAberto(true)}/>
         {editorCortesAberto&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
           const rotulo=rotuloCategoria(categoriaMaterialAberta)
@@ -1563,7 +1680,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </Box>}
 
         {aba==='instalacao'&&<Box titulo="Instalação desta venda">
-          <VendaInstalacaoDetalhada vendaId={venda.id} obraId={obra?.id||null} clienteId={clienteId} orcamentoId={venda.orcamento_id} itens={itens} statusGeral={colunaInstalacao?.nome||null} onAtualizar={()=>void atualizarStatusInstalacao()}/>
+          <VendaInstalacaoDetalhada vendaId={venda.id} obraId={obra?.id||null} clienteId={clienteId} orcamentoId={venda.orcamento_id} itens={itensInstalacao} statusGeral={colunaInstalacao?.nome||null} onAtualizar={()=>void atualizarStatusInstalacao()}/>
         </Box>}
 
         {aba==='notas'&&<Box titulo="Notas / Recibos desta venda">

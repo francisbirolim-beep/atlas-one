@@ -151,8 +151,8 @@ export async function POST(req:NextRequest){
     quantidade_barras:ed.quantidade_barras,tamanho_barra_mm:ed.tamanho_barra_mm,
     peso_kg:origem.peso_kg,sobra_kg:origem.sobra_kg,
     status_validacao:ed.alterado?'corrigido':'validado',status_compra:'necessidade',
-    observacao_correcao:ed.justificativa,validado_em:new Date().toISOString(),
-    validado_por_id:ctx.usuario.id,validado_por_nome:ctx.usuario.nome,
+    observacao_correcao:ed.justificativa,validado_em:null,
+    validado_por_id:null,validado_por_nome:null,
     atualizado_por_id:ctx.usuario.id,atualizado_por_nome:ctx.usuario.nome,
    }
   })
@@ -180,6 +180,40 @@ export async function PATCH(req:NextRequest){
  const vendaId=txt(body.vendaId,80),barraId=txt(body.barraId,80),acao=txt(body.acao,30)
  const ctx=await contexto(req,vendaId,true)
  if(!ctx)return erro('Sem acesso ao registro ou à obra.',403)
+ if(acao==='validar_enviar_compras'){
+  const ids=Array.isArray(body.barras)?[...new Set<string>(body.barras.filter((x:unknown)=>typeof x==='string'&&uuid.test(x)))]:[]
+  if(!ids.length||ids.length>150)return erro('Selecione de 1 a 150 materiais para enviar a Compras.')
+  const {data:linhas,error:le}=await supabaseAdmin.from('venda_wvetro_barras').select('*')
+   .eq('empresa_id',ctx.usuario.empresa_id).eq('venda_obra_id',vendaId).in('id',ids)
+  if(le)return erro('Não foi possível conferir a seleção de compra.',500)
+  if((linhas||[]).length!==ids.length)return erro('A seleção não pertence integralmente a esta obra. Atualize a lista.',409)
+  let enviadas=0,jaEmCompras=0
+  const eventos:any[]=[]
+  for(const antiga of linhas||[]){
+   if(antiga.validado_em||antiga.status_compra!=='necessidade'){jaEmCompras++;continue}
+   const agora=new Date().toISOString()
+   const patch:any={validado_em:agora,validado_por_id:ctx.usuario.id,validado_por_nome:ctx.usuario.nome,updated_at:agora,atualizado_por_id:ctx.usuario.id,atualizado_por_nome:ctx.usuario.nome}
+   if(antiga.status_validacao==='pendente'){
+    patch.status_validacao='validado';patch.validado_em=agora
+    patch.validado_por_id=ctx.usuario.id;patch.validado_por_nome=ctx.usuario.nome
+   }
+   const {data:atualizada,error:ae}=await supabaseAdmin.from('venda_wvetro_barras').update(patch)
+    .eq('empresa_id',ctx.usuario.empresa_id).eq('venda_obra_id',vendaId).eq('id',antiga.id)
+    .is('validado_em',null).eq('status_compra','necessidade').select('*').maybeSingle()
+   if(ae)return erro('Erro ao enviar um material. Atualize a lista para conferir o que já foi enviado.',500)
+   if(!atualizada){jaEmCompras++;continue}
+   enviadas++
+   eventos.push({empresa_id:ctx.usuario.empresa_id,venda_obra_id:vendaId,barra_id:antiga.id,
+    evento:'mudanca_etapa',dados_antes:dadosBarra(antiga),dados_depois:dadosBarra(atualizada),
+    justificativa:'Lista e estoque conferidos, material liberado em Falta comprar do Kanban da venda',
+    validado_por_id:ctx.usuario.id,validado_por_nome:ctx.usuario.nome})
+  }
+  if(eventos.length){
+   const log=await supabaseAdmin.from('venda_wvetro_barras_aprendizado').insert(eventos)
+   if(log.error)console.error('[WVetro barras][Envio compras histórico]',log.error)
+  }
+  return NextResponse.json({ok:true,enviadas,jaEmCompras,solicitadas:ids.length},{headers:{'Cache-Control':'private,no-store'}})
+ }
  if(acao==='validar_lote'){
   const ids=Array.isArray(body.barras)?[...new Set<string>(body.barras.filter((x:unknown)=>typeof x==='string'&&uuid.test(x)))]:[]
   if(!ids.length||ids.length>150)return erro('Selecione de 1 a 150 barras para validar.')
@@ -227,15 +261,16 @@ export async function PATCH(req:NextRequest){
   patch={codigo:ed.codigo,descricao:ed.descricao,tipo:ed.tipo,tratamento:ed.tratamento,
    quantidade_barras:ed.quantidade_barras,tamanho_barra_mm:ed.tamanho_barra_mm,
    status_validacao:ed.alterado?'corrigido':'validado',
-   observacao_correcao:ed.justificativa,validado_em:new Date().toISOString(),
-   validado_por_id:ctx.usuario.id,validado_por_nome:ctx.usuario.nome}
+   observacao_correcao:ed.justificativa,validado_em:row.status_compra==='necessidade'?null:row.validado_em,
+   validado_por_id:row.status_compra==='necessidade'?null:row.validado_por_id,
+   validado_por_nome:row.status_compra==='necessidade'?null:row.validado_por_nome}
   evento=ed.alterado?'correcao':'validacao'
  }else if(acao==='mover'){
   const status=txt(body.status,20)
   const etapas=['necessidade','cotacao','comprado','entrega','recebido']
   const origem=etapas.indexOf(row.status_compra),destino=etapas.indexOf(status)
   if(origem<0||destino<0||origem===destino)return erro('Etapa inválida.')
-  if(row.status_validacao==='pendente')return erro('Valide a lista de barras antes de movimentar.',409)
+  if(!row.validado_em)return erro('Confira o estoque e valide o material na aba Materiais antes de movimentar no Kanban.',409)
   if(destino>origem+1||destino<origem)return erro('Movimente somente para a próxima etapa. Reversões precisam de conferência específica.',409)
   patch={status_compra:status}
   evento='mudanca_etapa'

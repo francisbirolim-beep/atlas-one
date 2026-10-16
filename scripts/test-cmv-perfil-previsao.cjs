@@ -9,14 +9,24 @@ assert.equal(o1176.total,1790.84,'Total vem do payload_bruto quando não há lin
 assert.equal(o1176.categorias.perfil,525.90,'Não alterar uso técnico original');
 assert.equal(o1176.categorias.acessorio,289.09);
 assert.equal(o1176.categorias.vidro,401.80);
-assert.equal(o1176.perfil_previsao,1099.95,'Conciliação 1790,84 - 289,09 - 401,80');
-assert.equal(o1176.perfil_previsao_fonte,'conciliacao_wvetro');
-assert.equal(custoPrevistoOriginal(o1176,'perfil'),1099.95);
-assert.equal(custoRevisado(o1176,{},'perfil'),1099.95);
+assert.equal(o1176.total_uso,1220.56,'Usado na obra conforme W.Vetro')
+assert.equal(o1176.total_com_sobra,1790.84,'Resultado com sobra conforme W.Vetro')
+assert.equal(o1176.categorias.sobra,570.28,'Sobra original W.Vetro')
+assert.equal(o1176.categorias.perda,3.77,'Perda de corte obtida por conciliação')
+assert.equal(o1176.perda_fonte,'conciliacao_wvetro')
+assert.equal(o1176.categorias.perfil+o1176.categorias.acessorio+o1176.categorias.vidro+o1176.categorias.perda,1220.56,'Categorias usadas devem fechar resultado de uso')
+assert.equal(o1176.categorias.perfil+o1176.categorias.acessorio+o1176.categorias.vidro+o1176.categorias.sobra+o1176.categorias.perda,1790.84,'Categorias com sobra devem fechar total')
+assert.equal(o1176.perfil_previsao,1096.18,'Perfis 525,90 + sobra 570,28; perda não pertence aos perfis');
+assert.equal(o1176.perfil_previsao_fonte,'uso_mais_sobra_wvetro');
+assert.equal(custoPrevistoOriginal(o1176,'perfil'),1096.18);
+assert.equal(custoRevisado(o1176,{},'perfil'),1096.18);
 const direto=extrairPrevisaoWVetro({...base,payload_bruto:{...base.payload_bruto,DespesasExtrasPrevisao:[{CentroCusto:'MATÉRIA PRIMA - PERFIL',Valor:'1.099,95',Descricao:'PERFIL'},{CentroCusto:'MATÉRIA PRIMA - ACESSORIOS',Valor:289.09}]}});
-assert.equal(direto.perfil_previsao,1099.95);assert.equal(direto.perfil_previsao_fonte,'despesas_extras_wvetro');
+assert.equal(direto.perfil_centro_custo,1099.95,'Centro de custo fica separado')
+assert.equal(direto.perfil_previsao,1096.18,'Previsão de centro de custo não altera materiais utilizados')
+assert.equal(direto.perfil_previsao_fonte,'uso_mais_sobra_wvetro');
+assert.equal(extrairPrevisaoWVetro({payload_bruto:{DespesasExtrasPrevisao:[{CentroCusto:'MATÉRIA PRIMA - PERFIL',Valor:'1.099,95',Descricao:'PERFIL'}]}}).perfil_previsao,1099.95,'Sem detalhamento, usa explicitamente o centro de custo');
 const outrosCustos=extrairPrevisaoWVetro({...base,payload_bruto:{...base.payload_bruto,CustoMaoObraVlr:'100.00'}});
-assert.equal(outrosCustos.perfil_previsao,null,'Sem fonte direta, não atribuir custo residual ao perfil quando há outros custos');
+assert.equal(outrosCustos.perfil_previsao,1096.18,'Outros custos não alteram valor conhecido de perfis+sobra');
 const soResumo=extrairPrevisaoWVetro({payload_bruto:{ResumoObra:base.payload_bruto.ResumoObra}});
 assert.equal(soResumo.perfil_previsao,null,'Sem total não inventar previsão');
 assert.equal(soResumo.categorias.perfil,525.90);

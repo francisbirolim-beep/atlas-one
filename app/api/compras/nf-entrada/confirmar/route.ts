@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { podeLancarNF } from '@/lib/nfEntradaAcessoServer'
 
 type Pagamento = { numero?: string; vencimento?: string | null; valor?: number | null; forma?: string | null }
 type ItemEntrada = {
@@ -58,6 +59,7 @@ function custoAquisicaoUnitario(item: ItemEntrada & { quantidade: number; valorT
 
 export async function POST(req: NextRequest) {
   const usuario = await autenticar(req); if (!usuario) return NextResponse.json({ error: 'Sessão inválida ou empresa não vinculada.' }, { status: 401 })
+  if (!(await podeLancarNF(usuario))) return NextResponse.json({ error: 'Sem permissão para lançar nota fiscal.' }, { status: 403 })
   let arquivoPath: string | null = null
   let nfCriadaId: string | null = null
   try {

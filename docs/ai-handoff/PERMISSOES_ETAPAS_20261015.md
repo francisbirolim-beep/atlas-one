@@ -1,6 +1,6 @@
 # Permissões por usuário e etapa — revisão iniciada em 15/10/2026
 
-Branch: `feat/permissoes-etapas-20261015`. Base: `302b0b2f` (origin/main no início).
+Branch: `feat/permissoes-etapas-20261015`. Base inicial: `302b0b2f`; reconciliado com a main atual `f891d3a5`. Sincronização W.Vetro autorizada, cards novos de compras e edições/exclusões da main foram preservados. Leitores de permissão de Compras e remoção de item da Medição agora usam também a configuração protegida.
 Status: **primeiro incremento implementado; revisão geral ainda incompleta; não publicar**.
 
 ## Escopo implementado
@@ -35,7 +35,7 @@ Status: **primeiro incremento implementado; revisão geral ainda incompleta; nã
 - Testes de regras e API com Master, vendedor limitado, leitura, teto de setor, bloqueio total, ausência de sessão e falha fechada.
 - Migration exercitada em PostgreSQL local isolado (PGlite 0.5.10): preservação do legado, isolamento de empresas, leitura própria, bloqueio de autoelevação e anônimo, escrita pelo backend.
 - Regressão de Cadastro Cliente 360, entrada antiga no cadastro aprovado e recebimento de venda autorizado.
-- TypeScript aprovado. Build completo/preflight registrado separadamente após commit.
+- TypeScript e build completo (`npm run release:check`) aprovados antes da reconciliação com a main; repetidos após a integração. Regressões das permissões de NF, cadastros e solicitações/carrinhos/destinos/edição/exclusão de compras da main também aprovadas.
 - Isso não equivale a teste funcional autenticado no Atlas real nem a validação de todas as políticas existentes.
 
 ## Preservação e rollback

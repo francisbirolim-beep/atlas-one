@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { tokenAtual } from "@/lib/auth";
+import type { ComprasAcessos } from "@/lib/comprasPermissoesServer";
 import BuscaAtlasInput from "@/components/system/BuscaAtlasInput";
 import { correspondeBuscaAtlas } from "@/lib/buscaAtlas";
 
@@ -146,6 +147,7 @@ type HistoricoWVetroSuprimento = {
   finalizada: boolean | null;
 };
 type Dados = {
+  acessos: ComprasAcessos;
   necessidades: Necessidade[];
   cotacoes: Cotacao[];
   produtos: Produto[];
@@ -299,7 +301,7 @@ export default function ComprasPage() {
   useEffect(() => {
     if (!dados) return;
     const clienteId = searchParams.get("cliente");
-    if (!clienteId) return;
+    if (!clienteId || !dados.acessos?.cotar) return;
     const c = dados.clientes.find((cl) => cl.id === clienteId);
     if (!c) return;
     const obrasCliente = dados.obras.filter((o) => o.cliente_id === clienteId);
@@ -594,6 +596,14 @@ export default function ComprasPage() {
   const aguardando = (dados?.necessidades || []).filter(
     (n) => n.status === "aguardando_entrega",
   ).length;
+  function podeMover(status: StatusCompra): boolean {
+    const a = dados?.acessos;
+    return !!a && (status === 'cotacao' ? a.cotar
+      : status === 'aprovado' ? a.aprovar
+      : status === 'pedido_emitido' || status === 'aguardando_entrega' ? a.comprar
+      : status === 'recebido' ? a.receber
+      : status === 'cancelado' ? a.cancelar : false);
+  }
   return (
     <main className="min-h-screen w-full min-w-0 overflow-x-hidden bg-slate-50 p-4 sm:p-6">
       <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-5">
@@ -611,21 +621,25 @@ export default function ComprasPage() {
             </p>
           </div>
           <div className="flex min-w-0 flex-wrap gap-2">
-            <Link
+            {dados?.acessos?.cotar && <Link
               href="/cadastro/fornecedores"
               className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
             >
               <Truck size={16} />
               Fornecedores
-            </Link>
-            <Link
+            </Link>}
+            {dados?.acessos?.notasLancar && <Link
               href="/compras/entrada"
               className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
             >
               <ReceiptText size={16} />
               Entrada por NF
-            </Link>
-            <button
+            </Link>}
+            {dados?.acessos?.solicitar && <Link
+              href="/compras/solicitacoes"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
+            ><Plus size={17}/> Solicitar compra (simples)</Link>}
+            {(dados?.acessos?.cotar || dados?.acessos?.comprar) && dados?.acessos?.solicitar && <button
               onClick={() => {
                 setFiltroCategoriaProduto("todos");
                 setBuscaProdutoCatalogo("");
@@ -636,8 +650,9 @@ export default function ComprasPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
             >
               <Plus size={17} />
-              Adicionar necessidade
-            </button>
+              Adicionar necessidade (avançado)
+            </button>}
+            {dados?.acessos?.consultar && <Link href="/compras/solicitacoes" className="rounded-xl border bg-white px-4 py-2.5 text-sm font-semibold">Lista de faltas / Carrinhos</Link>}
           </div>
         </header>
         {erro && (
@@ -648,6 +663,14 @@ export default function ComprasPage() {
             </button>
           </div>
         )}
+        {carregando && <p className="text-sm text-slate-500">Carregando suas permissões de Compras...</p>}
+        {dados?.acessos && !dados.acessos.consultar && dados.acessos.solicitar && (
+          <section className="rounded-2xl border bg-white p-5 text-sm text-slate-700">
+            <h2 className="font-semibold">Solicitação de material</h2>
+            <p className="mt-2">Descreva o que precisa, escolha Estoque ou Cliente e Obra, revise e confirme o envio. O comprador receberá a solicitação na Lista de Faltas.</p>
+          </section>
+        )}
+        {dados?.acessos?.consultar && <>
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Indicador
             label="Compras em aberto"
@@ -907,6 +930,7 @@ export default function ComprasPage() {
                         }}
                         onAvancar={(s) => void movimentar(n.id, s)}
                         salvando={salvando}
+                        podeAvancar={podeMover(PROXIMO[n.status]?.status || n.status)}
                       />
                     ))}
                     {!itens.length && (
@@ -925,8 +949,9 @@ export default function ComprasPage() {
           estoque. A entrada oficial continua pela conferência da NF, evitando
           saldo e custo incorretos.
         </div>
+        </>}
       </div>
-      {novaAberta && (
+      {novaAberta && dados?.acessos?.solicitar && (
         <Modal
           titulo="Adicionar à lista de faltas"
           onFechar={() => {
@@ -1306,7 +1331,7 @@ export default function ComprasPage() {
           </form>
         </Modal>
       )}
-      {selecionada && (
+      {selecionada && dados?.acessos?.consultar && (
         <Modal
           titulo={selecionada.descricao}
           onFechar={() => setSelecionadaId(null)}
@@ -1341,22 +1366,23 @@ export default function ComprasPage() {
                   ultimo={dados.ultimoPrecoPorProduto[selecionada.produto_id]}
                 />
               )}
-            <ConviteFornecedores
+            {dados?.acessos?.cotar && <ConviteFornecedores
               fornecedores={dados?.fornecedores || []}
               jaConvidados={cotacoesSelecionadas.map((c) => c.fornecedor_id)}
               selecionados={fornecedoresConvite}
               onAlternar={alternarFornecedorConvite}
               onConvidar={() => void convidarFornecedores()}
               convidando={convidando}
-            />
+            />}
             <TabelaCotacoes
               cotacoes={cotacoesSelecionadas}
               quantidade={selecionada.quantidade}
               fornecedor={fornecedor}
               onSelecionar={(id) => void selecionarCotacao(id)}
               salvando={salvando}
+              podeSelecionar={!!dados?.acessos?.aprovar}
             />
-            <form
+            {dados?.acessos?.cotar && <form
               onSubmit={adicionarCotacao}
               className="rounded-2xl border border-blue-200 bg-blue-50 p-4"
             >
@@ -1496,7 +1522,7 @@ export default function ComprasPage() {
                 )}
                 Salvar cotação
               </button>
-            </form>
+            </form>}
           </div>
         </Modal>
       )}
@@ -1556,6 +1582,7 @@ function Card({
   onAbrir,
   onAvancar,
   salvando,
+  podeAvancar,
 }: {
   n: Necessidade;
   produto?: Produto;
@@ -1563,6 +1590,7 @@ function Card({
   onAbrir: () => void;
   onAvancar: (s: StatusCompra) => void;
   salvando: boolean;
+  podeAvancar: boolean;
 }) {
   const prox = PROXIMO[n.status],
     cotadas = cotacoes.filter((c) => c.preco_unitario !== null),
@@ -1626,7 +1654,7 @@ function Card({
           </span>
         </div>
       </button>
-      {prox && (
+      {prox && podeAvancar && (
         <button
           disabled={salvando}
           onClick={() =>
@@ -1819,12 +1847,14 @@ function TabelaCotacoes({
   fornecedor,
   onSelecionar,
   salvando,
+  podeSelecionar,
 }: {
   cotacoes: Cotacao[];
   quantidade: number;
   fornecedor: (id: string) => Fornecedor | undefined;
   onSelecionar: (id: string) => void;
   salvando: boolean;
+  podeSelecionar: boolean;
 }) {
   return (
     <section>
@@ -1892,7 +1922,7 @@ function TabelaCotacoes({
                     <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                       Selecionada
                     </span>
-                  ) : (
+                  ) : podeSelecionar ? (
                     <button
                       type="button"
                       disabled={salvando || c.preco_unitario === null}
@@ -1901,7 +1931,7 @@ function TabelaCotacoes({
                     >
                       Selecionar
                     </button>
-                  )}
+                  ) : <span className="text-slate-400">—</span>}
                 </td>
               </tr>
             ))}
