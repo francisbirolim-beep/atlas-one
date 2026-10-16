@@ -23,7 +23,7 @@ export async function POST(req:NextRequest){
   ])
   if(itR.error||forR.error)throw itR.error||forR.error
   const item=itR.data,forn=forR.data
-  if(!item||item.status==='cancelado'||!forn)return erro('Item ou fornecedor inválido')
+  if(!item||item.status!=='ativo'||!forn)return erro('Item cancelado ou com exclusão pendente. Revise a solicitação antes de incluir no carrinho.',409)
   if(!item.produto_id||item.identificacao_status!=='validado')return erro('O comprador deve identificar e validar o produto antes da cotação')
   let carrinhoId=String(b.carrinhoId||'')
   if(carrinhoId){
@@ -86,6 +86,12 @@ export async function PATCH(req:NextRequest){
   if(linhasR.error||fornR.error)throw linhasR.error||fornR.error
   if(!fornR.data||!(linhasR.data||[]).length)return erro('Carrinho sem fornecedor ou itens')
   const linhas=linhasR.data||[]
+  // Item com cancelamento solicitado jamais pode ser comprado automaticamente.
+  const {data:itensAtivos,error:eia}=await db.from('compras_solicitacao_itens')
+   .select('id,status').eq('empresa_id',u.empresa_id).in('id',linhas.map(x=>x.item_id))
+  if(eia)throw eia
+  if((itensAtivos||[]).length!==linhas.length||(itensAtivos||[]).some(x=>x.status!=='ativo'))
+   return erro('Carrinho contém material excluído ou com exclusão solicitada. Revise antes de confirmar a compra.',409)
   if(linhas.some(x=>x.preco_unitario===null))return erro('Confirme todos os preços do pedido')
   const total=linhas.reduce((s,x)=>s+(Number(x.quantidade_obra)+Number(x.quantidade_estoque))*Number(x.preco_unitario),0)
   const minimo=Number(fornR.data.pedido_minimo||0)

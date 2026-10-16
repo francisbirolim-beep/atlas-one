@@ -12,6 +12,23 @@ const fotosValidas:Record<string,string>={'image/jpeg':'.jpg','image/png':'.png'
 const falha=(msg:string,status=400)=>NextResponse.json({error:msg},{status})
 const str=(v:unknown,max=500)=>String(v??'').trim().slice(0,max)
 const quantidade=(v:unknown):number|null=>v==null||String(v).trim()===''?null:Number(v)
+const resumoAuditoria=(evento:{entidade:string;acao:string;antes:unknown;depois:unknown})=>{
+ const antes=(evento.antes&&typeof evento.antes==='object'?evento.antes:{}) as Record<string,unknown>
+ const depois=(evento.depois&&typeof evento.depois==='object'?evento.depois:{}) as Record<string,unknown>
+ if(evento.entidade==='compras_solicitacao_itens'){
+  if(evento.acao==='insert')return 'Incluiu material: '+str(depois.descricao,100)
+  if(depois.status==='cancelamento_solicitado'&&antes.status!=='cancelamento_solicitado')
+   return 'Solicitou exclusão do item: '+str(depois.motivo_cancelamento,150)
+  if(depois.status==='cancelado'&&antes.status!=='cancelado')
+   return 'Excluiu/cancelou o item: '+str(depois.motivo_cancelamento,150)
+  const campos=[['descricao','Descrição'],['categoria','Categoria'],['quantidade_necessaria','Quantidade'],['destino','Destino'],['cliente_id','Cliente'],['obra_id','Obra'],['foto_path','Foto']]
+  const mudancas=campos.filter(([k])=>String(antes[k]??'')!==String(depois[k]??'')).map(([k,label])=>
+   k==='foto_path'?'Foto substituída':k==='cliente_id'||k==='obra_id'?label+' alterado':label+': '+str(antes[k]??'vazio',70)+' → '+str(depois[k]??'vazio',70))
+  return mudancas.length?mudancas.join(' · '):'Atualização do item'
+ }
+ return evento.acao==='insert'?'Solicitação criada':'Etapa do pedido atualizada'
+}
+
 
 export async function GET(req:NextRequest){
  const u=await autenticarCompras(req);if(!u)return falha('Sessão inválida',401)
@@ -57,7 +74,7 @@ export async function GET(req:NextRequest){
   }
   const itemIds=(itensR.data||[]).map(x=>x.id)
   const [historicoR,linhasR]=await Promise.all([
-   ids.length?db.from('compras_solicitacao_auditoria').select('id,solicitacao_id,item_id,acao,entidade,usuario_id,created_at').eq('empresa_id',u.empresa_id).in('solicitacao_id',ids).order('created_at',{ascending:false}).limit(1000):Promise.resolve({data:[],error:null}),
+   ids.length?db.from('compras_solicitacao_auditoria').select('id,solicitacao_id,item_id,acao,entidade,usuario_id,created_at,antes,depois').eq('empresa_id',u.empresa_id).in('solicitacao_id',ids).order('created_at',{ascending:false}).limit(1000):Promise.resolve({data:[],error:null}),
    todos&&itemIds.length?db.from('compras_carrinho_itens').select('*').eq('empresa_id',u.empresa_id).in('item_id',itemIds).limit(5000):Promise.resolve({data:[],error:null}),
   ])
   if(historicoR.error||linhasR.error)throw historicoR.error||linhasR.error
@@ -75,7 +92,7 @@ export async function GET(req:NextRequest){
   const podeFinanceiro=a.financeiro||a.cotar||a.comprar
   return NextResponse.json({acessos:a,usuarioId:u.id,solicitacoes:solicitacoes||[],
    itens:(itensR.data||[]).map(i=>({...i,foto_url:fotos[i.id]||null})),
-   historico:(historicoR.data||[]).map(h=>({...h,autor_nome:h.usuario_id?nomesHist.get(h.usuario_id)||'Usuário':'Sistema'})),clientes:[...(clientesR.data||[]),...extrasClientesDados],obras:[...(obrasR.data||[]),...extrasObrasDados],produtos:produtosR.data||[],
+   historico:(historicoR.data||[]).map(h=>({id:h.id,item_id:h.item_id,solicitacao_id:h.solicitacao_id,acao:h.acao,entidade:h.entidade,created_at:h.created_at,autor_nome:h.usuario_id?nomesHist.get(h.usuario_id)||'Usuário':'Sistema',detalhe:resumoAuditoria(h)})),clientes:[...(clientesR.data||[]),...extrasClientesDados],obras:[...(obrasR.data||[]),...extrasObrasDados],produtos:produtosR.data||[],
    fornecedores:(fornecedoresR.data||[]).map(f=>({...f,pedido_minimo:podeFinanceiro?f.pedido_minimo:null})),
    carrinhos:(carrinhosR.data||[]).map(c=>podeFinanceiro?c:{...c,numero_pedido:null}),
    linhas:(linhasR.data||[]).map(l=>podeFinanceiro?l:{...l,preco_unitario:null})
@@ -152,9 +169,13 @@ export async function POST(req:NextRequest){
 export async function PATCH(req:NextRequest){
  const u=await autenticarCompras(req);if(!u)return falha('Sessão inválida',401)
  try{
-  const a=await obterComprasAcessos(u),b=await req.json().catch(()=>null)
+  const a=await obterComprasAcessos(u)
+  const multipart=(req.headers.get('content-type')||'').toLowerCase().includes('multipart/form-data')
+  const form=multipart?await req.formData():null
+  const b=form?JSON.parse(str(form.get('payload'),20000)):await req.json().catch(()=>null)
+
   if(!b||!uuid.test(str(b.itemId,80)))return falha('Item inválido')
-  const {data:item,error:ei}=await db.from('compras_solicitacao_itens').select('id,solicitacao_id,status,produto_id,descricao,quantidade_necessaria,destino,cliente_id,obra_id')
+  const {data:item,error:ei}=await db.from('compras_solicitacao_itens').select('id,solicitacao_id,status,produto_id,descricao,categoria,quantidade_necessaria,destino,cliente_id,obra_id,foto_path')
    .eq('empresa_id',u.empresa_id).eq('id',b.itemId).maybeSingle()
   if(ei)throw ei
   if(!item)return falha('Item não encontrado',404)
@@ -177,18 +198,41 @@ export async function PATCH(req:NextRequest){
    return NextResponse.json({ok:true,acao:'identificado'})
   }
   if(!edita)return falha('Sem permissão para editar este pedido',403)
-  if(sol.status!=='aguardando_validacao'&&sol.status!=='em_cotacao')return falha('Pedido em compra ou entrega não pode ser alterado',409)
   if(b.acao==='cancelar'){
-   if(item.status==='cancelado')return NextResponse.json({ok:true})
-   const {data:usado}=await db.from('compras_carrinho_itens').select('id').eq('empresa_id',u.empresa_id).eq('item_id',item.id).limit(1)
-   if(usado?.length)return falha('Este item já foi separado pelo comprador. Solicite correção a Compras.',409)
-   const {error}=await db.from('compras_solicitacao_itens').update({status:'cancelado',atualizado_por_id:u.id,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',item.id)
+   if(item.status==='cancelado')return NextResponse.json({ok:true,estado:'cancelado',historicoPreservado:true})
+   if(item.status==='cancelamento_solicitado')return NextResponse.json({ok:true,estado:'cancelamento_solicitado',historicoPreservado:true})
+   const motivo=str(b.motivo||'Solicitação de exclusão pelo usuário',250)
+   const {data:usado,error:euso}=await db.from('compras_carrinho_itens').select('id').eq('empresa_id',u.empresa_id).eq('item_id',item.id).limit(1)
+   if(euso)throw euso
+   // Se o comprador já separou ou comprou, NUNCA exclua o vínculo ou estorne compra/estoque automaticamente.
+   const pendente=!!usado?.length
+   const status=pendente?'cancelamento_solicitado':'cancelado'
+   const {error}=await db.from('compras_solicitacao_itens').update({status,motivo_cancelamento:motivo,
+    cancelamento_solicitado_em:pendente?new Date().toISOString():null,
+    atualizado_por_id:u.id,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',item.id).eq('status','ativo')
    if(error)throw error
-   return NextResponse.json({ok:true,acao:'cancelado',historicoPreservado:true})
+   // Não apagar o card. Somente encerrar o pedido quando nenhum item ativo ou pendente permanecer.
+   if(!pendente){
+    const {data:restantes,error:er}=await db.from('compras_solicitacao_itens').select('id').eq('empresa_id',u.empresa_id)
+     .eq('solicitacao_id',sol.id).neq('status','cancelado').limit(1)
+    if(!er&&!restantes?.length)await db.from('compras_solicitacoes').update({status:'cancelado',atualizado_por_id:u.id,updated_at:new Date().toISOString()})
+     .eq('empresa_id',u.empresa_id).eq('id',sol.id).in('status',['aguardando_validacao','em_cotacao','aguardando_minimo'])
+   }
+   return NextResponse.json({ok:true,estado:status,historicoPreservado:true,
+    aviso:pendente?'Este item já está em carrinho ou compra: exclusão solicitada para revisão pelo comprador. Nenhuma compra ou estoque foi alterado.':null})
   }
   if(b.acao==='editar'){
-   if(item.status==='cancelado')return falha('Pedido cancelado, histórico preservado',409)
+   if(item.status!=='ativo')return falha('Item cancelado ou com exclusão pendente. Consulte o histórico.',409)
+   if(!['aguardando_validacao','em_cotacao','aguardando_minimo'].includes(sol.status))
+    return falha('Pedido já comprado ou em entrega. Solicite revisão ao comprador.',409)
+
    const descricao=str(b.descricao,500),q=quantidade(b.quantidade_necessaria)
+   const categoria=b.categoria===undefined?item.categoria:str(b.categoria,40)
+   if(!categorias.has(categoria))return falha('Categoria inválida')
+   const foto=form?.get('foto')
+   if(foto&&(!(foto instanceof File)||foto.size>5*1024*1024||foto.size<1||!fotosValidas[foto.type]))
+    return falha('Foto deve ser JPG, PNG ou WEBP, com até 5 MB')
+
    const destino=b.destino===undefined?item.destino:str(b.destino,20)
    if(destino!=='obra'&&destino!=='estoque')return falha('Destino inválido')
    const clienteId=destino==='obra'?(b.cliente_id===undefined?item.cliente_id:str(b.cliente_id,80)):null
@@ -203,9 +247,19 @@ export async function PATCH(req:NextRequest){
    const {data:usado,error:euso}=await db.from('compras_carrinho_itens').select('id').eq('empresa_id',u.empresa_id).eq('item_id',item.id).limit(1)
    if(euso)throw euso
    if(usado?.length)return falha('Comprador já separou este item. Não é possível alterar.',409)
-   const {error}=await db.from('compras_solicitacao_itens').update({descricao,quantidade_necessaria:q,destino,cliente_id:clienteId,obra_id:obraId,atualizado_por_id:u.id,
-    updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',item.id)
-   if(error)throw error
+   let novoPath:string|null=null
+   if(foto instanceof File){
+    novoPath=u.empresa_id+'/'+sol.id+'/'+randomUUID()+fotosValidas[foto.type]
+    const {error:up}=await db.storage.from('compras-solicitacoes').upload(novoPath,
+     Buffer.from(await foto.arrayBuffer()),{contentType:foto.type,upsert:false})
+    if(up)throw up
+   }
+   const {error}=await db.from('compras_solicitacao_itens').update({descricao,categoria,quantidade_necessaria:q,
+    destino,cliente_id:clienteId,obra_id:obraId,
+    ...(novoPath?{foto_path:novoPath}:{}),atualizado_por_id:u.id,
+    updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',item.id).eq('status','ativo')
+   if(error){if(novoPath)await db.storage.from('compras-solicitacoes').remove([novoPath]);throw error}
+   // O arquivo anterior permanece no armazenamento privado para manter o histórico auditável.
    return NextResponse.json({ok:true,acao:'editado',historicoPreservado:true})
   }
   return falha('Ação desconhecida')
