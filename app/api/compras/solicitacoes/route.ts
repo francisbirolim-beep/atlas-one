@@ -186,6 +186,7 @@ export async function PATCH(req:NextRequest){
   const comprador=a.cotar||a.comprar||a.aprovar
   const edita=a.editarTodos||(a.editarProprios&&sol.solicitante_id===u.id)
   if(b.acao==='identificar'){
+   if(item.status!=='ativo')return falha('Item excluído ou com exclusão pendente.',409)
    if(!comprador)return falha('Somente o comprador pode validar a identificação',403)
    if(!uuid.test(str(b.produtoId,80)))return falha('Selecione um produto cadastrado')
    const {data:produto}=await db.from('produtos').select('id').eq('empresa_id',u.empresa_id).eq('id',b.produtoId).maybeSingle()
@@ -254,8 +255,11 @@ export async function PATCH(req:NextRequest){
      Buffer.from(await foto.arrayBuffer()),{contentType:foto.type,upsert:false})
     if(up)throw up
    }
+   // Mudou a identificação do produto? Exigir nova conferência pelo comprador.
+   const exigeNovaValidacao=descricao!==item.descricao||categoria!==item.categoria||Boolean(novoPath)
    const {error}=await db.from('compras_solicitacao_itens').update({descricao,categoria,quantidade_necessaria:q,
     destino,cliente_id:clienteId,obra_id:obraId,
+    ...(exigeNovaValidacao?{produto_id:null,identificacao_status:'pendente',identificacao_por_id:null}:{}),
     ...(novoPath?{foto_path:novoPath}:{}),atualizado_por_id:u.id,
     updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',item.id).eq('status','ativo')
    if(error){if(novoPath)await db.storage.from('compras-solicitacoes').remove([novoPath]);throw error}
