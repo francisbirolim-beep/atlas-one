@@ -122,7 +122,22 @@ export async function POST(req: NextRequest) {
   const numero = String(p.numeroRomaneio || '').trim()
   if (!fornecedor || fornecedor.length > 200 || !numero || numero.length > 100) return falha('Informe o fornecedor e o número do romaneio.')
   if (typeof p.dataDocumento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.dataDocumento)) return falha('Informe a data do romaneio.')
-  if (p.vencimento && (typeof p.vencimento !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.vencimento))) return falha('Vencimento inválido.')
+  const parcelas = p.parcelas
+  if (!Array.isArray(parcelas) || parcelas.length < 1 || parcelas.length > 36)
+    return falha('Informe de 1 a 36 parcelas.')
+  for (const [indice, parcela] of parcelas.entries()) {
+    const vencimento = parcela?.vencimento
+    const valor = Number(parcela?.valor)
+    const data = typeof vencimento === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(vencimento)
+      ? new Date(vencimento + 'T12:00:00Z') : null
+    if (!data || Number.isNaN(data.getTime()) || data.toISOString().slice(0, 10) !== vencimento)
+      return falha(`Parcela ${indice + 1}: informe um vencimento válido.`)
+    if (!['boleto', 'pix', 'cheque'].includes(parcela?.forma))
+      return falha(`Parcela ${indice + 1}: informe boleto, Pix ou cheque.`)
+    if (!Number.isFinite(valor) || valor <= 0 || valor > 1000000000
+      || Math.abs(valor * 100 - Math.round(valor * 100)) > 0.00001)
+      return falha(`Parcela ${indice + 1}: informe um valor monetário válido.`)
+  }
   const itens = p.itens
   if (!Array.isArray(itens) || itens.length < 1 || itens.length > 100) return falha('Informe de 1 a 100 produtos.')
   const inteiro4 = (valor: number) => Math.round(valor * 10000)
@@ -153,7 +168,7 @@ export async function POST(req: NextRequest) {
     if (total !== inteiro4(quantidade)) return falha(`Produto ${indice + 1}: a distribuição deve somar exatamente ${quantidade}.`)
   }
   try {
-    const { data, error } = await db.rpc('registrar_entrada_manual_romaneio_dividido', {
+    const { data, error } = await db.rpc('registrar_entrada_manual_romaneio_parcelado', {
       p_empresa_id: a.usuario.empresa_id,
       p_usuario_id: a.usuario.id,
       p_chave_idempotencia: p.chaveIdempotencia,
@@ -161,7 +176,11 @@ export async function POST(req: NextRequest) {
       p_numero_romaneio: numero,
       p_data_documento: p.dataDocumento,
       p_observacoes: String(p.observacoes || '').slice(0, 2000),
-      p_vencimento: p.vencimento || null,
+      p_parcelas: parcelas.map((parcela: { valor: number; vencimento: string; forma: string }) => ({
+        valor: Number(parcela.valor).toFixed(2),
+        vencimento: parcela.vencimento,
+        forma: parcela.forma,
+      })),
       p_itens: itens,
     })
     if (error) {
