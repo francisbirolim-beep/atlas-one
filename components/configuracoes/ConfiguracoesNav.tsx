@@ -3,10 +3,11 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Building2, FileText, Settings2, Users, Workflow, SlidersHorizontal } from 'lucide-react'
+import { BellRing, Building2, FileText, Settings2, Users, Workflow, SlidersHorizontal } from 'lucide-react'
 
 const LINKS = [
   { href: '/configuracoes', label: 'Visão geral', icon: Settings2, exact: true },
+  { href: '/configuracoes/notificacoes', label: 'Notificações e Lembretes', icon: BellRing },
   { href: '/configuracoes/empresa', label: 'Empresa e Identidade', icon: Building2 },
   { href: '/configuracoes/automacoes-fluxo', label: 'Central de Automações', icon: Workflow, destaque: true },
   { href: '/configuracoes/usuarios', label: 'Pessoas e Acesso', icon: Users },

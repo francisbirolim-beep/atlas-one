@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { usuarioAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import BotaoMicrofone from '@/components/BotaoMicrofone'
+import DitarCompromisso from '@/components/system/DitarCompromisso'
 import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
 import { Usuario, TarefaPessoal, TarefaPessoalColuna, Evento, Setor } from '@/lib/tipos'
 import { listarTarefas, listarColunasTarefas, criarTarefa, concluirTarefa, primeiraColunaTarefaId, criarTarefaRecorrente } from '@/lib/tarefas'
@@ -329,6 +330,7 @@ export default function Home() {
               </Link>
             </div>
 
+            <div className="mb-3"><DitarCompromisso tipo="tarefa" onResultado={aoFalarNovaTarefa}/></div>
             <div className="flex gap-2 mb-4">
               <input
                 value={novaTarefaTexto}
@@ -337,7 +339,6 @@ export default function Home() {
                 placeholder="Adicionar tarefa..."
                 className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm"
               />
-              <BotaoMicrofone onResultado={aoFalarNovaTarefa} titulo="Falar (ex: hoje medir obra)" />
               <button
                 onClick={adicionarTarefaRapida}
                 disabled={!novaTarefaTexto.trim() || salvandoTarefa}

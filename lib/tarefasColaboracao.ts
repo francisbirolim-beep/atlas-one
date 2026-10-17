@@ -10,6 +10,8 @@ export async function atribuirTarefa(dados: {
   descricao?: string
   dataHora?: string | null
   prioridade?: PrioridadeTarefa
+  avisosMinutos?: number[]
+  repetirPendenteMinutos?: number
 }): Promise<{ ok: boolean; tarefa?: TarefaPessoal; error?: string; code?: CodigoErroColaboracao; atribuidaParaOutro?: boolean }> {
   const token = await tokenAtual()
   if (!token) return { ok: false, error: 'Sessão expirada' }

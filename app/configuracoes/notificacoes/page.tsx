@@ -17,6 +17,7 @@ import {
   type StatusPushDispositivo,
 } from '@/lib/notificacoes'
 import type { NotificacaoPreferencias, Usuario } from '@/lib/tipos'
+import CamposLembretes from '@/components/system/CamposLembretes'
 
 type ChaveCategoria = 'tarefas' | 'agenda' | 'chat' | 'operacao'
 
@@ -146,7 +147,7 @@ export default function ConfiguracoesNotificacoesPage() {
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-8">
         <div className="mb-6 flex items-center gap-3">
-          <Link href="/configuracoes" className="grid h-10 w-10 place-items-center rounded-xl border bg-white text-slate-600 hover:bg-slate-50">
+          <Link href="/" title="Voltar à Visão Geral" className="grid h-10 w-10 place-items-center rounded-xl border bg-white text-slate-600 hover:bg-slate-50">
             <ArrowLeft size={18}/>
           </Link>
           <div className="min-w-0 flex-1">
@@ -163,6 +164,25 @@ export default function ConfiguracoesNotificacoesPage() {
 
         <div className="grid gap-5 lg:grid-cols-[1.05fr_.95fr]">
           <section className="space-y-5">
+            <div className="rounded-2xl border bg-white p-5 shadow-sm">
+              <h2 className="mb-2 text-lg font-bold text-slate-900">Lembretes padrão</h2>
+              <p className="mb-4 text-xs text-slate-500">Usados automaticamente ao criar tarefas e compromissos. Cada item pode ter horários diferentes.</p>
+              <div className="space-y-3">
+                <CamposLembretes titulo="Tarefas" descricao="Avisos e cobrança enquanto a tarefa não for concluída."
+                  valores={prefs.tarefas_avisos_minutos || [1440,60]}
+                  repeticao={prefs.tarefas_repetir_pendente_minutos ?? 60}
+                  onChange={v=>void alterar({tarefas_avisos_minutos:v})}
+                  onRepeticao={v=>void alterar({tarefas_repetir_pendente_minutos:v})}
+                  disabled={salvando}/>
+                <CamposLembretes titulo="Agenda" descricao="Avisos antes de compromissos e acompanhamento opcional."
+                  valores={prefs.agenda_avisos_minutos || [1440,60,10]}
+                  repeticao={prefs.agenda_repetir_pendente_minutos ?? 0}
+                  onChange={v=>void alterar({agenda_avisos_minutos:v})}
+                  onRepeticao={v=>void alterar({agenda_repetir_pendente_minutos:v})}
+                  disabled={salvando}/>
+              </div>
+              <p className="mt-3 text-xs text-slate-500">Notificações no Atlas e celular são a primeira etapa. O envio e as respostas por WhatsApp serão habilitados após validação da integração.</p>
+            </div>
             <div className="rounded-2xl border bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-start gap-3">
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-700"><Smartphone size={20}/></span>
@@ -246,13 +266,18 @@ export default function ConfiguracoesNotificacoesPage() {
                   <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${prefs.som_ativo ? 'left-6' : 'left-1'}`}/>
                 </button>
               </div>
-              <label className="block text-xs font-semibold text-slate-600">Volume dentro do Atlas</label>
+              <label className="block text-xs font-semibold text-slate-600">Volume dos avisos no computador</label>
               <input type="range" min="0.1" max="1" step="0.1" value={prefs.som_volume}
                 onChange={e=>setPrefs({ ...prefs, som_volume: Number(e.target.value) })}
                 onMouseUp={()=>void alterar({ som_volume: prefs.som_volume })}
                 onTouchEnd={()=>void alterar({ som_volume: prefs.som_volume })}
                 className="mt-3 w-full" disabled={!prefs.som_ativo}/>
               <div className="mt-1 flex justify-between text-[10px] text-slate-400"><span>Baixo</span><span>{Math.round(Number(prefs.som_volume)*100)}%</span><span>Alto</span></div>
+              <p className="mt-3 text-xs leading-relaxed text-slate-600">
+                <strong>No celular, vale o som do aparelho.</strong> O Atlas não toca áudio próprio no iPhone ou Android.
+                Os avisos do sistema operacional respeitam o modo silencioso, o Foco/Não Perturbe e as permissões do celular.
+                O controle acima ajusta somente os sons internos do navegador no computador.
+              </p>
             </div>
 
             <div className="rounded-2xl border bg-white p-5 shadow-sm">

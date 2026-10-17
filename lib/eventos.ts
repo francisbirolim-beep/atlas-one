@@ -29,7 +29,8 @@ export async function listarEventosDoUsuario(usuarioId: string): Promise<EventoC
 export async function criarEvento(
   usuarioId: string,
   dados: { titulo: string; descricao?: string; local?: string; data_inicio: string; data_fim?: string | null },
-  convidadosIds: string[] = []
+  convidadosIds: string[] = [],
+  avisos?: { avisosMinutos: number[]; repetirPendenteMinutos: number }
 ): Promise<Evento | null> {
   const { data, error } = await supabase
     .from('eventos')
@@ -40,6 +41,10 @@ export async function criarEvento(
       local: dados.local || null,
       data_inicio: dados.data_inicio,
       data_fim: dados.data_fim || null,
+      ...(avisos ? {
+        avisos_minutos: avisos.avisosMinutos,
+        repetir_pendente_minutos: avisos.repetirPendenteMinutos,
+      } : {}),
     })
     .select()
     .single()
@@ -56,6 +61,18 @@ export async function criarEvento(
   }
 
   return data as Evento
+}
+
+// Alterações do próprio compromisso. Os convites e eventos de terceiros permanecem protegidos.
+export async function atualizarMeuEvento(
+  eventoId: string,
+  usuarioId: string,
+  campos: { data_inicio?: string; data_fim?: string | null; concluido_em?: string | null; pausado_ate?: string | null },
+): Promise<boolean> {
+  const { data, error } = await supabase.from('eventos')
+    .update(campos).eq('id', eventoId).eq('usuario_id', usuarioId)
+    .select('id').maybeSingle()
+  return !error && Boolean(data?.id)
 }
 
 export async function excluirEvento(eventoId: string): Promise<boolean> {

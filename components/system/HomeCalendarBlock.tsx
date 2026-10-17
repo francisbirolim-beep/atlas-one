@@ -5,6 +5,8 @@ import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, X } from
 import { usuarioAtual } from '@/lib/auth'
 import { criarEvento, listarEventosDoUsuario, listarUsuariosConvidaveis, type EventoComConvite } from '@/lib/eventos'
 import type { Usuario } from '@/lib/tipos'
+import DitarCompromisso from '@/components/system/DitarCompromisso'
+import { interpretarDitadoAgenda } from '@/lib/ditadoAgenda'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
@@ -84,6 +86,18 @@ export default function HomeCalendarBlock() {
     if (usuario && usuarios.length === 0) setUsuarios(await listarUsuariosConvidaveis(usuario.id))
   }
 
+  function preencherPorVoz(texto: string) {
+    const interpretado = interpretarDitadoAgenda(texto)
+    setTitulo(interpretado.titulo)
+    if (interpretado.data) {
+      setData(dataInput(interpretado.data))
+      const h=String(interpretado.data.getHours()).padStart(2,'0'),m=String(interpretado.data.getMinutes()).padStart(2,'0')
+      setInicio(h+':'+m)
+      const fimPadrao=new Date(interpretado.data.getTime()+60*60*1000)
+      setFim(String(fimPadrao.getHours()).padStart(2,'0')+':'+String(fimPadrao.getMinutes()).padStart(2,'0'))
+    }
+  }
+
   async function salvar() {
     if (!usuario || !titulo.trim() || !data) return
     const dataInicio = new Date(`${data}T${inicio}:00`)
@@ -161,10 +175,11 @@ export default function HomeCalendarBlock() {
 
       {modal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold text-slate-900">Novo compromisso</h3><p className="text-xs text-slate-500">Adicione à sua agenda e convide usuários.</p></div><button type="button" onClick={() => setModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={17}/></button></div>
             <div className="space-y-3">
-              <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do compromisso" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
+              <DitarCompromisso tipo="agenda" onResultado={preencherPorVoz}/>
+              <input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do compromisso" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
               <input type="date" value={data} onChange={e => setData(e.target.value)} className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
               <div className="grid grid-cols-2 gap-2"><label className="text-xs text-slate-500">Início<input type="time" value={inicio} onChange={e => setInicio(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label><label className="text-xs text-slate-500">Fim<input type="time" value={fim} onChange={e => setFim(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label></div>
               <input value={local} onChange={e => setLocal(e.target.value)} placeholder="Local (opcional)" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
