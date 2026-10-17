@@ -1,3 +1,7 @@
+import {textoCatalogoGeometrico} from '@/lib/ai/catalogoPdfTexto'
+import {pesoDecimalCatalogo} from '@/lib/ai/catalogoPeso'
+import {podeAtualizarCandidatoCatalogo,dadosReanaliseCatalogo} from '@/lib/ai/catalogoReanalise'
+import {extrairLinhasCatalogo, VERSAO_REGRAS_CATALOGO} from '@/lib/ai/catalogoLinhas'
 import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
@@ -20,9 +24,22 @@ const CATEGORIAS = new Set(['produto','acessorio','perfil','vidro','kit','porta_
 function txt(v: unknown, n=500){ return String(v ?? '').trim().slice(0,n) }
 function dig(v: unknown){ return String(v ?? '').replace(/\D/g,'') }
 function num(v: unknown): number|null {
+  if(typeof v==='number')return Number.isFinite(v)?v:null
   if(v===null||v===undefined||v==='') return null
   const n=Number(String(v).replace(/\s/g,'').replace(/\.(?=\d{3}(?:\D|$))/g,'').replace(',','.'))
   return Number.isFinite(n)?n:null
+}
+// Dados técnicos de catálogo: somente cotas reais, sem inventar dimensões.
+function medidasMmCatalogo(valor: unknown): Record<string,number> {
+  const resultado: Record<string,number> = {}
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return resultado
+  for (const [chave, original] of Object.entries(valor)) {
+    if (!/^(A|B|C|D|e)$/.test(chave) || original === '' || original == null) continue
+    const n = pesoDecimalCatalogo(original)
+    if (n === null || n <= 0 || n > 100000) throw new Error('Cota inválida em ' + chave + '. Use milímetros, por exemplo 23,5.')
+    resultado[chave] = n
+  }
+  return resultado
 }
 function norm(v: unknown){ return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\s+/g,' ').trim() }
 function cod(v: unknown){ return txt(v,120).toUpperCase().replace(/[^A-Z0-9]/g,'') }
@@ -89,30 +106,23 @@ async function podeValidar(usuario:UsuarioTenant,c:any,snapshot?:Awaited<ReturnT
  return true
 }
 async function lerPdfCatalogo(b:Buffer){
-  const paginas:Array<{pagina:number;texto:string}>=[]
+  const paginas:Array<{pagina:number;texto:string;items?:any[]}>=[]
   const p=await pdfParse(b,{pagerender:async(pageData:any)=>{
     const tc=await pageData.getTextContent({normalizeWhitespace:false,disableCombineTextItems:false})
-    let lastY:number|undefined,textoPagina=''
-    for(const item of (tc?.items||[])){
-      const y=Number(item?.transform?.[5])
-      const str=String(item?.str||'')
-      if(lastY===undefined||y===lastY)textoPagina+=str
-      else textoPagina+='\n'+str
-      lastY=y
-    }
-    paginas.push({pagina:paginas.length+1,texto:textoPagina})
+    const textoPagina=textoCatalogoGeometrico(tc?.items||[])
+    paginas.push({pagina:paginas.length+1,texto:textoPagina,items:tc.items})
     return textoPagina
   }})
   return {texto:String(p.text||'').replace(/\r/g,'').trim().slice(0,250000),paginas}
 }
 
 async function preparar(usuario:UsuarioTenant,id:string,a:any){
-  if(!a)return {path:null as string|null,texto:'',imagens:[] as OpenCodeAnexo[],paginas:[] as Array<{pagina:number;texto:string}>,size:0}
+  if(!a)return {path:null as string|null,texto:'',imagens:[] as OpenCodeAnexo[],paginas:[] as Array<{pagina:number;texto:string;items?:any[]}>,size:0}
   const mime=a.mediaType||'application/octet-stream'
   const ehTexto=mime.startsWith('text/')||mime==='application/json'
   let b:Buffer,texto=''
   const imagens:OpenCodeAnexo[]=[]
-  const paginas:Array<{pagina:number;texto:string}>=[]
+  const paginas:Array<{pagina:number;texto:string;items?:any[]}>=[]
   if(ehTexto){ texto=String(a.dados).slice(0,250000); b=Buffer.from(a.dados,'utf8') }
   else {
     b=Buffer.from(a.dados,'base64')
@@ -135,11 +145,11 @@ function limparLinhaCatalogo(v: unknown){
 }
 function ehCodigoCatalogo(v: unknown){
   const x=limparLinhaCatalogo(v).toUpperCase().replace(/\s+/g,'')
-  if(!x||x.length>24||!/\d/.test(x))return ''
+  if(!x||x.length>24||!/\d/.test(x)||/^(LINHA|PERFIL)\d/.test(x))return ''
   const prefixo=x.split(/[-_/]/)[0]||''
   if(['VISTA','PERFIL','LINHA','BARRA','ACABAMENTO','SUPERIOR','INFERIOR','LATERAL','TRAVESSA','MONTANTE'].includes(prefixo))return ''
   if(/^[A-Z]{1,6}\d{0,3}(?:[-_/][A-Z0-9]{2,8}){1,2}$/.test(x))return x
-  if(/^[A-Z]{2,6}\d{2,8}$/.test(x))return x
+  if(/^[A-Z]{1,6}\d{2,8}[A-Z]{0,3}$/.test(x))return x
   return ''
 }
 function pesoKgM(v: unknown){
@@ -195,12 +205,14 @@ function categoriaCatalogo(descricao:string,peso:number|null){
   if(/PERFIL|TUBO|CANTONEIRA|BARRA|MONTANTE|TRAVESSA|MARCO|CONTRAMARCO|BAGUETE|TRILHO|COLUNA|CAPA|CADEIRINHA/.test(x))return 'perfil'
   return 'outro'
 }
-function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,paginas:Array<{pagina:number;texto:string}>=[]){
+function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,paginas:Array<{pagina:number;texto:string;items?:any[]}>=[]){
   const linhas=texto.split(/\r?\n/).map(limparLinhaCatalogo)
   const linhaPorIndice:string[]=[]
   let linhaAtual=''
   for(let i=0;i<linhas.length;i++){
     const atual=norm(linhas[i])
+    const linhaExplicita=linhas[i].match(/^Linha\s+(.{1,60})$/i)
+    if(linhaExplicita)linhaAtual='Linha '+linhaExplicita[1]
     if(atual==='LINHA'){
       const partes:string[]=[]
       for(let j=i-1;j>=0&&j>=i-3;j--){
@@ -220,8 +232,8 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,p
     }
   }
 
-  const itens:any[]=[]
-  const vistos=new Set<string>()
+  const itens:any[]=extrairLinhasCatalogo(paginas.length?paginas:[{pagina:1,texto}])
+  const vistos=new Set<string>(itens.map(i=>i.codigo))
   for(let i=0;i<linhas.length;i++){
     const codigo=ehCodigoCatalogo(linhas[i])
     if(!codigo||vistos.has(codigo))continue
@@ -257,15 +269,15 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,p
     vistos.add(codigo)
     itens.push({
       tipo:'produto',titulo:codigo+' — '+descricao,modulo:'engenharia',
-      codigo,descricao,categoria:categoriaCatalogo(descricao,peso),unidade:null,
+      codigo,descricao,categoria:categoriaCatalogo(descricao,peso),unidade:categoriaCatalogo(descricao,peso)==='perfil'?'KG':null,
       preco:null,peso_kg_m:peso,tamanho_barra_mm:null,linha:linhaPorIndice[i]||null,
       aplicacao:null,conteudo:null,pagina_catalogo:paginaPorCodigo.get(codigo)||null,confianca:peso!==null?.97:.65,
     })
-    if(itens.length>=1200)break
+
   }
   return itens
 }
-function analisarCatalogoLocal(tipo:string,descricao:string,nome:string|null,texto:string,paginas:Array<{pagina:number;texto:string}>=[]){
+function analisarCatalogoLocal(tipo:string,descricao:string,nome:string|null,texto:string,paginas:Array<{pagina:number;texto:string;items?:any[]}>=[]){
   const fornecedorNome=nomeFornecedorCatalogo(texto)
   const itens=extrairProdutosCatalogoLocal(texto,fornecedorNome,paginas)
   const tipoDetectado=tipo==='tabela_preco'?'tabela_preco':'catalogo'
@@ -299,7 +311,7 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
     }
   }
   const {data:candidatos,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
-    .select('id,dados').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').limit(2000)
+    .select('id,dados').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').eq('status','pendente').limit(2000)
   if(ce)throw ce
   let mapeados=0
   const lista=candidatos||[]
@@ -332,7 +344,7 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
   return {mapeados,total:lista.length}
 }
 
-async function analisar(token:string,tipo:string,descricao:string,nome:string|null,texto:string,imagens:OpenCodeAnexo[],paginas:Array<{pagina:number;texto:string}>=[]){
+async function analisar(token:string,tipo:string,descricao:string,nome:string|null,texto:string,imagens:OpenCodeAnexo[],paginas:Array<{pagina:number;texto:string;items?:any[]}>=[]){
   if(catalogoProvavel(tipo,nome,texto)){
     const local=analisarCatalogoLocal(tipo,descricao,nome,texto,paginas)
     if(local.itens.length>0)return local
@@ -431,6 +443,15 @@ async function reconciliarProdutoCatalogoNoBanco(usuario:UsuarioTenant,c:any){
   return atualizado
 }
 
+async function lerTodas(query:any){
+  const rows:any[]=[]
+  for(let offset=0;;offset+=1000){
+    const {data,error}=await query.range(offset,offset+999)
+    if(error)throw error
+    rows.push(...(data||[]))
+    if(!data||data.length<1000)return {data:rows,error:null}
+  }
+}
 async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,fornecedorInfo:any){
   const rows:any[]=[]
   const f=x?.documento?.fornecedor||null
@@ -482,7 +503,7 @@ async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,forn
     }
     return {produto:null,metodo:'novo',confianca:c?.length?0.8:0.6}
   }
-  for(const item of Array.isArray(x?.itens)?x.itens.slice(0,1200):[]){
+  for(const item of Array.isArray(x?.itens)?x.itens:[]){
     if(String(item.tipo)==='produto'||String(item.tipo)==='preco'){
       const codigo=txt(item.codigo,120), descricao=txt(item.descricao||item.titulo,400)
       if(!codigo&&!descricao)continue
@@ -495,7 +516,7 @@ async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,forn
         entrada_id:entradaId,empresa_id:usuario.empresa_id,tipo:'produto',
         modulo:MODULOS.has(txt(item.modulo,50))?txt(item.modulo,50):'engenharia',
         titulo:codigo?`${codigo} — ${descricao||'Produto'}`:descricao,
-        dados:{codigo:codigo||null,descricao:descricao||null,categoria:cat,unidade:txt(item.unidade,30)||null,preco_fornecedor:num(item.preco),peso_kg_m:num(item.peso_kg_m),tamanho_barra_mm:num(item.tamanho_barra_mm),linha:txt(item.linha,120)||null,aplicacao:txt(item.aplicacao,1000)||null,pagina_catalogo:num(item.pagina_catalogo),fornecedor_nome:txt(f?.nome,220)||null,fornecedor_cnpj:dig(f?.cnpj)||null},
+        dados:{codigo:codigo||null,descricao:descricao||null,categoria:cat,unidade:txt(item.unidade,30)||null,preco_fornecedor:num(item.preco),peso_kg_m:pesoDecimalCatalogo(item.peso_kg_m),tamanho_barra_mm:num(item.tamanho_barra_mm),linha:txt(item.linha,120)||null,aplicacao:txt(item.aplicacao,1000)||null,pagina_catalogo:num(item.pagina_catalogo),paginas_referencia:item.paginas_referencia||[item.pagina_catalogo].filter(Boolean),conflito_peso_catalogo:item.conflito_peso_catalogo||null,medidas_mm:item.medidas_mm||{},medidas_polegadas:item.medidas_polegadas||{},evidencia_tabela:item.evidencia_tabela||null,imagem_tipo:item.imagem_tipo||null,familia:item.familia||null,regras_versao:VERSAO_REGRAS_CATALOGO,fornecedor_nome:txt(f?.nome,220)||null,fornecedor_cnpj:dig(f?.cnpj)||null},
         deduplicacao:{metodo:p.metodo,produto_existente:p.produto||null,ambiguos:(p as any).ambiguos||[]},
         acao_sugerida:p.produto?'vincular_existente':p.metodo==='ambiguo'?'revisar_ambiguidade':'cadastrar_novo',
         confianca:Math.min(num(item.confianca)??p.confianca,p.produto?1:.95),
@@ -507,8 +528,28 @@ async function criarCandidatos(usuario:UsuarioTenant,entradaId:string,x:any,forn
       rows.push({entrada_id:entradaId,empresa_id:usuario.empresa_id,tipo:'conhecimento',modulo,titulo:txt(item.titulo,180)||conteudo.slice(0,120),dados:{conteudo,aplicacao:txt(item.aplicacao,1000)||null},deduplicacao:{},acao_sugerida:modulo?'validar_conhecimento_setorial':'definir_setor',confianca:num(item.confianca)??.7})
     }
   }
-  if(rows.length){const {error}=await supabaseAdmin.from('ai_aprendizado_candidatos').insert(rows);if(error)throw new Error(error.message)}
-  return rows.length
+
+  const {data:anteriores,error:buscaErro}=await lerTodas(supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entradaId).order('id'))
+  if(buscaErro)throw buscaErro
+  const chave=(r:any)=>r.tipo==='produto'?'produto:'+cod(r.dados?.codigo):r.tipo==='fornecedor'?'fornecedor':'conhecimento:'+norm(r.titulo)
+  const porChave=new Map((anteriores||[]).map((r:any)=>[chave(r),r]))
+  const novos:any[]=[]
+  for(const row of rows){
+    const anterior=porChave.get(chave(row)) as any
+    if(!anterior){novos.push(row);porChave.set(chave(row),row);continue}
+    if(!podeAtualizarCandidatoCatalogo(anterior))continue
+    const {error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({
+      titulo:row.titulo,dados:dadosReanaliseCatalogo(anterior.dados,row.dados),
+      deduplicacao:row.deduplicacao,acao_sugerida:row.acao_sugerida,confianca:row.confianca,
+      updated_at:new Date().toISOString()
+    }).eq('empresa_id',usuario.empresa_id).eq('id',anterior.id).eq('status','pendente').eq('updated_at',anterior.updated_at)
+    if(error)throw error
+  }
+  for(let i=0;i<novos.length;i+=100){
+    const {error}=await supabaseAdmin.from('ai_aprendizado_candidatos').insert(novos.slice(i,i+100))
+    if(error)throw error
+  }
+  return novos.length
 }
 async function assinar(e:any){
   if(!e?.storage_path)return {...e,fonte_url:null}
@@ -552,7 +593,7 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornec
         if(existente)produtoId=existente.id
       }
       if(!produtoId){
-        const {data,error}=await supabaseAdmin.from('produtos').insert({empresa_id:usuario.empresa_id,nome:descricao.toUpperCase(),descricao,codigo,codigo_origem:codigo,categoria,unidade:txt(d.unidade,30)||(categoria==='perfil'?'BR':'UN'),preco:0,peso_kg_m:num(d.peso_kg_m),tamanho_barra_mm:num(d.tamanho_barra_mm),origem:'central_aprendizado',ativo:true,status_validacao:'revisado',validado_em:new Date().toISOString(),validado_por_id:usuario.id,validado_por_nome:usuario.nome,observacao_validacao:'Validado pela Central de Aprendizado.',criado_por_id:usuario.id,criado_por_nome:usuario.nome,dados_origem:{entrada_id:entrada.id,linha:d.linha||null,aplicacao:d.aplicacao||null}}).select('id').single()
+        const {data,error}=await supabaseAdmin.from('produtos').insert({empresa_id:usuario.empresa_id,nome:descricao.toUpperCase(),descricao,codigo,codigo_origem:codigo,categoria,unidade:txt(d.unidade,30)||(categoria==='perfil'?'KG':'UN'),preco:0,peso_kg_m:pesoDecimalCatalogo(d.peso_kg_m),tamanho_barra_mm:num(d.tamanho_barra_mm),foto_url:d.imagem_confirmada===true?d.imagem_item_url||null:null,origem:'central_aprendizado',ativo:true,status_validacao:'revisado',validado_em:new Date().toISOString(),validado_por_id:usuario.id,validado_por_nome:usuario.nome,observacao_validacao:'Validado pela Central de Aprendizado.',criado_por_id:usuario.id,criado_por_nome:usuario.nome,dados_origem:{entrada_id:entrada.id,linha:d.linha||null,medidas_mm:d.medidas_mm||{},medidas_polegadas:d.medidas_polegadas||{},pagina_catalogo:d.pagina_catalogo||null,aplicacao:d.aplicacao||null}}).select('id').single()
         if(error){
           if((error as any)?.code==='23505'&&codigo){
             const existente=await esperarProdutoPorCodigoBanco(usuario.empresa_id,codigo)
@@ -560,6 +601,24 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornec
             else throw new Error('O código '+codigo+' já existe, mas ainda não foi possível reconciliá-lo. Tente novamente em alguns segundos.')
           }else throw new Error(error.message)
         }else produtoId=data.id
+      }
+    }
+    if(produtoId){
+      const {data:atual,error:le}=await supabaseAdmin.from('produtos').select('id,peso_kg_m,foto_url,dados_origem,updated_at').eq('empresa_id',usuario.empresa_id).eq('id',produtoId).single()
+      if(le)throw le
+      const patch:any={}
+      if(atual.peso_kg_m==null&&pesoDecimalCatalogo(d.peso_kg_m)!==null)patch.peso_kg_m=pesoDecimalCatalogo(d.peso_kg_m)
+      if(!atual.foto_url&&d.imagem_confirmada===true&&cod(d.imagem_codigo_validado)===cod(d.codigo))patch.foto_url=d.imagem_item_url
+      const origem={...(atual.dados_origem||{})}
+      let origemMudou=false
+      for(const campo of ['linha','medidas_mm','medidas_polegadas']){
+        if((origem[campo]==null||(typeof origem[campo]==='object'&&!Object.keys(origem[campo]).length))&&d[campo]!=null){origem[campo]=d[campo];origemMudou=true}
+      }
+      if(origemMudou)patch.dados_origem=origem
+      if(Object.keys(patch).length){
+        const {data:gravado,error:ue}=await supabaseAdmin.from('produtos').update({...patch,updated_at:new Date().toISOString()}).eq('empresa_id',usuario.empresa_id).eq('id',produtoId).eq('updated_at',atual.updated_at).select('id').maybeSingle()
+        if(ue)throw ue
+        if(!gravado)throw Error('O produto foi alterado por outro usuário. Atualize antes de validar novamente.')
       }
     }
     const fornecedorId=contexto?.fornecedorId!==undefined?contexto.fornecedorId:await resolverFornecedor(usuario,entrada,null)
@@ -593,7 +652,7 @@ function conflitosProdutoCatalogo(c:any){
   const cat=String(d.categoria||'')
   if(cat&&cat!=='outro'&&p.categoria&&String(p.categoria)!=='outro'&&norm(cat)!==norm(p.categoria))conflitos.push({campo:'categoria',atlas:p.categoria,catalogo:cat})
   if(d.unidade&&p.unidade&&norm(d.unidade)!==norm(p.unidade))conflitos.push({campo:'unidade',atlas:p.unidade,catalogo:d.unidade})
-  const pesoNovo=num(d.peso_kg_m), pesoAtlas=num(p.peso_kg_m)
+  const pesoNovo=pesoDecimalCatalogo(d.peso_kg_m), pesoAtlas=pesoDecimalCatalogo(p.peso_kg_m)
   if(pesoNovo!==null&&pesoAtlas!==null&&Math.abs(pesoNovo-pesoAtlas)>Math.max(.01,Math.abs(pesoAtlas)*.03))conflitos.push({campo:'peso_kg_m',atlas:pesoAtlas,catalogo:pesoNovo})
   const barraNova=num(d.tamanho_barra_mm), barraAtlas=num(p.tamanho_barra_mm)
   if(barraNova!==null&&barraAtlas!==null&&Math.abs(barraNova-barraAtlas)>2)conflitos.push({campo:'tamanho_barra_mm',atlas:barraAtlas,catalogo:barraNova})
@@ -607,6 +666,8 @@ function motivoPendenciaCatalogo(c:any){
     return null
   }
   if(c.tipo==='produto'){
+    if(Array.isArray(c.dados?.conflito_peso_catalogo)&&c.dados.conflito_peso_catalogo.length>1)return 'O mesmo código apresenta pesos diferentes no catálogo. Confirme o peso e a imagem antes de validar.'
+    if(c.dados?.categoria==='perfil'&&(pesoDecimalCatalogo(c.dados?.peso_kg_m)??0)<=0)return 'Peso por metro não identificado. Confira o catálogo.'
     if(c.acao_sugerida==='revisar_ambiguidade')return 'Encontrei mais de um produto possível para o mesmo item.'
     if(!txt(c.dados?.codigo,120))return 'O catálogo não trouxe código suficiente para vincular este item.'
     if(!ehCodigoCatalogo(c.dados?.codigo))return 'Código com formato incompatível com os códigos técnicos. Corrija antes de aplicar.'
@@ -657,9 +718,9 @@ async function aplicarCatalogoAutomatico(usuario:UsuarioTenant,c:any,entrada:any
 async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:string){
   let {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',usuario.empresa_id).eq('id',entradaId).maybeSingle()
   if(!entrada)return {aplicados:0,pendentes:0}
-  const {data:lista}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('*')
+  const {data:lista}=await lerTodas(supabaseAdmin.from('ai_aprendizado_candidatos').select('*')
     .eq('empresa_id',usuario.empresa_id).eq('entrada_id',entradaId)
-    .in('status',['pendente','corrigido','aprovado']).order('created_at',{ascending:true})
+    .in('status',['pendente','corrigido','aprovado']).order('created_at',{ascending:true}).order('id'))
   if(usuario.role!=='master'){
     const snapshot=await carregarPermissoesIA(usuario)
     const autorizados=await Promise.all((lista||[]).map(c=>podeValidar(usuario,c,snapshot)))
@@ -681,7 +742,7 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
   const fornecedorNecessario=entrada.tipo==='catalogo'||entrada.tipo==='tabela_preco'||Boolean(entrada.fornecedor_nome_sugerido||entrada.fornecedor_cnpj_sugerido)
   const fornecedorId=await resolverFornecedor(usuario,entrada,null)
   const documentoId=fornecedorId?await copiarFonte(usuario,entrada,fornecedorId):null
-  const outros=(lista||[]).filter((x:any)=>x.tipo!=='fornecedor')
+  const outros=(lista||[]).filter((x:any)=>x.tipo!=='fornecedor'&&!x.dados?.arquivado_em)
   for(let i=0;i<outros.length;i+=12){
     const lote=outros.slice(i,i+12)
     const resultados=await Promise.all(lote.map(async(c:any)=>{
@@ -693,6 +754,7 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
         }).eq('empresa_id',usuario.empresa_id).eq('id',c.id)
         return 0
       }
+      if(c.status==='corrigido'||c.status==='aprovado'||c.dados?.revisado_manualmente)return 0
       const reconciliado=c.tipo==='produto'?await reconciliarProdutoCatalogoNoBanco(usuario,c):c
       const motivo=motivoPendenciaCatalogo(reconciliado)
       if(motivo){await pendenciarCatalogo(usuario,reconciliado,motivo);return 0}
@@ -702,8 +764,8 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
     aplicados+=resultados.reduce((s:number,n:number)=>s+n,0)
   }
 
-  const {data:restantes}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('id,acao_sugerida')
-    .eq('empresa_id',usuario.empresa_id).eq('entrada_id',entradaId).in('status',['pendente','corrigido','aprovado'])
+  const {data:restantes}=await lerTodas(supabaseAdmin.from('ai_aprendizado_candidatos').select('id,acao_sugerida')
+    .eq('empresa_id',usuario.empresa_id).eq('entrada_id',entradaId).in('status',['pendente','corrigido','aprovado']).order('id'))
   const reais=(restantes||[]).filter((c:any)=>c.acao_sugerida!=='aguardar_fornecedor')
   await supabaseAdmin.from('ai_aprendizado_entradas').update({
     status:reais.length?'aguardando_validacao':'concluido',
@@ -714,7 +776,7 @@ async function processarCatalogoAutomatico(usuario:UsuarioTenant,entradaId:strin
 }
 
 async function concluir(empresaId:string,entradaId:string){
-  const {data}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('status').eq('empresa_id',empresaId).eq('entrada_id',entradaId)
+  const {data}=await lerTodas(supabaseAdmin.from('ai_aprendizado_candidatos').select('status').eq('empresa_id',empresaId).eq('entrada_id',entradaId).order('id'))
   if(!(data||[]).some((c:any)=>['pendente','corrigido','aprovado'].includes(c.status)))await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'concluido',updated_at:new Date().toISOString()}).eq('empresa_id',empresaId).eq('id',entradaId)
 }
 
@@ -724,12 +786,12 @@ export async function GET(req:NextRequest){
     const autorizacao=await carregarPermissoesIA(u)
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const entradaId=txt(req.nextUrl.searchParams.get('entradaId'),80), status=txt(req.nextUrl.searchParams.get('status'),40)
-    let q=supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(200);if(entradaId)q=q.eq('id',entradaId)
+    let q=supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).order('id');if(entradaId)q=q.eq('id',entradaId)
     if(u.role!=='master')q=q.eq('criado_por_id',u.id)
-    const {data:entradas,error:e1}=await q;if(e1)throw e1
-    let qc=supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(3000);if(entradaId)qc=qc.eq('entrada_id',entradaId);if(['pendente','aprovado','rejeitado','corrigido','aplicado'].includes(status))qc=qc.eq('status',status)
+    const {data:entradas,error:e1}=await lerTodas(q);if(e1)throw e1
+    let qc=supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).order('id');if(entradaId)qc=qc.eq('entrada_id',entradaId);if(['pendente','aprovado','rejeitado','corrigido','aplicado'].includes(status))qc=qc.eq('status',status)
     if(u.role!=='master')qc=qc.in('entrada_id',(entradas||[]).map(e=>e.id))
-    const {data:candidatos,error:e2}=await qc;if(e2)throw e2
+    const {data:candidatos,error:e2}=await lerTodas(qc);if(e2)throw e2
     // Comparação estrita de código e categoria: nenhuma imagem é inferida por nome parecido.
     // Consulta em lotes para evitar URL demasiadamente grande no PostgREST.
     const codigos=[...new Set((candidatos||[])
@@ -768,7 +830,7 @@ export async function GET(req:NextRequest){
       entradas:await Promise.all(es.map(assinar)),
       candidatos:cs,
       totais:{
-        pendentes:cs.filter(c=>['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length,
+        pendentes:cs.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor'&&!es.find((e:any)=>e.id===c.entrada_id)?.metadados?.arquivado_em).length,
         aplicados:cs.filter(c=>c.status==='aplicado').length,
         rejeitados:cs.filter(c=>c.status==='rejeitado').length,
         entradasAguardando:es.filter((e:any)=>e.status==='aguardando_validacao').length,
@@ -825,6 +887,22 @@ export async function PATCH(req:NextRequest){
     const autorizacao=await carregarPermissoesIA(u)
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     const b=await req.json(),acao=txt(b?.acao,40)
+    if(acao==='arquivar_entrada'||acao==='restaurar_entrada'){
+      const entradaId=txt(b?.entrada_id,80)
+      const {data:entrada,error:le}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).maybeSingle()
+      if(le)throw le
+      if(!entrada||(u.role!=='master'&&entrada.criado_por_id!==u.id))return NextResponse.json({error:'Material não encontrado.'},{status:404})
+      if(entrada.status==='analisando')return NextResponse.json({error:'Aguarde a análise terminar antes de arquivar.'},{status:409})
+      const {data:itens,error:ie}=await lerTodas(supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).eq('entrada_id',entradaId).order('id'))
+      if(ie)throw ie
+      for(const item of itens||[])if(!await podeValidar(u,item))return NextResponse.json({error:'Sem permissão para arquivar este material.'},{status:403})
+      if(!(itens||[]).length&&u.role!=='master')return NextResponse.json({error:'Somente Master pode arquivar uma análise sem itens.'},{status:403})
+      const arquivar=acao==='arquivar_entrada'
+      const {error}=await supabaseAdmin.from('ai_aprendizado_entradas').update({metadados:{...(entrada.metadados||{}),arquivado_em:arquivar?new Date().toISOString():null,arquivado_por:arquivar?u.id:null},updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId).eq('updated_at',entrada.updated_at).select('id').single()
+      if(error)throw error
+      await log(u,arquivar?'entrada_arquivada':'entrada_restaurada',entradaId)
+      return NextResponse.json({mensagem:arquivar?'Material arquivado. Histórico e cadastros preservados.':'Material restaurado.'})
+    }
     if(acao==='mapear_catalogo'){
       if(!await podeValidar(u,{tipo:'produto',modulo:'engenharia'})||!await podeValidar(u,{tipo:'fornecedor',modulo:'compras'}))return NextResponse.json({error:'Sem permissão para alterar este catálogo.'},{status:403})
 
@@ -846,20 +924,39 @@ export async function PATCH(req:NextRequest){
       if(!entrada)return NextResponse.json({error:'Catálogo não encontrado.'},{status:404})
       if(u.role!=='master'&&entrada.criado_por_id!==u.id)return NextResponse.json({error:'Material não encontrado.'},{status:404})
       if(!['catalogo','tabela_preco'].includes(String(entrada.tipo)))return NextResponse.json({error:'Somente catálogo ou tabela de preço pode ser reprocessado por esta ação.'},{status:400})
-      await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'analisando',erro:null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId)
-      await remapearCatalogoExistente(u,entrada)
-      const auto=await processarCatalogoAutomatico(u,entradaId)
-      return NextResponse.json({
-        mensagem:auto.pendentes
-          ?'Catálogo reprocessado: '+auto.aplicados+' item(ns) aplicados e '+auto.pendentes+' pendência(s) para validar.'
-          :'Catálogo reprocessado: '+auto.aplicados+' item(ns) aplicados, sem pendências.',
-        ...auto,
-      })
+      if(entrada.metadados?.arquivado_em)return NextResponse.json({error:'Restaure o catálogo antes de reanalisar.'},{status:409})
+      if(entrada.status==='analisando'&&Date.now()-new Date(entrada.updated_at).getTime()<600000)return NextResponse.json({error:'Este catálogo já está em análise.'},{status:409})
+      const {data:travada,error:te}=await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'analisando',erro:null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId).eq('updated_at',entrada.updated_at).select('id').maybeSingle()
+      if(te)throw te
+      if(!travada)return NextResponse.json({error:'O catálogo mudou. Atualize a tela antes de tentar novamente.'},{status:409})
+      try{
+        if(!entrada.storage_path||entrada.mime_type!=='application/pdf')throw Error('A reanálise completa exige o PDF original. Envie o arquivo para extrair todos os itens.')
+        const {data:file,error:fe}=await supabaseAdmin.storage.from('atlas-aprendizado').download(entrada.storage_path)
+        if(fe||!file)throw Error('Não foi possível abrir o catálogo original.')
+        const lido=await lerPdfCatalogo(Buffer.from(await file.arrayBuffer()))
+        const x=analisarCatalogoLocal(entrada.tipo,entrada.descricao||'',entrada.fonte_nome,lido.texto,lido.paginas)
+        if(!x.itens.length)throw Error('Nenhum produto foi identificado com segurança. O PDF pode precisar de leitura visual; os cadastros anteriores foram preservados.')
+        if(entrada.fornecedor_nome_sugerido)x.documento.fornecedor={cnpj:'',contato:'',telefone:'',email:'',cidade:'',...x.documento.fornecedor,nome:entrada.fornecedor_nome_sugerido}
+        let fornecedor:any=null
+        if(entrada.fornecedor_id_sugerido){
+          const r=await supabaseAdmin.from('fornecedores').select('id,nome').eq('empresa_id',u.empresa_id).eq('id',entrada.fornecedor_id_sugerido).maybeSingle()
+          if(r.error)throw r.error
+          fornecedor=r.data
+        }
+        const novos=await criarCandidatos(u,entradaId,x,{existente:fornecedor,ambiguos:[]})
+        const auto=await processarCatalogoAutomatico(u,entradaId)
+        await log(u,'catalogo_reanalisado',entradaId,null,{regras_versao:VERSAO_REGRAS_CATALOGO,novos,extraidos:x.itens.length,...auto})
+        return NextResponse.json({mensagem:'Reanálise concluída: '+x.itens.length+' produtos lidos, '+novos+' candidatos novos, '+auto.aplicados+' aplicados e '+auto.pendentes+' pendências. Correções anteriores preservadas.',novos,...auto})
+      }catch(error:any){
+        await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'erro',erro:error.message,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',entradaId)
+        throw error
+      }
     }
     const id=txt(b?.id,80);if(!id)return NextResponse.json({error:'Candidato não informado.'},{status:400})
     const {data:c}=await supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle();if(!c)return NextResponse.json({error:'Candidato não encontrado.'},{status:404});if(!(await podeValidar(u,c)))return NextResponse.json({error:'Sem permissão para validar.'},{status:403})
     const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',c.entrada_id).maybeSingle();if(!entrada)return NextResponse.json({error:'Entrada não encontrada.'},{status:404})
       if(u.role!=='master'&&entrada.criado_por_id!==u.id)return NextResponse.json({error:'Material não encontrado.'},{status:404})
+    if(entrada.metadados?.arquivado_em)return NextResponse.json({error:'Restaure o material para editar ou validar.'},{status:409})
     if(acao==='salvar_imagem_catalogo'){
       if(c.tipo!=='produto')return NextResponse.json({error:'Imagem só pode ser vinculada a produto.'},{status:400})
       const dataUrl=String(b?.imagem||'')
@@ -908,13 +1005,16 @@ export async function PATCH(req:NextRequest){
       if(!descricao)return NextResponse.json({error:'Informe a descrição do item.'},{status:400})
       const dados={
         ...anterior,
+        revisado_manualmente:true,
         codigo,
         descricao,
         categoria,
         unidade:txt(recebido.unidade??anterior.unidade,30)||null,
         preco_fornecedor:num(recebido.preco_fornecedor??anterior.preco_fornecedor),
-        peso_kg_m:num(recebido.peso_kg_m??anterior.peso_kg_m),
+        peso_kg_m:pesoDecimalCatalogo(recebido.peso_kg_m??anterior.peso_kg_m),
         tamanho_barra_mm:num(recebido.tamanho_barra_mm??anterior.tamanho_barra_mm),
+        medidas_mm:medidasMmCatalogo(recebido.medidas_mm??anterior.medidas_mm),
+        medidas_polegadas:recebido.medidas_polegadas&&typeof recebido.medidas_polegadas==='object'?recebido.medidas_polegadas:(anterior.medidas_polegadas||{}),
         linha:txt(recebido.linha??anterior.linha,120)||null,
         aplicacao:txt(recebido.aplicacao??anterior.aplicacao,1000)||null,
         imagem_item_url:txt(recebido.imagem_item_url??anterior.imagem_item_url,2000)||null,
@@ -932,10 +1032,10 @@ export async function PATCH(req:NextRequest){
           codigo,
           codigo_origem:codigo,
           categoria,
-          unidade:dados.unidade||(categoria==='perfil'?'BR':'UN'),
+          unidade:dados.unidade||(categoria==='perfil'?'KG':'UN'),
           peso_kg_m:dados.peso_kg_m,
           tamanho_barra_mm:dados.tamanho_barra_mm,
-          dados_origem:{...(produtoAtual.dados_origem||{}),entrada_id:entrada.id,linha:dados.linha,aplicacao:dados.aplicacao},
+          dados_origem:{...(produtoAtual.dados_origem||{}),entrada_id:entrada.id,linha:dados.linha,medidas_mm:dados.medidas_mm||{},medidas_polegadas:dados.medidas_polegadas||{},pagina_catalogo:dados.pagina_catalogo||null,aplicacao:dados.aplicacao},
           status_validacao:'revisado',
           validado_em:new Date().toISOString(),
           validado_por_id:u.id,
@@ -977,7 +1077,7 @@ export async function PATCH(req:NextRequest){
     }
     if(acao==='corrigir'){
       const modulo=txt(b?.modulo,50);if(modulo&&!MODULOS.has(modulo))return NextResponse.json({error:'Setor inválido.'},{status:400})
-      const {data,error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({titulo:txt(b?.titulo,180)||c.titulo,modulo:modulo||c.modulo,dados:b?.dados&&typeof b.dados==='object'?b.dados:c.dados,status:'corrigido',observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id).select('*').single();if(error)throw error;await log(u,'candidato_corrigido',entrada.id,id);return NextResponse.json({candidato:{...data,pode_validar:true}})
+      const {data,error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({titulo:txt(b?.titulo,180)||c.titulo,modulo:modulo||c.modulo,dados:{...c.dados,...(b?.dados&&typeof b.dados==='object'?b.dados:{}),revisado_manualmente:true},status:'corrigido',observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id).select('*').single();if(error)throw error;await log(u,'candidato_corrigido',entrada.id,id);return NextResponse.json({candidato:{...data,pode_validar:true}})
     }
     if(acao==='rejeitar'){
       const {data,error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({status:'rejeitado',validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id).select('*').single();if(error)throw error;await log(u,'candidato_rejeitado',entrada.id,id);await concluir(u.empresa_id,entrada.id);return NextResponse.json({candidato:{...data,pode_validar:true}})
@@ -991,6 +1091,7 @@ export async function PATCH(req:NextRequest){
           error:'Código não reconhecido como referência técnica. Confira e corrija no catálogo antes de validar.',
         },{status:422})
         const categoria=txt(candidatoDados.categoria,60)
+        if(categoria==='perfil'&&(pesoDecimalCatalogo(candidatoDados.peso_kg_m)??0)<=0)return NextResponse.json({error:'Confira e informe o peso kg/m antes de validar o perfil.'},{status:422})
         let fotoValida=Boolean(txt(c.dados?.imagem_item_url)
           && c.dados?.imagem_confirmada === true
           && cod(c.dados?.imagem_codigo_validado) === cod(codigo))
@@ -1008,7 +1109,7 @@ export async function PATCH(req:NextRequest){
         },{status:422})
       }
       await supabaseAdmin.from('ai_aprendizado_candidatos').update({status:'aprovado',validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id)
-      const candidatoAplicar={...c,dados:b?.dados&&typeof b.dados==='object'?b.dados:c.dados}
+      const candidatoAplicar={...c,dados:{...c.dados,...(b?.dados&&typeof b.dados==='object'?b.dados:{}),imagem_item_url:c.dados?.imagem_item_url,imagem_confirmada:c.dados?.imagem_confirmada,imagem_codigo_validado:c.dados?.imagem_codigo_validado}}
       const destino=await aplicar(u,candidatoAplicar,entrada)
       const {data,error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({status:'aplicado',destino_id:destino,validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id).select('*').single();if(error)throw error
       await log(u,'candidato_aplicado',entrada.id,id,{tipo:c.tipo,destino_id:destino})
