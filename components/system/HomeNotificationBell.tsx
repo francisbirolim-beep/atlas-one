@@ -15,6 +15,7 @@ import {
   salvarPreferenciasNotificacao,
 } from '@/lib/notificacoes'
 import type { Notificacao, NotificacaoPreferencias, Usuario } from '@/lib/tipos'
+import { podeTocarAlertaNoNavegador } from '@/lib/notificacoesSom'
 
 function tempoRelativo(iso: string) {
   const ms = Date.now() - new Date(iso).getTime()
@@ -61,6 +62,13 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
   }
 
   function tocarSom(volume?: number) {
+    const prefs = preferenciasRef.current
+    if (!prefs || !podeTocarAlertaNoNavegador(prefs, {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      maxTouchPoints: navigator.maxTouchPoints,
+      mobileHint: (navigator as any).userAgentData?.mobile === true,
+    }, new Date())) return
     try {
       const Ctx = window.AudioContext || (window as any).webkitAudioContext
       if (!Ctx) return

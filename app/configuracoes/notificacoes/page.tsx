@@ -266,13 +266,18 @@ export default function ConfiguracoesNotificacoesPage() {
                   <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${prefs.som_ativo ? 'left-6' : 'left-1'}`}/>
                 </button>
               </div>
-              <label className="block text-xs font-semibold text-slate-600">Volume dentro do Atlas</label>
+              <label className="block text-xs font-semibold text-slate-600">Volume dos avisos no computador</label>
               <input type="range" min="0.1" max="1" step="0.1" value={prefs.som_volume}
                 onChange={e=>setPrefs({ ...prefs, som_volume: Number(e.target.value) })}
                 onMouseUp={()=>void alterar({ som_volume: prefs.som_volume })}
                 onTouchEnd={()=>void alterar({ som_volume: prefs.som_volume })}
                 className="mt-3 w-full" disabled={!prefs.som_ativo}/>
               <div className="mt-1 flex justify-between text-[10px] text-slate-400"><span>Baixo</span><span>{Math.round(Number(prefs.som_volume)*100)}%</span><span>Alto</span></div>
+              <p className="mt-3 text-xs leading-relaxed text-slate-600">
+                <strong>No celular, vale o som do aparelho.</strong> O Atlas não toca áudio próprio no iPhone ou Android.
+                Os avisos do sistema operacional respeitam o modo silencioso, o Foco/Não Perturbe e as permissões do celular.
+                O controle acima ajusta somente os sons internos do navegador no computador.
+              </p>
             </div>
 
             <div className="rounded-2xl border bg-white p-5 shadow-sm">
