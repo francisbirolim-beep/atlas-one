@@ -17,6 +17,8 @@ import {
   type StatusPushDispositivo,
 } from '@/lib/notificacoes'
 import type { NotificacaoPreferencias, Usuario } from '@/lib/tipos'
+import LembretesPreferenciasEditor from '@/components/system/LembretesPreferenciasEditor'
+import { PADRAO_AVISOS_TAREFA, PADRAO_AVISOS_AGENDA } from '@/lib/lembretesInteligentes'
 
 type ChaveCategoria = 'tarefas' | 'agenda' | 'chat' | 'operacao'
 
@@ -234,6 +236,47 @@ export default function ConfiguracoesNotificacoesPage() {
                 })}
               </div>
             </div>
+            <LembretesPreferenciasEditor
+              titulo="Avisos padrão das tarefas"
+              descricao="Estes avisos aparecem ao criar tarefas. Cada tarefa poderá ter horários próprios."
+              valores={prefs.avisos_tarefa_minutos ?? [...PADRAO_AVISOS_TAREFA]}
+              desabilitado={salvando}
+              onAlterar={valores => void alterar({ avisos_tarefa_minutos: valores })}
+            />
+            <LembretesPreferenciasEditor
+              titulo="Avisos padrão da agenda"
+              descricao="Antecedências para compromissos. Você poderá personalizar cada evento."
+              valores={prefs.avisos_agenda_minutos ?? [...PADRAO_AVISOS_AGENDA]}
+              desabilitado={salvando}
+              onAlterar={valores => void alterar({ avisos_agenda_minutos: valores })}
+            />
+            <section className="rounded-2xl border bg-white p-5 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900">Acompanhamento de tarefas pendentes</h3>
+              <p className="mt-1 text-xs text-slate-500">Após o prazo, perguntar novamente até concluir, reagendar ou adiar.</p>
+              <label className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-700">
+                <input type="checkbox" checked={prefs.cobranca_tarefa_ativa ?? true}
+                  disabled={salvando} onChange={e => void alterar({ cobranca_tarefa_ativa: e.target.checked })}/>
+                Cobrança automática ativada
+              </label>
+              <label className="mt-3 block text-xs font-semibold text-slate-600">
+                Repetir a cada
+                <select className="mt-1 block w-full rounded-xl border px-3 py-2 text-sm font-normal"
+                  value={prefs.cobranca_tarefa_intervalo_minutos ?? 60}
+                  disabled={salvando || !(prefs.cobranca_tarefa_ativa ?? true)}
+                  onChange={e => void alterar({ cobranca_tarefa_intervalo_minutos: Number(e.target.value) })}>
+                  <option value={15}>15 minutos</option>
+                  <option value={30}>30 minutos</option>
+                  <option value={60}>1 hora</option>
+                  <option value={120}>2 horas</option>
+                  <option value={240}>4 horas</option>
+                  <option value={1440}>1 dia</option>
+                </select>
+              </label>
+              <p className="mt-3 text-xs text-slate-500">
+                O envio depende da ativação do serviço de lembretes. O WhatsApp será habilitado
+                somente após testar a associação segura das respostas à tarefa.
+              </p>
+            </section>
           </section>
 
           <section className="space-y-5">
