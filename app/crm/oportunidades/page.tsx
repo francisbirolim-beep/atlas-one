@@ -23,7 +23,7 @@ export default function OportunidadesComerciais(){
  const [vinculos,setVinculos]=useState<VinculoConfirmado[]>([])
  const [persistencia,setPersistencia]=useState(false)
  // Deploys de prévia nunca gravam tarefas nem confirmam vínculos no banco operacional.
- const podeGravar=process.env.NEXT_PUBLIC_VERCEL_ENV==='production'
+ const podeGravar=false // Etapa 1: consulta; aguarda migração e homologação das permissões
  const [vendasVerificadas,setVendasVerificadas]=useState(false)
  const [busca,setBusca]=useState(''),[pendentes,setPendentes]=useState(false),[aberto,setAberto]=useState<string|null>(null)
  const [salvando,setSalvando]=useState<string|null>(null),[agenda,setAgenda]=useState<string|null>(null)
@@ -44,15 +44,15 @@ export default function OportunidadesComerciais(){
    let tq=supabase.from('crm_tarefas').select('id,cliente_id,cliente_nome,orcamento_id,titulo,descricao,data_vencimento,concluida,responsavel_id,responsavel_nome,created_at').eq('concluida',false).limit(1000)
    let pq=supabase.from('prospeccoes').select('id,nome_cliente,nome_obra,cliente_id,obra_id,cidade,interesses,status,temperatura,proxima_acao,proxima_acao_em,responsavel_id,responsavel_nome,created_at').order('created_at',{ascending:false}).limit(1000)
    if(!equipe){oq=oq.eq('criado_por_id',me.id);tq=tq.eq('responsavel_id',me.id);pq=pq.eq('responsavel_id',me.id)}
-   const [os,ts,ps,vs,vendas]=await Promise.all([oq,tq,pq,supabase.from('crm_oportunidade_vinculos').select('orcamento_id,ancora_orcamento_id').limit(1000),supabase.from('vendas_obras').select('orcamento_id,status').limit(1000)])
+   const [os,ts,ps,vendas]=await Promise.all([oq,tq,pq,supabase.from('vendas_obras').select('orcamento_id,status').limit(1000)])
    if(os.error||ts.error||ps.error)throw new Error(os.error?.message||ts.error?.message||ps.error?.message)
-   const vendidos=new Set((vendas.data||[]).filter(v=>!['cancelado','cancelada','estornado'].includes(String(v.status||'').toLowerCase())).map(v=>v.orcamento_id))
+   const vendidos=new Set((vendas.data||[]).filter(v=>['ativa','ativo','confirmada','confirmado'].includes(String(v.status||'').toLowerCase())).map(v=>v.orcamento_id))
    setVendasVerificadas(!vendas.error)
    setOrcamentos(((os.data||[]) as OrcamentoOportunidade[]).map(o=>vendidos.has(o.id)?{...o,status:'vendido'}:o))
    setTarefas((ts.data||[]) as Tarefa[])
    setProspeccoes((ps.data||[]) as unknown as Prospeccao[])
-   setVinculos((vs.data||[]) as VinculoConfirmado[])
-   setPersistencia(!vs.error)
+   setVinculos([]) // Vínculos manuais serão ativados só com RLS/migração validada.
+   setPersistencia(false)
   }catch(e){setErro(e instanceof Error?e.message:'Falha na consulta comercial')}
   finally{setCarregando(false)}
  }
@@ -110,8 +110,8 @@ export default function OportunidadesComerciais(){
   </div></header>
   <main className="mx-auto max-w-[1500px] space-y-4 px-4 pt-5 sm:px-6">
    <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900"><Sparkles size={14} className="mr-1 inline"/> Análise assistida por regras de tipologia, quantidade e ambiente: cores e contramarcos não criam novas oportunidades. Escopos incertos ficam separados para conferência. Nenhum movimento automático no Kanban.</div>
-   {!podeGravar&&<div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">Ambiente de validação: edição e agendamentos desativados para proteger os dados reais. Consulte os agrupamentos e os vínculos sugeridos.</div>}
-   {!persistencia&&<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Prévia somente leitura: a migração de vínculos não está ativa. É possível consultar as sugestões, mas confirmar exige validar a nova tabela.</div>}
+   {!podeGravar&&<div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900">Primeira fase em modo consulta: confira oportunidades e propostas com segurança. Para agendar retornos, use o CRM atual.</div>}
+   {!persistencia&&<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">A confirmação de vínculos ficará disponível depois da validação da base de dados e permissões.</div>}
    {!vendasVerificadas&&<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Não foi possível verificar todas as vendas confirmadas. A classificação de oportunidades ganhas está incompleta neste acesso.</div>}
    {erro&&<div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{erro}</div>}
    {mensagem&&<div role="status" className="rounded-xl border bg-white p-3 text-sm">{mensagem}</div>}
@@ -134,7 +134,7 @@ export default function OportunidadesComerciais(){
     return o&&base?<div key={o.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 text-xs"><div><b>{o.cliente_nome} · #{o.numero||'—'}</b><p className="mt-1 text-slate-500">Relacionado a #{base.numero||'—'}? {s.motivo}</p></div>{podeGravar&&nivel==='edicao'&&persistencia&&<div className="flex gap-2"><button disabled={!!salvando} onClick={()=>void confirmar(o.id,base.id)} className="rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white disabled:opacity-50">Mesma oportunidade</button><button disabled={!!salvando} onClick={()=>void confirmar(o.id,o.id)} className="rounded-lg border px-3 py-2 font-bold disabled:opacity-50">Nova oportunidade</button></div>}</div>:null
    })}</div></section>}
    {prospectosSemOrcamento.length>0&&<section className="rounded-2xl border bg-white p-4"><h2 className="flex items-center gap-2 font-black"><UserRound size={18}/> Prospecção sem orçamento vinculado</h2><p className="my-2 text-xs text-slate-500">Visitas já contam como oportunidades iniciais, sem criar cliente ou obra duplicados.</p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{prospectosSemOrcamento.filter(p=>!busca||p.nome_cliente.toLowerCase().includes(busca.toLowerCase())).map(p=><Link key={p.id} href={'/prospeccao/'+p.id} className="rounded-xl border p-3 text-xs"><b>{p.nome_cliente}</b><p className="mt-1 text-slate-500">{p.nome_obra||'Obra a identificar'} · {p.status}</p><span className="mt-2 inline-flex items-center text-blue-700">Visita e agendamento <ChevronRight size={13}/></span></Link>)}</div></section>}
-   <div className="rounded-xl border border-dashed bg-white p-3 text-xs text-slate-500"><ShieldCheck size={14} className="mr-1 inline text-teal-700"/> Apenas a tabela de vínculos recebe confirmações. Nenhum orçamento, Kanban, venda ou financeiro é modificado. <Link href="/crm/comercial" className="font-bold text-blue-700">Voltar ao CRM <ArrowRight size={13} className="inline"/></Link></div>
+   <div className="rounded-xl border border-dashed bg-white p-3 text-xs text-slate-500"><ShieldCheck size={14} className="mr-1 inline text-teal-700"/> Apenas a tabela de vínculos recebe confirmações. Nenhum orçamento, Kanban, venda ou financeiro é modificado. <Link href="/crm" className="font-bold text-blue-700">Agendar no CRM atual <ArrowRight size={13} className="inline"/></Link></div>
   </main>
  </div>
 }
