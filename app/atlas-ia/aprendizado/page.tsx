@@ -11,6 +11,7 @@ import { tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
 import { conferirDadosCatalogo } from '@/lib/ai/catalogoConferencia'
+import { lerImagemCatalogoPreview, salvarImagemCatalogoPreview } from '@/lib/ai/catalogoImagemPreview'
 
 type Entrada = {
   id: string
@@ -136,8 +137,23 @@ export default function CentralAprendizadoPage(){
   }
   async function carregar(){
     setCarregando(true);setErro('')
-    try{ setDados(await api('/api/ia/central-aprendizado')) }
-    catch(e:any){setErro(e?.message||'Erro ao carregar a Central de Aprendizado.')}
+    try{
+      const resposta:DadosAPI=await api('/api/ia/central-aprendizado')
+      if(resposta.somenteLeitura){
+        // Não modifica o Supabase. Apenas restaura o teste local do mesmo usuário e código.
+        try{
+          const {data:{session}}=await supabase.auth.getSession()
+          const uid=session?.user?.id||''
+          resposta.candidatos=resposta.candidatos.map(c=>{
+            if(c.tipo!=='produto'||c.foto_cadastro||c.dados?.imagem_item_url)return c
+            const registro=lerImagemCatalogoPreview(window.localStorage,uid,c.id,String(c.dados?.codigo||''))
+            if(!registro)return c
+            return {...c,dados:{...c.dados,imagem_item_url:registro.imagem,imagem_preview_local:true}}
+          })
+        }catch{/* Navegador sem armazenamento: a consulta permanece somente leitura. */}
+      }
+      setDados(resposta)
+    }catch(e:any){setErro(e?.message||'Erro ao carregar a Central de Aprendizado.')}
     finally{setCarregando(false)}
   }
   useEffect(()=>{void carregar()},[])
@@ -290,10 +306,27 @@ export default function CentralAprendizadoPage(){
   }
 
   async function salvarImagemCatalogo(candidato:Candidato,imagem:string){
+    if(dados.somenteLeitura){
+      const {data:{session}}=await supabase.auth.getSession()
+      const uid=session?.user?.id
+      if(!uid)throw new Error('Sessão expirada; entre novamente para testar a confirmação.')
+      try{
+        salvarImagemCatalogoPreview(window.localStorage,uid,candidato.id,String(candidato.dados?.codigo||''),imagem)
+      }catch(e:any){throw new Error('Não foi possível manter o desenho neste navegador: '+(e?.message||'armazenamento indisponível'))}
+      setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id
+        ?{...c,dados:{...c.dados,imagem_item_url:imagem,imagem_preview_local:true}}:c)}))
+      setMensagem('Desenho mantido para teste neste navegador. Não foi gravado no Atlas oficial e o produto ainda não está homologado.')
+      return {demo:true,imagem_url:imagem}
+    }
     const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({
       id:candidato.id,acao:'salvar_imagem_catalogo',imagem,
     })})
-    setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id?{...c,dados:{...(c.dados||{}),imagem_item_url:j.imagem_url||imagem}}:c)}))
+    if(!j?.candidato?.dados?.imagem_confirmada || !j?.candidato?.dados?.imagem_item_url){
+      throw new Error('A confirmação não foi retornada pelo servidor. Atualize antes de tentar novamente.')
+    }
+    setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id
+      ?{...c,...j.candidato,dados:{...c.dados,...j.candidato.dados}}:c)}))
+    setMensagem('Desenho confirmado e salvo para o código '+String(candidato.dados?.codigo||'')+'.')
     return j
   }
 
@@ -348,7 +381,7 @@ export default function CentralAprendizadoPage(){
     </header>
 
     <section className="mx-auto max-w-7xl px-4 py-6">
-      {dados.somenteLeitura&&<p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><b>Prévia de homologação: somente leitura.</b> Consulte códigos, desenhos, pesos e pendências. Enviar, corrigir, validar e reanalisar ficam bloqueados aqui para não alterar cadastros em produção.</p>}
+      {dados.somenteLeitura&&<p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><b>Prévia de homologação: nenhum cadastro real será alterado.</b> Você pode conferir o desenho e simular sua confirmação: a imagem fica guardada somente neste navegador de testes, mesmo após recarregar a página. A validação oficial de produtos, a reanálise e outras gravações permanecem bloqueadas.</p>}
       <div className="mb-5 grid gap-3 md:grid-cols-3">
         <button onClick={()=>{setEntradaValidacaoFiltro(null);setAba('validacoes')}} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{dados.totais.pendentes}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-emerald-700"><CheckCircle2 size={18}/><b>{dados.totais.aplicados}</b></div><p className="mt-1 text-xs text-slate-500">Itens já aprovados e aplicados</p></div>
@@ -428,6 +461,7 @@ export default function CentralAprendizadoPage(){
               onSalvarItem={salvarItemCatalogo}
               onMapearCatalogo={mapearCatalogo}
               onSalvarImagem={salvarImagemCatalogo}
+              somenteLeitura={Boolean(dados.somenteLeitura)}
               salvandoId={salvando}
               mapeando={reprocessando===e.id}
             />}
@@ -470,6 +504,7 @@ export default function CentralAprendizadoPage(){
                   {c.tipo==='produto'&&Array.isArray(c.dados?.divergencias_tabela)&&c.dados.divergencias_tabela.length>0&&<p className="mt-1 text-xs text-amber-800">Divergência na tabela: {c.dados.divergencias_tabela.join(', ')}. Valor antigo mantido para revisão.</p>}
                   {c.tipo==='produto'&&precisaCodigo&&<p className="mt-1 text-xs text-amber-700">Código não identificado com segurança; corrija antes de validar.</p>}
                   {c.tipo==='produto'&&precisaImagem&&<p className="mt-1 text-xs text-amber-700">Sem imagem vinculada: confira a foto ou anexe um desenho.</p>}
+              {c.tipo==='produto'&&c.dados?.imagem_preview_local&&<p className="mt-1 text-xs font-semibold text-blue-700">Desenho confirmado somente neste navegador de teste. Não homologado no banco.</p>}
                   {c.tipo==='produto'&&c.foto_cadastro&&<p className="mt-1 text-[11px] text-emerald-700">Foto existente encontrada por código exato no Atlas/WVetro</p>}
                   <p className="mt-1 text-xs text-slate-400">Origem: {origem?.titulo||'Material'} · enviado por {origem?.criado_por_nome||'usuário'}</p>
                   {c.deduplicacao?.produto_existente&&<p className="mt-2 text-sm text-emerald-700"><b>Já existe no Atlas:</b> {c.deduplicacao.produto_existente.codigo||''} {c.deduplicacao.produto_existente.nome}</p>}
@@ -487,7 +522,7 @@ export default function CentralAprendizadoPage(){
             {c.pode_validar?<div className="flex flex-wrap items-center gap-2 border-t bg-white px-4 py-3">
               <span className="mr-1 text-xs font-bold uppercase tracking-wide text-slate-400">Decisão</span>
               {!podeAprovar&&<p className="w-full text-xs text-amber-800">Para liberar a validação: {precisaCodigo?'confira e salve o código. ':''}{precisaImagem?'abra Revisar / corrigir e confirme o desenho correto. ':''}{precisaPeso?'informe e salve o peso kg/m.':''}</p>}
-              <button disabled={salvando===c.id||!podeAprovar} title={!podeAprovar?'Confirme código, peso e imagem antes de validar':'Validar item'} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
+              <button disabled={salvando===c.id||!podeAprovar||Boolean(dados.somenteLeitura)} title={dados.somenteLeitura?'Prévia: produto só pode ser homologado na versão oficial':!podeAprovar?'Confirme código, peso e imagem antes de validar':'Validar item'} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
               <button disabled={salvando===c.id} onClick={()=>editarInicial(c)} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"><Eye size={15}/>Revisar / corrigir</button>
               {c.tipo==='produto'&&origem?.mime_type==='application/pdf'&&<button disabled={Boolean(conferindoTabela)} onClick={()=>void conferirTabela(origem)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50"><RefreshCcw size={15} className={conferindoTabela===origem.id?'animate-spin':''}/>Conferir tabela original</button>}
               <button disabled={salvando===c.id} onClick={()=>void acao(c,'rejeitar')} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-semibold text-red-700 disabled:opacity-40"><XCircle size={15}/>Não validar</button>
@@ -503,7 +538,7 @@ export default function CentralAprendizadoPage(){
                 <Campo label="Cidade" value={e.dados.cidade||''} onChange={v=>campo(c.id,'cidade',v)}/>
               </div>}
               {c.tipo==='produto'&&<div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-                <ProdutoImagemValidacao candidato={c} entrada={origem} onSalvar={imagem=>salvarImagemCatalogo(c,imagem)}/>
+                <ProdutoImagemValidacao candidato={c} entrada={origem} somenteLeitura={Boolean(dados.somenteLeitura)} onSalvar={imagem=>salvarImagemCatalogo(c,imagem)}/>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Campo label="Código" value={e.dados.codigo||''} onChange={v=>campo(c.id,'codigo',v)}/>
                   <Campo label="Descrição" value={e.dados.descricao||''} onChange={v=>campo(c.id,'descricao',v)}/>
@@ -548,7 +583,7 @@ export default function CentralAprendizadoPage(){
 }
 
 
-function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,salvandoId,mapeando}:{
+function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,somenteLeitura,salvandoId,mapeando}:{
   entrada:Entrada
   candidatos:Candidato[]
   busca:string
@@ -559,6 +594,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   onSalvarItem:(c:Candidato,dados:Record<string,any>)=>Promise<void>
   onMapearCatalogo:(e:Entrada)=>Promise<any>
   onSalvarImagem:(c:Candidato,imagem:string)=>Promise<any>
+  somenteLeitura:boolean
   salvandoId:string|null
   mapeando:boolean
 }){
@@ -645,6 +681,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
               <div className="mt-1 font-semibold">{c.dados?.codigo||'Sem código'} <span className="font-normal text-slate-500">— {c.dados?.descricao||c.titulo}</span></div>
               <div className="mt-1 text-xs text-slate-400">{c.deduplicacao?.produto_existente?'Vinculado ao produto já existente no Atlas':labelAcao(c.acao_sugerida)}{c.dados?.preco_fornecedor!=null?' · preço '+String(c.dados.preco_fornecedor):' · sem preço'}</div>
               {c.dados?.conferencia_tabela_visualizada&&<div className="mt-1 text-xs text-blue-700">Tabela consultada no PDF (sem salvar). Peso: {c.dados.peso_kg_m??'—'} kg/m · {Object.entries(c.dados.medidas_mm||{}).map(([k,v])=>k+' '+v+' mm').join(' · ')||'sem cotas'}</div>}
+              {c.dados?.imagem_preview_local&&<div className="mt-1 text-xs font-semibold text-blue-700">Imagem preservada neste navegador de teste, sem gravar o cadastro.</div>}
             </div>
             {aberto?<ChevronUp size={17}/>:<ChevronDown size={17}/>}
           </button>
@@ -670,6 +707,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
                   {precisaValidar&&<button onClick={()=>onAbrirValidacao(c)} className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800">Abrir validação completa</button>}
                 </div>
               </div>:<div className="grid gap-2 text-sm">
+                {c.dados?.imagem_preview_local&&<p className="text-xs font-semibold text-blue-700">Imagem local de teste: não foi gravada no cadastro oficial.</p>}
                 <InfoItem rotulo="Código" valor={c.dados?.codigo}/>
                 <InfoItem rotulo="Descrição" valor={c.dados?.descricao}/>
                 <InfoItem rotulo="Categoria" valor={c.dados?.categoria}/>
@@ -687,7 +725,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
             <div>
               <div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><Eye size={14}/>Imagem do item</div>{fontePagina&&<a href={fontePagina} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700">Ver evidência no catálogo</a>}</div>
               {imagemItem?<img src={imagemItem} alt={String(c.dados?.descricao||c.dados?.codigo||'Item do catálogo')} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>
-              :pagina>0&&entrada.fonte_url?<ImagemPerfilCatalogo fonteUrl={entrada.fonte_url} pagina={pagina} codigo={String(c.dados?.codigo||'')} descricao={String(c.dados?.descricao||c.titulo)} onSalvar={imagem=>onSalvarImagem(c,imagem)}/>
+              :pagina>0&&entrada.fonte_url?<ImagemPerfilCatalogo fonteUrl={entrada.fonte_url} pagina={pagina} codigo={String(c.dados?.codigo||'')} descricao={String(c.dados?.descricao||c.titulo)} somenteLeitura={somenteLeitura} onSalvar={imagem=>onSalvarImagem(c,imagem)}/>
               :<div className="grid min-h-56 place-items-center rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-400"><div>{mapeando?<Loader2 className="mx-auto mb-2 animate-spin" size={22}/>:<Eye className="mx-auto mb-2" size={22}/>}<b className="text-slate-500">{mapeando?'Preparando o catálogo...':'Localizando este perfil no PDF...'}</b><p className="mt-1 text-xs">Assim que a página for identificada, o Atlas gera o recorte do desenho e salva como imagem do produto.</p></div></div>}
             </div>
           </div>}
@@ -716,7 +754,7 @@ function pareceCodigoImagem(v:string){
   return /^[A-Z]{1,6}\d{0,3}(?:[-_/][A-Z0-9]{2,8}){1,2}$/.test(x)||/^[A-Z]{1,6}\d{2,8}[A-Z]{0,3}$/.test(x)
 }
 
-function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidato;entrada?:Entrada|null;onSalvar:(imagem:string)=>Promise<any>}){
+function ProdutoImagemValidacao({candidato,entrada,somenteLeitura,onSalvar}:{candidato:Candidato;entrada?:Entrada|null;somenteLeitura:boolean;onSalvar:(imagem:string)=>Promise<any>}){
   const imagem=imagemProdutoCandidato(candidato)
   const pagina=Number(candidato.dados?.pagina_catalogo||0)
   const fonteUrl=entrada?.fonte_url||''
@@ -750,8 +788,9 @@ function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidat
     </div>
     <div className="mb-2 text-xs font-semibold text-slate-700">Código {codigo||'não informado'} · {descricao}</div>
     {candidato.foto_cadastro&&<p className="mb-2 text-[11px] font-semibold text-emerald-700">Imagem existente do produto localizado pelo código exato.</p>}
+    {candidato.dados?.imagem_preview_local&&<p className="mb-2 text-[11px] font-semibold text-blue-700">Desenho preservado neste navegador de testes, não gravado no banco oficial.</p>}
     {imagem?<img src={imagem} alt={descricao||codigo} className="max-h-72 w-full rounded-xl border bg-white object-contain"/>
-    :pagina>0&&fonteUrl?<ImagemPerfilCatalogo fonteUrl={fonteUrl} pagina={pagina} codigo={codigo} descricao={descricao} onSalvar={onSalvar}/>
+    :pagina>0&&fonteUrl?<ImagemPerfilCatalogo fonteUrl={fonteUrl} pagina={pagina} codigo={codigo} descricao={descricao} somenteLeitura={somenteLeitura} onSalvar={onSalvar}/>
     :<div className="grid min-h-48 place-items-center rounded-xl border border-dashed bg-slate-50 p-5 text-center text-sm text-slate-500">
       <div>
         <PackageSearch className="mx-auto mb-2 text-slate-400" size={24}/>
@@ -767,9 +806,10 @@ function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidat
   </div>
 }
 
-function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;onSalvar:(imagem:string)=>Promise<any>}){
+function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,onSalvar}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;somenteLeitura:boolean;onSalvar:(imagem:string)=>Promise<any>}){
   const [imagem,setImagem]=useState('')
   const [erroImagem,setErroImagem]=useState('')
+  const [erroSalvarImagem,setErroSalvarImagem]=useState('')
   const [carregandoImagem,setCarregandoImagem]=useState(true)
   const [salvandoImagem,setSalvandoImagem]=useState(false)
   const [codigoEncontrado,setCodigoEncontrado]=useState(false)
@@ -778,7 +818,7 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
   useEffect(()=>{
     let cancelado=false
     async function gerar(){
-      setCarregandoImagem(true);setErroImagem('');setCodigoEncontrado(false);setImagemConfirmada(false)
+      setCarregandoImagem(true);setErroImagem('');setErroSalvarImagem('');setCodigoEncontrado(false);setImagemConfirmada(false)
       try{
         const pdfModuleUrl='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs'
         const pdfjs:any=await import(/* webpackIgnore: true */ pdfModuleUrl)
@@ -862,10 +902,17 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
     {!codigoEncontrado
       ?<p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Código não localizado de forma única no texto do PDF. O recorte não será vinculado automaticamente.</p>
       :imagemConfirmada
-        ?<p className="rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800">Imagem do código {codigo} confirmada e vinculada.</p>
-        :<button type="button" disabled={salvandoImagem} onClick={async()=>{setSalvandoImagem(true);try{await onSalvar(imagem);setImagemConfirmada(true)}catch(e:any){setErroImagem(e?.message||'Falha ao salvar imagem')}finally{setSalvandoImagem(false)}}} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">
-          {salvandoImagem?'Salvando...':'Confirmar: este desenho corresponde ao código '+codigo}
+        ?<p className={'rounded-lg p-2 text-xs font-semibold '+(somenteLeitura?'border border-blue-200 bg-blue-50 text-blue-800':'bg-emerald-50 text-emerald-800')}>{somenteLeitura?'Desenho do código '+codigo+' guardado somente neste navegador de testes.':'Imagem do código '+codigo+' confirmada e vinculada.'}</p>
+        :<button type="button" disabled={salvandoImagem} onClick={async()=>{
+          setSalvandoImagem(true);setErroSalvarImagem('')
+          try{await onSalvar(imagem);setImagemConfirmada(true)}
+          catch(e:any){setErroSalvarImagem(e?.message||'Falha ao salvar a imagem. O desenho continua disponível para tentar novamente.')}
+          finally{setSalvandoImagem(false)}
+        }} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">
+          {salvandoImagem?'Confirmando...':somenteLeitura?'Confirmar desenho (teste local)':'Confirmar: este desenho corresponde ao código '+codigo}
         </button>}
+    {somenteLeitura&&<p className="text-xs text-blue-700">Prévia segura: a confirmação fica somente neste navegador, não no banco do Atlas.</p>}
+    {erroSalvarImagem&&<p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Não foi possível salvar a confirmação: {erroSalvarImagem}. O desenho foi mantido na tela.</p>}
   </div>
 }
 

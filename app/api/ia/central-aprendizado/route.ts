@@ -992,16 +992,18 @@ export async function PATCH(req:NextRequest){
       const buffer=Buffer.from(m[2],'base64')
       if(!buffer.length||buffer.length>4*1024*1024)return NextResponse.json({error:'Recorte de imagem inválido ou maior que 4 MB.'},{status:400})
       const extensao=formato==='jpeg'?'jpg':formato
-      const path='catalogo-itens/'+u.empresa_id+'/'+entrada.id+'/'+c.id+'.'+extensao
-      const {error:up}=await supabaseAdmin.storage.from('fotos').upload(path,buffer,{contentType:'image/'+formato,upsert:true})
+      // URL única por confirmação evita imagem antiga no cache quando um desenho é substituído.
+      const path='catalogo-itens/'+u.empresa_id+'/'+entrada.id+'/'+c.id+'/'+randomUUID()+'.'+extensao
+      const {error:up}=await supabaseAdmin.storage.from('fotos').upload(path,buffer,{contentType:'image/'+formato,upsert:false})
       if(up)throw new Error(up.message)
       const {data:pub}=supabaseAdmin.storage.from('fotos').getPublicUrl(path)
       const url=pub.publicUrl
       const dados={...(c.dados||{}),imagem_item_url:url,imagem_catalogo_pagina:num(c?.dados?.pagina_catalogo),
         imagem_confirmada:true,imagem_codigo_validado:txt(c.dados?.codigo,120),imagem_origem:'revisada_na_central'}
       const {data:atualizado,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
-        .eq('empresa_id',u.empresa_id).eq('id',id).select('*').single()
+        .eq('empresa_id',u.empresa_id).eq('id',id).eq('updated_at',c.updated_at).select('*').maybeSingle()
       if(ce)throw ce
+      if(!atualizado)throw new Error('O cadastro foi alterado durante a confirmação. Atualize a página e confira novamente.')
       if(c.destino_id){
         // Nunca sobrescrever foto de um produto já catalogado, nem copiar imagem
         // para produto com código/categoria divergentes da fonte em validação.
