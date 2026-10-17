@@ -96,7 +96,8 @@ export type AcaoResposta = 'concluir' | 'adiar' | 'reagendar' | 'nao_concluida' 
 export function identificarRespostaTarefa(texto: string, tarefaVinculada: boolean): AcaoResposta {
   if (!tarefaVinculada) return 'desconhecida'
   const t = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
-  if (/^(sim|conclui|concluido|concluida|ja fiz|feito|finalizei|enviado|enviei|ja enviei)[.!\s]*$/.test(t)) return 'concluir'
+  if (/^(sim|conclui|concluido|concluida|ja fiz|feito|finalizei|enviado|enviei|ja enviei)[.!\\s]*$/.test(t) ||
+      /^(sim[, ]+conclui|conclui[, ]+sim|sim[, ]+enviei|enviei[, ]+sim)[.!\\s]*$/.test(t)) return 'concluir'
   if (/\b(reagendar|remarcar)\b/.test(t)) return 'reagendar'
   if (/\b(adiar|lembra|lembrar|protelar)\b/.test(t)) return 'adiar'
   if (/^(nao|ainda nao|nao fiz|nao conclui|nao enviado ainda|ainda nao enviei|pendente)[.!\s]*$/.test(t)) return 'nao_concluida'
