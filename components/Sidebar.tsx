@@ -41,11 +41,23 @@ export default function Sidebar() {
   const [podeLancarNF, setPodeLancarNF] = useState(false)
   const [podeReceberManual, setPodeReceberManual] = useState(false)
   const [podeVerCadastros, setPodeVerCadastros] = useState(false)
+  const [podeAcessarCRM, setPodeAcessarCRM] = useState(false)
   const [busca, setBusca] = useState('')
   const [adminAberto, setAdminAberto] = useState(false)
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({})
 
   useEffect(() => { void usuarioAtual().then(u => { if (u) setUsuario(u) }) }, [])
+
+  // O acesso ao CRM no menu respeita o setor autorizado; nunca exibir a um funcionário oculto.
+  useEffect(() => {
+    if (!usuario?.id) { setPodeAcessarCRM(false); return }
+    if (usuario.role === 'master') { setPodeAcessarCRM(true); return }
+    let ativo = true
+    void listarPermissoesUsuario(usuario.id)
+      .then(setores => { if (ativo) setPodeAcessarCRM(setores.crm === 'consulta' || setores.crm === 'edicao') })
+      .catch(() => { if (ativo) setPodeAcessarCRM(false) })
+    return () => { ativo = false }
+  }, [usuario?.id, usuario?.role])
 
   // Atalho operacional: apenas quem recebeu do Master edição em NF/compras.
   // Mantém o menu do Master exatamente como era.
@@ -130,13 +142,13 @@ export default function Sidebar() {
 
   const termo = normalizar(busca)
   const gruposVisiveis = useMemo(() => {
-    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros) && (guia.href !== '/compras/entrada-manual' || podeReceberManual))
+    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros) && (guia.href !== '/crm/comercial' || podeAcessarCRM) && (guia.href !== '/compras/entrada-manual' || podeReceberManual))
     const filtradas = (termo
       ? permitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : permitidas
     ).filter(guia => guia.grupo !== 'Geral')
     return agruparGuias(filtradas)
-  }, [termo, usuario?.role, podeVerCadastros, podeReceberManual])
+  }, [termo, usuario?.role, podeVerCadastros, podeReceberManual, podeAcessarCRM])
 
   const adminVisiveis = useMemo(() => {
     if (!termo) return ITENS_ADMIN
