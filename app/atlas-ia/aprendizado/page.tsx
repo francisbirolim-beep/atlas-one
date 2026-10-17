@@ -125,6 +125,21 @@ export default function CentralAprendizadoPage(){
   const [entradaValidacaoFiltro,setEntradaValidacaoFiltro]=useState<string|null>(null)
   const [edicoes,setEdicoes]=useState<Record<string,{titulo:string;modulo:string;dados:Record<string,any>;observacao:string}>>({})
   const fileRef=useRef<HTMLInputElement>(null)
+  // Somente leitura: memoriza a tabela já conferida nesta sessão para que a imagem
+  // e os dados continuem juntos ao abrir outro candidato, sem gravar no banco.
+  const tabelasConsultandoRef=useRef<Set<string>>(new Set())
+  const tabelasOriginaisRef=useRef<Map<string,Map<string,Record<string,any>>>>(new Map())
+
+  function preencherPelaTabela(c:Candidato,tabela?:Map<string,Record<string,any>>):Candidato{
+    if(c.tipo!=='produto'||!tabela)return c
+    const codigo=String(c.dados?.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
+    const extracao=tabela.get(codigo)
+    if(!extracao)return c
+    const revisao=conferirDadosCatalogo(c,extracao)
+    if(!revisao)return c
+    return {...c,dados:{...revisao.dados,divergencias_tabela:revisao.divergencias},
+      titulo:String(c.dados?.codigo||'')+' — '+String(revisao.dados.descricao||'Produto')}
+  }
 
   async function api(url:string,init?:RequestInit){
     if(dados.somenteLeitura&&init?.method&&init.method.toUpperCase()!=='GET')throw new Error('Esta prévia é somente leitura. As alterações de cadastro estão bloqueadas para proteger a produção.')
@@ -151,6 +166,9 @@ export default function CentralAprendizadoPage(){
             return {...c,dados:{...c.dados,imagem_item_url:registro.imagem,imagem_preview_local:true}}
           })
         }catch{/* Navegador sem armazenamento: a consulta permanece somente leitura. */}
+      }
+      if(resposta.somenteLeitura){
+        resposta.candidatos=resposta.candidatos.map(c=>preencherPelaTabela(c,tabelasOriginaisRef.current.get(c.entrada_id)))
       }
       setDados(resposta)
     }catch(e:any){setErro(e?.message||'Erro ao carregar a Central de Aprendizado.')}
@@ -249,9 +267,12 @@ export default function CentralAprendizadoPage(){
     finally{setReprocessando(null)}
   }
 
-  async function conferirTabela(e:Entrada){
-    if(conferindoTabela)return
-    setConferindoTabela(e.id);setErro('');setMensagem('')
+  async function conferirTabela(e:Entrada,automatica=false){
+    if(tabelasConsultandoRef.current.has(e.id))return
+    if(automatica&&tabelasOriginaisRef.current.has(e.id))return
+    tabelasConsultandoRef.current.add(e.id)
+    setConferindoTabela(e.id)
+    if(!automatica){setErro('');setMensagem('')}
     try{
       const resultado=await api('/api/ia/central-aprendizado?conferirTabela='+encodeURIComponent(e.id))
       const porCodigo=new Map<string,Record<string,any>>()
@@ -259,24 +280,24 @@ export default function CentralAprendizadoPage(){
         const codigo=String(item.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
         if(codigo&&!porCodigo.has(codigo))porCodigo.set(codigo,item)
       }
+      // O PDF oficial é fonte da descrição, cotas e peso; a foto já confirmada prevalece.
+      tabelasOriginaisRef.current.set(e.id,porCodigo)
       const originais=new Map(dados.candidatos.map(c=>[c.id,c]))
       const revisados=new Map<string,Candidato>()
       let corrigidos=0,conflitos=0
       for(const c of dados.candidatos){
         if(c.entrada_id!==e.id||c.tipo!=='produto')continue
-        const codigo=String(c.dados?.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
-        const extracao=porCodigo.get(codigo)
-        if(!extracao)continue
-        const conferencia=conferirDadosCatalogo(c,extracao)
-        if(!conferencia)continue
-        const novo={...c,dados:{...conferencia.dados,divergencias_tabela:conferencia.divergencias},
-          titulo:String(c.dados?.codigo||'')+' — '+String(conferencia.dados.descricao||'Produto')}
+        const novo=preencherPelaTabela(c,porCodigo)
+        if(novo===c)continue
         revisados.set(c.id,novo)
-        if(conferencia.divergencias.length)conflitos++
+        if((novo.dados.divergencias_tabela||[]).length)conflitos++
         corrigidos++
       }
-      setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>revisados.get(c.id)||c)}))
-      // Campos ja modificados pelo usuario nao sao substituidos silenciosamente.
+      setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>
+        c.entrada_id===e.id?preencherPelaTabela(c,porCodigo):c
+      )}))
+      // Se a edição estiver aberta mas ainda intacta, atualiza os campos visíveis.
+      // Uma alteração manual iniciada enquanto o PDF era consultado nunca é substituída.
       setEdicoes(prev=>{
         const proximo={...prev}
         for(const [id,item] of revisados){
@@ -286,12 +307,26 @@ export default function CentralAprendizadoPage(){
         }
         return proximo
       })
-      setMensagem('Tabela do PDF conferida: '+corrigidos+' item(ns) exibidos com dados de origem'+
+      if(!automatica)setMensagem('Tabela do PDF conferida: '+corrigidos+' item(ns) exibidos com dados de origem'+
         (conflitos?', '+conflitos+' divergência(s) preservada(s) para revisão':'')+
         '. Consulta visual, sem gravar cadastros; desenhos ainda exigem homologação individual.')
-    }catch(err:any){setErro(err?.message||'Falha ao conferir os dados no PDF.')}
-    finally{setConferindoTabela(null)}
+    }catch(err:any){setErro('Não foi possível carregar os dados da tabela original: '+(err?.message||'tente novamente pelo botão Conferir tabela original.'))}
+    finally{
+      tabelasConsultandoRef.current.delete(e.id)
+      setConferindoTabela(v=>v===e.id?null:v)
+    }
   }
+
+  useEffect(()=>{
+    // Apenas ao abrir o cadastro em prévia; consulta em segundo plano, sem PATCH.
+    if(!dados.somenteLeitura)return
+    const id=catalogoAberto||dados.candidatos.find(c=>c.id===aberto)?.entrada_id
+    const entrada=dados.entradas.find(e=>e.id===id)
+    if(entrada?.mime_type==='application/pdf'&&['catalogo','tabela_preco'].includes(entrada.tipo)
+      &&!tabelasOriginaisRef.current.has(entrada.id)){
+      void conferirTabela(entrada,true)
+    }
+  },[aberto,catalogoAberto,dados.entradas.length,dados.somenteLeitura])
 
   async function mapearCatalogo(e:Entrada){
     if(reprocessando)return
@@ -450,6 +485,7 @@ export default function CentralAprendizadoPage(){
               </div>
               <div className="shrink-0 text-right text-[11px] text-slate-400"><div>{e.criado_por_nome||'Usuário'}</div><div>{dataBr(e.created_at)}</div></div>
             </div>
+            {catalogoAberto===e.id&&conferindoTabela===e.id&&<p className="mt-3 text-xs font-semibold text-blue-700"><Loader2 className="mr-1 inline animate-spin" size={13}/>Carregando automaticamente os dados das tabelas do PDF original, sem alterar cadastros...</p>}
             {catalogoAberto===e.id&&<CatalogoDetalhes
               entrada={e}
               candidatos={dados.candidatos.filter(c=>c.entrada_id===e.id)}
@@ -500,6 +536,7 @@ export default function CentralAprendizadoPage(){
                   {c.tipo==='produto'&&<div className="mt-1 text-xs font-semibold text-slate-700">Código: {String(c.dados?.codigo||'não informado')}</div>}
                   {c.tipo==='produto'&&c.dados?.medidas_mm&&Object.keys(c.dados.medidas_mm).length>0&&<p className="mt-1 text-xs text-slate-600">Medidas: {Object.entries(c.dados.medidas_mm).map(([k,v])=>k+': '+v+' mm').join(' · ')}</p>}
                   {c.tipo==='produto'&&c.dados?.evidencia_tabela&&<p className="mt-1 text-xs text-slate-500">Fonte: {c.dados.evidencia_tabela}</p>}
+                  {c.tipo==='produto'&&conferindoTabela===origem?.id&&<p className="mt-1 text-xs font-semibold text-blue-700">Buscando automaticamente nome, peso e medidas da tabela original...</p>}
                   {c.tipo==='produto'&&c.dados?.conferencia_tabela_visualizada&&<p className="mt-1 text-xs font-semibold text-blue-700">Dados conferidos no PDF nesta visualização (não gravados).</p>}
                   {c.tipo==='produto'&&Array.isArray(c.dados?.divergencias_tabela)&&c.dados.divergencias_tabela.length>0&&<p className="mt-1 text-xs text-amber-800">Divergência na tabela: {c.dados.divergencias_tabela.join(', ')}. Valor antigo mantido para revisão.</p>}
                   {c.tipo==='produto'&&precisaCodigo&&<p className="mt-1 text-xs text-amber-700">Código não identificado com segurança; corrija antes de validar.</p>}
