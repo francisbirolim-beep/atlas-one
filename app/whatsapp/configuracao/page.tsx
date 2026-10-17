@@ -74,6 +74,9 @@ export default function ConfiguracaoWhatsAppPage() {
   const [numero,setNumero]=useState('5517996355667')
   const [setorPadrao,setSetorPadrao]=useState('')
   const [usuarioPadraoId,setUsuarioPadraoId]=useState('')
+  const [triagemPrivadaAtiva,setTriagemPrivadaAtiva]=useState(false)
+  const [triagemTempoMinutos,setTriagemTempoMinutos]=useState(10)
+  const [triagemDestinos,setTriagemDestinos]=useState<string[]>([])
   const [regras,setRegras]=useState<Regra[]>([])
   const [erro,setErro]=useState('')
   const [salvando,setSalvando]=useState(false)
@@ -111,6 +114,9 @@ export default function ConfiguracaoWhatsAppPage() {
       setNumero(c.numero_principal||'5517996355667')
       setSetorPadrao(c.setor_padrao||'')
       setUsuarioPadraoId(c.usuario_padrao_id||'')
+      setTriagemPrivadaAtiva(c.triagem_privada_ativa===true)
+      setTriagemTempoMinutos(Number(c.triagem_tempo_minutos||10))
+      setTriagemDestinos(Array.isArray(c.triagem_destinos)?c.triagem_destinos:[])
     }
     setRegras((json.regras||[]).map((r:any)=>({
       nome:r.nome||'',
@@ -249,6 +255,9 @@ export default function ConfiguracaoWhatsAppPage() {
           numeroPrincipal:numero,
           setorPadrao:setorPadrao||null,
           usuarioPadraoId:usuarioPadraoId||null,
+          triagemPrivadaAtiva,
+          triagemTempoMinutos,
+          triagemDestinos,
           regras:regras.map(r=>({
             ...r,
             palavrasChave:r.palavrasChave.split(',').map(p=>p.trim()).filter(Boolean),
@@ -397,6 +406,39 @@ export default function ConfiguracaoWhatsAppPage() {
           <p className="md:col-span-3 text-xs text-slate-500">
             Se nenhuma regra abaixo combinar, a conversa usa o usuario padrao. Sem usuario padrao, entra na fila para alguem assumir.
           </p>
+        </section>
+
+        <section className="rounded-2xl border p-4 space-y-4">
+          <div>
+            <h2 className="font-bold text-slate-900">Triagem privada e repasse automático</h2>
+            <p className="text-sm text-slate-500">Contatos novos do WhatsApp principal ficam somente com o usuário padrão até ele aceitar. Depois do prazo, entram na fila restrita dos substitutos.</p>
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" checked={triagemPrivadaAtiva} onChange={e=>setTriagemPrivadaAtiva(e.target.checked)} />
+            Ativar atendente inicial exclusivo e repasse por tempo
+          </label>
+          {triagemPrivadaAtiva && <div className="space-y-4">
+            <label className="block text-sm font-medium">
+              Tempo máximo para aceitar (minutos)
+              <input className="mt-1 block w-40 rounded-lg border px-3 py-2" type="number"
+                min={1} max={1440} value={triagemTempoMinutos}
+                onChange={e=>setTriagemTempoMinutos(Number(e.target.value))}/>
+            </label>
+            <div>
+              <p className="text-sm font-medium">Pessoas que recebem a conversa após o prazo</p>
+              <p className="text-xs text-slate-500">Você pode selecionar várias. A primeira que aceitar assume o atendimento; as demais deixam de vê-lo.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {usuarios.filter(u=>u.id!==usuarioPadraoId).map(u=><label key={u.id} className="flex items-center gap-2 rounded-lg border p-2 text-sm">
+                  <input type="checkbox" checked={triagemDestinos.includes(u.id)}
+                    onChange={e=>setTriagemDestinos(antigos=>e.target.checked
+                      ? [...new Set([...antigos,u.id])]
+                      : antigos.filter(id=>id!==u.id))}/>
+                  {u.nome}
+                </label>)}
+              </div>
+            </div>
+          </div>}
+          <p className="text-xs text-slate-500">O responsável inicial é definido em "Usuário padrão" acima. Não altera grupos nem conversas já assumidas. O Master mantém o acesso de supervisão.</p>
         </section>
 
         <section>

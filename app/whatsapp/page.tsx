@@ -46,6 +46,8 @@ type Conversa = {
   status: string
   responsavel_id?: string | null
   responsavel_nome?: string | null
+  triagem_destinos?: string[] | null
+  triagem_escalonada_em?: string | null
   setor?: string | null
   ultimo_preview?: string | null
   nao_lidas?: number | null
@@ -240,6 +242,7 @@ export default function WhatsAppAtendimentoPage() {
   const partesAudioRef = useRef<Blob[]>([])
   const timerGravacaoRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const canalFiltroInicializadoRef = useRef(false)
+  const filaInicializadaRef = useRef(false)
   const conversaAtivaIdRef = useRef<string | null>(null)
   const carregandoConversasRef = useRef(false)
   const recarregarConversasPendenteRef = useRef(false)
@@ -304,6 +307,7 @@ export default function WhatsAppAtendimentoPage() {
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar conversas.')
       setEu(json.usuario)
+      if (!filaInicializadaRef.current) { filaInicializadaRef.current = true; if (json.configuracao?.triagem_privada_ativa) setFiltro('minhas') }
       setConversas(json.conversas || [])
       setUsuarios(json.usuarios || [])
       const canaisRecebidos = (json.canais || []) as Canal[]
@@ -994,7 +998,7 @@ export default function WhatsAppAtendimentoPage() {
         if (!aguardandoAceite && !aguardandoMensagem) return false
       }
       if (filtro === 'com_atendente' && (!c.responsavel_id || c.status === 'finalizado')) return false
-      if (filtro === 'minhas' && (c.responsavel_id !== eu?.id || c.status === 'finalizado')) return false
+      if (filtro === 'minhas' && ((c.responsavel_id !== eu?.id && !(c.triagem_destinos || []).includes(eu?.id || '')) || c.status === 'finalizado')) return false
       if (filtro === 'nao_lidas' && !c.nao_lidas) return false
       if (filtro === 'acompanhando' && !c.acompanhando) return false
       if (filtro === 'transferidas' && !c.transferida_em) return false
@@ -1448,7 +1452,7 @@ export default function WhatsAppAtendimentoPage() {
           (c.status === 'aguardando' || Number(c.nao_lidas || 0) > 0)
       }).length,
       comAtendente: chats.filter(c => Boolean(c.responsavel_id) && c.status !== 'finalizado').length,
-      minhas: chats.filter(c => c.responsavel_id === eu?.id && c.status !== 'finalizado').length,
+      minhas: chats.filter(c => (c.responsavel_id === eu?.id || (c.triagem_destinos || []).includes(eu?.id || '')) && c.status !== 'finalizado').length,
       grupos: doCanal.filter(c => c.whatsapp_chat_tipo === 'grupo').length,
       naoLidas: chats.filter(c => Number(c.nao_lidas || 0) > 0).length,
       acompanhando: chats.filter(c => Boolean(c.acompanhando)).length,
