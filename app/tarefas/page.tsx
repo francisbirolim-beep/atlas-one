@@ -28,7 +28,7 @@ import CamposLembretes from '@/components/system/CamposLembretes'
 import GravadorLembreteAudio, { vincularAudioLembrete } from '@/components/system/GravadorLembreteAudio'
 import AudioAnexadoLembrete from '@/components/system/AudioAnexadoLembrete'
 import { carregarPreferenciasNotificacao } from '@/lib/notificacoes'
-import BotaoMicrofone from '@/components/BotaoMicrofone'
+import DitarCompromisso from '@/components/system/DitarCompromisso'
 import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
 
 function formatarDuracao(ms: number) {
@@ -382,6 +382,7 @@ export default function Tarefas() {
                 <X size={18} />
               </button>
             </div>
+            <DitarCompromisso tipo="tarefa" onResultado={aoFalarNovaTarefa}/>
             <div className="flex gap-2 items-center">
               <input
                 value={tituloNovo}
@@ -390,7 +391,6 @@ export default function Tarefas() {
                 className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm"
                 autoFocus
               />
-              <BotaoMicrofone onResultado={aoFalarNovaTarefa} titulo="Falar (ex: hoje medir obra)" />
             </div>
             <textarea
               value={descNova}
