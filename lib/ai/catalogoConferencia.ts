@@ -5,7 +5,7 @@ const numero=(v:unknown)=>typeof v==='number'?v:Number(String(v||'').replace(','
 export function conferirDadosCatalogo(candidato:{status?:string;dados?:Record<string,any>},extraido:Record<string,any>){
   const antigo=candidato.dados||{}
   if(candidato.status!=='pendente'||antigo.revisado_manualmente||antigo.arquivado_em||
-     antigo.imagem_confirmada||!extraido||codigoLimpo(antigo.codigo)!==codigoLimpo(extraido.codigo)||
+     !extraido||codigoLimpo(antigo.codigo)!==codigoLimpo(extraido.codigo)||
      !codigoLimpo(antigo.codigo))return null
   if(extraido.conflito_peso_catalogo?.length>1)return null
   const dados={...antigo},divergencias:string[]=[]
