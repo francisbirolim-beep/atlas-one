@@ -23,6 +23,7 @@ import { jsPDF } from 'jspdf'
 import ConferenciaItemWVetro, { TipoImportadoWVetro, EditorTecnicoWVetro } from './ConferenciaItemWVetro'
 import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wvetroValidacaoItem'
 import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
+import { ObraEnderecoKanban, enderecoObraNoKanban } from '@/lib/kanbanEnderecoObra'
 
 let tipoLabels: Record<string, string> = {}
 
@@ -262,6 +263,7 @@ const [colunas, setColunas] = useState<KanbanColuna[]>([])
 const [cards, setCards] = useState<OrcamentoRapido[]>([])
 const [carregando, setCarregando] = useState(true)
 const [cardSelecionado, setCardSelecionado] = useState<OrcamentoRapido | null>(null)
+const [obrasPorId, setObrasPorId] = useState<Record<string, ObraEnderecoKanban>>({})
 const [editando, setEditando] = useState<OrcamentoRapido | null>(null)
 const [historico, setHistorico] = useState<HistoricoItem[]>([])
 const [salvando, setSalvando] = useState(false)
@@ -299,6 +301,16 @@ const t = setInterval(() => setAgora(Date.now()), 60000)
 return () => clearInterval(t)
 }, [])
 
+async function carregarObrasDosCards(lista: OrcamentoRapido[]) {
+  const ids = Array.from(new Set(lista.map(card => card.obra_id).filter((id): id is string => !!id)))
+  if (!ids.length) { setObrasPorId({}); return }
+  // A consulta é apenas de leitura: o Kanban continua carregando normalmente.
+  const { data, error } = await supabase.from('obras')
+    .select('id,nome,endereco,numero_endereco,bairro,cidade,cep,observacoes').in('id', ids)
+  if (error) { console.warn('Não foi possível consultar endereços das obras no Kanban', error); return }
+  setObrasPorId(Object.fromEntries(((data || []) as ObraEnderecoKanban[]).map(obra => [obra.id, obra])))
+}
+
 async function carregar() {
 setCarregando(true)
 const [cols, { data: orc }] = await Promise.all([
@@ -313,6 +325,7 @@ setColunas(cols)
 if (orc) {
 const lista = (orc as OrcamentoRapido[]).filter(c => (c as any).modo_entrada !== 'wvetro_api_vinculado')
 setCards(lista)
+void carregarObrasDosCards(lista)
 if (typeof window !== 'undefined') {
 const idAlvo = new URLSearchParams(window.location.search).get('orcamento')
 if (idAlvo) {
@@ -1383,6 +1396,13 @@ style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
 </span>
 )}
 </div>
+{card.obra_id && obrasPorId[card.obra_id] && (
+<div className="mb-1 text-xs" style={{ color: est ? est.texto : '#64748b', opacity: est ? 0.9 : 1 }}>
+<p className="truncate font-medium"><Building2 size={11} className="inline mr-1" />{obrasPorId[card.obra_id].nome || 'Obra'}</p>
+{enderecoObraNoKanban(obrasPorId[card.obra_id]).texto && <p className="truncate" title={enderecoObraNoKanban(obrasPorId[card.obra_id]).texto}>
+<MapPin size={11} className="inline mr-1" />{enderecoObraNoKanban(obrasPorId[card.obra_id]).texto}</p>}
+</div>
+)}
 {card.ia_criado && card.ia_validacao_status === 'aguardando' && !card.eh_assistencia && (
 <span
 className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-semibold mb-1 bg-violet-100 text-violet-700"
@@ -1485,6 +1505,24 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 </div>
 
 <div className="p-5 space-y-4">
+{/* Cabeçalho sempre visível, inclusive antes de iniciar e em orçamento finalizado. */}
+<section className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm" data-testid="kanban-localizacao-obra">
+<p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cliente</p>
+<p className="font-bold text-slate-900">{cardSelecionado.cliente_nome}</p>
+{cardSelecionado.cliente_whatsapp && <p className="mt-1 text-xs text-slate-700"><Phone size={12} className="mr-1 inline" />{cardSelecionado.cliente_whatsapp}</p>}
+{cardSelecionado.cliente_id && <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="mt-1 inline-block text-xs font-semibold text-blue-700 underline">Abrir cadastro do cliente</Link>}
+<p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Obra</p>
+<p className="font-semibold text-slate-900">{(cardSelecionado.obra_id && obrasPorId[cardSelecionado.obra_id]?.nome) || 'Obra não vinculada no cadastro'}</p>
+{cardSelecionado.obra_id && obrasPorId[cardSelecionado.obra_id] ? (
+<>
+<p className="mt-1 break-words text-xs text-slate-700"><MapPin size={12} className="mr-1 inline" />{enderecoObraNoKanban(obrasPorId[cardSelecionado.obra_id]).texto || 'Endereço não informado nesta obra'}</p>
+{enderecoObraNoKanban(obrasPorId[cardSelecionado.obra_id]).localizacaoConfirmada && <p className="mt-1 text-[11px] text-emerald-700">Localização GPS confirmada</p>}
+{enderecoObraNoKanban(obrasPorId[cardSelecionado.obra_id]).localizacaoPendente && <p className="mt-1 text-[11px] text-amber-800">Ponto GPS salvo, aguardando conferência. Não é uma rota confirmada.</p>}
+{enderecoObraNoKanban(obrasPorId[cardSelecionado.obra_id]).mapaConferencia && <a href={enderecoObraNoKanban(obrasPorId[cardSelecionado.obra_id]).mapaConferencia!} target="_blank" rel="noopener noreferrer" className="mt-2 mr-2 inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-semibold text-amber-800"><MapPin size={14} /> Conferir ponto GPS no mapa</a>}
+{enderecoObraNoKanban(obrasPorId[cardSelecionado.obra_id]).rota && <a href={enderecoObraNoKanban(obrasPorId[cardSelecionado.obra_id]).rota!} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"><MapPin size={14} /> {enderecoObraNoKanban(obrasPorId[cardSelecionado.obra_id]).localizacaoConfirmada ? 'Abrir rota no mapa' : 'Abrir mapa pelo endereço'}</a>}
+</>
+) : <p className="mt-1 text-xs text-amber-700">Não há endereço de obra disponível para este pedido. Confira o vínculo da obra no cadastro.</p>}
+</section>
 {naPrimeiraColuna && !sessaoAtiva && !podeEditarSemIniciar ? (
 <div className="text-center py-10 space-y-4">
 <p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p>

@@ -268,6 +268,8 @@ export default function OrcamentoRapido() {
   const [obrasDoCliente, setObrasDoCliente] = useState<ObraResumida[]>([])
   const [capturandoLocalizacao, setCapturandoLocalizacao] = useState(false)
   const [avisoLocalizacao, setAvisoLocalizacao] = useState('')
+  const [precisaoGps, setPrecisaoGps] = useState<number | null>(null)
+  const [numeroSugeridoGps, setNumeroSugeridoGps] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
   const [temperatura, setTemperatura] = useState<TemperaturaLead | ''>('')
   const [acabamento, setAcabamento] = useState<Acabamento | ''>('')
@@ -433,6 +435,7 @@ export default function OrcamentoRapido() {
     if (obra.cidade) setCidade(obra.cidade)
     const coordenadas = localizacaoRegistradaNaObra(obra.observacoes)
     setObraLocalizacao(coordenadas || '')
+    setPrecisaoGps(null); setNumeroSugeridoGps('')
     setObraLocalizacaoConfirmada(coordenadas && obra.observacoes?.includes('Localização conferida: Sim') ? 'sim' : '')
     setAvisoLocalizacao(coordenadas ? 'Localização recuperada desta obra. Confira no mapa antes de enviar.' : '')
     limparErroValidacaoAoEditar()
@@ -443,7 +446,7 @@ export default function OrcamentoRapido() {
     if (obra) return preencherDaObraExistente(obra)
     setObraIdSelecionada(null)
     setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep('')
-    setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setAvisoLocalizacao('')
+    setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setAvisoLocalizacao(''); setPrecisaoGps(null); setNumeroSugeridoGps('')
     limparErroValidacaoAoEditar()
   }
 
@@ -467,6 +470,8 @@ export default function OrcamentoRapido() {
         return
       }
       setObraLocalizacao(coordenadas)
+      setPrecisaoGps(Number.isFinite(pos.coords.accuracy) ? Math.round(pos.coords.accuracy) : null)
+      setNumeroSugeridoGps('')
       setObraLocalizacaoConfirmada('')
       limparErroValidacaoAoEditar()
       setAvisoLocalizacao('Localização capturada. Buscando rua e bairro...')
@@ -476,11 +481,12 @@ export default function OrcamentoRapido() {
           + encodeURIComponent(pos.coords.latitude) + '&lon='
           + encodeURIComponent(pos.coords.longitude), { cache: 'no-store' })
         if (!resp.ok) throw new Error('Endereço não localizado.')
-        const dados = await resp.json() as { rua?: string; bairro?: string; cidade?: string; cep?: string }
+        const dados = await resp.json() as { rua?: string; bairro?: string; cidade?: string; cep?: string; numero?: string }
         if (dados.rua) setObraRua(dados.rua)
         if (dados.bairro) setObraBairro(dados.bairro)
         if (dados.cidade) setCidade(dados.cidade)
         if (dados.cep) setObraCep(dados.cep)
+        if (dados.numero) setNumeroSugeridoGps(dados.numero)
         setAvisoLocalizacao(dados.rua
           ? 'Endereço identificado. Confira os dados e informe apenas o número do imóvel.'
           : 'GPS salvo, mas a rua não foi identificada. Digite o endereço e o número.')
@@ -705,7 +711,7 @@ export default function OrcamentoRapido() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
-    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
+    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setPrecisaoGps(null); setNumeroSugeridoGps(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
 
@@ -758,10 +764,17 @@ export default function OrcamentoRapido() {
             <span className="text-xs text-slate-500">Na obra, use o GPS. Fora dela, digite o endereço ou cole as coordenadas recebidas.</span>
           </div>
           {avisoLocalizacao && <p role="status" className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">{avisoLocalizacao}</p>}
+          {precisaoGps !== null && <p className={`text-xs ${precisaoGps > 30 ? 'text-amber-800' : 'text-emerald-700'}`}>
+            Precisão informada pelo aparelho: aproximadamente {precisaoGps} m. {precisaoGps > 30 ? 'Para reduzir o erro, vá para um local aberto e toque novamente em “Usar localização atual”.' : 'Confira o ponto no mapa antes de confirmar.'}
+          </p>}
+          {numeroSugeridoGps && !obraNumero.trim() && <div className="flex flex-wrap items-center gap-2 text-xs text-blue-800">
+            <span>O mapa identificou o número {numeroSugeridoGps} nas proximidades. Confirme antes de usar.</span>
+            <button type="button" className="rounded-lg border border-blue-300 bg-white px-2 py-1 font-semibold" onClick={() => { setObraNumero(numeroSugeridoGps); setNumeroSugeridoGps(''); limparErroValidacaoAoEditar() }}>Usar número sugerido</button>
+          </div>}
           <label className="block text-xs font-medium text-slate-600">
             Localização da obra (latitude, longitude)
             <input data-preserve-case="true" value={obraLocalizacao}
-              onChange={e => { limparErroValidacaoAoEditar(); setObraLocalizacao(e.target.value); setObraLocalizacaoConfirmada('') }}
+              onChange={e => { limparErroValidacaoAoEditar(); setObraLocalizacao(e.target.value); setObraLocalizacaoConfirmada(''); setPrecisaoGps(null); setNumeroSugeridoGps('') }}
               placeholder="Ex.: -21.052812,-49.690112 (pode colar)"
               className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
           </label>
