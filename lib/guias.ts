@@ -39,6 +39,7 @@ export const GUIAS: Guia[] = [
 
   { href: '/clientes', label: 'Clientes', icon: Users, grupo: 'Comercial' },
   { href: '/obras', label: 'Obras', icon: Building2, grupo: 'Comercial' },
+  { href: '/crm/comercial', label: 'CRM Comercial', icon: BarChart3, grupo: 'Comercial' },
   { href: '/prospeccao', label: 'Prospecção', icon: MapPinned, grupo: 'Comercial' },
   { href: '/orcamento/pesquisar', label: 'Orçamentos', icon: FileText, grupo: 'Comercial' },
   { href: '/kanban', label: 'Kanban', icon: Columns3, grupo: 'Comercial' },
