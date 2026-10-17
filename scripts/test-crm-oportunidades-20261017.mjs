@@ -64,10 +64,32 @@ function grupos(...args){return agruparOportunidades(...args).grupos}
  const r=grupos([orc(1,{revisao_grupo_id:uid(900)}),orc(2,{revisao_grupo_id:uid(900),itens:[item('portao ripado',1)]})])
  assert.equal(r.length,1,'Grupo de revisões formal prevalece sobre diferença de tipologia')
 }
+{
+ const a=orc(1,{itens:[{tipo_esquadria:'outro',tipo_outro_texto:'Portão ripado',quantidade:1,ambiente:'Frente'}]})
+ const b=orc(2,{itens:[{tipo_esquadria:'outro',tipo_outro_texto:'Vidro fixo',quantidade:1,ambiente:'Frente'}]})
+ assert.equal(grupos([a,b]).length,2,'Códigos outro não unem escopos diferentes')
+}
+{
+ const a=orc(1,{itens:[item('l_suprema_porta_de_giro_01_folha',1,'Entrada')]})
+ const b=orc(2,{itens:[item('l_suprema_porta_de_correr_01_folha',1,'Entrada')]})
+ assert.equal(grupos([a,b]).length,2,'Porta de giro não é porta de correr')
+}
+{
+ const a=orc(1,{itens:[{...item('janela_correr',1,'Quarto'),largura_mm:1000,altura_mm:1200}]})
+ const b=orc(2,{itens:[{...item('janela_correr',1,'Quarto'),largura_mm:1450,altura_mm:1200}]})
+ const rs=grupos([a,b])
+ assert.equal(rs.length,2,'Dimensões significativamente diferentes exigem revisão')
+ assert.equal(rs.some(r=>r.pendenteRevisao),true)
+}
+{
+ const a=orc(1,{itens:[{...item('l_suprema_janela_de_correr_02_folhas',1,'Quarto'),largura_mm:1000,altura_mm:1200}]})
+ const b=orc(2,{itens:[{...item('janela_correr',1,'Quarto'),largura_mm:1005,altura_mm:1198}]})
+ assert.equal(grupos([a,b]).length,1,'Linhas e correções pequenas de medida preservam a mesma oportunidade')
+}
 const live=readFileSync('app/crm/comercial/page.tsx','utf8')
 const novo=readFileSync('app/crm/oportunidades/page.tsx','utf8')
 assert.match(live,/href="\/crm\/oportunidades"/)
 assert.match(novo,/\.from\('vendas_obras'\)/)
 assert.match(novo,/\.from\('crm_oportunidade_vinculos'\)/)
 assert.doesNotMatch(novo,/\.from\('orcamentos'\)\.update\(|\.from\('orcamentos'\)\.delete\(/)
-console.log('PASS: 11 cenários de CRM por obra, escopo, revisão, confirmação, vendas e regressão de Kanban.')
+console.log('PASS: 15 cenários de CRM por obra, escopo, revisão, confirmação, vendas e regressão de Kanban.')
