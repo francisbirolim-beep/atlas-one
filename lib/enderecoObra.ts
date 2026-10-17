@@ -15,3 +15,64 @@ export function coordenadasDaObra(latitude: number, longitude: number): string |
       latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null
   return latitude.toFixed(6) + ',' + longitude.toFixed(6)
 }
+
+// Leitura do formato legado usado nos orçamentos, para que o mesmo ponto possa
+// ser aberto por outros setores sem criar uma segunda localização por cliente.
+export function coordenadasEmTexto(valor?: string | null): string | null {
+  const texto = valor?.trim() || ''
+  const match = texto.match(/^(-?\d{1,3}(?:\.\d+)?)\s*[,;]\s*(-?\d{1,3}(?:\.\d+)?)$/)
+  if (!match) return null
+  return coordenadasDaObra(Number(match[1]), Number(match[2]))
+}
+
+export function localizacaoRegistradaNaObra(observacoes?: string | null): string | null {
+  const match = (observacoes || '').match(/^Localização:\s*([^\r\n]+)$/mi)
+  return coordenadasEmTexto(match?.[1])
+}
+
+export function linkRotaObra(dados: { coordenadas?: string | null; endereco?: string | null; bairro?: string | null; cidade?: string | null }): string | null {
+  const destino = coordenadasEmTexto(dados.coordenadas) ||
+    [dados.endereco, dados.bairro, dados.cidade].map(item => item?.trim()).filter(Boolean).join(', ')
+  return destino ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destino)}` : null
+}
+
+// Conserva observações livres. Rejeições são registradas como feedback, mas
+// NUNCA viram ponto de navegação válido sem a confirmação humana.
+export function registrarFeedbackLocalizacao(
+  observacoes: string | null | undefined,
+  confirmada?: string | null,
+  rejeitada?: string | null,
+): string | null {
+  const linhas = (observacoes || '').split(/\r?\n/).filter(Boolean)
+  const confirmadaValida = coordenadasEmTexto(confirmada)
+  const rejeitadaValida = coordenadasEmTexto(rejeitada)
+  const localizacaoRegistrada = (linha: string) =>
+    linha.startsWith('Localização: ') ? coordenadasEmTexto(linha.slice('Localização: '.length)) : null
+  const gpsDesconsiderado = !confirmadaValida && !!rejeitadaValida &&
+    linhas.some(linha => localizacaoRegistrada(linha) === rejeitadaValida)
+  const semLocalizacaoAntiga = (confirmadaValida || gpsDesconsiderado)
+    ? linhas.filter(linha => !localizacaoRegistrada(linha) && linha !== 'Localização conferida: Sim')
+    : linhas
+  if (confirmadaValida) {
+    semLocalizacaoAntiga.push(`Localização: ${confirmadaValida}`)
+    if (!semLocalizacaoAntiga.includes('Localização conferida: Sim')) semLocalizacaoAntiga.push('Localização conferida: Sim')
+  }
+  if (rejeitadaValida) semLocalizacaoAntiga.push(`GPS rejeitado pelo usuário: ${rejeitadaValida}`)
+  return semLocalizacaoAntiga.join('\n') || null
+}
+
+export function decomporEnderecoObra(endereco?: string | null, numero_endereco?: string | null, cep?: string | null) {
+  let rua = (endereco || '').trim()
+  let numero = (numero_endereco || '').trim()
+  let cepAtual = (cep || '').trim()
+  const cepNoEndereco = rua.match(/\s*-\s*CEP\s*(\d{5}-?\d{3})\s*$/i)
+  if (cepNoEndereco) {
+    cepAtual ||= cepNoEndereco[1]
+    rua = rua.slice(0, cepNoEndereco.index).trim()
+  }
+  if (!numero) {
+    const fim = rua.match(/^(.*),\s*(\d+[a-zA-Z]?|S\/?N)\s*$/i)
+    if (fim) { rua = fim[1].trim(); numero = fim[2].trim() }
+  }
+  return { rua, numero, cep: cepAtual }
+}

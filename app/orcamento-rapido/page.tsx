@@ -9,7 +9,7 @@ import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
-import { formatarEnderecoObra, coordenadasDaObra } from '@/lib/enderecoObra'
+import { formatarEnderecoObra, coordenadasDaObra, coordenadasEmTexto, decomporEnderecoObra, linkRotaObra, localizacaoRegistradaNaObra } from '@/lib/enderecoObra'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
 
 const RASCUNHO_ID = 'orcamento-rapido-layout-restaurado-v1'
@@ -225,6 +225,8 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
 
 type ArquivoRascunho = { nome: string; tipo: string; ultimaModificacao: number; blob: Blob }
 
+type ObraResumida = { id: string; nome: string; endereco?: string | null; numero_endereco?: string | null; bairro?: string | null; cidade?: string | null; cep?: string | null; observacoes?: string | null }
+
 interface RascunhoOrcamentoRapido {
   itens: ItemForm[]
   clienteIdOrigem: string | null
@@ -237,6 +239,8 @@ interface RascunhoOrcamentoRapido {
   obraBairro?: string
   obraCep?: string
   obraLocalizacao?: string
+  obraIdSelecionada?: string | null
+  obraLocalizacaoConfirmada?: 'sim' | 'nao' | ''
   origem: OrigemCliente
   temperatura: TemperaturaLead | ''
   acabamento: Acabamento | ''
@@ -259,6 +263,9 @@ export default function OrcamentoRapido() {
   const [obraBairro, setObraBairro] = useState('')
   const [obraCep, setObraCep] = useState('')
   const [obraLocalizacao, setObraLocalizacao] = useState('')
+  const [obraLocalizacaoConfirmada, setObraLocalizacaoConfirmada] = useState<'sim'|'nao'|''>('')
+  const [obraIdSelecionada, setObraIdSelecionada] = useState<string | null>(null)
+  const [obrasDoCliente, setObrasDoCliente] = useState<ObraResumida[]>([])
   const [capturandoLocalizacao, setCapturandoLocalizacao] = useState(false)
   const [avisoLocalizacao, setAvisoLocalizacao] = useState('')
   const [origem, setOrigem] = useState<OrigemCliente>('outros')
@@ -317,6 +324,8 @@ export default function OrcamentoRapido() {
         setObraBairro(d.obraBairro || '')
         setObraCep(d.obraCep || '')
         setObraLocalizacao(d.obraLocalizacao || '')
+        setObraIdSelecionada(d.obraIdSelecionada || null)
+        setObraLocalizacaoConfirmada(d.obraLocalizacaoConfirmada || '')
         if (d.origem) setOrigem(d.origem)
         setTemperatura(d.temperatura || '')
         setAcabamento(d.acabamento || '')
@@ -363,14 +372,14 @@ export default function OrcamentoRapido() {
     const timer = window.setTimeout(() => {
       const dados: RascunhoOrcamentoRapido = {
         itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, origem, temperatura,
+        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, origem, temperatura,
         acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
         arquivos: arquivos.map(arquivoParaRascunho),
       }
       salvarRascunho(RASCUNHO_ID, dados).then(() => setRascunhoSalvoEm(new Date().toISOString())).catch(() => {})
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
@@ -393,6 +402,51 @@ export default function OrcamentoRapido() {
     })()
   }, [rascunhoCarregado, rascunhoRestaurado])
 
+  // Um cliente pode ter várias obras. O vínculo sempre é com a OBRA escolhida,
+  // não com a última localização cadastrada para o cliente.
+  useEffect(() => {
+    if (!rascunhoCarregado || !clienteIdOrigem || typeof navigator === 'undefined' || !navigator.onLine) return
+    let ativo = true
+    void supabase.from('obras')
+      .select('id,nome,endereco,numero_endereco,bairro,cidade,cep,observacoes')
+      .eq('cliente_id', clienteIdOrigem).order('created_at', { ascending: false }).then(({data, error}) => {
+        if (!ativo || error) return
+        const obras = (data || []) as ObraResumida[]
+        setObrasDoCliente(obras)
+        const idUrl = rascunhoRestaurado ? null : new URLSearchParams(window.location.search).get('obra')
+        if (idUrl && !obraIdSelecionada) {
+          const encontrada = obras.find(item => item.id === idUrl)
+          if (encontrada) preencherDaObraExistente(encontrada)
+        }
+      })
+    return () => { ativo = false }
+  }, [rascunhoCarregado, rascunhoRestaurado, clienteIdOrigem])
+
+  function preencherDaObraExistente(obra: ObraResumida) {
+    const endereco = decomporEnderecoObra(obra.endereco, obra.numero_endereco, obra.cep)
+    setObraIdSelecionada(obra.id)
+    setObraNome(obra.nome)
+    setObraRua(endereco.rua)
+    setObraNumero(endereco.numero)
+    setObraCep(endereco.cep)
+    setObraBairro(obra.bairro || '')
+    if (obra.cidade) setCidade(obra.cidade)
+    const coordenadas = localizacaoRegistradaNaObra(obra.observacoes)
+    setObraLocalizacao(coordenadas || '')
+    setObraLocalizacaoConfirmada(coordenadas && obra.observacoes?.includes('Localização conferida: Sim') ? 'sim' : '')
+    setAvisoLocalizacao(coordenadas ? 'Localização recuperada desta obra. Confira no mapa antes de enviar.' : '')
+    limparErroValidacaoAoEditar()
+  }
+
+  function escolherObraExistente(id: string) {
+    const obra = obrasDoCliente.find(item => item.id === id)
+    if (obra) return preencherDaObraExistente(obra)
+    setObraIdSelecionada(null)
+    setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep('')
+    setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setAvisoLocalizacao('')
+    limparErroValidacaoAoEditar()
+  }
+
   function capturarEnderecoDaObra() {
     if (capturandoLocalizacao) return
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -413,6 +467,8 @@ export default function OrcamentoRapido() {
         return
       }
       setObraLocalizacao(coordenadas)
+      setObraLocalizacaoConfirmada('')
+      limparErroValidacaoAoEditar()
       setAvisoLocalizacao('Localização capturada. Buscando rua e bairro...')
       try {
         // Reutiliza a geocodificação já usada na prospecção, sem expor token de serviço.
@@ -536,9 +592,12 @@ export default function OrcamentoRapido() {
     const tipoMedida = itens.every(item => item.tipoMedida === 'final') ? 'final' : 'comum'
     const dadosForm: DadosOrcamentoForm = {
       clienteId: clienteIdOrigem,
+      obraId: obraIdSelecionada,
       obraNome: obraNome.trim(),
       obraEndereco: formatarEnderecoObra(obraRua, obraNumero, obraCep),
-      obraBairro: obraBairro.trim(), obraCidade: cidade.trim(), obraLocalizacao,
+      obraBairro: obraBairro.trim(), obraCidade: cidade.trim(),
+      obraLocalizacao: obraLocalizacaoConfirmada === 'sim' ? coordenadasEmTexto(obraLocalizacao) || '' : '',
+      obraGpsRejeitado: obraLocalizacaoConfirmada === 'nao' ? coordenadasEmTexto(obraLocalizacao) || '' : '',
       orcamentoIdDestino: new URLSearchParams(window.location.search).get('adicionarAo'), itens: itens.map(item => ({ ...item, itemTipo: item.itemTipo || 'sob_medida' })), clienteNome, clienteWhatsapp, cidade, origem,
       temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
       arquitetoNome, arquitetoContato, fotos, arquivos,
@@ -594,9 +653,12 @@ export default function OrcamentoRapido() {
 
     if (!clienteNome.trim()) return falharValidacao('Informe o nome do cliente')
     if (!cidade.trim()) return falharValidacao('Informe a cidade da obra')
-    if ((obraRua.trim() || obraNumero.trim() || obraBairro.trim() || obraCep.trim() || obraLocalizacao) && !obraNome.trim()) return falharValidacao('Informe o nome da obra para vincular o endereço.')
+    if (!obraNome.trim()) return falharValidacao('Informe o nome da obra. Este campo é obrigatório.')
+    const gpsConfirmado = obraLocalizacaoConfirmada === 'sim' && !!coordenadasEmTexto(obraLocalizacao)
+    const enderecoInformado = !!obraRua.trim() && !!obraNumero.trim()
+    if (!gpsConfirmado && !enderecoInformado) return falharValidacao('Informe rua e número (pode ser S/N) ou confirme a localização GPS da obra.')
     if (obraNumero.trim() && !obraRua.trim()) return falharValidacao('Informe a rua ou avenida da obra antes do número.')
-    if (obraRua.trim() && !obraNumero.trim()) return falharValidacao('Informe o número da obra (ou S/N).')
+    if (obraRua.trim() && !obraNumero.trim() && !gpsConfirmado) return falharValidacao('Informe o número da obra (ou S/N).')
     if (obraCep.trim() && !/^\d{5}-?\d{3}$/.test(obraCep.trim())) return falharValidacao('Confira o CEP da obra: são 8 dígitos.')
     if (!temperatura) return falharValidacao('Selecione a temperatura do orçamento (quente, morno ou frio)')
     if (!acabamento) return falharValidacao('Selecione a cor/acabamento')
@@ -643,7 +705,7 @@ export default function OrcamentoRapido() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
-    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setAvisoLocalizacao(''); setTemperatura('')
+    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
 
@@ -668,14 +730,24 @@ export default function OrcamentoRapido() {
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-slate-800">Dados da obra</h3>
-            <p className="mt-1 text-xs text-slate-500">Informe o nome da obra. O endereço será associado à obra e não altera o endereço do cliente.</p>
+            <p className="mt-1 text-xs text-slate-500">Nome da obra e endereço OU localização são obrigatórios. O endereço pertence à obra, não ao cadastro pessoal do cliente.</p>
           </div>
+          {clienteIdOrigem && obrasDoCliente.length > 0 && <label className="block text-xs font-medium text-slate-600">
+            Obra existente (opcional)
+            <select value={obraIdSelecionada || ''} onChange={e => escolherObraExistente(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
+              <option value="">Nova obra — cadastrar abaixo</option>
+              {obrasDoCliente.map(obra => <option key={obra.id} value={obra.id}>{obra.nome} · {obra.cidade || 'Cidade não informada'}</option>)}
+            </select>
+            <span className="mt-1 block text-[11px] text-slate-500">Escolha a obra para reutilizar endereço, GPS e histórico. Outras obras do cliente continuam separadas.</span>
+          </label>}
           <label className="block text-xs font-medium text-slate-600">
-            Obra
+            Obra *
             <input data-preserve-case="true" value={obraNome}
               onChange={e => { limparErroValidacaoAoEditar(); setObraNome(e.target.value) }}
+              disabled={!!obraIdSelecionada}
               placeholder="Ex.: Residência Silva, Reforma centro..."
-              className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+              className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm disabled:bg-slate-100" />
           </label>
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" onClick={capturarEnderecoDaObra} disabled={capturandoLocalizacao}
@@ -683,9 +755,30 @@ export default function OrcamentoRapido() {
               {capturandoLocalizacao ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
               {capturandoLocalizacao ? 'Localizando...' : 'Usar localização atual'}
             </button>
-            <span className="text-xs text-slate-500">Ou digite o endereço abaixo. Use o GPS estando na obra.</span>
+            <span className="text-xs text-slate-500">Na obra, use o GPS. Fora dela, digite o endereço ou cole as coordenadas recebidas.</span>
           </div>
           {avisoLocalizacao && <p role="status" className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">{avisoLocalizacao}</p>}
+          <label className="block text-xs font-medium text-slate-600">
+            Localização da obra (latitude, longitude)
+            <input data-preserve-case="true" value={obraLocalizacao}
+              onChange={e => { limparErroValidacaoAoEditar(); setObraLocalizacao(e.target.value); setObraLocalizacaoConfirmada('') }}
+              placeholder="Ex.: -21.052812,-49.690112 (pode colar)"
+              className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
+          </label>
+          {obraLocalizacao && !coordenadasEmTexto(obraLocalizacao) && <p className="text-xs font-medium text-amber-700">Informe duas coordenadas válidas separadas por vírgula.</p>}
+          {coordenadasEmTexto(obraLocalizacao) && <div className="space-y-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-semibold text-slate-800">A localização mostrada no mapa está correta?</p>
+              <button type="button" onClick={() => { limparErroValidacaoAoEditar(); setObraLocalizacaoConfirmada('sim') }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${obraLocalizacaoConfirmada === 'sim' ? 'border-emerald-600 bg-emerald-600 text-white' : 'bg-white'}`}>Sim, está certa</button>
+              <button type="button" onClick={() => { limparErroValidacaoAoEditar(); setObraLocalizacaoConfirmada('nao') }}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${obraLocalizacaoConfirmada === 'nao' ? 'border-red-600 bg-red-600 text-white' : 'bg-white'}`}>Não, corrigir</button>
+              <a href={linkRotaObra({ coordenadas: obraLocalizacao }) || '#'} target="_blank" rel="noreferrer"
+                className="text-xs font-bold text-blue-700 underline">Ver ponto no mapa</a>
+            </div>
+            {obraLocalizacaoConfirmada === 'nao' && <p className="text-xs text-amber-800">Esta coordenada não será usada para navegação. Capture novamente ou informe rua e número. Ao enviar, a rejeição será registrada para revisão.</p>}
+            {obraLocalizacaoConfirmada === 'sim' && <p className="text-xs text-emerald-700">Localização confirmada. Rua e número são opcionais; complete-os se souber.</p>}
+          </div>}
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
             <label className="block text-xs font-medium text-slate-600">
               Rua / avenida da obra
@@ -715,7 +808,7 @@ export default function OrcamentoRapido() {
             </label>
           </div>
           <p className="text-xs text-slate-500">Cidade da obra: <strong className="text-slate-700">{cidade || 'preencha no bloco acima'}</strong>. É atualizada também pelo GPS, quando encontrada.</p>
-          {obraLocalizacao && <p className="text-xs text-emerald-700">Localização GPS vinculada à obra. Confira o endereço antes de enviar.</p>}
+          <p className="text-xs font-semibold text-slate-600">Obrigatório: rua e número (ou S/N), ou localização confirmada no mapa.</p>
           <p className="text-[11px] text-slate-400">Endereço automático com dados do OpenStreetMap. O GPS só é solicitado quando você toca no botão.</p>
         </section>
 
@@ -791,6 +884,7 @@ export default function OrcamentoRapido() {
               </div>
               {(obraNome || obraRua) && <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
                 <b>Obra:</b> {obraNome || 'Não informada'}{(obraRua || obraNumero) && <p className="mt-1"><b>Endereço:</b> {formatarEnderecoObra(obraRua, obraNumero, obraCep)}{obraBairro ? ' · ' + obraBairro : ''}</p>}
+                {obraLocalizacaoConfirmada === 'sim' && coordenadasEmTexto(obraLocalizacao) && <p className="mt-1"><b>GPS:</b> confirmado · <a href={linkRotaObra({ coordenadas: obraLocalizacao }) || '#'} target="_blank" rel="noreferrer" className="underline">Abrir rota</a></p>}
               </div>}
               <div className="space-y-3">
                 {itens.map((item,idx) => (

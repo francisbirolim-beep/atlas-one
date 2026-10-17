@@ -1,3 +1,11 @@
+## 2026-10-17 — Validar Localização por Obra (somente Pedido de Orçamento)
+
+1. Revisar a branch isolada `feat/localizacao-obras-pedido-orcamento-20261017`; NÃO publicar nem alterar `main` sem aprovação expressa.
+2. Homologar no celular com usuário real: GPS disponível, GPS negado, localização correta Sim, incorreta Não; endereço digitado e número S/N; endereço vazio/GPS vazio; cliente com mais de uma obra.
+3. Testar rascunho/offline, reconexão, seleção de obra por URL `?cliente=...&obra=...`, endereço com número em coluna separada e observações preexistentes.
+4. Confirmar rota no mapa a partir da página da Obra e histórico preservado. Não fazer testes destrutivos em clientes reais: preferir cliente/obra de teste.
+5. Antes de outras telas: projetar local estruturado em Obra e migração segura dos GPS de Prospecção, regras de feedback IA; só depois Assistência, Cliente 360, Instalação e Medida Final.
+
 ## COMPRAS — Próxima validação (15/10/2026)
 
 Branch isolada: `feature/compras-recebimento-estoque-20261015`. **Não publicar automaticamente.**
