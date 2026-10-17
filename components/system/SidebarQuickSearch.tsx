@@ -13,6 +13,7 @@ import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 const ALIASES: Record<string, string> = {
   '/cadastro': 'cadastro usuario usuários perfil perfis acesso funcionario funcionários vendedor vendedores equipe',
   '/configuracoes': 'configuração configurações sistema parâmetros preferências administração',
+  '/configuracoes/notificacoes': 'notificações notificacao lembretes agenda tarefas som celular push silencioso alertas',
   '/configuracoes/usuarios': 'usuários senhas usuario senha acesso administração master',
   '/configuracoes/orcamento': 'padrão orçamento configuração proposta administração',
   '/engenharia/formulas-corte': 'fórmula fórmulas corte plano corte engenharia tipologia cálculo perfil administração',

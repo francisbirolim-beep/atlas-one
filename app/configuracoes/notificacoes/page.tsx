@@ -147,7 +147,7 @@ export default function ConfiguracoesNotificacoesPage() {
     <main className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-8">
         <div className="mb-6 flex items-center gap-3">
-          <Link href="/configuracoes" className="grid h-10 w-10 place-items-center rounded-xl border bg-white text-slate-600 hover:bg-slate-50">
+          <Link href="/" title="Voltar à Visão Geral" className="grid h-10 w-10 place-items-center rounded-xl border bg-white text-slate-600 hover:bg-slate-50">
             <ArrowLeft size={18}/>
           </Link>
           <div className="min-w-0 flex-1">

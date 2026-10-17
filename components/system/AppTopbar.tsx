@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ChevronDown, Command, FileText, LogOut, MapPin, Plus, Search, Settings, Sparkles, UserRound, X } from 'lucide-react'
+import { BellRing, ChevronDown, Command, FileText, LogOut, MapPin, Plus, Search, Settings, Sparkles, UserRound, X } from 'lucide-react'
 import { logout, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { bateBusca } from '@/lib/texto'
@@ -53,6 +53,7 @@ const PAGINAS: { id: string; titulo: string; subtitulo: string; href: string; te
   { id: 'pagina-cadastro', titulo: 'Cadastro', subtitulo: 'Página · Linhas, cores, materiais, produtos, fornecedores', href: '/cadastro', termos: ['cadastro', 'linhas', 'cores', 'materiais', 'produtos', 'fornecedores', 'aluminio', 'alumínio', 'kg', 'pintura'] },
   { id: 'pagina-setores', titulo: 'Setores', subtitulo: 'Página · Setores do sistema', href: '/setores', termos: ['setores', 'setor'] },
   { id: 'pagina-configuracoes', titulo: 'Configurações', subtitulo: 'Página · Configurações gerais', href: '/configuracoes', termos: ['configuracoes', 'config', 'ajustes'] },
+  { id: 'pagina-notificacoes', titulo: 'Notificações e Lembretes', subtitulo: 'Página · Tarefas, Agenda, Push e som', href: '/configuracoes/notificacoes', termos: ['notificacao', 'notificacoes', 'lembretes', 'avisos', 'alertas', 'silencioso', 'som'] },
   { id: 'pagina-padrao-orcamento', titulo: 'Padrão do Orçamento', subtitulo: 'Página · Configurações de orçamento', href: '/configuracoes/orcamento', termos: ['padrao do orcamento', 'padrao orcamento', 'modelo de orcamento'] },
 ]
 
@@ -201,6 +202,7 @@ export default function AppTopbar() {
             {perfilAberto && (
               <div className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                 {usuario?.role === 'master' && <Link href="/configuracoes" onClick={() => setPerfilAberto(false)} className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"><Settings size={16}/>Configurações</Link>}
+                <Link href="/configuracoes/notificacoes" onClick={() => setPerfilAberto(false)} className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"><BellRing size={16}/>Notificações e Lembretes</Link>
                 <button type="button" onClick={() => void sair()} className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50"><LogOut size={16}/>Sair</button>
               </div>
             )}
