@@ -101,7 +101,8 @@ export async function criarTarefa(
   colunaId: string,
   titulo: string,
   descricao?: string,
-  dataHora?: string | null
+  dataHora?: string | null,
+  avisos?: { avisosMinutos: number[]; repetirPendenteMinutos: number }
 ): Promise<TarefaPessoal | null> {
   const { data, error } = await supabase
     .from('tarefas')
@@ -111,6 +112,10 @@ export async function criarTarefa(
       titulo,
       descricao: descricao || null,
       data_hora: dataHora || null,
+      ...(avisos ? {
+        avisos_minutos: avisos.avisosMinutos,
+        repetir_pendente_minutos: avisos.repetirPendenteMinutos,
+      } : {}),
     })
     .select()
     .single()
@@ -142,7 +147,7 @@ export async function reabrirTarefa(tarefaId: string): Promise<boolean> {
 
 export async function editarTarefa(
   tarefaId: string,
-  campos: { titulo?: string; descricao?: string | null; data_hora?: string | null }
+  campos: { titulo?: string; descricao?: string | null; data_hora?: string | null; avisos_minutos?: number[]; repetir_pendente_minutos?: number; pausado_ate?: string | null }
 ): Promise<boolean> {
   const { error } = await supabase.from('tarefas').update(campos).eq('id', tarefaId)
   return !error

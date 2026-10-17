@@ -17,6 +17,7 @@ import {
   type StatusPushDispositivo,
 } from '@/lib/notificacoes'
 import type { NotificacaoPreferencias, Usuario } from '@/lib/tipos'
+import CamposLembretes from '@/components/system/CamposLembretes'
 
 type ChaveCategoria = 'tarefas' | 'agenda' | 'chat' | 'operacao'
 
@@ -163,6 +164,25 @@ export default function ConfiguracoesNotificacoesPage() {
 
         <div className="grid gap-5 lg:grid-cols-[1.05fr_.95fr]">
           <section className="space-y-5">
+            <div className="rounded-2xl border bg-white p-5 shadow-sm">
+              <h2 className="mb-2 text-lg font-bold text-slate-900">Lembretes padrão</h2>
+              <p className="mb-4 text-xs text-slate-500">Usados automaticamente ao criar tarefas e compromissos. Cada item pode ter horários diferentes.</p>
+              <div className="space-y-3">
+                <CamposLembretes titulo="Tarefas" descricao="Avisos e cobrança enquanto a tarefa não for concluída."
+                  valores={prefs.tarefas_avisos_minutos || [1440,60]}
+                  repeticao={prefs.tarefas_repetir_pendente_minutos ?? 60}
+                  onChange={v=>void alterar({tarefas_avisos_minutos:v})}
+                  onRepeticao={v=>void alterar({tarefas_repetir_pendente_minutos:v})}
+                  disabled={salvando}/>
+                <CamposLembretes titulo="Agenda" descricao="Avisos antes de compromissos e acompanhamento opcional."
+                  valores={prefs.agenda_avisos_minutos || [1440,60,10]}
+                  repeticao={prefs.agenda_repetir_pendente_minutos ?? 0}
+                  onChange={v=>void alterar({agenda_avisos_minutos:v})}
+                  onRepeticao={v=>void alterar({agenda_repetir_pendente_minutos:v})}
+                  disabled={salvando}/>
+              </div>
+              <p className="mt-3 text-xs text-slate-500">Notificações no Atlas e celular são a primeira etapa. O envio e as respostas por WhatsApp serão habilitados após validação da integração.</p>
+            </div>
             <div className="rounded-2xl border bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-start gap-3">
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-700"><Smartphone size={20}/></span>
