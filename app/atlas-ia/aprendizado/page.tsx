@@ -320,13 +320,13 @@ export default function CentralAprendizadoPage(){
   useEffect(()=>{
     // Apenas ao abrir o cadastro em prévia; consulta em segundo plano, sem PATCH.
     if(!dados.somenteLeitura)return
-    const id=catalogoAberto||dados.candidatos.find(c=>c.id===aberto)?.entrada_id
+    const id=aba==='validacoes' ? dados.candidatos.find(c=>c.id===aberto)?.entrada_id : catalogoAberto
     const entrada=dados.entradas.find(e=>e.id===id)
     if(entrada?.mime_type==='application/pdf'&&['catalogo','tabela_preco'].includes(entrada.tipo)
       &&!tabelasOriginaisRef.current.has(entrada.id)){
       void conferirTabela(entrada,true)
     }
-  },[aberto,catalogoAberto,dados.entradas.length,dados.somenteLeitura])
+  },[aba,aberto,catalogoAberto,dados.entradas.length,dados.somenteLeitura])
 
   async function mapearCatalogo(e:Entrada){
     if(reprocessando)return
