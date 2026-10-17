@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { tokenAtual } from './auth'
 import type { Notificacao, NotificacaoPreferencias } from './tipos'
+import { PADRAO_AVISOS_TAREFA, PADRAO_AVISOS_AGENDA, PADRAO_COBRANCA_MINUTOS } from './lembretesInteligentes'
 
 export const PREFERENCIAS_PADRAO: NotificacaoPreferencias = {
   usuario_id: '',
@@ -15,6 +16,11 @@ export const PREFERENCIAS_PADRAO: NotificacaoPreferencias = {
   nao_perturbe_inicio: '22:00:00',
   nao_perturbe_fim: '07:00:00',
   timezone: 'America/Sao_Paulo',
+  avisos_tarefa_minutos: [...PADRAO_AVISOS_TAREFA],
+  avisos_agenda_minutos: [...PADRAO_AVISOS_AGENDA],
+  cobranca_tarefa_ativa: true,
+  cobranca_tarefa_intervalo_minutos: PADRAO_COBRANCA_MINUTOS,
+  whatsapp_lembretes_ativo: false,
 }
 
 export async function listarNotificacoes(usuarioId: string, limite = 30): Promise<Notificacao[]> {
@@ -52,7 +58,7 @@ export async function carregarPreferenciasNotificacao(usuarioId: string): Promis
     .eq('usuario_id', usuarioId)
     .maybeSingle()
   if (error || !data) return { ...PREFERENCIAS_PADRAO, usuario_id: usuarioId }
-  return data as NotificacaoPreferencias
+  return { ...PREFERENCIAS_PADRAO, ...data } as NotificacaoPreferencias
 }
 
 export async function salvarPreferenciasNotificacao(

@@ -89,7 +89,7 @@ export async function moverCard(
   // fica parecendo vendido sem existir venda, conta a receber ou projeto.
   const { data: colunaDestino, error: erroColuna } = await supabase
     .from('kanban_colunas')
-    .select('gera_medicao_final')
+    .select('gera_medicao_final,nome')
     .eq('id', colunaId)
     .maybeSingle()
 
@@ -115,6 +115,8 @@ export async function moverCard(
   if (error) return false
 
   executarAutomacoesColuna(colunaId, {
+    id: orcamentoId,
+    coluna_nome: colunaDestino?.nome || null,
     cliente_nome: data?.cliente_nome || null,
     criado_por_id: data?.criado_por_id || null,
   }).catch(() => {})
