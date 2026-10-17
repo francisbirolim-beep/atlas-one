@@ -10,6 +10,7 @@ import {
 import { tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
+import { conferirDadosCatalogo } from '@/lib/ai/catalogoConferencia'
 
 type Entrada = {
   id: string
@@ -118,6 +119,7 @@ export default function CentralAprendizadoPage(){
   const [mostrarHistorico,setMostrarHistorico]=useState(false)
   const [arquivando,setArquivando]=useState<string|null>(null)
   const [reprocessando,setReprocessando]=useState<string|null>(null)
+  const [conferindoTabela,setConferindoTabela]=useState<string|null>(null)
   const [salvando,setSalvando]=useState<string|null>(null)
   const [entradaValidacaoFiltro,setEntradaValidacaoFiltro]=useState<string|null>(null)
   const [edicoes,setEdicoes]=useState<Record<string,{titulo:string;modulo:string;dados:Record<string,any>;observacao:string}>>({})
@@ -229,6 +231,50 @@ export default function CentralAprendizadoPage(){
       await carregar()
     }catch(err:any){setErro(err?.message||'Erro ao reprocessar catálogo.')}
     finally{setReprocessando(null)}
+  }
+
+  async function conferirTabela(e:Entrada){
+    if(conferindoTabela)return
+    setConferindoTabela(e.id);setErro('');setMensagem('')
+    try{
+      const resultado=await api('/api/ia/central-aprendizado?conferirTabela='+encodeURIComponent(e.id))
+      const porCodigo=new Map<string,Record<string,any>>()
+      for(const item of Array.isArray(resultado.itens)?resultado.itens:[]){
+        const codigo=String(item.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
+        if(codigo&&!porCodigo.has(codigo))porCodigo.set(codigo,item)
+      }
+      const originais=new Map(dados.candidatos.map(c=>[c.id,c]))
+      const revisados=new Map<string,Candidato>()
+      let corrigidos=0,conflitos=0
+      for(const c of dados.candidatos){
+        if(c.entrada_id!==e.id||c.tipo!=='produto')continue
+        const codigo=String(c.dados?.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
+        const extracao=porCodigo.get(codigo)
+        if(!extracao)continue
+        const conferencia=conferirDadosCatalogo(c,extracao)
+        if(!conferencia)continue
+        const novo={...c,dados:{...conferencia.dados,divergencias_tabela:conferencia.divergencias},
+          titulo:String(c.dados?.codigo||'')+' — '+String(conferencia.dados.descricao||'Produto')}
+        revisados.set(c.id,novo)
+        if(conferencia.divergencias.length)conflitos++
+        corrigidos++
+      }
+      setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>revisados.get(c.id)||c)}))
+      // Campos ja modificados pelo usuario nao sao substituidos silenciosamente.
+      setEdicoes(prev=>{
+        const proximo={...prev}
+        for(const [id,item] of revisados){
+          const edicao=prev[id],original=originais.get(id)
+          if(edicao&&original&&JSON.stringify(edicao.dados)===JSON.stringify(original.dados))
+            proximo[id]={...edicao,titulo:item.titulo,dados:{...item.dados}}
+        }
+        return proximo
+      })
+      setMensagem('Tabela do PDF conferida: '+corrigidos+' item(ns) exibidos com dados de origem'+
+        (conflitos?', '+conflitos+' divergência(s) preservada(s) para revisão':'')+
+        '. Consulta visual, sem gravar cadastros; desenhos ainda exigem homologação individual.')
+    }catch(err:any){setErro(err?.message||'Falha ao conferir os dados no PDF.')}
+    finally{setConferindoTabela(null)}
   }
 
   async function mapearCatalogo(e:Entrada){
@@ -364,6 +410,7 @@ export default function CentralAprendizadoPage(){
                   {e.fonte_url&&<a href={e.fonte_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={12}/>Abrir fonte</a>}
                   {dados.candidatos.some(c=>c.entrada_id===e.id&&['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')&&!e.metadados?.arquivado_em&&<button onClick={()=>abrirValidacaoEntrada(e.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"><ShieldCheck size={13}/>Revisar agora ({dados.candidatos.filter(c=>c.entrada_id===e.id&&['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length})</button>}
                   {['catalogo','tabela_preco'].includes(e.tipo)&&<button onClick={()=>{setCatalogoAberto(v=>v===e.id?null:e.id);setItemCatalogoAberto(null);setBuscaCatalogo('')}} className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"><PackageSearch size={13}/>Ver itens ({dados.candidatos.filter(c=>c.entrada_id===e.id&&c.tipo==='produto').length})</button>}
+                  {!e.metadados?.arquivado_em&&e.mime_type==='application/pdf'&&['catalogo','tabela_preco'].includes(e.tipo)&&<button disabled={Boolean(conferindoTabela)} onClick={()=>void conferirTabela(e)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><RefreshCcw size={13} className={conferindoTabela===e.id?'animate-spin':''}/>{conferindoTabela===e.id?'Conferindo tabela...':'Conferir códigos, pesos e medidas no PDF'}</button>}
                   {!e.metadados?.arquivado_em&&['catalogo','tabela_preco'].includes(e.tipo)&&<button disabled={Boolean(reprocessando)} onClick={()=>void reprocessarEntrada(e)} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-50"><RefreshCcw size={13} className={reprocessando===e.id?'animate-spin':''}/>{reprocessando===e.id?'Reprocessando...':'Reanalisar com regras atuais'}</button>}
                 </div>
                 {e.erro&&<div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-2 text-xs text-red-700">{String(e.erro).includes('uq_produtos_codigo_upper')?'Uma tentativa anterior encontrou um código já existente. O catálogo foi lido; agora o Atlas reconcilia o código existente em vez de criar duplicado.':e.erro}</div>}
@@ -419,6 +466,8 @@ export default function CentralAprendizadoPage(){
                   {c.tipo==='produto'&&<div className="mt-1 text-xs font-semibold text-slate-700">Código: {String(c.dados?.codigo||'não informado')}</div>}
                   {c.tipo==='produto'&&c.dados?.medidas_mm&&Object.keys(c.dados.medidas_mm).length>0&&<p className="mt-1 text-xs text-slate-600">Medidas: {Object.entries(c.dados.medidas_mm).map(([k,v])=>k+': '+v+' mm').join(' · ')}</p>}
                   {c.tipo==='produto'&&c.dados?.evidencia_tabela&&<p className="mt-1 text-xs text-slate-500">Fonte: {c.dados.evidencia_tabela}</p>}
+                  {c.tipo==='produto'&&c.dados?.conferencia_tabela_visualizada&&<p className="mt-1 text-xs font-semibold text-blue-700">Dados conferidos no PDF nesta visualização (não gravados).</p>}
+                  {c.tipo==='produto'&&Array.isArray(c.dados?.divergencias_tabela)&&c.dados.divergencias_tabela.length>0&&<p className="mt-1 text-xs text-amber-800">Divergência na tabela: {c.dados.divergencias_tabela.join(', ')}. Valor antigo mantido para revisão.</p>}
                   {c.tipo==='produto'&&precisaCodigo&&<p className="mt-1 text-xs text-amber-700">Código não identificado com segurança; corrija antes de validar.</p>}
                   {c.tipo==='produto'&&precisaImagem&&<p className="mt-1 text-xs text-amber-700">Sem imagem vinculada: confira a foto ou anexe um desenho.</p>}
                   {c.tipo==='produto'&&c.foto_cadastro&&<p className="mt-1 text-[11px] text-emerald-700">Foto existente encontrada por código exato no Atlas/WVetro</p>}
@@ -440,6 +489,7 @@ export default function CentralAprendizadoPage(){
               {!podeAprovar&&<p className="w-full text-xs text-amber-800">Para liberar a validação: {precisaCodigo?'confira e salve o código. ':''}{precisaImagem?'abra Revisar / corrigir e confirme o desenho correto. ':''}{precisaPeso?'informe e salve o peso kg/m.':''}</p>}
               <button disabled={salvando===c.id||!podeAprovar} title={!podeAprovar?'Confirme código, peso e imagem antes de validar':'Validar item'} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
               <button disabled={salvando===c.id} onClick={()=>editarInicial(c)} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"><Eye size={15}/>Revisar / corrigir</button>
+              {c.tipo==='produto'&&origem?.mime_type==='application/pdf'&&<button disabled={Boolean(conferindoTabela)} onClick={()=>void conferirTabela(origem)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50"><RefreshCcw size={15} className={conferindoTabela===origem.id?'animate-spin':''}/>Conferir tabela original</button>}
               <button disabled={salvando===c.id} onClick={()=>void acao(c,'rejeitar')} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-semibold text-red-700 disabled:opacity-40"><XCircle size={15}/>Não validar</button>
             </div>:<div className="border-t bg-slate-50 px-4 py-3 text-xs text-slate-600"><ShieldCheck size={15} className="mr-1 inline"/>Somente Master ou responsável com edição no setor pode validar este aprendizado.</div>}
 
@@ -594,6 +644,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
               </div>
               <div className="mt-1 font-semibold">{c.dados?.codigo||'Sem código'} <span className="font-normal text-slate-500">— {c.dados?.descricao||c.titulo}</span></div>
               <div className="mt-1 text-xs text-slate-400">{c.deduplicacao?.produto_existente?'Vinculado ao produto já existente no Atlas':labelAcao(c.acao_sugerida)}{c.dados?.preco_fornecedor!=null?' · preço '+String(c.dados.preco_fornecedor):' · sem preço'}</div>
+              {c.dados?.conferencia_tabela_visualizada&&<div className="mt-1 text-xs text-blue-700">Tabela consultada no PDF (sem salvar). Peso: {c.dados.peso_kg_m??'—'} kg/m · {Object.entries(c.dados.medidas_mm||{}).map(([k,v])=>k+' '+v+' mm').join(' · ')||'sem cotas'}</div>}
             </div>
             {aberto?<ChevronUp size={17}/>:<ChevronDown size={17}/>}
           </button>

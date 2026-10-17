@@ -15,6 +15,21 @@ const geometria = moduloTs('lib/ai/catalogoTabelaGeometria.ts')
 const leitor = moduloTs('lib/ai/catalogoPdfTexto.ts')
 const {localizarCodigoCatalogo} = moduloTs('lib/ai/catalogoImagemCodigo.ts')
 const {pesoDecimalCatalogo} = moduloTs('lib/ai/catalogoPeso.ts')
+const {conferirDadosCatalogo} = moduloTs('lib/ai/catalogoConferencia.ts')
+const antigos={status:'pendente',dados:{codigo:'TQ-036',descricao:'Peso',peso_kg_m:null,medidas_mm:{},medidas_polegadas:{},categoria:'outro'}}
+const daFonte={codigo:'TQ-036',descricao:'Tubo Quadrado',peso_kg_m:1.28,medidas_mm:{A:76.2,B:1.58},medidas_polegadas:{A:'3”'},categoria:'perfil',unidade:'KG'}
+const revisao=conferirDadosCatalogo(antigos,daFonte)
+assert.equal(revisao.dados.descricao,'Tubo Quadrado')
+assert.equal(revisao.dados.peso_kg_m,1.28)
+assert.deepEqual(JSON.parse(JSON.stringify(revisao.dados.medidas_mm)),{A:76.2,B:1.58})
+assert.equal(antigos.dados.descricao,'Peso','Consulta jamais deve alterar cadastro anterior')
+assert.equal(conferirDadosCatalogo({...antigos,status:'aprovado'},daFonte),null)
+assert.equal(conferirDadosCatalogo({...antigos,dados:{...antigos.dados,revisado_manualmente:true}},daFonte),null)
+assert.equal(conferirDadosCatalogo(antigos,{...daFonte,codigo:'TQ-037'}),null)
+const conflitante=conferirDadosCatalogo({...antigos,dados:{...antigos.dados,peso_kg_m:9}},daFonte)
+assert.equal(conflitante.dados.peso_kg_m,9,'Peso divergente nunca pode ser substituido silenciosamente')
+assert.ok(conflitante.divergencias.includes('peso_kg_m'))
+
 for (const [entrada, esperado] of [['0.375',0.375],['0,375',0.375],['1.270',1.27],['1,270',1.27],['1.234,567',1234.567],['1,234.567',1234.567]]) {
  assert.equal(pesoDecimalCatalogo(entrada), esperado, 'Peso decimal: '+entrada)
 }
@@ -74,6 +89,12 @@ async function testar(){
  checar('CT-128',0.436,4,'e',2)
  checar('BAR-013',0.135,4,'B',3.18)
  checar('TUB-4002',0.161,5,'A',15.88)
+ checar('TQ-036',1.28,5,'A',76.2)
+ assert.equal(produtos.find(p=>p.codigo==='TQ-036')?.descricao,'Tubo Quadrado')
+ assert.equal(produtos.find(p=>p.codigo==='TQ-036')?.medidas_mm.B,1.58)
+ assert.equal(produtos.find(p=>p.codigo==='TQ-036')?.medidas_polegadas.A,'3”')
+ assert.equal(produtos.find(p=>p.codigo==='TQ-036')?.evidencia_tabela?.startsWith('TQ-036'),true)
+
  checar('P064',0.375,14)
  assert.equal(produtos.find(p=>p.codigo==='P064').linha,'Linha 30')
  assert.ok(produtos.some(p=>p.medidas_polegadas.A),'Sem polegadas')

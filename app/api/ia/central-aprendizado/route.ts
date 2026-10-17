@@ -785,6 +785,29 @@ export async function GET(req:NextRequest){
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
     const autorizacao=await carregarPermissoesIA(u)
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
+    // Consulta explicita da tabela original; nenhuma escrita nos candidatos ou produtos.
+    const conferirTabelaId=txt(req.nextUrl.searchParams.get('conferirTabela'),80)
+    if(conferirTabelaId){
+      let q=supabaseAdmin.from('ai_aprendizado_entradas').select('id,tipo,mime_type,storage_path')
+        .eq('empresa_id',u.empresa_id).eq('id',conferirTabelaId)
+      if(u.role!=='master')q=q.eq('criado_por_id',u.id)
+      const {data:entrada,error:erroEntrada}=await q.single()
+      if(erroEntrada||!entrada)return NextResponse.json({error:'Catálogo não localizado.'},{status:404})
+      if(!['catalogo','tabela_preco'].includes(String(entrada.tipo))||entrada.mime_type!=='application/pdf'||!entrada.storage_path)
+        return NextResponse.json({error:'Esta fonte não é um catálogo PDF consultável.'},{status:400})
+      const {data:pdf,error:erroPdf}=await supabaseAdmin.storage.from('atlas-aprendizado').download(entrada.storage_path)
+      if(erroPdf||!pdf)return NextResponse.json({error:'PDF original indisponível.'},{status:404})
+      const lido=await lerPdfCatalogo(Buffer.from(await pdf.arrayBuffer()))
+      const itens=extrairLinhasCatalogo(lido.paginas).map(item=>({
+        codigo:item.codigo,descricao:item.descricao,categoria:item.categoria,unidade:item.unidade,
+        peso_kg_m:item.peso_kg_m,medidas_mm:item.medidas_mm,medidas_polegadas:item.medidas_polegadas,
+        linha:item.linha,pagina_catalogo:item.pagina_catalogo,imagem_tipo:item.imagem_tipo,
+        familia:item.familia,evidencia_tabela:item.evidencia_tabela,
+        conflito_peso_catalogo:item.conflito_peso_catalogo||null
+      }))
+      return NextResponse.json({itens,total:itens.length,consulta:true},
+        {headers:{'Cache-Control':'private, no-store'}})
+    }
     const entradaId=txt(req.nextUrl.searchParams.get('entradaId'),80), status=txt(req.nextUrl.searchParams.get('status'),40)
     let q=supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).order('id');if(entradaId)q=q.eq('id',entradaId)
     if(u.role!=='master')q=q.eq('criado_por_id',u.id)
