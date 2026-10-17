@@ -25,6 +25,8 @@ import { usuarioAtual } from '@/lib/auth'
 import { listarUsuariosConvidaveis } from '@/lib/eventos'
 import { atribuirTarefa, type PrioridadeTarefa } from '@/lib/tarefasColaboracao'
 import CamposLembretes from '@/components/system/CamposLembretes'
+import GravadorLembreteAudio, { vincularAudioLembrete } from '@/components/system/GravadorLembreteAudio'
+import AudioAnexadoLembrete from '@/components/system/AudioAnexadoLembrete'
 import { carregarPreferenciasNotificacao } from '@/lib/notificacoes'
 import BotaoMicrofone from '@/components/BotaoMicrofone'
 import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
@@ -58,6 +60,8 @@ export default function Tarefas() {
   const [reagendarPara, setReagendarPara] = useState('')
   const [avisosSelecionada, setAvisosSelecionada] = useState<number[]>([1440,60])
   const [repetirSelecionada, setRepetirSelecionada] = useState(60)
+  const [audioNovoId,setAudioNovoId] = useState<string|null>(null)
+  const [audioOcupado,setAudioOcupado] = useState(false)
   const [avisosNovo, setAvisosNovo] = useState<number[]>([1440, 60])
   const [repetirAvisoNovo, setRepetirAvisoNovo] = useState(60)
 
@@ -139,6 +143,7 @@ export default function Tarefas() {
     setRepetirNova('')
     setRepetirValorNova(5)
     setPrioridadeNova('normal')
+    setAudioNovoId(null)
     if (usuario) {
       const prefs = await carregarPreferenciasNotificacao(usuario.id)
       setAvisosNovo(prefs.tarefas_avisos_minutos || [1440,60])
@@ -171,6 +176,7 @@ export default function Tarefas() {
         alert(resultado.error || 'Não foi possível atribuir a tarefa.')
         return
       }
+      if(audioNovoId && resultado.tarefa?.id && !await vincularAudioLembrete(audioNovoId,resultado.tarefa.id)) alert('Tarefa atribuída. Não foi possível vincular o áudio.')
       const nome = usuariosTarefa.find(u => u.id === responsavelId)?.nome || 'o responsável'
       alert(`Tarefa atribuída para ${nome}.`)
       setNovaEm(null)
@@ -179,13 +185,20 @@ export default function Tarefas() {
 
     if (repetirNova) {
       if (!dataNova) { alert('Defina uma data para a tarefa repetir a partir dela.'); return }
-      await criarTarefaRecorrente(usuario.id, novaEm, tituloNovo.trim(), new Date(dataNova).toISOString(), repetirNova, repetirValorNova, descNova.trim() || undefined)
+      const recorrente = await criarTarefaRecorrente(usuario.id, novaEm, tituloNovo.trim(), new Date(dataNova).toISOString(), repetirNova, repetirValorNova, descNova.trim() || undefined)
+      if(recorrente){
+        await editarTarefa(recorrente.id,{avisos_minutos:avisosNovo,repetir_pendente_minutos:repetirAvisoNovo})
+        if(audioNovoId && !await vincularAudioLembrete(audioNovoId,recorrente.id)) alert('Tarefa criada. Não foi possível vincular o áudio.')
+      }
       const tfs = await listarTarefas(usuario.id)
       setTarefas(tfs)
     } else {
       const t = await criarTarefa(usuario.id, novaEm, tituloNovo.trim(), descNova.trim() || undefined, dataNova || null,
         { avisosMinutos: avisosNovo, repetirPendenteMinutos: repetirAvisoNovo })
-      if (t) setTarefas((prev) => [...prev, t])
+      if (t){
+        setTarefas((prev) => [...prev, t])
+        if(audioNovoId && !await vincularAudioLembrete(audioNovoId,t.id)) alert('Tarefa criada. Não foi possível vincular o áudio.')
+      }
     }
     setNovaEm(null)
   }
@@ -444,11 +457,13 @@ export default function Tarefas() {
                 />
               )}
             </div>
+            <GravadorLembreteAudio tipo="tarefa" gravacaoId={audioNovoId} onOcupado={setAudioOcupado}
+              onSalvo={r=>{setAudioNovoId(r.id);if(r.transcricao){const i=interpretarComandoDeVoz(r.transcricao);setTituloNovo(t=>t||i.titulo);if(i.data)setDataNova(paraDatetimeLocal(i.data))}}}/>
             <CamposLembretes titulo="Avisos desta tarefa" valores={avisosNovo} repeticao={repetirAvisoNovo}
               onChange={setAvisosNovo} onRepeticao={setRepetirAvisoNovo}/>
             <button
               onClick={salvarNovaTarefa}
-              disabled={!tituloNovo.trim()}
+              disabled={audioOcupado || !tituloNovo.trim()}
               className="w-full bg-brand-navy text-white rounded-xl py-2 text-sm font-medium disabled:opacity-40"
             >
               Salvar
@@ -493,6 +508,7 @@ export default function Tarefas() {
               <input type="datetime-local" value={reagendarPara} onChange={e=>setReagendarPara(e.target.value)} className="w-full rounded-lg border px-2 py-2 text-sm"/>
               <button type="button" disabled={!reagendarPara} onClick={()=>void reagendar(selecionada,reagendarPara)} className="w-full rounded-lg bg-blue-600 py-2 text-xs font-semibold text-white disabled:opacity-50">Salvar novo horário</button>
             </div>}
+            <AudioAnexadoLembrete tipo="tarefa" referenciaId={selecionada.id}/>
             <div className="flex gap-2 pt-2">
               <button
                 onClick={() => alternarConcluida(selecionada)}

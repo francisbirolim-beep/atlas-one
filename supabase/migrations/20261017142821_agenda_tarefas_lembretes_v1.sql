@@ -37,6 +37,25 @@ create trigger trg_ativar_lembretes_evento_atlas
   before insert or update of data_inicio,avisos_minutos,repetir_pendente_minutos on public.eventos
   for each row execute function private.ativar_lembretes_novo_atlas();
 
+-- Áudios originais de tarefas/compromissos, sempre privados e vinculados após confirmação.
+create table if not exists public.lembretes_audios (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null,
+  usuario_id uuid not null references public.usuarios(id),
+  tipo text not null check (tipo in ('tarefa','agenda')),
+  referencia_id uuid,
+  arquivo_path text not null unique,
+  mime_type text not null,
+  tamanho_bytes integer not null check (tamanho_bytes > 0 and tamanho_bytes <= 12582912),
+  transcricao text,
+  created_at timestamptz not null default now()
+);
+create index if not exists lembretes_audios_usuario_ref_idx
+  on public.lembretes_audios(empresa_id, usuario_id, referencia_id);
+alter table public.lembretes_audios enable row level security;
+revoke all on table public.lembretes_audios from public,anon,authenticated;
+grant select,insert,update,delete on table public.lembretes_audios to service_role;
+
 create unique index if not exists tarefas_orcamento_envio_unico
   on public.tarefas(empresa_id, orcamento_id, usuario_id)
   where origem_lembrete = 'orcamento_feito_envio' and orcamento_id is not null;
@@ -143,6 +162,38 @@ $fn$;
 revoke all on function private.processar_lembretes_atlas() from public, anon, authenticated;
 grant execute on function private.processar_lembretes_atlas() to service_role;
 
+-- Evita notificações aguardando entrega quando uma tarefa já mudou de estado.
+create or replace function private.cancelar_avisos_desatualizados_atlas()
+returns trigger language plpgsql security definer set search_path = ''
+as $fn$
+begin
+  if tg_table_name = 'tarefas' then
+    if new.concluida_em is not distinct from old.concluida_em
+       and new.data_hora is not distinct from old.data_hora
+       and new.pausado_ate is not distinct from old.pausado_ate then return new; end if;
+  else
+    if new.concluido_em is not distinct from old.concluido_em
+       and new.data_inicio is not distinct from old.data_inicio
+       and new.pausado_ate is not distinct from old.pausado_ate then return new; end if;
+  end if;
+  update public.notificacoes set push_status = 'ignorado'
+  where empresa_id = new.empresa_id and usuario_id = new.usuario_id
+    and origem_tipo in ('lembrete_programado','lembrete_pendente')
+    and left(origem_id,length(new.id::text)+1) = new.id::text||':'
+    and push_status='pendente';
+  return new;
+end;
+$fn$;
+revoke all on function private.cancelar_avisos_desatualizados_atlas() from public,anon,authenticated;
+drop trigger if exists trg_cancelar_avisos_tarefa_atlas on public.tarefas;
+create trigger trg_cancelar_avisos_tarefa_atlas
+  after update of concluida_em,data_hora,pausado_ate on public.tarefas
+  for each row execute function private.cancelar_avisos_desatualizados_atlas();
+drop trigger if exists trg_cancelar_avisos_evento_atlas on public.eventos;
+create trigger trg_cancelar_avisos_evento_atlas
+  after update of concluido_em,data_inicio,pausado_ate on public.eventos
+  for each row execute function private.cancelar_avisos_desatualizados_atlas();
+
 -- Orçamento muda para Feito: tarefa única ao solicitante, sem interferir no Kanban existente.
 create or replace function private.criar_tarefa_envio_orcamento_atlas()
 returns trigger language plpgsql security definer set search_path = ''
@@ -150,6 +201,7 @@ as $fn$
 declare
   v_nome text;
   v_coluna uuid;
+  v_tarefa uuid;
 begin
   if new.coluna_id is not distinct from old.coluna_id then return new; end if;
   select lower(trim(nome)) into v_nome
@@ -180,7 +232,17 @@ begin
       new.cliente_id,new.obra_id,new.id,'orcamento_feito_envio')
     on conflict (empresa_id,orcamento_id,usuario_id)
       where origem_lembrete = 'orcamento_feito_envio' and orcamento_id is not null
-      do nothing;
+      do nothing returning id into v_tarefa;
+    if v_tarefa is not null then
+      insert into public.notificacoes(
+        empresa_id, usuario_id, categoria, tipo, titulo, mensagem, href, origem_tipo, origem_id)
+      values(new.empresa_id,new.criado_por_id,'tarefas','orcamento_pronto_envio',
+        'Orçamento pronto: ' || coalesce(nullif(new.cliente_nome,''),'cliente'),
+        'O orçamento está pronto. Falta enviar ao cliente.',
+        '/tarefas','orcamento_pronto_envio',v_tarefa::text)
+      on conflict (usuario_id,origem_tipo,origem_id)
+        where origem_tipo is not null and origem_id is not null do nothing;
+    end if;
   end if;
   return new;
 end;

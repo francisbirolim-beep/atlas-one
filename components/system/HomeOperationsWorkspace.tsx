@@ -35,6 +35,8 @@ import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
 import { atribuirTarefa, type PrioridadeTarefa } from '@/lib/tarefasColaboracao'
 import { carregarPreferenciasNotificacao, listarNotificacoes } from '@/lib/notificacoes'
 import CamposLembretes from '@/components/system/CamposLembretes'
+import GravadorLembreteAudio, { vincularAudioLembrete } from '@/components/system/GravadorLembreteAudio'
+import AudioAnexadoLembrete from '@/components/system/AudioAnexadoLembrete'
 import BotaoMicrofone from '@/components/BotaoMicrofone'
 import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
 import type { Notificacao } from '@/lib/tipos'
@@ -95,6 +97,9 @@ export default function HomeOperationsWorkspace() {
   const [usuariosConvidaveis, setUsuariosConvidaveis] = useState<{ id: string; nome: string }[]>([])
   const [convidados, setConvidados] = useState<string[]>([])
   const [salvando, setSalvando] = useState(false)
+  const [audioTarefaId,setAudioTarefaId] = useState<string|null>(null)
+  const [audioEventoId,setAudioEventoId] = useState<string|null>(null)
+  const [audioOcupado,setAudioOcupado] = useState(false)
   const [reagendarEventoId, setReagendarEventoId] = useState<string | null>(null)
   const [novoHorarioEvento, setNovoHorarioEvento] = useState('')
   const [avisosTarefa, setAvisosTarefa] = useState<number[]>([1440,60])
@@ -215,6 +220,7 @@ export default function HomeOperationsWorkspace() {
   async function abrirTarefa() {
     if (!usuario) return
     setResponsavelTarefaId(usuario.id)
+    setAudioTarefaId(null)
     setPrioridadeTarefa('normal')
     const p = await carregarPreferenciasNotificacao(usuario.id)
     setAvisosTarefa(p.tarefas_avisos_minutos || [1440,60])
@@ -239,7 +245,10 @@ export default function HomeOperationsWorkspace() {
       if (colunaId) {
         const criada = await criarTarefa(usuario.id, colunaId, tituloTarefa.trim(), undefined, dataHora,
           { avisosMinutos: avisosTarefa, repetirPendenteMinutos: repetirTarefa })
-        if (criada) setTarefas(prev => [...prev, criada])
+        if (criada) {
+          setTarefas(prev => [...prev, criada])
+          if(audioTarefaId && !await vincularAudioLembrete(audioTarefaId,criada.id)) alert('Tarefa criada, mas não foi possível vincular o áudio. Tente novamente.')
+        }
       }
     } else {
       const resultado = await atribuirTarefa({
@@ -255,6 +264,7 @@ export default function HomeOperationsWorkspace() {
         setSalvando(false)
         return
       }
+      if(audioTarefaId && resultado.tarefa?.id && !await vincularAudioLembrete(audioTarefaId,resultado.tarefa.id)) alert('Tarefa atribuída, mas não foi possível vincular o áudio.')
       const nome = usuariosTarefa.find(u => u.id === responsavelId)?.nome || 'o responsável'
       alert(`Tarefa atribuída para ${nome}.`)
     }
@@ -266,6 +276,7 @@ export default function HomeOperationsWorkspace() {
   }
 
   async function abrirEvento() {
+    setAudioEventoId(null)
     setModalEvento(true)
     if (usuario) {
       const p = await carregarPreferenciasNotificacao(usuario.id)
@@ -293,7 +304,10 @@ export default function HomeOperationsWorkspace() {
       data_inicio: inicio.toISOString(),
       data_fim: fim.toISOString(),
     }, convidados, { avisosMinutos: avisosEvento, repetirPendenteMinutos: repetirEvento })
-    if (criado) setEventos(await listarEventosDoUsuario(usuario.id))
+    if (criado) {
+      setEventos(await listarEventosDoUsuario(usuario.id))
+      if(audioEventoId && !await vincularAudioLembrete(audioEventoId,criado.id)) alert('Compromisso criado, mas não foi possível vincular o áudio.')
+    }
     setTituloEvento('')
     setLocalEvento('')
     setConvidados([])
@@ -410,6 +424,7 @@ export default function HomeOperationsWorkspace() {
               <div key={`${e.id}-${e.meuStatus}`} className="flex items-start gap-3 rounded-xl border border-white/10 px-3 py-3">
                 <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-blue-400"/>
                 <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-100">{hora(e.data_inicio)} · {e.titulo}</strong>{e.concluido_em && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">Realizado</span>}{e.meuStatus === 'pendente' && <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-300">Convite pendente</span>}</div>{e.local && <p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin size={11}/>{e.local}</p>}
+                <AudioAnexadoLembrete tipo="agenda" referenciaId={e.id} claro/>
                 {usuario?.id === e.usuario_id && !e.concluido_em && <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" onClick={()=>void concluirCompromisso(e)} className="rounded-lg bg-emerald-600/15 px-2 py-1 text-xs text-emerald-300">Concluir</button>
                   <button type="button" onClick={()=>void reagendarCompromisso(e,new Date(Math.max(Date.now(),new Date(e.data_inicio).getTime())+3600000))} className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-300">Adiar 1 hora</button>
@@ -425,9 +440,13 @@ export default function HomeOperationsWorkspace() {
         </div>
       </article>
 
-      {modalTarefa && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.currentTarget === e.target) setModalTarefa(false) }}><div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Tarefa</p><h3 className="text-lg font-bold text-slate-900">Nova tarefa</h3></div><button onClick={() => setModalTarefa(false)} className="p-1 text-slate-400 hover:text-slate-700"><X size={18}/></button></div><div className="space-y-3"><input value={tituloTarefa} onChange={e => setTituloTarefa(e.target.value)} placeholder="O que precisa ser feito?" autoFocus className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"/><BotaoMicrofone titulo="Dite a tarefa e o prazo" onResultado={texto => { const interpretado = interpretarComandoDeVoz(texto); setTituloTarefa(interpretado.titulo); if (interpretado.data) { setDataTarefa(dataInput(interpretado.data)); setHoraTarefa('09:00') } }}/><div><label className="mb-1 block text-xs font-medium text-slate-500">Responsável</label><select value={responsavelTarefaId || usuario?.id || ''} onChange={e => setResponsavelTarefaId(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">{usuariosTarefa.map(u => <option key={u.id} value={u.id}>{u.id === usuario?.id ? `${u.nome} (eu)` : u.nome}</option>)}</select></div><div className="grid grid-cols-2 gap-3"><input type="date" value={dataTarefa} onChange={e => setDataTarefa(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><input type="time" value={horaTarefa} onChange={e => setHoraTarefa(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div>{responsavelTarefaId && responsavelTarefaId !== usuario?.id && <div><label className="mb-1 block text-xs font-medium text-slate-500">Prioridade</label><select value={prioridadeTarefa} onChange={e => setPrioridadeTarefa(e.target.value as PrioridadeTarefa)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"><option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></div>}<CamposLembretes titulo="Avisos desta tarefa" valores={avisosTarefa} repeticao={repetirTarefa} onChange={setAvisosTarefa} onRepeticao={setRepetirTarefa} disabled={salvando}/><button disabled={salvando || !tituloTarefa.trim()} onClick={() => void salvarTarefa()} className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">{salvando ? 'Salvando...' : ((responsavelTarefaId && responsavelTarefaId !== usuario?.id) ? 'Atribuir tarefa' : 'Criar tarefa')}</button></div></div></div>}
+      {modalTarefa && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.currentTarget === e.target) setModalTarefa(false) }}><div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Tarefa</p><h3 className="text-lg font-bold text-slate-900">Nova tarefa</h3></div><button onClick={() => setModalTarefa(false)} className="p-1 text-slate-400 hover:text-slate-700"><X size={18}/></button></div><div className="space-y-3"><input value={tituloTarefa} onChange={e => setTituloTarefa(e.target.value)} placeholder="O que precisa ser feito?" autoFocus className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"/><BotaoMicrofone titulo="Dite a tarefa e o prazo" onResultado={texto => { const interpretado = interpretarComandoDeVoz(texto); setTituloTarefa(interpretado.titulo); if (interpretado.data) { setDataTarefa(dataInput(interpretado.data)); setHoraTarefa('09:00') } }}/><div><label className="mb-1 block text-xs font-medium text-slate-500">Responsável</label><select value={responsavelTarefaId || usuario?.id || ''} onChange={e => setResponsavelTarefaId(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm">{usuariosTarefa.map(u => <option key={u.id} value={u.id}>{u.id === usuario?.id ? `${u.nome} (eu)` : u.nome}</option>)}</select></div><div className="grid grid-cols-2 gap-3"><input type="date" value={dataTarefa} onChange={e => setDataTarefa(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><input type="time" value={horaTarefa} onChange={e => setHoraTarefa(e.target.value)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div>{responsavelTarefaId && responsavelTarefaId !== usuario?.id && <div><label className="mb-1 block text-xs font-medium text-slate-500">Prioridade</label><select value={prioridadeTarefa} onChange={e => setPrioridadeTarefa(e.target.value as PrioridadeTarefa)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"><option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option></select></div>}<GravadorLembreteAudio tipo="tarefa" gravacaoId={audioTarefaId} onOcupado={setAudioOcupado}
+  onSalvo={r=>{setAudioTarefaId(r.id);if(r.transcricao){const i=interpretarComandoDeVoz(r.transcricao);setTituloTarefa(t=>t||i.titulo);if(i.data){setDataTarefa(dataInput(i.data));setHoraTarefa(new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(i.data))}}}}/>
+<CamposLembretes titulo="Avisos desta tarefa" valores={avisosTarefa} repeticao={repetirTarefa} onChange={setAvisosTarefa} onRepeticao={setRepetirTarefa} disabled={salvando}/><button disabled={salvando || audioOcupado || !tituloTarefa.trim()} onClick={() => void salvarTarefa()} className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40">{salvando ? 'Salvando...' : ((responsavelTarefaId && responsavelTarefaId !== usuario?.id) ? 'Atribuir tarefa' : 'Criar tarefa')}</button></div></div></div>}
 
-      {modalEvento && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.currentTarget === e.target) setModalEvento(false) }}><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Agenda</p><h3 className="text-lg font-bold text-slate-900">Novo compromisso</h3></div><button onClick={() => setModalEvento(false)} className="p-1 text-slate-400 hover:text-slate-700"><X size={18}/></button></div><div className="space-y-3"><input value={tituloEvento} onChange={e => setTituloEvento(e.target.value)} placeholder="Título do compromisso" autoFocus className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><BotaoMicrofone titulo="Dite o compromisso e a data" onResultado={texto => { const interpretado = interpretarComandoDeVoz(texto); setTituloEvento(interpretado.titulo); if (interpretado.data) setDataEvento(dataInput(interpretado.data)) }}/><input value={localEvento} onChange={e => setLocalEvento(e.target.value)} placeholder="Local (opcional)" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><input type="date" value={dataEvento} onChange={e => setDataEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-slate-500">Início</label><input type="time" value={inicioEvento} onChange={e => setInicioEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div><div><label className="mb-1 block text-xs text-slate-500">Fim</label><input type="time" value={fimEvento} onChange={e => setFimEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div></div>{usuariosConvidaveis.length > 0 && <div><p className="mb-2 text-xs font-semibold text-slate-600">Convidar usuários</p><div className="flex flex-wrap gap-2">{usuariosConvidaveis.map(u => <button key={u.id} onClick={() => setConvidados(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${convidados.includes(u.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{primeiroNome(u.nome)}</button>)}</div></div>}<CamposLembretes titulo="Avisos deste compromisso" valores={avisosEvento} repeticao={repetirEvento} onChange={setAvisosEvento} onRepeticao={setRepetirEvento} disabled={salvando}/><button disabled={salvando || !tituloEvento.trim()} onClick={() => void salvarEvento()} className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">{salvando ? 'Salvando...' : 'Adicionar à agenda'}</button></div></div></div>}
+      {modalEvento && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.currentTarget === e.target) setModalEvento(false) }}><div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Agenda</p><h3 className="text-lg font-bold text-slate-900">Novo compromisso</h3></div><button onClick={() => setModalEvento(false)} className="p-1 text-slate-400 hover:text-slate-700"><X size={18}/></button></div><div className="space-y-3"><input value={tituloEvento} onChange={e => setTituloEvento(e.target.value)} placeholder="Título do compromisso" autoFocus className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><BotaoMicrofone titulo="Dite o compromisso e a data" onResultado={texto => { const interpretado = interpretarComandoDeVoz(texto); setTituloEvento(interpretado.titulo); if (interpretado.data) setDataEvento(dataInput(interpretado.data)) }}/><input value={localEvento} onChange={e => setLocalEvento(e.target.value)} placeholder="Local (opcional)" className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><input type="date" value={dataEvento} onChange={e => setDataEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/><div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-slate-500">Início</label><input type="time" value={inicioEvento} onChange={e => setInicioEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div><div><label className="mb-1 block text-xs text-slate-500">Fim</label><input type="time" value={fimEvento} onChange={e => setFimEvento(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"/></div></div>{usuariosConvidaveis.length > 0 && <div><p className="mb-2 text-xs font-semibold text-slate-600">Convidar usuários</p><div className="flex flex-wrap gap-2">{usuariosConvidaveis.map(u => <button key={u.id} onClick={() => setConvidados(prev => prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id])} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${convidados.includes(u.id) ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>{primeiroNome(u.nome)}</button>)}</div></div>}<GravadorLembreteAudio tipo="agenda" gravacaoId={audioEventoId} onOcupado={setAudioOcupado}
+ onSalvo={r=>{setAudioEventoId(r.id);if(r.transcricao){const i=interpretarComandoDeVoz(r.transcricao);setTituloEvento(t=>t||i.titulo);if(i.data){setDataEvento(dataInput(i.data));setInicioEvento(new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(i.data))}}}}/>
+<CamposLembretes titulo="Avisos deste compromisso" valores={avisosEvento} repeticao={repetirEvento} onChange={setAvisosEvento} onRepeticao={setRepetirEvento} disabled={salvando}/><button disabled={salvando || audioOcupado || !tituloEvento.trim()} onClick={() => void salvarEvento()} className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">{salvando ? 'Salvando...' : 'Adicionar à agenda'}</button></div></div></div>}
     </section>
   )
 }
