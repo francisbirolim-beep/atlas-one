@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
 
 type Entrada = {
   id: string
@@ -741,14 +742,13 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
           const t=pdfjs.Util.transform(viewport.transform,i.transform)
           return {str:String(i.str),x:Number(t[4]||0),y:Number(t[5]||0),w:Number(i.width||0)*scale,h:Math.max(10,Number(i.height||0)*scale)}
         })
-        const alvo=normalizarCodigoImagem(codigo)
         const codigoNoTexto=(str:string)=>{
           const m=str.trim().match(/^([A-Z]{1,6}\s*[-_/]?\s*\d{2,8}[A-Z]{0,3})(?=\s|$)/i)
           return m?normalizarCodigoImagem(m[1]):''
         }
         const codigos=itens.map((i:any)=>{const row=itens.filter((j:any)=>Math.abs(j.y-i.y)<2*scale&&j.x>=i.x&&j.x<i.x+100*scale).sort((a:any,b:any)=>a.x-b.x);return {...i,codigo:codigoNoTexto(i.str)||codigoNoTexto(row.slice(0,3).map((j:any)=>j.str).join(''))}}).filter((i:any)=>i.codigo)
-        const exatos=codigos.filter((i:any)=>i.codigo===alvo)
-        const target=exatos.length===1?exatos[0]:null
+        const localizado=localizarCodigoCatalogo(itens,codigo,scale)
+        const target=localizado.alvo
 
         const canvas=document.createElement('canvas')
         canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height)
@@ -792,7 +792,7 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
         octx.drawImage(canvas,sx,sy,sw,sh,0,0,out.width,out.height)
         const data=out.toDataURL('image/jpeg',0.9)
         if(cancelado)return
-        setImagem(data);setCodigoEncontrado(exatos.length===1&&Boolean(target));setCarregandoImagem(false)
+        setImagem(data);setCodigoEncontrado(localizado.ocorrencias===1&&Boolean(target));setCarregandoImagem(false)
         try{await doc.destroy()}catch{}
       }catch(e:any){
         if(cancelado)return

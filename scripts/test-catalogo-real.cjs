@@ -13,6 +13,7 @@ function moduloTs(arquivo, dependencias = {}) {
 }
 const geometria = moduloTs('lib/ai/catalogoTabelaGeometria.ts')
 const leitor = moduloTs('lib/ai/catalogoPdfTexto.ts')
+const {localizarCodigoCatalogo} = moduloTs('lib/ai/catalogoImagemCodigo.ts')
 const {pesoDecimalCatalogo} = moduloTs('lib/ai/catalogoPeso.ts')
 for (const [entrada, esperado] of [['0.375',0.375],['0,375',0.375],['1.270',1.27],['1,270',1.27],['1.234,567',1234.567],['1,234.567',1234.567]]) {
  assert.equal(pesoDecimalCatalogo(entrada), esperado, 'Peso decimal: '+entrada)
@@ -42,6 +43,14 @@ async function testar(){
   return texto
  }})
  const produtos=extrairLinhasCatalogo(paginas)
+ const fotos=produtos.map(p=>({produto:p.codigo,pagina:p.pagina_catalogo, resultado:localizarCodigoCatalogo(paginas[p.pagina_catalogo-1].items.filter(i=>i?.str&&i?.transform).map(i=>({str:i.str,x:Number(i.transform[4]),y:Number(i.transform[5]),w:Number(i.width||0)})),p.codigo)}))
+ const unicos=fotos.filter(f=>f.resultado.ocorrencias===1)
+ const ambig=fotos.filter(f=>f.resultado.ocorrencias>1)
+ const semFoto=fotos.filter(f=>f.resultado.ocorrencias===0)
+ console.log('RECONHECIMENTO FOTO',JSON.stringify({unicos:unicos.length,ambiguos:ambig.length,nao_localizados:semFoto.length,exemplos_sem_foto:semFoto.slice(0,30).map(p=>p.produto),exemplos_ambiguos:ambig.slice(0,30).map(p=>p.produto)}))
+ assert.equal(unicos.length,475,'Quantidade de desenhos identificados por código exato mudou')
+ assert.equal(semFoto.length,0,'Alguns códigos não foram localizados no PDF original')
+ assert.equal(ambig.length,5,'Casos de código repetido/ambíguo devem exigir revisão manual')
  assert.ok(paginas.length>=100,'Faltam paginas do catalogo')
  assert.ok(produtos.length>=450,'Leitura parcial das tabelas')
  assert.equal(new Set(produtos.map(p=>p.codigo)).size,produtos.length,'Codigos duplicados')
