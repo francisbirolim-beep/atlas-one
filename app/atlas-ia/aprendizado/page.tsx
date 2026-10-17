@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
 import { conferirDadosCatalogo } from '@/lib/ai/catalogoConferencia'
 import { lerImagemCatalogoPreview, salvarImagemCatalogoPreview } from '@/lib/ai/catalogoImagemPreview'
+import { conferidoSomenteNaPrevia } from '@/lib/ai/catalogoFilaValidacao'
 
 type Entrada = {
   id: string
@@ -123,6 +124,7 @@ export default function CentralAprendizadoPage(){
   const [conferindoTabela,setConferindoTabela]=useState<string|null>(null)
   const [salvando,setSalvando]=useState<string|null>(null)
   const [entradaValidacaoFiltro,setEntradaValidacaoFiltro]=useState<string|null>(null)
+  const [mostrarConferidosPreview,setMostrarConferidosPreview]=useState(false)
   const [edicoes,setEdicoes]=useState<Record<string,{titulo:string;modulo:string;dados:Record<string,any>;observacao:string}>>({})
   const fileRef=useRef<HTMLInputElement>(null)
   // Somente leitura: memoriza a tabela já conferida nesta sessão para que a imagem
@@ -212,13 +214,18 @@ export default function CentralAprendizadoPage(){
   }
 
   function entradaDo(id:string){ return dados.entradas.find(e=>e.id===id) }
-  const pendentes=useMemo(()=>dados.candidatos
+  const pendentesBase=useMemo(()=>dados.candidatos
     .filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor'&&!dados.entradas.find(e=>e.id===c.entrada_id)?.metadados?.arquivado_em)
     .sort((a,b)=>{
       const pa=a.tipo==='fornecedor'?0:a.tipo==='produto'?1:2
       const pb=b.tipo==='fornecedor'?0:b.tipo==='produto'?1:2
       return pa-pb
     }),[dados.candidatos,dados.entradas])
+  // Conferência local na prévia não é aprovação oficial no banco.
+  const conferidosPreview=useMemo(()=>dados.somenteLeitura
+    ?pendentesBase.filter(conferidoSomenteNaPrevia):[],[pendentesBase,dados.somenteLeitura])
+  const pendentes=useMemo(()=>dados.somenteLeitura
+    ?pendentesBase.filter(c=>!conferidoSomenteNaPrevia(c)):pendentesBase,[pendentesBase,dados.somenteLeitura])
   const historico=useMemo(()=>[...dados.entradas].filter(e=>mostrarHistorico||(!e.metadados?.arquivado_em&&(e.status==='erro'||e.status==='analisando'||pendentes.some(c=>c.entrada_id===e.id)))).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime()),[dados.entradas,mostrarHistorico,pendentes])
 
   function editarInicial(c:Candidato){
@@ -226,9 +233,9 @@ export default function CentralAprendizadoPage(){
     setAberto(v=>v===c.id?null:c.id)
   }
   function abrirValidacaoEntrada(entradaId:string){
-    const candidatos=dados.candidatos
-      .filter(c=>c.entrada_id===entradaId&&['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
+    const candidatos=pendentes.filter(c=>c.entrada_id===entradaId)
     setEntradaValidacaoFiltro(entradaId)
+    setMostrarConferidosPreview(false)
     setAba('validacoes')
     if(candidatos[0]){
       setEdicoes(prev=>prev[candidatos[0].id]?prev:{...prev,[candidatos[0].id]:{
@@ -348,9 +355,19 @@ export default function CentralAprendizadoPage(){
       try{
         salvarImagemCatalogoPreview(window.localStorage,uid,candidato.id,String(candidato.dados?.codigo||''),imagem)
       }catch(e:any){throw new Error('Não foi possível manter o desenho neste navegador: '+(e?.message||'armazenamento indisponível'))}
+      const simulado={...candidato,dados:{...candidato.dados,imagem_item_url:imagem,imagem_preview_local:true}}
+      const edicaoAtual=edicoes[candidato.id]?.dados
+      const haAlteracaoNaoSalva=Boolean(edicaoAtual && JSON.stringify(edicaoAtual)!==JSON.stringify(candidato.dados))
+      const conferenciaConcluida=conferidoSomenteNaPrevia(simulado)&&!haAlteracaoNaoSalva
       setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id
         ?{...c,dados:{...c.dados,imagem_item_url:imagem,imagem_preview_local:true}}:c)}))
-      setMensagem('Desenho mantido para teste neste navegador. Não foi gravado no Atlas oficial e o produto ainda não está homologado.')
+      if(conferenciaConcluida){
+        setAberto(v=>v===candidato.id?null:v)
+        setMostrarConferidosPreview(false)
+      }
+      setMensagem(conferenciaConcluida
+        ?'Produto '+String(candidato.dados?.codigo||'')+' retirado da fila DE TESTE: desenho, peso e medidas conferidos. Veja em "Conferidos nesta prévia". Não foi homologado no Atlas oficial.'
+        :'Desenho preservado neste navegador de teste. O item continua pendente até ter todas as informações técnicas confirmadas. Nenhum cadastro oficial foi alterado.')
       return {demo:true,imagem_url:imagem}
     }
     const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({
@@ -393,9 +410,10 @@ export default function CentralAprendizadoPage(){
     finally{setSalvando(null)}
   }
 
+  const filaSelecionada=dados.somenteLeitura&&mostrarConferidosPreview ?conferidosPreview:pendentes
   const pendentesVisiveis=entradaValidacaoFiltro
-    ? pendentes.filter(c=>c.entrada_id===entradaValidacaoFiltro)
-    : pendentes
+    ? filaSelecionada.filter(c=>c.entrada_id===entradaValidacaoFiltro)
+    : filaSelecionada
   const entradaFiltrada=entradaValidacaoFiltro?entradaDo(entradaValidacaoFiltro):null
 
   return <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -416,16 +434,16 @@ export default function CentralAprendizadoPage(){
     </header>
 
     <section className="mx-auto max-w-7xl px-4 py-6">
-      {dados.somenteLeitura&&<p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><b>Prévia de homologação: nenhum cadastro real será alterado.</b> Você pode conferir o desenho e simular sua confirmação: a imagem fica guardada somente neste navegador de testes, mesmo após recarregar a página. A validação oficial de produtos, a reanálise e outras gravações permanecem bloqueadas.</p>}
+      {dados.somenteLeitura&&<p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><b>Prévia de homologação: nenhum cadastro real será alterado.</b> Você pode conferir o desenho e simular sua confirmação: a imagem fica guardada somente neste navegador de testes, mesmo após recarregar a página. Quando desenho, peso e medidas estiverem conferidos, o item sai apenas da fila de teste e fica em “Conferidos nesta prévia”. A validação oficial de produtos, a reanálise e outras gravações permanecem bloqueadas.</p>}
       <div className="mb-5 grid gap-3 md:grid-cols-3">
-        <button onClick={()=>{setEntradaValidacaoFiltro(null);setAba('validacoes')}} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{dados.totais.pendentes}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
+        <button onClick={()=>{setEntradaValidacaoFiltro(null);setMostrarConferidosPreview(false);setAba('validacoes')}} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{pendentes.length}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-emerald-700"><CheckCircle2 size={18}/><b>{dados.totais.aplicados}</b></div><p className="mt-1 text-xs text-slate-500">Itens já aprovados e aplicados</p></div>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-slate-700"><History size={18}/><b>{dados.entradas.length}</b></div><p className="mt-1 text-xs text-slate-500">Materiais/conversas no histórico</p></div>
       </div>
 
       <div className="mb-5 flex gap-2 rounded-2xl border bg-white p-2">
         <button onClick={()=>setAba('entrada')} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='entrada'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Entrada geral</button>
-        <button onClick={()=>{setEntradaValidacaoFiltro(null);setAba('validacoes')}} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='validacoes'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Validações {dados.totais.pendentes>0?'('+dados.totais.pendentes+')':''}</button>
+        <button onClick={()=>{setEntradaValidacaoFiltro(null);setMostrarConferidosPreview(false);setAba('validacoes')}} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='validacoes'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Validações {pendentes.length>0?'('+pendentes.length+')':''}</button>
       </div>
 
       {erro&&<div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
@@ -476,7 +494,7 @@ export default function CentralAprendizadoPage(){
                   <button disabled={Boolean(arquivando)||e.status==='analisando'||Boolean(reprocessando)} onClick={()=>void arquivarEntrada(e)} className="rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-40">{arquivando===e.id?'Salvando...':e.metadados?.arquivado_em?'Restaurar material':'Arquivar material'}</button>
                   {e.metadados?.arquivado_em&&<span className="rounded-lg bg-slate-100 px-2 py-1 text-xs">Arquivado — preservado no histórico</span>}
                   {e.fonte_url&&<a href={e.fonte_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={12}/>Abrir fonte</a>}
-                  {dados.candidatos.some(c=>c.entrada_id===e.id&&['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')&&!e.metadados?.arquivado_em&&<button onClick={()=>abrirValidacaoEntrada(e.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"><ShieldCheck size={13}/>Revisar agora ({dados.candidatos.filter(c=>c.entrada_id===e.id&&['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length})</button>}
+                  {pendentes.some(c=>c.entrada_id===e.id)&&!e.metadados?.arquivado_em&&<button onClick={()=>abrirValidacaoEntrada(e.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"><ShieldCheck size={13}/>Revisar agora ({pendentes.filter(c=>c.entrada_id===e.id).length})</button>}
                   {['catalogo','tabela_preco'].includes(e.tipo)&&<button onClick={()=>{setCatalogoAberto(v=>v===e.id?null:e.id);setItemCatalogoAberto(null);setBuscaCatalogo('')}} className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"><PackageSearch size={13}/>Ver itens ({dados.candidatos.filter(c=>c.entrada_id===e.id&&c.tipo==='produto').length})</button>}
                   {!e.metadados?.arquivado_em&&e.mime_type==='application/pdf'&&['catalogo','tabela_preco'].includes(e.tipo)&&<button disabled={Boolean(conferindoTabela)} onClick={()=>void conferirTabela(e)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><RefreshCcw size={13} className={conferindoTabela===e.id?'animate-spin':''}/>{conferindoTabela===e.id?'Conferindo tabela...':'Conferir códigos, pesos e medidas no PDF'}</button>}
                   {!e.metadados?.arquivado_em&&['catalogo','tabela_preco'].includes(e.tipo)&&<button disabled={Boolean(reprocessando)} onClick={()=>void reprocessarEntrada(e)} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-50"><RefreshCcw size={13} className={reprocessando===e.id?'animate-spin':''}/>{reprocessando===e.id?'Reprocessando...':'Reanalisar com regras atuais'}</button>}
@@ -505,14 +523,21 @@ export default function CentralAprendizadoPage(){
         </div>
       </div> : <div>
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <b>Fila de exceções.</b> Aqui aparecem somente conflitos, ambiguidades ou informações insuficientes. Catálogos e tabelas oficiais são processados automaticamente quando os dados batem; fórmulas, planos de corte e regras operacionais continuam vindo para validação antes de virar padrão.
+          <b>Fila de exceções.</b> Aqui aparecem somente conflitos, ambiguidades ou informações insuficientes. Após a aprovação oficial, o item sai desta fila sem ser excluído do catálogo nem do histórico.
         </div>
+        {dados.somenteLeitura&&<div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 text-sm">
+          <div><b>{pendentes.length}</b> pendência(s) para conferir{conferidosPreview.length>0&&<> · <b>{conferidosPreview.length}</b> conferido(s) neste navegador</>}</div>
+          <button type="button" onClick={()=>{setMostrarConferidosPreview(v=>!v);setAberto(null)}} className="rounded-xl border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700">
+            {mostrarConferidosPreview?'Voltar às pendências':'Ver conferidos nesta prévia ('+conferidosPreview.length+')'}
+          </button>
+          <p className="w-full text-xs text-slate-500">A conferência local não é homologação oficial. Os itens só são aprovados no Atlas após validação e gravação no sistema principal.</p>
+        </div>}
         {entradaFiltrada&&<div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-          <div><p className="text-xs font-bold uppercase tracking-wide text-blue-600">Revisando este material</p><p className="mt-1 font-semibold text-slate-800">{entradaFiltrada.titulo}</p><p className="mt-1 text-xs text-slate-500">{pendentesVisiveis.length} item(ns) aguardando sua decisão.</p></div>
+          <div><p className="text-xs font-bold uppercase tracking-wide text-blue-600">Revisando este material</p><p className="mt-1 font-semibold text-slate-800">{entradaFiltrada.titulo}</p><p className="mt-1 text-xs text-slate-500">{pendentesVisiveis.length} item(ns) {mostrarConferidosPreview?'conferido(s) somente nesta prévia':'aguardando sua decisão'}.</p></div>
           <button onClick={()=>{setEntradaValidacaoFiltro(null);setAberto(null)}} className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Ver todas as validações</button>
         </div>}
         {carregando?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-400"><Loader2 className="mx-auto mb-2 animate-spin"/>Carregando...</div>
-        :pendentesVisiveis.length===0?<div className="rounded-2xl border bg-white p-12 text-center"><BookOpenCheck className="mx-auto mb-3 text-slate-300" size={36}/><b>Nada aguardando validação.</b><p className="mt-1 text-sm text-slate-500">Somente exceções que realmente precisam de decisão humana aparecerão aqui.</p></div>
+        :pendentesVisiveis.length===0?<div className="rounded-2xl border bg-white p-12 text-center"><BookOpenCheck className="mx-auto mb-3 text-slate-300" size={36}/><b>{mostrarConferidosPreview?'Nenhum produto conferido nesta prévia.':'Nada aguardando validação.'}</b><p className="mt-1 text-sm text-slate-500">{mostrarConferidosPreview?'Confirme um desenho com dados técnicos completos para tirá-lo da fila local.':'Somente exceções que realmente precisam de decisão humana aparecerão aqui.'}</p></div>
         :<div className="space-y-3">{pendentesVisiveis.map(c=>{
           const e=edicoes[c.id]||{titulo:c.titulo,modulo:c.modulo||'',dados:{...(c.dados||{})},observacao:''}
           const origem=entradaDo(c.entrada_id)
@@ -533,6 +558,7 @@ export default function CentralAprendizadoPage(){
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">confiança {pct(c.confianca)}</span>
                   </div>
                   <h3 className="font-semibold">{c.titulo}</h3>
+                  {mostrarConferidosPreview&&<p className="mt-1 text-xs font-semibold text-blue-700">Conferido nesta prévia · ainda pendente de aprovação oficial</p>}
                   {c.tipo==='produto'&&<div className="mt-1 text-xs font-semibold text-slate-700">Código: {String(c.dados?.codigo||'não informado')}</div>}
                   {c.tipo==='produto'&&c.dados?.medidas_mm&&Object.keys(c.dados.medidas_mm).length>0&&<p className="mt-1 text-xs text-slate-600">Medidas: {Object.entries(c.dados.medidas_mm).map(([k,v])=>k+': '+v+' mm').join(' · ')}</p>}
                   {c.tipo==='produto'&&c.dados?.evidencia_tabela&&<p className="mt-1 text-xs text-slate-500">Fonte: {c.dados.evidencia_tabela}</p>}
@@ -558,7 +584,7 @@ export default function CentralAprendizadoPage(){
 
             {c.pode_validar?<div className="flex flex-wrap items-center gap-2 border-t bg-white px-4 py-3">
               <span className="mr-1 text-xs font-bold uppercase tracking-wide text-slate-400">Decisão</span>
-              {!podeAprovar&&<p className="w-full text-xs text-amber-800">Para liberar a validação: {precisaCodigo?'confira e salve o código. ':''}{precisaImagem?'abra Revisar / corrigir e confirme o desenho correto. ':''}{precisaPeso?'informe e salve o peso kg/m.':''}</p>}
+              {!podeAprovar&&!mostrarConferidosPreview&&<p className="w-full text-xs text-amber-800">Para liberar a validação: {precisaCodigo?'confira e salve o código. ':''}{precisaImagem?'abra Revisar / corrigir e confirme o desenho correto. ':''}{precisaPeso?'informe e salve o peso kg/m.':''}</p>}
               <button disabled={salvando===c.id||!podeAprovar||Boolean(dados.somenteLeitura)} title={dados.somenteLeitura?'Prévia: produto só pode ser homologado na versão oficial':!podeAprovar?'Confirme código, peso e imagem antes de validar':'Validar item'} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
               <button disabled={salvando===c.id} onClick={()=>editarInicial(c)} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"><Eye size={15}/>Revisar / corrigir</button>
               {c.tipo==='produto'&&origem?.mime_type==='application/pdf'&&<button disabled={Boolean(conferindoTabela)} onClick={()=>void conferirTabela(origem)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50"><RefreshCcw size={15} className={conferindoTabela===origem.id?'animate-spin':''}/>Conferir tabela original</button>}
