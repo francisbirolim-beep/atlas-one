@@ -1,3 +1,4 @@
+import { coordenadasEmTexto, decomporEnderecoObra, registrarFeedbackLocalizacao } from '@/lib/enderecoObra'
 import { supabase } from './supabase'
 import { obterOuCriarCliente } from './clientes'
 import { primeiraColunaId } from './kanban'
@@ -67,6 +68,7 @@ export interface DadosOrcamentoForm {
   obraBairro?: string
   obraCidade?: string
   obraLocalizacao?: string
+  obraGpsRejeitado?: string
   cidade: string
   origem: OrigemCliente
   temperatura: TemperaturaLead | ''
@@ -153,11 +155,16 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   const {
     clienteId: clienteIdInformado,
     itens, clienteNome, clienteWhatsapp, cidade, origem,
-    clienteApelido, obraNome, obraEndereco, obraBairro, obraCidade, obraLocalizacao,
+    clienteApelido, obraNome, obraEndereco, obraBairro, obraCidade, obraLocalizacao, obraGpsRejeitado,
     temperatura, acabamento, acabamentoOutroTexto, contramarco, tipoMedida,
     arquitetoNome, arquitetoContato, fotos, arquivos = [],
   } = dados
   const obraId = dados.obraId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('obra') : null)
+  const gpsConfirmado = coordenadasEmTexto(obraLocalizacao)
+  const gpsRejeitado = coordenadasEmTexto(obraGpsRejeitado)
+  // O sincronizador offline usa este mesmo caminho: nunca aceitar pedido sem local.
+  if (!obraNome?.trim()) return { ok: false, error: 'Informe o nome da obra.' }
+  if (!obraEndereco?.trim() && !gpsConfirmado) return { ok: false, error: 'Informe endereço ou localização confirmada da obra.' }
 
   const [clienteId, colunaId, usuario, referenciasWvetro] = await Promise.all([
     clienteIdInformado ? Promise.resolve(clienteIdInformado) : obterOuCriarCliente({ nome: clienteNome, apelido: clienteApelido, whatsapp: clienteWhatsapp, cidade: obraCidade || cidade, origem }),
@@ -169,6 +176,34 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   }
 
   let obraIdEfetiva = obraId
+  if (obraIdEfetiva) {
+    // Confere cliente + obra antes de reaproveitar. Nunca vincular obra de outro cliente.
+    const { data: obraExistente, error: erroBuscaObra } = await supabase.from('obras')
+      .select('id,endereco,numero_endereco,cep,bairro,cidade,observacoes').eq('id', obraIdEfetiva)
+      .eq('cliente_id', clienteId).maybeSingle()
+    if (erroBuscaObra || !obraExistente) return { ok: false, error: 'A obra escolhida não pertence ao cliente ou está indisponível.' }
+    const atualizacoes: Record<string, string | null> = {}
+    if (obraEndereco?.trim()) {
+      // Obras antigas podem ter número/CEP em colunas separadas. Evita duplicar
+      // "Rua, 123, 123" ao editar localização em um pedido novo.
+      const partes = decomporEnderecoObra(obraEndereco)
+      const enderecoNormalizado = obraExistente.numero_endereco?.trim() ? partes.rua : obraEndereco.trim()
+      if (enderecoNormalizado !== (obraExistente.endereco || '')) atualizacoes.endereco = enderecoNormalizado
+      if (obraExistente.numero_endereco?.trim() && partes.numero && partes.numero !== obraExistente.numero_endereco)
+        atualizacoes.numero_endereco = partes.numero
+      if (obraExistente.cep?.trim() && partes.cep && partes.cep !== obraExistente.cep)
+        atualizacoes.cep = partes.cep
+    }
+    if (obraBairro?.trim() && obraBairro.trim() !== (obraExistente.bairro || '')) atualizacoes.bairro = obraBairro.trim()
+    if ((obraCidade || cidade).trim() && (obraCidade || cidade).trim() !== (obraExistente.cidade || '')) atualizacoes.cidade = (obraCidade || cidade).trim()
+    const observacoes = registrarFeedbackLocalizacao(obraExistente.observacoes, gpsConfirmado, gpsRejeitado)
+    if (observacoes !== (obraExistente.observacoes || null)) atualizacoes.observacoes = observacoes
+    if (Object.keys(atualizacoes).length) {
+      const { error: erroAtualizacao } = await supabase.from('obras').update(atualizacoes)
+        .eq('id', obraIdEfetiva).eq('cliente_id', clienteId)
+      if (erroAtualizacao) return { ok: false, error: erroAtualizacao.message }
+    }
+  }
   if (!obraIdEfetiva && obraNome?.trim()) {
     const { data: obraCriada, error: erroObra } = await supabase.from('obras').insert({
       cliente_id: clienteId,
@@ -177,7 +212,9 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
       endereco: obraEndereco?.trim() || null,
       bairro: obraBairro?.trim() || null,
       cidade: (obraCidade || cidade).trim() || null,
-      observacoes: obraLocalizacao?.trim() ? `Localização: ${obraLocalizacao.trim()}` : null,
+      observacoes: obraLocalizacao?.trim()
+        ? registrarFeedbackLocalizacao(null, gpsConfirmado, gpsRejeitado)
+        : registrarFeedbackLocalizacao(null, null, gpsRejeitado),
       criado_por_id: usuario?.id || null,
       criado_por_nome: usuario?.nome || null,
     }).select('id').single()

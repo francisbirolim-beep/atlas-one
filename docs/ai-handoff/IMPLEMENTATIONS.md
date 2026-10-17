@@ -1,3 +1,12 @@
+## 2026-10-17 — Pedido de Orçamento: obra/endereço OU GPS obrigatório (isolada, sem deploy)
+
+- Captura GPS existente preservada e ampliada com coordenadas manuais, confirmação explícita Sim/Não e navegação no mapa.
+- Seleção de obra existente por cliente e preenchimento automático; ID salvo nos rascunhos/offline; não altera cadastro pessoal do cliente.
+- Validação de obra obrigatória + rua/número OU coordenadas confirmadas no formulário e serviço de gravação.
+- Feedback salvo nas observações sem apagar texto histórico; GPS rejeitado não é usado para navegação. Segurança: obra existente só se pertencer ao cliente selecionado.
+- Página da obra passou a exibir link para traçar rota com GPS ou endereço.
+- Não houve mudança de schema, migração, publicação ou execução sobre base de produção.
+
 ## 2026-10-12 — Separação de Materiais (candidata local)
 
 - Implementado quadro de conferência por unidade da Medição Final aprovada (inclusive parcial), sem misturar itens não medidos.

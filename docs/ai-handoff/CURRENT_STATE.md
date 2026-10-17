@@ -1,3 +1,14 @@
+## 2026-10-17 — Localização de obras no Pedido de Orçamento (candidata LOCAL, NÃO publicada)
+
+Branch isolada `feat/localizacao-obras-pedido-orcamento-20261017`, base `ac64684` da `main` de 16/10/2026. Nenhuma alteração enviada a produção, migrations ou dados.
+
+- `app/orcamento-rapido`: exige nome de obra e rua+número (S/N aceito) OU coordenadas GPS confirmadas; exige cidade como antes. Pode usar GPS no local, colar coordenadas enviadas remotamente ou digitar endereço. Confirmação Sim/Não impede usar GPS rejeitado como navegação.
+- Seleção de obra previamente cadastrada do mesmo cliente, com preenchimento de endereço e localização. Rascunho/offline guarda o ID da obra e a confirmação, evitando perda e obras duplicadas quando escolhida a existente.
+- `lib/orcamentos`: servidor e fila offline obedecem validação; vinculação a obra preexistente exige `cliente_id` correto. Endereço e feedback são preservados em `obras`; apenas os campos da obra vinculada são atualizados, conservando outras observações.
+- `app/obras/[id]`: ação para abrir rota no Google Maps pelo GPS válido existente, senão pelo endereço registrado. Compatível com localizações legadas em `obras.observacoes`.
+- Feedback de confirmação/rejeição fica registrado como texto auditável nas observações da obra, SEM afirmar que uma IA já foi treinada. Migrar futuramente para eventos estruturados multiempresa e avaliação da IA.
+- Escopo futuro separado: confirmar GPS na Prospecção, transferir localização existente da Prospecção ao converter para Obra, apresentar navegação em Assistências, Cliente 360, Instalação e Medição Final; exigir endereço ou localização na Assistência, sem alterar seus fluxos existentes.
+
 ## 2026-10-15 — Compras: conferência de NF + estoque visível — em branch, NÃO publicada
 
 Branch: `feature/compras-recebimento-estoque-20261015` criada a partir de `main` (#842). Desenvolvimento local **sem deploy nem migração no banco real**. Pedidos com destino cliente/obra ou estoque, importação XML/PDF e entrada manual existentes foram preservados. A entrada da NF passou a consultar saldos do produto vinculado (físico, reservado, disponível), mostrar imagens cadastradas e filtrar produtos/fornecedores pelo `empresa_id` do usuário. A conferência de recebimento apresenta saldo, entrada projetada, saldo após a entrada e pendências; reforçado isolamento da empresa e preenchimento de `empresa_id` nas gravações. A movimentação física continua exclusivamente pela RPC existente `aplicar_estoque_recebimento`, depois da confirmação; avarias não entram no estoque.
