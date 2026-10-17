@@ -1,3 +1,12 @@
+## 2026-10-17 — Kanban Comercial: endereço por obra e GPS (prévia isolada, NÃO publicada)
+
+- Branch separada `feat/kanban-localizacao-obra-20261017`, base `5e62cf3` da produção de 17/10/2026. Sem mudanças no banco nem nos módulos de movimentação do Kanban.
+- Os pedidos do dia de **TIAGO GARCIA** e **REGINALDO ROSSINI** têm obra vinculada, endereço e coordenadas gravados. Ambos possuem GPS sem marcador de confirmação formal; Tiago tem bairro gravado e Reginaldo não. Consulta de diagnóstico somente leitura.
+- O Kanban Comercial lê as obras vinculadas por `obra_id` em lote. Mostra nome da obra e endereço no card e no cabeçalho do orçamento; link de rota usa coordenadas da obra ou endereço. Não usa endereço pessoal do cliente e não mistura obras distintas.
+- Quando o bairro está ausente e há GPS, botão de consulta Nominatim; somente salva sugestão após confirmação explícita, e apenas se `bairro IS NULL`, vinculada ao mesmo cliente. Falha da API não impede abrir orçamento.
+- Geocodificação reversa prioriza bairro e amplia campos de localização (subdivisões mapeadas); número somente quando presente na base cartográfica, sem inventar faixas. Captura GPS informa precisão aproximada em metros e alerta sinal maior que 30 m; mantém rascunho/offline.
+- Escopo é complemento visual/consulta e edição opcional de bairro em obra; regressões obrigatórias para Kanban/W.Vetro e orçamento. Antes de publicar, homologar a prévia e receber autorização explícita.
+
 ## 2026-10-17 — Validar Localização por Obra (somente Pedido de Orçamento)
 
 1. Revisar a branch isolada `feat/localizacao-obras-pedido-orcamento-20261017`; NÃO publicar nem alterar `main` sem aprovação expressa.

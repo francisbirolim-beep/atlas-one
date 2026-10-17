@@ -76,3 +76,17 @@ export function decomporEnderecoObra(endereco?: string | null, numero_endereco?:
   }
   return { rua, numero, cep: cepAtual }
 }
+
+// O número pode estar dentro de endereco (cadastros antigos) ou em coluna própria.
+// Não duplica o número e não usa endereço residencial do cliente como endereço da obra.
+export function enderecoCompletoObra(obra: {
+  endereco?: string | null; numero_endereco?: string | null; cep?: string | null;
+  bairro?: string | null; cidade?: string | null; uf?: string | null;
+}): string {
+  const { rua: ruaOriginal, numero, cep } = decomporEnderecoObra(obra.endereco, obra.numero_endereco, obra.cep)
+  let rua = ruaOriginal
+  if (numero && rua.toLowerCase().endsWith(', ' + numero.toLowerCase())) rua = rua.slice(0, -(numero.length + 2))
+  const partes = [rua, numero, obra.bairro, obra.cidade, obra.uf].filter(v => !!v?.trim())
+  const local = partes.join(', ')
+  return local && cep && !local.includes(cep) ? `${local} · CEP ${cep}` : local
+}

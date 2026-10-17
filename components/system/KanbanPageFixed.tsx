@@ -23,6 +23,19 @@ import { jsPDF } from 'jspdf'
 import ConferenciaItemWVetro, { TipoImportadoWVetro, EditorTecnicoWVetro } from './ConferenciaItemWVetro'
 import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wvetroValidacaoItem'
 import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
+import { linkRotaObra, localizacaoRegistradaNaObra, enderecoCompletoObra } from '@/lib/enderecoObra'
+
+type ObraKanbanLocal = {
+  id: string
+  nome: string
+  endereco: string | null
+  numero_endereco: string | null
+  bairro: string | null
+  cidade: string | null
+  uf: string | null
+  cep: string | null
+  observacoes: string | null
+}
 
 let tipoLabels: Record<string, string> = {}
 
@@ -260,6 +273,12 @@ export default function Kanban() {
 const router = useRouter()
 const [colunas, setColunas] = useState<KanbanColuna[]>([])
 const [cards, setCards] = useState<OrcamentoRapido[]>([])
+const [obrasPorId, setObrasPorId] = useState<Record<string, ObraKanbanLocal>>({})
+const [statusLocais, setStatusLocais] = useState<'carregando' | 'pronto' | 'erro'>('carregando')
+const [buscandoBairro, setBuscandoBairro] = useState(false)
+const [salvandoBairro, setSalvandoBairro] = useState(false)
+const [bairroSugerido, setBairroSugerido] = useState<{obraId: string; bairro: string} | null>(null)
+const [avisoBairro, setAvisoBairro] = useState('')
 const [carregando, setCarregando] = useState(true)
 const [cardSelecionado, setCardSelecionado] = useState<OrcamentoRapido | null>(null)
 const [editando, setEditando] = useState<OrcamentoRapido | null>(null)
@@ -313,6 +332,27 @@ setColunas(cols)
 if (orc) {
 const lista = (orc as OrcamentoRapido[]).filter(c => (c as any).modo_entrada !== 'wvetro_api_vinculado')
 setCards(lista)
+// Consulta somente as obras vinculadas aos orçamentos, sem misturar clientes,
+// alterar status do Kanban ou editar o cadastro do cliente.
+setStatusLocais('carregando')
+const idsObras = [...new Set(lista.map(c => c.obra_id).filter((id): id is string => !!id))]
+if (idsObras.length) {
+  void (async () => {
+    const mapa: Record<string, ObraKanbanLocal> = {}
+    for (let inicio = 0; inicio < idsObras.length; inicio += 80) {
+      const { data, error } = await supabase.from('obras')
+        .select('id,nome,endereco,numero_endereco,bairro,cidade,uf,cep,observacoes')
+        .in('id', idsObras.slice(inicio, inicio + 80))
+      if (error) { setStatusLocais('erro'); return } // Orçamentos continuam acessíveis se falhar.
+      for (const obra of (data || []) as ObraKanbanLocal[]) mapa[obra.id] = obra
+    }
+    setObrasPorId(mapa)
+    setStatusLocais('pronto')
+  })()
+} else {
+  setObrasPorId({})
+  setStatusLocais('pronto')
+}
 if (typeof window !== 'undefined') {
 const idAlvo = new URLSearchParams(window.location.search).get('orcamento')
 if (idAlvo) {
@@ -465,6 +505,44 @@ setCards(prev => prev.map(c => (c.coluna_id === col.id ? { ...c, coluna_id: dest
 }
 }
 
+// Somente consulta sob demanda; a decisão de salvar o bairro é do usuário.
+async function sugerirBairroPeloGps(obra: ObraKanbanLocal) {
+const coordenadas = localizacaoRegistradaNaObra(obra.observacoes)
+if (!coordenadas || buscandoBairro || salvandoBairro || obra.bairro?.trim()) return
+setBuscandoBairro(true)
+setBairroSugerido(null)
+setAvisoBairro('')
+try {
+  const [lat, lon] = coordenadas.split(',')
+  const resp = await fetch(`/api/geocodificacao/reversa?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`, {cache:'no-store'})
+  const dados = await resp.json() as {bairro?:string;error?:string}
+  if (!resp.ok) throw new Error(dados.error || 'Falha na busca do bairro.')
+  const bairro = dados.bairro?.trim() || ''
+  if (!bairro) { setAvisoBairro('O mapa não possui um bairro confiável para este ponto. Preencha manualmente no cadastro da obra.');return }
+  setBairroSugerido({obraId:obra.id,bairro})
+} catch (e) { setAvisoBairro(e instanceof Error ? e.message : 'Não foi possível consultar o mapa.') }
+finally { setBuscandoBairro(false) }
+}
+
+async function confirmarBairroDaObra(obra: ObraKanbanLocal) {
+const bairro = bairroSugerido?.obraId===obra.id ? bairroSugerido.bairro.trim() : ''
+if (!bairro || salvandoBairro || !cardSelecionado?.cliente_id) return
+setSalvandoBairro(true)
+setAvisoBairro('')
+try {
+  // Compare-and-set: não substitui um bairro salvo por outra pessoa.
+  const {data,error}=await supabase.from('obras').update({bairro})
+    .eq('id',obra.id).eq('cliente_id',cardSelecionado.cliente_id).is('bairro',null)
+    .select('id,bairro').maybeSingle()
+  if (error) throw error
+  if (!data) {setAvisoBairro('O bairro foi alterado em outra sessão. Reabra o orçamento para conferir.');return}
+  setObrasPorId(prev=>({...prev,[obra.id]:{...obra,bairro:data.bairro}}))
+  setBairroSugerido(null)
+  setAvisoBairro('Bairro salvo na obra. Orçamentos vinculados usarão este cadastro.')
+} catch(e) {setAvisoBairro(e instanceof Error ? e.message : 'Não foi possível salvar o bairro.')}
+finally {setSalvandoBairro(false)}
+}
+
 async function abrirCard(card: OrcamentoRapido) {
 const agoraIso = new Date().toISOString()
 let cardAberto = card
@@ -505,6 +583,8 @@ const usuarioSessao = usuario || await usuarioAtual()
 if (!usuario && usuarioSessao) setUsuario(usuarioSessao)
 
 setCardSelecionado(cardAberto)
+setBairroSugerido(null)
+setAvisoBairro('')
 setEditando({ ...cardAberto, itens: itensComFoto, anexos: normalizarVersoesLegadas(cardAberto.anexos) })
 setNovoAnexoTitulo('')
 setSessaoAtiva(!cardAberto.orcamento_finalizado_em)
@@ -1383,6 +1463,14 @@ style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
 </span>
 )}
 </div>
+{!card.eh_assistencia && card.obra_id && obrasPorId[card.obra_id] && (
+<div className="mb-1 space-y-0.5 text-[11px] leading-4" style={{color:est ? est.texto : '#475569'}}>
+  <p className="flex items-start gap-1"><Building2 size={12} className="mt-0.5 shrink-0"/><span className="line-clamp-1">{obrasPorId[card.obra_id].nome}</span></p>
+  {enderecoCompletoObra(obrasPorId[card.obra_id]) && <p className="flex items-start gap-1"><MapPin size={12} className="mt-0.5 shrink-0"/><span className="line-clamp-2">{enderecoCompletoObra(obrasPorId[card.obra_id])}</span></p>}
+  {!enderecoCompletoObra(obrasPorId[card.obra_id]) && localizacaoRegistradaNaObra(obrasPorId[card.obra_id].observacoes) && <p className="flex items-center gap-1"><MapPin size={12}/> GPS cadastrado</p>}
+</div>
+)}
+{!card.eh_assistencia && !card.obra_id && card.cidade && <p className="mb-1 text-[11px]" style={{color:est ? est.texto : '#64748b'}}><MapPin size={11} className="mr-1 inline"/>{card.cidade}</p>}
 {card.ia_criado && card.ia_validacao_status === 'aguardando' && !card.eh_assistencia && (
 <span
 className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-semibold mb-1 bg-violet-100 text-violet-700"
@@ -1485,6 +1573,40 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 </div>
 
 <div className="p-5 space-y-4">
+<section data-orcamento-localizacao="true" className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm">
+  <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-blue-700">Cliente e local da obra</p>
+  <p className="flex items-start gap-2 font-bold text-slate-800"><User size={16} className="mt-0.5 shrink-0"/>{cardSelecionado.cliente_nome}</p>
+  {cardSelecionado.cliente_whatsapp && <p className="mt-2 flex items-start gap-2 text-xs text-slate-700"><Phone size={14} className="shrink-0"/>{cardSelecionado.cliente_whatsapp}</p>}
+  {cardSelecionado.obra_id && obrasPorId[cardSelecionado.obra_id] ? (
+    <div className="mt-2 space-y-1 border-t border-blue-100 pt-2">
+      <p className="flex items-start gap-2 font-semibold text-slate-800"><Building2 size={15} className="mt-0.5 shrink-0"/>{obrasPorId[cardSelecionado.obra_id].nome}</p>
+      {obrasPorId[cardSelecionado.obra_id].endereco?.trim() ? (
+        <p className="flex items-start gap-2 text-xs text-slate-700"><MapPin size={14} className="mt-0.5 shrink-0"/>{enderecoCompletoObra(obrasPorId[cardSelecionado.obra_id])}</p>
+      ) : <p className="text-xs text-amber-700">Endereço da obra ainda não cadastrado.</p>}
+      {localizacaoRegistradaNaObra(obrasPorId[cardSelecionado.obra_id].observacoes) && <p className="text-[11px] text-emerald-700">GPS da obra registrado{obrasPorId[cardSelecionado.obra_id].observacoes?.includes('Localização conferida: Sim') ? ' · Confirmado' : ' · Confira o ponto no mapa'}</p>}
+      {!obrasPorId[cardSelecionado.obra_id].bairro?.trim() && localizacaoRegistradaNaObra(obrasPorId[cardSelecionado.obra_id].observacoes) && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+        <p>Bairro ainda não informado.</p>
+        {!bairroSugerido && <button type="button" disabled={buscandoBairro||salvandoBairro} onClick={()=>void sugerirBairroPeloGps(obrasPorId[cardSelecionado.obra_id!])} className="mt-1 rounded-md border border-amber-300 bg-white px-2 py-1.5 font-semibold disabled:opacity-50">{buscandoBairro?'Consultando mapa...':'Buscar bairro pelo GPS'}</button>}
+        {bairroSugerido?.obraId===cardSelecionado.obra_id && <div className="mt-2 space-y-1">
+          <p>Sugestão do mapa: <strong>{bairroSugerido.bairro}</strong>. Confira antes de salvar.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={salvandoBairro} onClick={()=>void confirmarBairroDaObra(obrasPorId[cardSelecionado.obra_id!])} className="rounded-md bg-amber-700 px-2 py-1.5 font-semibold text-white disabled:opacity-50">{salvandoBairro?'Salvando...':'Confirmar e salvar bairro'}</button>
+            <button type="button" onClick={()=>setBairroSugerido(null)} className="rounded-md border bg-white px-2 py-1.5 font-semibold">Descartar</button>
+          </div>
+        </div>}
+        {avisoBairro && <p role="status" className="mt-1">{avisoBairro}</p>}
+      </div>}
+      {avisoBairro && !!obrasPorId[cardSelecionado.obra_id].bairro?.trim() && <p role="status" className="text-xs text-emerald-700">{avisoBairro}</p>}
+      {linkRotaObra({coordenadas:localizacaoRegistradaNaObra(obrasPorId[cardSelecionado.obra_id].observacoes),endereco:obrasPorId[cardSelecionado.obra_id].endereco ? enderecoCompletoObra(obrasPorId[cardSelecionado.obra_id]) : null}) && (
+        <a href={linkRotaObra({coordenadas:localizacaoRegistradaNaObra(obrasPorId[cardSelecionado.obra_id].observacoes),endereco:obrasPorId[cardSelecionado.obra_id].endereco ? enderecoCompletoObra(obrasPorId[cardSelecionado.obra_id]) : null})!} target="_blank" rel="noopener noreferrer"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700"><MapPin size={14}/> Abrir rota no mapa</a>
+      )}
+      <Link href={`/obras/${cardSelecionado.obra_id}`} className="ml-2 inline-flex text-xs font-semibold text-blue-700 underline">Ver obra</Link>
+    </div>
+  ) : cardSelecionado.obra_id ? <p className="mt-2 text-xs text-slate-500">{statusLocais === 'carregando' ? 'Consultando o endereço da obra...' : statusLocais === 'erro' ? 'Não foi possível consultar o endereço. Você pode abrir a obra pelo Cliente 360.' : 'Obra vinculada indisponível para consulta.'}</p>
+    : <p className="mt-2 text-xs text-amber-700">Este orçamento antigo não tem obra vinculada. Confira a obra no Cliente 360.</p>}
+  {cardSelecionado.cliente_id && <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="mt-2 inline-flex text-xs font-semibold text-blue-700 underline">Abrir Cliente 360</Link>}
+</section>
 {naPrimeiraColuna && !sessaoAtiva && !podeEditarSemIniciar ? (
 <div className="text-center py-10 space-y-4">
 <p className="text-xs text-slate-400 uppercase tracking-wide">Cliente</p>
