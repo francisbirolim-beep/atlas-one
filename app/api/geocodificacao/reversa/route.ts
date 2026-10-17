@@ -11,6 +11,10 @@ type NominatimAddress = {
   suburb?: string
   neighbourhood?: string
   quarter?: string
+  city_district?: string
+  district?: string
+  borough?: string
+  hamlet?: string
   road?: string
   pedestrian?: string
   residential?: string
@@ -51,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       cidade: address.city || address.town || address.village || address.municipality || address.county || '',
-      bairro: address.suburb || address.neighbourhood || address.quarter || '',
+      bairro: address.suburb || address.neighbourhood || address.quarter || address.city_district || address.district || address.borough || address.hamlet || '',
       rua: address.road || address.pedestrian || address.residential || '',
       numero: address.house_number || '',
       cep: address.postcode || '',
