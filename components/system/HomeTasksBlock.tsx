@@ -7,6 +7,8 @@ import { usuarioAtual } from '@/lib/auth'
 import { listarUsuariosConvidaveis } from '@/lib/eventos'
 import { concluirTarefa, criarTarefa, listarColunasTarefas, listarTarefas, primeiraColunaTarefaId } from '@/lib/tarefas'
 import { atribuirTarefa, type PrioridadeTarefa } from '@/lib/tarefasColaboracao'
+import DitarCompromisso from '@/components/system/DitarCompromisso'
+import { interpretarDitadoAgenda } from '@/lib/ditadoAgenda'
 import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
 
 function dataHoje() {
@@ -83,6 +85,17 @@ export default function HomeTasksBlock() {
     }
   }
 
+  function preencherPorVoz(texto: string) {
+    const interpretado = interpretarDitadoAgenda(texto)
+    setTitulo(interpretado.titulo)
+    if (interpretado.data) {
+      const d = interpretado.data
+      const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), dia = String(d.getDate()).padStart(2,'0')
+      setData(y + '-' + m + '-' + dia)
+      setHora(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'))
+    }
+  }
+
   async function concluir(tarefa: TarefaPessoal) {
     setTarefas(prev => prev.map(t => t.id === tarefa.id ? { ...t, concluida_em: new Date().toISOString() } : t))
     const ok = await concluirTarefa(tarefa.id)
@@ -153,10 +166,11 @@ export default function HomeTasksBlock() {
 
       {modal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold text-slate-900">Nova tarefa</h3><p className="text-xs text-slate-500">Crie para você ou atribua a outro usuário.</p></div><button type="button" onClick={() => setModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={17}/></button></div>
             <div className="space-y-3">
-              <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="O que precisa ser feito?" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
+              <DitarCompromisso tipo="tarefa" onResultado={preencherPorVoz}/>
+              <input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="O que precisa ser feito?" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
               <div className="grid grid-cols-2 gap-2"><input type="date" value={data} onChange={e => setData(e.target.value)} className="rounded-xl border border-slate-300 p-3 text-sm"/><input type="time" value={hora} onChange={e => setHora(e.target.value)} className="rounded-xl border border-slate-300 p-3 text-sm"/></div>
               <select value={responsavelId} onChange={e => setResponsavelId(e.target.value)} className="w-full rounded-xl border border-slate-300 p-3 text-sm">{responsaveis.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}</select>
               <select value={prioridade} onChange={e => setPrioridade(e.target.value as PrioridadeTarefa)} className="w-full rounded-xl border border-slate-300 p-3 text-sm"><option value="baixa">Prioridade baixa</option><option value="normal">Prioridade normal</option><option value="alta">Prioridade alta</option><option value="urgente">Urgente</option></select>
