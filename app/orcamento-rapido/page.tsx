@@ -241,6 +241,7 @@ interface RascunhoOrcamentoRapido {
   obraLocalizacao?: string
   obraIdSelecionada?: string | null
   obraLocalizacaoConfirmada?: 'sim' | 'nao' | ''
+  obraPrecisaoMetros?: number | null
   origem: OrigemCliente
   temperatura: TemperaturaLead | ''
   acabamento: Acabamento | ''
@@ -264,6 +265,7 @@ export default function OrcamentoRapido() {
   const [obraCep, setObraCep] = useState('')
   const [obraLocalizacao, setObraLocalizacao] = useState('')
   const [obraLocalizacaoConfirmada, setObraLocalizacaoConfirmada] = useState<'sim'|'nao'|''>('')
+  const [obraPrecisaoMetros, setObraPrecisaoMetros] = useState<number | null>(null)
   const [obraIdSelecionada, setObraIdSelecionada] = useState<string | null>(null)
   const [obrasDoCliente, setObrasDoCliente] = useState<ObraResumida[]>([])
   const [capturandoLocalizacao, setCapturandoLocalizacao] = useState(false)
@@ -326,6 +328,7 @@ export default function OrcamentoRapido() {
         setObraLocalizacao(d.obraLocalizacao || '')
         setObraIdSelecionada(d.obraIdSelecionada || null)
         setObraLocalizacaoConfirmada(d.obraLocalizacaoConfirmada || '')
+        setObraPrecisaoMetros(d.obraPrecisaoMetros ?? null)
         if (d.origem) setOrigem(d.origem)
         setTemperatura(d.temperatura || '')
         setAcabamento(d.acabamento || '')
@@ -372,14 +375,14 @@ export default function OrcamentoRapido() {
     const timer = window.setTimeout(() => {
       const dados: RascunhoOrcamentoRapido = {
         itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, origem, temperatura,
+        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
         acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
         arquivos: arquivos.map(arquivoParaRascunho),
       }
       salvarRascunho(RASCUNHO_ID, dados).then(() => setRascunhoSalvoEm(new Date().toISOString())).catch(() => {})
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
@@ -433,6 +436,7 @@ export default function OrcamentoRapido() {
     if (obra.cidade) setCidade(obra.cidade)
     const coordenadas = localizacaoRegistradaNaObra(obra.observacoes)
     setObraLocalizacao(coordenadas || '')
+    setObraPrecisaoMetros(null) // Precisión anterior não é conhecida nesta consulta.
     setObraLocalizacaoConfirmada(coordenadas && obra.observacoes?.includes('Localização conferida: Sim') ? 'sim' : '')
     setAvisoLocalizacao(coordenadas ? 'Localização recuperada desta obra. Confira no mapa antes de enviar.' : '')
     limparErroValidacaoAoEditar()
@@ -443,7 +447,7 @@ export default function OrcamentoRapido() {
     if (obra) return preencherDaObraExistente(obra)
     setObraIdSelecionada(null)
     setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep('')
-    setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setAvisoLocalizacao('')
+    setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setAvisoLocalizacao('')
     limparErroValidacaoAoEditar()
   }
 
@@ -467,6 +471,7 @@ export default function OrcamentoRapido() {
         return
       }
       setObraLocalizacao(coordenadas)
+      setObraPrecisaoMetros(Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null)
       setObraLocalizacaoConfirmada('')
       limparErroValidacaoAoEditar()
       setAvisoLocalizacao('Localização capturada. Buscando rua e bairro...')
@@ -476,13 +481,14 @@ export default function OrcamentoRapido() {
           + encodeURIComponent(pos.coords.latitude) + '&lon='
           + encodeURIComponent(pos.coords.longitude), { cache: 'no-store' })
         if (!resp.ok) throw new Error('Endereço não localizado.')
-        const dados = await resp.json() as { rua?: string; bairro?: string; cidade?: string; cep?: string }
+        const dados = await resp.json() as { rua?: string; bairro?: string; cidade?: string; cep?: string; numero?: string; numeroOrigem?: string | null }
         if (dados.rua) setObraRua(dados.rua)
         if (dados.bairro) setObraBairro(dados.bairro)
         if (dados.cidade) setCidade(dados.cidade)
         if (dados.cep) setObraCep(dados.cep)
+        if (dados.numero) setObraNumero(atual => atual.trim() ? atual : dados.numero || '')
         setAvisoLocalizacao(dados.rua
-          ? 'Endereço identificado. Confira os dados e informe apenas o número do imóvel.'
+          ? (dados.bairro ? 'Rua e bairro identificados no mapa. Confira e complete o número, se necessário.' : 'Rua encontrada, mas o bairro não consta no mapa. Informe-o manualmente, se souber.')
           : 'GPS salvo, mas a rua não foi identificada. Digite o endereço e o número.')
       } catch {
         setAvisoLocalizacao('GPS salvo, mas não foi possível identificar a rua. Complete o endereço manualmente.')
@@ -705,7 +711,7 @@ export default function OrcamentoRapido() {
     void removerRascunho(RASCUNHO_ID).catch(() => {})
     setRascunhoSalvoEm(null)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
-    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
+    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
 
@@ -761,10 +767,11 @@ export default function OrcamentoRapido() {
           <label className="block text-xs font-medium text-slate-600">
             Localização da obra (latitude, longitude)
             <input data-preserve-case="true" value={obraLocalizacao}
-              onChange={e => { limparErroValidacaoAoEditar(); setObraLocalizacao(e.target.value); setObraLocalizacaoConfirmada('') }}
+              onChange={e => { limparErroValidacaoAoEditar(); setObraLocalizacao(e.target.value); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null) }}
               placeholder="Ex.: -21.052812,-49.690112 (pode colar)"
               className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
           </label>
+          {obraPrecisaoMetros !== null && <p className={`rounded-lg px-3 py-2 text-xs ${obraPrecisaoMetros > 30 ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'}`}>Precisão estimada pelo aparelho: raio de aproximadamente {Math.round(obraPrecisaoMetros)} m. {obraPrecisaoMetros > 30 ? 'O sinal está impreciso: tente capturar novamente ao ar livre antes de confirmar.' : 'Confira o ponto no mapa antes de validar.'}</p>}
           {obraLocalizacao && !coordenadasEmTexto(obraLocalizacao) && <p className="text-xs font-medium text-amber-700">Informe duas coordenadas válidas separadas por vírgula.</p>}
           {coordenadasEmTexto(obraLocalizacao) && <div className="space-y-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -808,6 +815,7 @@ export default function OrcamentoRapido() {
             </label>
           </div>
           <p className="text-xs text-slate-500">Cidade da obra: <strong className="text-slate-700">{cidade || 'preencha no bloco acima'}</strong>. É atualizada também pelo GPS, quando encontrada.</p>
+          <p className="text-xs text-slate-500">Número do imóvel: o mapa só sugere quando existe um número cadastrado próximo. Não estimamos faixas de números sem fonte confiável.</p>
           <p className="text-xs font-semibold text-slate-600">Obrigatório: rua e número (ou S/N), ou localização confirmada no mapa.</p>
           <p className="text-[11px] text-slate-400">Endereço automático com dados do OpenStreetMap. O GPS só é solicitado quando você toca no botão.</p>
         </section>

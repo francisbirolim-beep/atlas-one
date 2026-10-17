@@ -171,6 +171,7 @@ export interface OrcamentoRapido {
       id: string
       created_at: string
       cliente_id?: string
+      obra_id?: string | null
       cliente_nome: string
       cliente_whatsapp?: string
       cidade?: string
