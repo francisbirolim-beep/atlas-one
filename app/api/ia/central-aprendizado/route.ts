@@ -827,6 +827,7 @@ export async function GET(req:NextRequest){
     }))
     const es=entradas||[]
     return NextResponse.json({
+      somenteLeitura:process.env.VERCEL_ENV==='preview',
       entradas:await Promise.all(es.map(assinar)),
       candidatos:cs,
       totais:{
@@ -848,6 +849,7 @@ export async function POST(req:NextRequest){
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
     const autorizacao=await carregarPermissoesIA(u)
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
+    if(process.env.VERCEL_ENV==='preview')return NextResponse.json({error:'Prévia de homologação em modo somente leitura. Nenhum cadastro real pode ser modificado aqui.'},{status:409})
     const token=(req.headers.get('authorization')||'').replace(/^Bearer\s+/i,'').trim(), body=await req.json()
     const tipo=TIPOS.has(txt(body?.tipo,40))?txt(body.tipo,40):'outro', descricao=txt(body?.descricao,12000), titulo=txt(body?.titulo,180)
     const a=anexo(body?.anexo) || await anexoRemoto(body?.arquivo,u)
@@ -886,6 +888,7 @@ export async function PATCH(req:NextRequest){
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
     const autorizacao=await carregarPermissoesIA(u)
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
+    if(process.env.VERCEL_ENV==='preview')return NextResponse.json({error:'Prévia de homologação em modo somente leitura. Nenhum cadastro real pode ser modificado aqui.'},{status:409})
     const b=await req.json(),acao=txt(b?.acao,40)
     if(acao==='arquivar_entrada'||acao==='restaurar_entrada'){
       const entradaId=txt(b?.entrada_id,80)

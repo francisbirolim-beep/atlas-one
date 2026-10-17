@@ -52,6 +52,7 @@ type DadosAPI = {
   entradas: Entrada[]
   candidatos: Candidato[]
   totais: { pendentes:number; aplicados:number; rejeitados:number }
+  somenteLeitura?: boolean
 }
 
 const TIPOS = [
@@ -122,6 +123,7 @@ export default function CentralAprendizadoPage(){
   const fileRef=useRef<HTMLInputElement>(null)
 
   async function api(url:string,init?:RequestInit){
+    if(dados.somenteLeitura&&init?.method&&init.method.toUpperCase()!=='GET')throw new Error('Esta prévia é somente leitura. As alterações de cadastro estão bloqueadas para proteger a produção.')
     const token=await tokenAtual()
     if(!token)throw new Error('Sessão expirada.')
     const r=await fetch(url,{...init,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...(init?.headers||{})},cache:'no-store'})
@@ -142,6 +144,7 @@ export default function CentralAprendizadoPage(){
   },[])
 
   async function uploadDireto(file:File){
+    if(dados.somenteLeitura||carregando)throw new Error('Aguarde o carregamento da Central. O envio é bloqueado na prévia de homologação.')
     const {data:{session}}=await supabase.auth.getSession()
     const uid=session?.user?.id
     if(!uid)throw new Error('Sessão expirada.')
@@ -153,6 +156,7 @@ export default function CentralAprendizadoPage(){
     return {path,nome:file.name,mediaType:file.type||'application/octet-stream',tamanho:file.size}
   }
   async function enviar(){
+    if(dados.somenteLeitura){setErro('Prévia em modo somente leitura: o envio de arquivos fica bloqueado.');return}
     if(enviando)return
     if(!descricao.trim()&&!arquivo){setErro('Escreva uma explicação ou escolha um arquivo.');return}
     if(arquivo&&arquivo.size>MAX){setErro('Arquivo maior que 50 MB.');return}
@@ -214,21 +218,6 @@ export default function CentralAprendizadoPage(){
       setMensagem(j.mensagem);await carregar()
     }catch(err:any){setErro(err?.message||'Não foi possível arquivar o material.')}
     finally{setArquivando(null)}
-  }
-  async function reanalisarTodos(){
-    if(reprocessando)return
-    const catalogos=dados.entradas.filter(e=>['catalogo','tabela_preco'].includes(e.tipo)&&!e.metadados?.arquivado_em)
-    setErro('')
-    const falhas:string[]=[]
-    for(let i=0;i<catalogos.length;i++){
-      const e=catalogos[i]
-      setReprocessando(e.id);setMensagem('Reanalisando catálogo '+(i+1)+' de '+catalogos.length+': '+e.titulo+'. Mantenha esta página aberta para continuar a fila.')
-      try{await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({acao:'reprocessar_entrada',entrada_id:e.id})})}
-      catch(err:any){falhas.push(e.titulo+': '+err.message)}
-    }
-    setReprocessando(null);await carregar()
-    setMensagem('Fila concluída: '+(catalogos.length-falhas.length)+' catálogos reanalisados; '+falhas.length+' com erro.')
-    if(falhas.length)setErro(falhas.join(' • '))
   }
   async function reprocessarEntrada(e:Entrada){
     if(reprocessando)return
@@ -312,6 +301,7 @@ export default function CentralAprendizadoPage(){
     </header>
 
     <section className="mx-auto max-w-7xl px-4 py-6">
+      {dados.somenteLeitura&&<p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><b>Prévia de homologação: somente leitura.</b> Consulte códigos, desenhos, pesos e pendências. Enviar, corrigir, validar e reanalisar ficam bloqueados aqui para não alterar cadastros em produção.</p>}
       <div className="mb-5 grid gap-3 md:grid-cols-3">
         <button onClick={()=>{setEntradaValidacaoFiltro(null);setAba('validacoes')}} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{dados.totais.pendentes}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-emerald-700"><CheckCircle2 size={18}/><b>{dados.totais.aplicados}</b></div><p className="mt-1 text-xs text-slate-500">Itens já aprovados e aplicados</p></div>
@@ -353,7 +343,6 @@ export default function CentralAprendizadoPage(){
         <div>
           <div className="mb-3 flex flex-wrap items-center gap-2"><History size={18}/><h2 className="font-semibold">{mostrarHistorico?'Histórico completo':'Materiais pendentes'}</h2>
             <button onClick={()=>setMostrarHistorico(v=>!v)} className="rounded-lg border bg-white px-3 py-2 text-xs">{mostrarHistorico?'Mostrar só pendentes':'Ver concluídos e arquivados'}</button>
-            <button disabled={Boolean(reprocessando)} onClick={()=>void reanalisarTodos()} className="rounded-lg border bg-white px-3 py-2 text-xs disabled:opacity-50">Reanalisar todos os catálogos</button>
           </div>
           {carregando?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-400"><Loader2 className="mx-auto mb-2 animate-spin"/>Carregando...</div>
           :historico.length===0?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-500">Nenhum material nesta lista. Consulte o histórico completo para ver concluídos e arquivados.</div>
@@ -524,14 +513,8 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
 }){
   const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'>('todos')
   const [edicoesItem,setEdicoesItem]=useState<Record<string,Record<string,any>>>({})
-  const [mapeamentoTentado,setMapeamentoTentado]=useState(false)
   const produtos=candidatos.filter(c=>c.tipo==='produto')
   const semPagina=produtos.filter(c=>!Number(c.dados?.pagina_catalogo||0)).length
-  useEffect(()=>{
-    if(mapeamentoTentado||!entrada.fonte_url||!produtos.length||semPagina===0)return
-    setMapeamentoTentado(true)
-    void onMapearCatalogo(entrada).catch(()=>setMapeamentoTentado(false))
-  },[entrada.id,entrada.fonte_url,produtos.length,semPagina,mapeamentoTentado])
   const aplicados=produtos.filter(c=>c.status==='aplicado')
   const pendentes=produtos.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
   const semPreco=produtos.filter(c=>c.dados?.preco_fornecedor==null||Number(c.dados?.preco_fornecedor)===0)
