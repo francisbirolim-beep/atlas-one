@@ -1,71 +1,77 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Mic, MicOff, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Mic, MicOff, CheckCircle2, AlertCircle, X } from 'lucide-react'
+import { iniciarDitado, type ControleDitado, type EstadoDitado } from '@/lib/ditadoControlador'
 
 type Props = {
   onResultado: (texto: string) => void
   tipo?: 'tarefa' | 'agenda'
 }
 
-type Estado = 'pronto' | 'ouvindo' | 'reconhecido' | 'erro'
+const INICIAL: EstadoDitado = { fase: 'pronto', mensagem: '' }
 
-/** Ditado rápido para preencher o formulário. Não cria nem envia itens automaticamente. */
+/** Ditado rápido com tempo limite, parada manual e saída segura. Não salva tarefa. */
 export default function DitarCompromisso({ onResultado, tipo = 'tarefa' }: Props) {
-  const [estado, setEstado] = useState<Estado>('pronto')
-  const [mensagem, setMensagem] = useState('')
-  const recRef = useRef<any>(null)
+  const [estado, setEstado] = useState<EstadoDitado>(INICIAL)
+  const sessaoRef = useRef<ControleDitado | null>(null)
+  const montadoRef = useRef(true)
 
-  useEffect(() => () => {
-    try { recRef.current?.abort() } catch {}
-    recRef.current = null
+  useEffect(() => {
+    montadoRef.current = true
+    return () => {
+      montadoRef.current = false
+      sessaoRef.current?.cancelar()
+      sessaoRef.current = null
+    }
   }, [])
 
   function alternar() {
-    if (estado === 'ouvindo') {
-      try { recRef.current?.stop() } catch {}
+    if (estado.fase === 'ouvindo') {
+      sessaoRef.current?.parar()
+      return
+    }
+    if (estado.fase === 'finalizando') {
+      sessaoRef.current?.cancelar()
+      sessaoRef.current = null
       return
     }
 
-    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!Recognition) {
-      setEstado('erro')
-      setMensagem('O ditado não está disponível neste navegador. Para testar, abra pelo Chrome e permita o microfone. Você também pode digitar a tarefa normalmente.')
+    const Reconhecimento = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!Reconhecimento) {
+      setEstado({
+        fase: 'erro',
+        mensagem: 'O reconhecimento de voz não está disponível neste navegador. Você pode digitar a tarefa normalmente.',
+      })
       return
     }
 
+    // Uma sessão antiga nunca pode continuar comandando o botão.
+    sessaoRef.current?.cancelar()
     try {
-      const rec = new Recognition()
-      rec.lang = 'pt-BR'
-      rec.interimResults = false
-      rec.maxAlternatives = 1
-      rec.onresult = (evento: any) => {
-        const texto = String(evento.results?.[0]?.[0]?.transcript || '').trim()
-        if (!texto) return
-        onResultado(texto)
-        setEstado('reconhecido')
-        setMensagem('Reconhecido: ' + texto)
-      }
-      rec.onerror = (evento: any) => {
-        setEstado('erro')
-        setMensagem(evento.error === 'not-allowed'
-          ? 'O microfone foi bloqueado. Libere a permissão do site no navegador e tente de novo.'
-          : evento.error === 'no-speech'
-            ? 'Não consegui ouvir sua voz. Tente falar novamente.'
-            : 'Não consegui reconhecer a fala. Tente novamente ou use o campo de texto.')
-      }
-      rec.onend = () => {
-        setEstado(atual => atual === 'ouvindo' ? 'pronto' : atual)
-      }
-      recRef.current = rec
-      rec.start()
-      setMensagem('Fale normalmente. O texto aparecerá no campo para você conferir.')
-      setEstado('ouvindo')
+      sessaoRef.current = iniciarDitado({
+        Reconhecimento,
+        onEstado: novo => {
+          if (!montadoRef.current) return
+          setEstado(novo)
+        },
+        onResultado: texto => {
+          if (montadoRef.current) onResultado(texto)
+        },
+      })
     } catch {
-      setEstado('erro')
-      setMensagem('Não foi possível iniciar o microfone. Confira a permissão de acesso no navegador.')
+      setEstado({ fase: 'erro', mensagem: 'Falha ao abrir o microfone. Verifique as permissões do site.' })
     }
   }
+
+  const ouvindo = estado.fase === 'ouvindo'
+  const finalizando = estado.fase === 'finalizando'
+  const ativo = ouvindo || finalizando
+  const classeStatus = estado.fase === 'erro'
+    ? 'text-red-700'
+    : estado.fase === 'reconhecido'
+      ? 'text-emerald-700'
+      : 'text-blue-700'
 
   return (
     <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-3" data-testid="ditado-tarefa">
@@ -73,22 +79,41 @@ export default function DitarCompromisso({ onResultado, tipo = 'tarefa' }: Props
         <button
           type="button"
           onClick={alternar}
-          aria-label={estado === 'ouvindo' ? 'Parar ditado' : 'Falar ' + (tipo === 'tarefa' ? 'tarefa' : 'compromisso')}
-          aria-pressed={estado === 'ouvindo'}
+          aria-label={ouvindo ? 'Parar escuta' : finalizando ? 'Cancelar escuta' : 'Falar ' + (tipo === 'tarefa' ? 'tarefa' : 'compromisso')}
+          aria-pressed={ativo}
           className={'inline-flex min-h-[44px] items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold shadow-sm transition ' +
-            (estado === 'ouvindo' ? 'bg-red-600 text-white animate-pulse' : 'bg-blue-700 text-white hover:bg-blue-800')}
+            (ativo ? 'bg-red-600 text-white' : 'bg-blue-700 text-white hover:bg-blue-800')}
         >
-          {estado === 'ouvindo' ? <MicOff size={19} /> : <Mic size={19} />}
-          {estado === 'ouvindo' ? 'Ouvindo... Parar' : 'Falar ' + (tipo === 'tarefa' ? 'tarefa' : 'compromisso')}
+          {ativo ? <MicOff size={19} /> : <Mic size={19} />}
+          {ouvindo ? 'Parar escuta' : finalizando ? 'Cancelar escuta' : 'Falar ' + (tipo === 'tarefa' ? 'tarefa' : 'compromisso')}
         </button>
-        <span className="text-xs text-slate-600">Toque, fale e confira o texto antes de salvar.</span>
+        {ativo && (
+          <button
+            type="button"
+            onClick={() => { sessaoRef.current?.cancelar(); sessaoRef.current = null }}
+            className="inline-flex min-h-[40px] items-center gap-1 rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700"
+          >
+            <X size={14} /> Cancelar
+          </button>
+        )}
+        <span className="text-xs text-slate-600">
+          {ouvindo ? 'Fale a frase e toque em Parar; máximo de 15 segundos.' : 'Toque, fale e confira o texto antes de salvar.'}
+        </span>
       </div>
-      {mensagem && (
-        <p role="status" aria-live="polite" className={'mt-2 flex items-start gap-1 text-xs ' +
-          (estado === 'erro' ? 'text-red-700' : estado === 'reconhecido' ? 'text-emerald-700' : 'text-blue-700')}>
-          {estado === 'erro' ? <AlertCircle size={14} /> : estado === 'reconhecido' ? <CheckCircle2 size={14} /> : <Mic size={14} />}
-          <span>{mensagem}</span>
-        </p>
+      {estado.mensagem && (
+        <div role="status" aria-live="polite" className={'mt-2 flex items-start gap-1 text-xs ' + classeStatus}>
+          {estado.fase === 'erro' ? <AlertCircle size={14} className="shrink-0" />
+            : estado.fase === 'reconhecido' ? <CheckCircle2 size={14} className="shrink-0" />
+              : <Mic size={14} className="shrink-0" />}
+          <div>
+            <p>{estado.mensagem}</p>
+            {estado.parcial && (
+              <p className="mt-1 rounded-lg bg-white/75 p-2 font-semibold text-slate-700">
+                Texto capturado: {estado.parcial}
+              </p>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
