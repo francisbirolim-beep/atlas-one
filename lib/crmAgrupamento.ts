@@ -45,12 +45,28 @@ export function normalizar(texto:unknown):string {
   return String(texto??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()
 }
 function nomeTipo(item:Record<string,unknown>):string {
-  const s = normalizar(item.tipo_esquadria || item.tipologia_id || item.produto_nome || item.descricao || item.tipo_outro_texto || '')
-  if (/portao|ripado/.test(s)) return 'portao ripado'
-  if (/janela|vitro/.test(s)) return 'janela'
-  if (/porta/.test(s)) return 'porta'
-  if (/maxi ar|maxim ar/.test(s)) return 'maxi ar'
+  const tipo=normalizar(item.tipo_esquadria || item.tipologia_id || '')
+  // O W.Vetro usa "outro" para peças heterogêneas; não agrupar por esse rótulo.
+  const detalhe=normalizar(item.tipo_outro_texto || item.configuracao_nome || item.produto_nome || item.descricao || '')
+  const s=tipo==='outro' ? detalhe : tipo || detalhe
+  if (!s || s==='outro') return ''
+  if (/portao/.test(s)) return 'portao'
+  if (/ripad/.test(s)) return 'ripado'
+  if (/maxi.*ar|maxim.*ar/.test(s)) return 'maxi ar'
+  if (/bascul/.test(s)) return 'basculante'
   if (/guarda corpo/.test(s)) return 'guarda corpo'
+  if (/tela mosquiteir/.test(s)) return 'tela mosquiteira'
+  if (/box/.test(s)) return 'box'
+  if (/porta/.test(s)) {
+    if (/pivot/.test(s)) return 'porta pivotante'
+    if (/giro|abrir/.test(s)) return 'porta de giro'
+    if (/correr/.test(s)) return 'porta de correr'
+    return 'porta'
+  }
+  if (/janela|vitro/.test(s)) {
+    if (/correr/.test(s)) return 'janela de correr'
+    return 'janela'
+  }
   return s
 }
 function produtoChave(item:Record<string,unknown>):string {
@@ -93,6 +109,22 @@ function avaliacaoEscopo(a:OrcamentoOportunidade,b:OrcamentoOportunidade):{tipo:
     comum+=c;total+=m
   }
   const sim=comum/Math.max(1,total)
+  // Medidas muito diferentes, mesmo na mesma tipologia/ambiente/quantidade, exigem conferência.
+  const obterMedidas=(o:OrcamentoOportunidade)=>{
+    const m=new Map<string,{l:number;a:number;q:number}>()
+    for(const raw of Array.isArray(o.itens)?o.itens:[]) {
+      if(!raw||typeof raw!=='object')continue
+      const i=raw as Record<string,unknown>,key=produtoChave(i)
+      const l=Number(i.largura_mm),a=Number(i.altura_mm),q=Number(i.quantidade)||1
+      if(key&&l>0&&a>0&&!m.has(key))m.set(key,{l,a,q})
+    }
+    return m
+  }
+  const ma=obterMedidas(a),mb=obterMedidas(b)
+  if([...ma].some(([key,dim])=>{
+    const other=mb.get(key)
+    return other&&dim.q===other.q&&(Math.abs(dim.l-other.l)>150||Math.abs(dim.a-other.a)>150)
+  }))return {tipo:'revisar_escopo',sim}
   // Sem ambiente discriminado, uma única tipologia é sinal fraco: revisão humana.
   const discriminado=[...keys].some(k=>k.split('|')[1])
   const unicos=(o:OrcamentoOportunidade)=>{
