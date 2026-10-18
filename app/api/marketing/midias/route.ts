@@ -5,11 +5,12 @@ import { nivelAcaoUsuarioServer } from '@/lib/acessoUsuarioServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { ehUUID, revisaoValida } from '@/lib/marketing/editorialRegras'
 import { conteudoMidiaValido, evidenciaDireitosValida, formatoPermitido,
-  FORMATOS_MIDIA_MARKETING, LIMITE_MIDIA_MARKETING, nomeMidiaValido } from '@/lib/marketing/midiaRegras'
+  FORMATOS_MIDIA_MARKETING, nomeMidiaValido } from '@/lib/marketing/midiaRegras'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 const BUCKET='atlas-marketing'
+const LIMITE_PROXY=3*1024*1024 // Para mídia maior usar /api/marketing/upload-direto
 const SEM_CACHE={'Cache-Control':'no-store'}
 const erro=(texto:string,status:number)=>NextResponse.json({error:texto},{status,headers:SEM_CACHE})
 function inativo(){return process.env.MARKETING_BACKEND_ENABLED!=='true'}
@@ -55,8 +56,8 @@ export async function POST(req:NextRequest){
   if('resposta' in auth)return auth.resposta
   const u=auth.usuario
   const declarado=Number(req.headers.get('content-length')||0)
-  if(Number.isFinite(declarado)&&declarado>LIMITE_MIDIA_MARKETING+1024*1024)
-    return erro('Arquivo maior que o limite de 30 MB.',413)
+  if(Number.isFinite(declarado)&&declarado>LIMITE_PROXY+128*1024)
+    return erro('Arquivo grande. Use o envio direto ao armazenamento privado.',413)
 
   let corpo:FormData
   try{corpo=await req.formData()}catch{return erro('Envie uma mídia por formulário.',400)}
@@ -64,8 +65,8 @@ export async function POST(req:NextRequest){
   if(!arquivo||typeof arquivo==='string'||typeof arquivo.arrayBuffer!=='function'
       ||typeof arquivo.size!=='number'||!nomeMidiaValido(arquivo.name))
     return erro('Selecione uma foto ou vídeo válido.',422)
-  if(arquivo.size<12||arquivo.size>LIMITE_MIDIA_MARKETING)
-    return erro('Arquivo vazio ou maior que 30 MB.',413)
+  if(arquivo.size<12||arquivo.size>LIMITE_PROXY)
+    return erro('Para arquivos maiores que 3 MB, use o envio direto ao armazenamento privado.',413)
   if(!formatoPermitido(arquivo.type))return erro('Formato de mídia não permitido.',415)
 
   const obraRaw=corpo.get('obra_id')
