@@ -11,6 +11,7 @@ create table if not exists public.marketing_midias (
   tamanho_bytes bigint not null check(tamanho_bytes between 1 and 31457280),
   storage_path text not null unique check(length(storage_path) between 15 and 500),
   hash_sha256 text null check(hash_sha256 ~ '^[a-f0-9]{64}$'),
+  versao integer not null default 1 check(versao > 0),
   direitos_confirmados boolean not null default false,
   evidencia_autorizacao text null check(length(evidencia_autorizacao) <= 2000),
   autorizado_por_id uuid null references public.usuarios(id),
@@ -83,6 +84,7 @@ begin
  if new.storage_path not like new.empresa_id::text||'/%'
  then raise exception 'Caminho de arquivo fora da empresa';end if;
  if tg_op='UPDATE' then
+  if new.versao <> old.versao+1 then raise exception 'Versão de mídia concorrente inválida';end if;
   if new.empresa_id is distinct from old.empresa_id
      or new.id is distinct from old.id
      or new.storage_path is distinct from old.storage_path
