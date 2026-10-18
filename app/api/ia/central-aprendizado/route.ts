@@ -1136,8 +1136,31 @@ export async function PATCH(req:NextRequest){
           error:'Para validar este produto, confirme o código e vincule primeiro a foto ou desenho correto. Sem imagem verificada, ele permanece pendente.',
         },{status:422})
       }
-      await supabaseAdmin.from('ai_aprendizado_candidatos').update({status:'aprovado',validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id)
-      const candidatoAplicar={...c,dados:{...c.dados,...(b?.dados&&typeof b.dados==='object'?b.dados:{}),imagem_item_url:c.dados?.imagem_item_url,imagem_confirmada:c.dados?.imagem_confirmada,imagem_codigo_validado:c.dados?.imagem_codigo_validado}}
+      // Dados revisados no PDF devem continuar no candidato homologado;
+      // senão a lista do catálogo voltava a exibir peso e cotas em branco.
+      const candidatoDadosAprovados=b?.dados&&typeof b.dados==='object'?b.dados:{}
+      const dadosAprovados={
+        ...c.dados,...candidatoDadosAprovados,
+        imagem_item_url:c.dados?.imagem_item_url||null,
+        imagem_confirmada:c.dados?.imagem_confirmada===true,
+        imagem_codigo_validado:c.dados?.imagem_codigo_validado||null,
+        // Flags locais nunca são registradas como homologação real.
+        imagem_preview_local:false,
+        peso_kg_m:c.tipo==='produto'
+          ?pesoDecimalCatalogo(candidatoDadosAprovados.peso_kg_m??c.dados?.peso_kg_m)
+          :c.dados?.peso_kg_m,
+        medidas_mm:c.tipo==='produto'
+          ?medidasMmCatalogo(candidatoDadosAprovados.medidas_mm??c.dados?.medidas_mm)
+          :c.dados?.medidas_mm,
+      }
+      const {data:marcado,error:marcaErro}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({
+        status:'aprovado',dados:dadosAprovados,
+        validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),
+        observacao_validacao:txt(b?.observacao,3000)||null,updated_at:new Date().toISOString()
+      }).eq('empresa_id',u.empresa_id).eq('id',id).eq('updated_at',c.updated_at).select('id').maybeSingle()
+      if(marcaErro)throw marcaErro
+      if(!marcado)return NextResponse.json({error:'O item mudou durante a validação. Atualize e confira novamente.'},{status:409})
+      const candidatoAplicar={...c,dados:dadosAprovados}
       const destino=await aplicar(u,candidatoAplicar,entrada)
       const {data,error}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({status:'aplicado',destino_id:destino,validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('empresa_id',u.empresa_id).eq('id',id).select('*').single();if(error)throw error
       await log(u,'candidato_aplicado',entrada.id,id,{tipo:c.tipo,destino_id:destino})

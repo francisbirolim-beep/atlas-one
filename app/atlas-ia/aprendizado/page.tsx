@@ -169,9 +169,9 @@ export default function CentralAprendizadoPage(){
           })
         }catch{/* Navegador sem armazenamento: a consulta permanece somente leitura. */}
       }
-      if(resposta.somenteLeitura){
-        resposta.candidatos=resposta.candidatos.map(c=>preencherPelaTabela(c,tabelasOriginaisRef.current.get(c.entrada_id)))
-      }
+      // Dados consultados no PDF são complementados apenas em memória até o usuário
+      // confirmar e validar. Vale tanto para prévia quanto para produção.
+      resposta.candidatos=resposta.candidatos.map(c=>preencherPelaTabela(c,tabelasOriginaisRef.current.get(c.entrada_id)))
       setDados(resposta)
     }catch(e:any){setErro(e?.message||'Erro ao carregar a Central de Aprendizado.')}
     finally{setCarregando(false)}
@@ -325,8 +325,7 @@ export default function CentralAprendizadoPage(){
   }
 
   useEffect(()=>{
-    // Apenas ao abrir o cadastro em prévia; consulta em segundo plano, sem PATCH.
-    if(!dados.somenteLeitura)return
+    // Leitura somente GET nos dois ambientes; nunca altera catálogo ao abrir.
     const id=aba==='validacoes' ? dados.candidatos.find(c=>c.id===aberto)?.entrada_id : catalogoAberto
     const entrada=dados.entradas.find(e=>e.id===id)
     if(entrada?.mime_type==='application/pdf'&&['catalogo','tabela_preco'].includes(entrada.tipo)
@@ -376,9 +375,37 @@ export default function CentralAprendizadoPage(){
     if(!j?.candidato?.dados?.imagem_confirmada || !j?.candidato?.dados?.imagem_item_url){
       throw new Error('A confirmação não foi retornada pelo servidor. Atualize antes de tentar novamente.')
     }
-    setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id
-      ?{...c,...j.candidato,dados:{...c.dados,...j.candidato.dados}}:c)}))
-    setMensagem('Desenho confirmado e salvo para o código '+String(candidato.dados?.codigo||'')+'.')
+    // Confirmar desenho só aprova automaticamente um produto pendente com a
+    // tabela completa e sem conflito. Do contrário, mantém a etapa Validar.
+    const dadosComImagem={...candidato.dados,...j.candidato.dados}
+    const atualizado={...candidato,...j.candidato,dados:dadosComImagem}
+    setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id?atualizado:c)}))
+    const camposEditados=edicoes[candidato.id]?.dados
+    const edicaoNaoSalva=Boolean(camposEditados&&JSON.stringify(camposEditados)!==JSON.stringify(candidato.dados))
+    const temPendencia=Boolean(candidato.acao_sugerida==='revisar_ambiguidade'
+      || candidato.acao_sugerida==='revisar_conflito'
+      || !candidato.codigo_verificavel||candidato.codigo_ambiguo)
+    const pronto=conferidoSomenteNaPrevia({...atualizado,dados:{...dadosComImagem,imagem_preview_local:true}})
+      &&candidato.pode_validar&&!edicaoNaoSalva&&!temPendencia
+    if(pronto){
+      try{
+        const aprovado=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({
+          id:candidato.id,acao:'aprovar',titulo:atualizado.titulo,
+          modulo:atualizado.modulo,dados:dadosComImagem,
+          observacao:'Desenho e dados técnicos conferidos individualmente no catálogo oficial.',
+        })})
+        if(aprovado?.candidato?.status!=='aplicado')throw new Error('Aprovação ainda não foi concluída.')
+        setAberto(v=>v===candidato.id?null:v)
+        setMensagem('Produto '+String(dadosComImagem.codigo||'')+' validado e retirado da fila. Imagem, peso e medidas gravados no Atlas; disponível no catálogo e histórico.')
+        await carregar()
+        return {...j,aprovado:true}
+      }catch(e:any){
+        // A foto JÁ foi confirmada e permanece salva; nunca apagá-la por falha de aprovação.
+        setMensagem('Imagem confirmada e salva. A validação completa não foi concluída: '+String(e?.message||'revise os dados')+'. O item continuará na fila para conferência.')
+        return {...j,aprovado:false}
+      }
+    }
+    setMensagem('Desenho confirmado e salvo para o código '+String(candidato.dados?.codigo||'')+'. O cadastro continua pendente até concluir a validação dos dados.')
     return j
   }
 
