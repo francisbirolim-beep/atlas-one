@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const ts = require('typescript')
 const sql = readFileSync('supabase/migrations/20261018100000_marketing_inteligente_base_v1.sql', 'utf8')
 for (const regra of ['enable row level security', 'revoke all', 'storage.buckets',
-  'marketing_verificar_midia_v1', 'marketing_verificar_publicacao_v1',
+  'marketing_verificar_midia_v1', 'marketing_uploads_pendentes', 'marketing_verificar_upload_v1', 'marketing_verificar_publicacao_v1',
   'marketing_reverter_aprovacoes_v1', 'marketing_registrar_post_v1',
   'marketing_registrar_midia_v1', 'marketing_eventos_immut']) {
   assert.ok(sql.includes(regra), 'SQL sem proteção: ' + regra)
