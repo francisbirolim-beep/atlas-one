@@ -56,11 +56,12 @@ begin
  then raise exception 'Obra de upload fora da empresa';end if;
  if new.storage_path not like new.empresa_id::text||'/%'
  then raise exception 'Caminho de upload fora da empresa';end if;
- if tg_op='UPDATE' and
-    (new.empresa_id,new.usuario_id,new.obra_id,new.storage_path,new.nome,new.tipo_mime,new.tamanho_bytes)
-    is distinct from
-    (old.empresa_id,old.usuario_id,old.obra_id,old.storage_path,old.nome,old.tipo_mime,old.tamanho_bytes)
- then raise exception 'Metadados do upload imutáveis';end if;
+ if tg_op='UPDATE' then
+  if (new.empresa_id,new.usuario_id,new.obra_id,new.storage_path,new.nome,new.tipo_mime,new.tamanho_bytes)
+     is distinct from
+     (old.empresa_id,old.usuario_id,old.obra_id,old.storage_path,old.nome,old.tipo_mime,old.tamanho_bytes)
+  then raise exception 'Metadados do upload imutáveis';end if;
+ end if;
  return new;
 end;$$;
 drop trigger if exists marketing_upload_guard on public.marketing_uploads_pendentes;
@@ -202,27 +203,37 @@ for each row execute function public.marketing_bloquear_eventos_v1();
 -- Eventos invioláveis são gerados no banco na mesma transação das mudanças.
 create or replace function public.marketing_registrar_post_v1()
 returns trigger language plpgsql set search_path='' as $$
+declare v_acao text;
 begin
+ if tg_op='INSERT' then
+  v_acao:='rascunho_criado';
+ elsif new.status='aprovado' and old.status is distinct from 'aprovado' then
+  v_acao:='publicacao_aprovada';
+ elsif old.status='aprovado' and new.status='rascunho' then
+  v_acao:='aprovacao_revogada';
+ else
+  v_acao:='rascunho_editado';
+ end if;
  insert into public.marketing_eventos(empresa_id,publicacao_id,midia_id,acao,autor_id,detalhes)
- values(new.empresa_id,new.id,new.midia_id,
-   case when tg_op='INSERT' then 'rascunho_criado'
-        when new.status='aprovado' and old.status is distinct from 'aprovado' then 'publicacao_aprovada'
-        when old.status='aprovado' and new.status='rascunho' then 'aprovacao_revogada'
-        else 'rascunho_editado' end,
-   new.alterado_por_id,
+ values(new.empresa_id,new.id,new.midia_id,v_acao,new.alterado_por_id,
    jsonb_build_object('revisao',new.revisao,'status',new.status,'canal',new.canal));
  return new;
 end;$$;
 create or replace function public.marketing_registrar_midia_v1()
 returns trigger language plpgsql set search_path='' as $$
+declare v_acao text;
 begin
+ if tg_op='INSERT' then
+  v_acao:='midia_registrada';
+ elsif old.direitos_confirmados=true and new.direitos_confirmados=false then
+  v_acao:='direitos_revogados';
+ elsif new.direitos_confirmados=true and old.direitos_confirmados=false then
+  v_acao:='direitos_confirmados';
+ else
+  v_acao:='midia_atualizada';
+ end if;
  insert into public.marketing_eventos(empresa_id,midia_id,acao,autor_id,detalhes)
- values(new.empresa_id,new.id,
- case when tg_op='INSERT' then 'midia_registrada'
-      when old.direitos_confirmados=true and new.direitos_confirmados=false then 'direitos_revogados'
-      when new.direitos_confirmados=true and old.direitos_confirmados=false then 'direitos_confirmados'
-      else 'midia_atualizada' end,
- new.alterado_por_id,
+ values(new.empresa_id,new.id,v_acao,new.alterado_por_id,
  jsonb_build_object('direitos_confirmados',new.direitos_confirmados));
  return new;
 end;$$;
