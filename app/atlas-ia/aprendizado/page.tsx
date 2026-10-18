@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ValidacaoLoteCatalogo from './ValidacaoLoteCatalogo'
 import Link from 'next/link'
 import {
   ArrowLeft, BookOpenCheck, CheckCircle2, ChevronDown, ChevronUp, FileText,
@@ -559,6 +560,14 @@ export default function CentralAprendizadoPage(){
           </button>
           <p className="w-full text-xs text-slate-500">A conferência local não é homologação oficial. Os itens só são aprovados no Atlas após validação e gravação no sistema principal.</p>
         </div>}
+        <ValidacaoLoteCatalogo
+          entradas={dados.entradas}
+          candidatos={dados.candidatos}
+          entradaAtivaId={entradaValidacaoFiltro}
+          somenteLeitura={Boolean(dados.somenteLeitura)}
+          api={api}
+          onFinalizar={async resumo=>{setMensagem(resumo);setAberto(null);await carregar()}}
+        />
         {entradaFiltrada&&<div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
           <div><p className="text-xs font-bold uppercase tracking-wide text-blue-600">Revisando este material</p><p className="mt-1 font-semibold text-slate-800">{entradaFiltrada.titulo}</p><p className="mt-1 text-xs text-slate-500">{pendentesVisiveis.length} item(ns) {mostrarConferidosPreview?'conferido(s) somente nesta prévia':'aguardando sua decisão'}.</p></div>
           <button onClick={()=>{setEntradaValidacaoFiltro(null);setAberto(null)}} className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Ver todas as validações</button>
