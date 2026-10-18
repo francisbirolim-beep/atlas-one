@@ -439,3 +439,83 @@ Nenhum merge para `main`.
 - Orçamentos W.Vetro sincronizados exibem o número de origem e uma descrição curta quando disponível.
 - Foi acrescentada conferência manual dos últimos 7 dias para Master, mantendo a automação periódica já existente.
 - O clique abre a composição técnica atual; a nova apresentação comercial Atlas fica para a etapa seguinte.
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
+## 2026-10-04 — Orçamento Atlas V2 / W.Vetro
+
+- visão geral do orçamento em lista, conforme protótipos aprovados;
+- detalhe por tipologia com resumo, variáveis e componentes;
+- impressão total ou parcial por seleção de tipologias;
+- plano de corte filtrável por tipologia;
+- lista de materiais filtrável por tipo e seleção;
+- regra automática de cobrança de sobra por cor com override manual;
+- edição técnica reutiliza o motor já existente de overrides e histórico, sem duplicar regras.
+
+## 2026-10-06 — Sincronização W.Vetro pelo card do Kanban
+
+- Modal do Kanban voltou a exibir anexos e versões mesmo no fluxo de edição direta.
+- Botão de sincronização consulta W.Vetro pelo cliente e período recente, com autoidentificação por nome exato quando há somente um resultado.
+- Vínculo usa o card atual como destino; dados técnicos do W.Vetro são atualizados sem apagar informações manuais.
+- Duplicado W.Vetro já importado pode ser consolidado no card escolhido e ocultado das visões Kanban/Cliente 360.
+- Regra de preservação funcional adicionada ao repositório para impedir regressões por alterações fora do escopo.
+
+## 2026-10-13 — Separação WVetro: lista de corte e barras utilizadas (candidato)
+Novos `VendaListaCorteWVetro`, `VendaBarrasWVetro`, parser posicional PDF WVetro, API de importação/validação e acompanhamento, página de impressão por card e tabela de feedback. Samuel #872: 18 linhas / 31 barras pendentes, preservando 40 cortes. Build, TypeScript e regressão do PDF real validados; falta teste funcional do preview.
+
+## 2026-10-15 — Compras: saldo visível na conferência de NF (candidato local)
+
+- Branch separada a partir da main #842, sem deploy e sem migrations.
+- Conferência de NF exibe imagem cadastrada, estoque físico/reservado/disponível, quantidade projetada de entrada e saldo após recebimento por linha.
+- Mensagem de confirmação agora distingue itens realmente movimentados de pendências de vínculo/conversão. Aviso antigo e incorreto de que a conferência nunca alterava estoque foi atualizado para refletir a RPC já existente.
+- API de recebimento aplica isolamento por empresa ao buscar nota/itens/produtos/saldos e preenche empresa_id ao gravar conferência, itens e fotos, respeitando as migrações de tenant já em vigor.
+- Pendentes: testes autenticados/estoque real em ambiente de homologação e vínculo formal entre pedido de compra e NF. Nenhuma rotina de pedido/cotação original foi alterada.
+
+## 2026-10-15 — Compras: conciliação por item de NF e saldo na entrada (candidato local)
+
+- API e interface para vincular item de NF a necessidade/pedido aprovado com destino Estoque ou Cliente/Obra, incluindo entregas parciais e saldo ainda não vinculado.
+- Migration aditiva `20261015173000_compras_nf_vinculo_pedidos_v1.sql` cria vínculos auditáveis, valida empresa, fornecedor da cotação selecionada, produto, unidade, quantidade máxima e bloqueia desfazer vínculo depois do recebimento físico. **Não aplicada.**
+- Exibição do saldo físico/reservado/disponível e imagem cadastrada do produto já na prévia da NF; produtos, fornecedores e respectivas referências fiscais passam a respeitar a empresa autenticada.
+- Nenhum pedido original, cotação, Kanban, baixa, reserva, custos ou lançamentos existentes foram alterados. Próximo: homologação de integração, XML/PDF/manual e recebimento parcial com notas reais de teste.
+
+
+## 2026-10-15 — Permissões por etapa — primeiro incremento, não publicar
+
+Branch `feat/permissoes-etapas-20261015`, base inicial `302b0b2f`, atualizado sobre `f891d3a5`. Matriz aditiva do Cliente 360 e leitura filtrada por API; gravação segura Master/tenant com migration candidata ainda não aplicada em produção. Testes de regras/API, regressões e PostgreSQL isolado aprovados. **Revisão geral ainda incompleta:** RLS/RPC de escritas diretas, abas internas de venda, escopos da IA e controles de cada setor permanecem pendentes. Ver `PERMISSOES_ETAPAS_20261015.md`. Não apresentar como autorização completa nem publicar esse pacote sem completar a revisão e homologação.
+
+
+## 2026-10-16 — Publicação incremental de permissões autorizada
+
+Francis autorizou publicar somente o incremento do Cliente 360 em atlasonesystem.com. Base de produção a1aa8e88; alterações e recebimento integrado preservados. Migration aplicada 20261016042736, com seed igual ao legado, RLS e RPC exclusiva do backend; teste transacional real concluído e desfeito. Histórico prévio restaurado com conteúdo exato, sem reexecutá-lo. Demais etapas de IA/relatórios/ações internas continuam pendentes. Autorização atual substitui o bloqueio de publicação do rascunho inicial para este incremento, sem declarar revisão geral concluída.
+
+
+## 2026-10-16 — IA e relatório de fornecedores: candidato de segurança
+
+Branch `feat/permissoes-ia-relatorios-20261016`, base `ac03af33`. Sem publicação.
+- Especialista e contexto federado bloqueiam consultas se a leitura das restrições de IA falha; escopos desconhecidos são negados, sem ampliar o teto do setor.
+- Busca federada com escopo próprio e sem coluna/valor de titularidade retorna vazio antes de consultar a tabela.
+- Relatório de fornecedores exige as ações existentes `admin.bi.consultar` no setor Relatórios e `compras.geral.consultar` no setor Compras; Master preservado. Falha de verificação retorna 503 antes de consultar custos.
+- Nenhuma migration, permissão real, dado operacional ou tela aprovada alterada. Rollback: reverter este commit; banco permanece igual.
+- Testes novos cobrem erro de leitura, escopo inválido, teto, tenant, ausência de titularidade e 401/403/503 antes das consultas do relatório. Regressões Cliente 360/cadastros e cálculo de fornecedores executadas.
+- Revisão geral permanece aberta: agentes geral/comercial legados, sessões anteriores, titularidade UUID de clientes/histórico WVetro, totais agregados em escopo próprio, atalhos de estimativa, edição/exportação dos demais relatórios e controles na interface. Este pacote não declara resolvidos esses caminhos.
+- Próximo passo: completar esses controles, validar com usuários de consulta/edição, apresentar prévia e somente então publicar o pacote aprovado.
+
+## 2026-10-16 — Conclusão dos controles de IA e relatórios (PR #863)
+
+Pacote ampliado sobre a main atual `57d8edc7`, preservando os incrementos de Kanban por usuário e identificação assistida de Compras. A lista anterior de pendências de IA/relatórios foi tratada: resolvedor único, titularidade por UUID, agregados e histórico limitados, sessões/histórico vinculados à autorização vigente, feedback/conhecimento/aprendizado protegidos, APIs de relatórios com consulta/edição/exportação e editor aditivo no usuário. Ver `PERMISSOES_IA_RELATORIOS_20261016.md` para critérios, limites e validações.
+
+67 verificações comportamentais e regressões do Cliente 360, cadastros, NF, recebimentos, RLS isolado, Kanbans, relatórios/book e fornecedores aprovadas. Nenhuma permissão real ou migration alterada. Typecheck aprovado; preflight final obrigatório antes da integração. A revisão de IA/relatórios está tecnicamente concluída neste pacote; não extrapolar essa afirmação para todos os módulos do ERP. Próximo passo operacional: validar o commit final no CI e publicar no domínio autorizado com snapshot/rollback, sem mudar configurações de acesso reais.
+
+
+## 2026-10-16 — Hotfix de abertura do Cliente 360
+
+Causa confirmada no banco: compras_necessidades revoga SELECT de authenticated (42501), mas o painel tentava consultar com o token do navegador, bloqueando inclusive Master. A consulta legada passa pelo servidor após validar o cliente com RLS, reutiliza obterComprasAcessos.consultar e filtra empresa_id + cliente_id. Nenhuma concessão de banco, mudança de permissões ou alteração dos novos pedidos de Compras. Regressões cobrem tabela privada, isolamento, cliente inacessível, solicitante próprio e falha fechada. Validar release e publicar o commit exato; confirmar abertura autenticada do cliente informado.
+
+
+## 2026-10-16 — Conferência W.Vetro por esquadria — candidata a prévia
+
+Branch feat/wvetro-validacao-por-item-20261016. Cada esquadria importada no Kanban tem Está certo, Corrigir e ensinar, status próprio e consulta de correções anteriores por modelo + linha. Ambiente, tipo, medidas, quantidade e demais campos conferidos usam diferenças por campo; descrição livre é aceita quando não há tipologia cadastrada. Correções de um item preservam rascunhos dos demais, fotos, anexos, valores e payload bruto. Snapshot invalida conferência após mudança; comparação CAS impede sobrescrever edição concorrente. Autorização usa permissão de edição de orçamento + domínio IA e escopo próprio; feedback filtrado por empresa e usuário quando próprio. Importação forçada com payload idêntico preserva IDs e correções por item. Materialização técnica existente somente após todos conferidos; receitas antigas não são homologadas por troca de nome. Sem migration. Prévia separada para homologação; não publicar em produção sem aprovação desta alteração.
+
+
+## 2026-10-17 — Marketing Inteligente / PR #896
+
+Primeira interface isolada de agência IA da Esquadrifácio®: menu Master, nove especialistas declarativos, mídia local com direitos de uso, calendário mensal e aprovações sem publicação. Testes de calendário/consentimento, TypeScript e preflight de build com variáveis fictícias passaram. O site premium v5 aprovado continua intocado. Ver `docs/marketing/PREVIA_ATLAS_20261017.md`.
