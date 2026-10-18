@@ -760,3 +760,8 @@ Causa confirmada no banco: compras_necessidades revoga SELECT de authenticated (
 ## 2026-10-16 — Conferência W.Vetro por esquadria — candidata a prévia
 
 Branch feat/wvetro-validacao-por-item-20261016. Cada esquadria importada no Kanban tem Está certo, Corrigir e ensinar, status próprio e consulta de correções anteriores por modelo + linha. Ambiente, tipo, medidas, quantidade e demais campos conferidos usam diferenças por campo; descrição livre é aceita quando não há tipologia cadastrada. Correções de um item preservam rascunhos dos demais, fotos, anexos, valores e payload bruto. Snapshot invalida conferência após mudança; comparação CAS impede sobrescrever edição concorrente. Autorização usa permissão de edição de orçamento + domínio IA e escopo próprio; feedback filtrado por empresa e usuário quando próprio. Importação forçada com payload idêntico preserva IDs e correções por item. Materialização técnica existente somente após todos conferidos; receitas antigas não são homologadas por troca de nome. Sem migration. Prévia separada para homologação; não publicar em produção sem aprovação desta alteração.
+
+
+## 2026-10-17 — Marketing Inteligente (PR #896, rascunho, NÃO publicado)
+
+Rota interna isolada `/marketing-inteligente` para Master, com biblioteca local (IndexedDB), calendário, aprovações de mídia autorizada, edição local de referência para o site e catálogo dos nove especialistas de IA. Sem contas externas, publicações, dados de CRM ou IA generativa ativa. Detalhes e limitações: `docs/marketing/PREVIA_ATLAS_20261017.md` e `docs/marketing/MARKETING_INTELIGENTE_ATLAS.md`. Alterações restritas à branch; não publicar sem homologação.

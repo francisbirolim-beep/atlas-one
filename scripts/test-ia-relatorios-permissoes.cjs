@@ -251,6 +251,10 @@ async function testarAprendizado(){
  const source=load('app/api/ia/central-aprendizado/route.ts',{
   'next/server':next,'crypto':require('node:crypto'),'pdf-parse':()=>{},
   '@/lib/ai/permissoesServer':ia,'@/lib/supabaseAdmin':{supabaseAdmin:db},
+  '@/lib/ai/catalogoPdfTexto':{textoCatalogoGeometrico:()=>''},
+  '@/lib/ai/catalogoPeso':{pesoDecimalCatalogo:()=>null},
+  '@/lib/ai/catalogoReanalise':{podeAtualizarCandidatoCatalogo:()=>false,dadosReanaliseCatalogo:()=>({})},
+  '@/lib/ai/catalogoLinhas':{extrairLinhasCatalogo:()=>[],VERSAO_REGRAS_CATALOGO:'teste'},
   '@/lib/tenantServer':{autenticarTenant:async()=>user},
   '@/lib/ai/opencode':{},'@/lib/ai/specialists':registry,
  },'\nexport {podeValidar,aplicar,processarCatalogoAutomatico}')

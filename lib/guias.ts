@@ -6,6 +6,7 @@ import {
   Home,
   Landmark,
   MapPinned,
+  Megaphone,
   PackageSearch,
   PackageCheck,
   ReceiptText,
@@ -64,6 +65,9 @@ export const GUIAS: Guia[] = [
 
   { href: '/assistencias', label: 'Assistências', icon: Wrench, grupo: 'Assistência' },
 
+  // Novo módulo em prévia: inicialmente visível somente para Master.
+  { href: '/marketing-inteligente', label: 'Marketing Inteligente', icon: Megaphone, grupo: 'Marketing', masterOnly: true },
+
   { href: '/cadastros', label: 'Cadastros 360', icon: PackageSearch, grupo: 'Cadastros' },
   { href: '/cadastro', label: 'Cadastros', icon: Settings, grupo: 'Cadastros', masterOnly: true },
 ]
@@ -76,6 +80,7 @@ export const GRUPOS_ORDEM_GUIAS = [
   'Compras',
   'Financeiro',
   'Assistência',
+  'Marketing',
   'Cadastros',
 ]
 

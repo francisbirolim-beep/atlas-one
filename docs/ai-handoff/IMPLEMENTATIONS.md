@@ -514,3 +514,8 @@ Causa confirmada no banco: compras_necessidades revoga SELECT de authenticated (
 ## 2026-10-16 — Conferência W.Vetro por esquadria — candidata a prévia
 
 Branch feat/wvetro-validacao-por-item-20261016. Cada esquadria importada no Kanban tem Está certo, Corrigir e ensinar, status próprio e consulta de correções anteriores por modelo + linha. Ambiente, tipo, medidas, quantidade e demais campos conferidos usam diferenças por campo; descrição livre é aceita quando não há tipologia cadastrada. Correções de um item preservam rascunhos dos demais, fotos, anexos, valores e payload bruto. Snapshot invalida conferência após mudança; comparação CAS impede sobrescrever edição concorrente. Autorização usa permissão de edição de orçamento + domínio IA e escopo próprio; feedback filtrado por empresa e usuário quando próprio. Importação forçada com payload idêntico preserva IDs e correções por item. Materialização técnica existente somente após todos conferidos; receitas antigas não são homologadas por troca de nome. Sem migration. Prévia separada para homologação; não publicar em produção sem aprovação desta alteração.
+
+
+## 2026-10-17 — Marketing Inteligente / PR #896
+
+Primeira interface isolada de agência IA da Esquadrifácio®: menu Master, nove especialistas declarativos, mídia local com direitos de uso, calendário mensal e aprovações sem publicação. Testes de calendário/consentimento, TypeScript e preflight de build com variáveis fictícias passaram. O site premium v5 aprovado continua intocado. Ver `docs/marketing/PREVIA_ATLAS_20261017.md`.

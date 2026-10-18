@@ -98,5 +98,8 @@ jobs:
       - name: IA and reports authorization regression
         run: npm run test:ia-relatorios
 
+      - name: Marketing editorial security regression
+        run: npm run test:marketing
+
       - name: Build
         run: npm run build

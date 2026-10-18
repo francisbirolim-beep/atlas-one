@@ -563,3 +563,12 @@ Causa confirmada no banco: compras_necessidades revoga SELECT de authenticated (
 ## 2026-10-16 — Conferência W.Vetro por esquadria — candidata a prévia
 
 Branch feat/wvetro-validacao-por-item-20261016. Cada esquadria importada no Kanban tem Está certo, Corrigir e ensinar, status próprio e consulta de correções anteriores por modelo + linha. Ambiente, tipo, medidas, quantidade e demais campos conferidos usam diferenças por campo; descrição livre é aceita quando não há tipologia cadastrada. Correções de um item preservam rascunhos dos demais, fotos, anexos, valores e payload bruto. Snapshot invalida conferência após mudança; comparação CAS impede sobrescrever edição concorrente. Autorização usa permissão de edição de orçamento + domínio IA e escopo próprio; feedback filtrado por empresa e usuário quando próprio. Importação forçada com payload idêntico preserva IDs e correções por item. Materialização técnica existente somente após todos conferidos; receitas antigas não são homologadas por troca de nome. Sem migration. Prévia separada para homologação; não publicar em produção sem aprovação desta alteração.
+
+
+## Próxima etapa — Marketing Inteligente / PR #896 (não publicar automaticamente)
+
+1. Homologar autenticação Master e permissões leitura/edição, envio e persistência local de fotos/vídeos, bloqueio sem autorização, calendário e revisão.
+2. Recuperar e preservar as mídias reais e o site premium v5 aprovado antes de conectar o domínio.
+3. Implementar storage/RLS multiempresa e consentimento de imagem, integrar CRM/obras/WhatsApp sem duplicar dados ou fluxos.
+4. Integrar IA e APIs oficiais de redes por etapas, testar fila idempotente, logs e alertas; anúncios exigem autorização de orçamento.
+5. Testar regressão do Atlas e obter aprovação explícita antes de qualquer deploy.
