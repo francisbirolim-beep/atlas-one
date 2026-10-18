@@ -29,6 +29,46 @@ create table if not exists public.marketing_midias (
 );
 create index if not exists marketing_midias_empresa_criado_idx on public.marketing_midias(empresa_id,criado_em desc);
 
+create table if not exists public.marketing_uploads_pendentes (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references public.empresas(id),
+  usuario_id uuid not null references public.usuarios(id),
+  obra_id uuid null references public.obras(id),
+  nome text not null check(length(btrim(nome)) between 1 and 240),
+  tipo_mime text not null check(tipo_mime in ('image/jpeg','image/png','image/webp','video/mp4','video/quicktime','video/webm')),
+  tamanho_bytes bigint not null check(tamanho_bytes between 12 and 31457280),
+  storage_path text not null unique check(length(storage_path) between 15 and 500),
+  status text not null default 'pendente' check(status in ('pendente','confirmado')),
+  expira_em timestamptz not null default (now()+interval '30 minutes'),
+  criado_em timestamptz not null default now()
+);
+create index if not exists marketing_uploads_pendentes_empresa_idx
+ on public.marketing_uploads_pendentes(empresa_id,usuario_id,status,expira_em);
+alter table public.marketing_midias
+  add column if not exists upload_id uuid unique references public.marketing_uploads_pendentes(id);
+
+create or replace function public.marketing_verificar_upload_v1()
+returns trigger language plpgsql set search_path='' as $$
+begin
+ if not exists(select 1 from public.usuarios u where u.id=new.usuario_id and u.empresa_id=new.empresa_id)
+ then raise exception 'Usuário de upload fora da empresa';end if;
+ if new.obra_id is not null and not exists(select 1 from public.obras o where o.id=new.obra_id and o.empresa_id=new.empresa_id)
+ then raise exception 'Obra de upload fora da empresa';end if;
+ if new.storage_path not like new.empresa_id::text||'/%'
+ then raise exception 'Caminho de upload fora da empresa';end if;
+ if tg_op='UPDATE' and
+    (new.empresa_id,new.usuario_id,new.obra_id,new.storage_path,new.nome,new.tipo_mime,new.tamanho_bytes)
+    is distinct from
+    (old.empresa_id,old.usuario_id,old.obra_id,old.storage_path,old.nome,old.tipo_mime,old.tamanho_bytes)
+ then raise exception 'Metadados do upload imutáveis';end if;
+ return new;
+end;$$;
+drop trigger if exists marketing_upload_guard on public.marketing_uploads_pendentes;
+create trigger marketing_upload_guard before insert or update on public.marketing_uploads_pendentes
+for each row execute function public.marketing_verificar_upload_v1();
+
+
+
 create table if not exists public.marketing_publicacoes (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references public.empresas(id),
@@ -83,6 +123,11 @@ begin
  then raise exception 'Autorizador fora da empresa';end if;
  if new.storage_path not like new.empresa_id::text||'/%'
  then raise exception 'Caminho de arquivo fora da empresa';end if;
+ if new.upload_id is not null and not exists (
+  select 1 from public.marketing_uploads_pendentes p
+  where p.id=new.upload_id and p.empresa_id=new.empresa_id
+    and p.usuario_id=new.criado_por_id and p.storage_path=new.storage_path
+ ) then raise exception 'Upload sem vínculo de origem válido';end if;
  if tg_op='UPDATE' then
   if new.versao <> old.versao+1 then raise exception 'Versão de mídia concorrente inválida';end if;
   if new.empresa_id is distinct from old.empresa_id
@@ -189,6 +234,9 @@ drop trigger if exists marketing_midia_eventos on public.marketing_midias;
 create trigger marketing_midia_eventos after insert or update on public.marketing_midias
 for each row execute function public.marketing_registrar_midia_v1();
 
+alter table public.marketing_uploads_pendentes enable row level security;
+revoke all on public.marketing_uploads_pendentes from public,anon,authenticated;
+grant select,insert,update,delete on public.marketing_uploads_pendentes to service_role;
 alter table public.marketing_midias enable row level security;
 alter table public.marketing_publicacoes enable row level security;
 alter table public.marketing_eventos enable row level security;
