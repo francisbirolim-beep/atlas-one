@@ -2,6 +2,7 @@ import {textoCatalogoGeometrico} from '@/lib/ai/catalogoPdfTexto'
 import {pesoDecimalCatalogo} from '@/lib/ai/catalogoPeso'
 import {podeAtualizarCandidatoCatalogo,dadosReanaliseCatalogo} from '@/lib/ai/catalogoReanalise'
 import {extrairLinhasCatalogo, VERSAO_REGRAS_CATALOGO} from '@/lib/ai/catalogoLinhas'
+import {avaliarCatalogoLote} from '@/lib/ai/catalogoLoteSeguro'
 import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
@@ -780,11 +781,84 @@ async function concluir(empresaId:string,entradaId:string){
   if(!(data||[]).some((c:any)=>['pendente','corrigido','aprovado'].includes(c.status)))await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'concluido',updated_at:new Date().toISOString()}).eq('empresa_id',empresaId).eq('id',entradaId)
 }
 
+// Homologação em lote é sempre restrita ao catálogo, ao tenant e ao usuário.
+// O plano não escreve; o executor reavalia a fonte e todas as permissões.
+async function planoValidacaoCatalogoLote(
+  u:UsuarioTenant, entradaId:string,
+  autorizacao:Awaited<ReturnType<typeof carregarPermissoesIA>>,
+){
+  if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(entradaId))
+    throw new Error('Selecione um catálogo válido para a conferência.')
+  let q=supabaseAdmin.from('ai_aprendizado_entradas').select('*')
+    .eq('empresa_id',u.empresa_id).eq('id',entradaId)
+  if(u.role!=='master')q=q.eq('criado_por_id',u.id)
+  const {data:entrada,error:e}=await q.maybeSingle()
+  if(e)throw e
+  if(!entrada||!['catalogo','tabela_preco'].includes(String(entrada.tipo))||
+      entrada.mime_type!=='application/pdf'||!entrada.storage_path)
+    throw new Error('Catálogo PDF original não encontrado ou não autorizado.')
+  if(entrada.metadados?.arquivado_em||entrada.status==='analisando')
+    throw new Error('Este catálogo está arquivado ou em análise.')
+  const {data:candidatos,error:cErro}=await lerTodas(
+    supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id)
+      .eq('entrada_id',entrada.id).eq('tipo','produto').eq('status','pendente')
+      .order('created_at',{ascending:true}).order('id'))
+  if(cErro)throw cErro
+  if(candidatos.length>750)throw new Error('Catálogo grande demais para uma única conferência em lote. Divida em etapas.')
+  const {data:pdf,error:pdfErro}=await supabaseAdmin.storage.from('atlas-aprendizado').download(entrada.storage_path)
+  if(pdfErro||!pdf)throw new Error('O PDF original não está disponível; nenhuma validação será realizada.')
+  const lido=await lerPdfCatalogo(Buffer.from(await pdf.arrayBuffer()))
+  const fontePorCodigo=new Map<string,any>()
+  for(const item of extrairLinhasCatalogo(lido.paginas)){
+    const codigo=cod(item.codigo)
+    if(codigo)fontePorCodigo.set(codigo,item)
+  }
+  const fornecedorId=await resolverFornecedor(u,entrada,null)
+  const semFornecedor=!fornecedorId
+  const repetidos=new Map<string,number>()
+  for(const c of candidatos){
+    const codigo=cod(c.dados?.codigo)
+    if(codigo)repetidos.set(codigo,(repetidos.get(codigo)||0)+1)
+  }
+  const aptos:Array<{id:string;codigo:string;descricao:string;entrada_id:string;dados:Record<string,any>;updated_at:string}>=[]
+  const bloqueados:Array<{id:string;codigo:string;motivo:string}>=[]
+  for(const candidato of candidatos){
+    const codigo=txt(candidato.dados?.codigo,120)
+    let motivo:string|null=null
+    const permitido=await podeValidar(u,candidato,autorizacao)
+    if(!permitido)motivo='Sem permissão para homologar este produto.'
+    else if(!ehCodigoCatalogo(codigo))motivo='Código técnico inválido.'
+    else if((repetidos.get(cod(codigo))||0)>1)motivo='Código repetido neste catálogo.'
+    else if(semFornecedor)motivo='Fornecedor do catálogo ainda não validado.'
+    const resultado=avaliarCatalogoLote(candidato,fontePorCodigo.get(cod(codigo))||null)
+    if(!motivo)motivo=resultado.motivo
+    if(motivo||!resultado.dados){
+      bloqueados.push({id:candidato.id,codigo,motivo:motivo||'Conferência individual necessária.'})
+      continue
+    }
+    aptos.push({id:candidato.id,codigo,descricao:String(resultado.dados.descricao||''),
+      entrada_id:entrada.id,dados:resultado.dados,updated_at:candidato.updated_at})
+  }
+  return {entrada,aptos,bloqueados,total:candidatos.length,fonte_total:fontePorCodigo.size,fornecedorId}
+}
+
 export async function GET(req:NextRequest){
   try{
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
     const autorizacao=await carregarPermissoesIA(u)
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
+    // Simulação completa, sem gravações. Revalidação acontece novamente a cada lote.
+    const preverLote=txt(req.nextUrl.searchParams.get('preverLote'),5)==='1'
+    if(preverLote){
+      const id=txt(req.nextUrl.searchParams.get('entradaId'),80)
+      const plano=await planoValidacaoCatalogoLote(u,id,autorizacao)
+      return NextResponse.json({
+        entrada_id:plano.entrada.id,entrada_nome:plano.entrada.titulo,
+        total:plano.total,aptos:plano.aptos.map(({id,codigo,descricao,entrada_id})=>({id,codigo,descricao,entrada_id})),
+        bloqueados:plano.bloqueados,fonte_total:plano.fonte_total,
+        somenteLeitura:process.env.VERCEL_ENV==='preview',
+      },{headers:{'Cache-Control':'private, no-store'}})
+    }
     // Consulta explicita da tabela original; nenhuma escrita nos candidatos ou produtos.
     const conferirTabelaId=txt(req.nextUrl.searchParams.get('conferirTabela'),80)
     if(conferirTabelaId){
@@ -913,6 +987,54 @@ export async function PATCH(req:NextRequest){
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     if(process.env.VERCEL_ENV==='preview')return NextResponse.json({error:'Prévia de homologação em modo somente leitura. Nenhum cadastro real pode ser modificado aqui.'},{status:409})
     const b=await req.json(),acao=txt(b?.acao,40)
+    if(acao==='validar_lote_catalogo'){
+      const entradaId=txt(b?.entrada_id,80)
+      const ids=Array.isArray(b?.ids)?b.ids:[]
+      if(!ids.length||ids.length>5||ids.some((id:any)=>typeof id!=='string'||!/^[-0-9a-f]{36}$/i.test(id))||
+         new Set(ids).size!==ids.length)
+        return NextResponse.json({error:'Selecione de 1 a 5 produtos por etapa, sem duplicidade.'},{status:422})
+      const plano=await planoValidacaoCatalogoLote(u,entradaId,autorizacao)
+      const selecionados=new Map(plano.aptos.map(c=>[c.id,c]))
+      const resultados:Array<{id:string;status:'aplicado'|'ignorado'|'erro';motivo?:string}>=[]
+      for(const id of ids){
+        const item=selecionados.get(id)
+        if(!item){
+          resultados.push({id,status:'ignorado',motivo:plano.bloqueados.find(x=>x.id===id)?.motivo||'Produto não está mais apto.'})
+          continue
+        }
+        // Refaz o lock otimista; nunca aplicar se outro usuário alterou o item.
+        const dados:Record<string,any>={...item.dados,imagem_preview_local:false}
+        delete dados.conferencia_tabela_visualizada
+        delete dados.divergencias_tabela
+        const {data:marcado,error:me}=await supabaseAdmin.from('ai_aprendizado_candidatos')
+          .update({status:'aprovado',dados,validado_por_id:u.id,validado_por_nome:u.nome,
+            validado_em:new Date().toISOString(),observacao_validacao:'Homologação em lote: código, desenho individual e tabela PDF conferidos.',
+            updated_at:new Date().toISOString()})
+          .eq('empresa_id',u.empresa_id).eq('entrada_id',entradaId).eq('id',id)
+          .eq('status','pendente').eq('updated_at',item.updated_at).select('*').maybeSingle()
+        if(me||!marcado){
+          resultados.push({id,status:'ignorado',motivo:'Produto modificado por outro usuário. Atualize a conferência.'})
+          continue
+        }
+        try{
+          const destino=await aplicar(u,{...marcado,dados},plano.entrada,{fornecedorId:plano.fornecedorId})
+          const {data:concluido,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
+            .update({status:'aplicado',destino_id:destino,updated_at:new Date().toISOString()})
+            .eq('empresa_id',u.empresa_id).eq('entrada_id',entradaId).eq('id',id).eq('status','aprovado')
+            .select('id').maybeSingle()
+          if(ce||!concluido)throw new Error('Cadastro aplicado, mas o status final não foi confirmado. Confira este item.')
+          await log(u,'catalogo_validado_em_lote',entradaId,id,{codigo:item.codigo,destino_id:destino})
+          resultados.push({id,status:'aplicado'})
+        }catch(e:any){
+          // Conserva o status aprovado para revisão e eventual recuperação individual.
+          // Não repete uma aplicação parcial cegamente.
+          resultados.push({id,status:'erro',motivo:String(e?.message||'Falha ao aplicar.').slice(0,300)})
+        }
+      }
+      await concluir(u.empresa_id,entradaId)
+      return NextResponse.json({entrada_id:entradaId,resultados,aplicados:resultados.filter(r=>r.status==='aplicado').length,
+        restantes:resultados.filter(r=>r.status!=='aplicado').length})
+    }
     if(acao==='arquivar_entrada'||acao==='restaurar_entrada'){
       const entradaId=txt(b?.entrada_id,80)
       const {data:entrada,error:le}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).maybeSingle()
