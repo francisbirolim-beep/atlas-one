@@ -9,6 +9,10 @@ import {
 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
+import { conferirDadosCatalogo } from '@/lib/ai/catalogoConferencia'
+import { lerImagemCatalogoPreview, salvarImagemCatalogoPreview } from '@/lib/ai/catalogoImagemPreview'
+import { conferidoSomenteNaPrevia } from '@/lib/ai/catalogoFilaValidacao'
 
 type Entrada = {
   id: string
@@ -26,6 +30,7 @@ type Entrada = {
   created_at: string
   erro?: string | null
   mime_type?: string | null
+  metadados?: {arquivado_em?:string|null}
 }
 type Candidato = {
   id: string
@@ -51,6 +56,7 @@ type DadosAPI = {
   entradas: Entrada[]
   candidatos: Candidato[]
   totais: { pendentes:number; aplicados:number; rejeitados:number }
+  somenteLeitura?: boolean
 }
 
 const TIPOS = [
@@ -112,13 +118,33 @@ export default function CentralAprendizadoPage(){
   const [catalogoAberto,setCatalogoAberto]=useState<string|null>(null)
   const [itemCatalogoAberto,setItemCatalogoAberto]=useState<string|null>(null)
   const [buscaCatalogo,setBuscaCatalogo]=useState('')
+  const [mostrarHistorico,setMostrarHistorico]=useState(false)
+  const [arquivando,setArquivando]=useState<string|null>(null)
   const [reprocessando,setReprocessando]=useState<string|null>(null)
+  const [conferindoTabela,setConferindoTabela]=useState<string|null>(null)
   const [salvando,setSalvando]=useState<string|null>(null)
   const [entradaValidacaoFiltro,setEntradaValidacaoFiltro]=useState<string|null>(null)
+  const [mostrarConferidosPreview,setMostrarConferidosPreview]=useState(false)
   const [edicoes,setEdicoes]=useState<Record<string,{titulo:string;modulo:string;dados:Record<string,any>;observacao:string}>>({})
   const fileRef=useRef<HTMLInputElement>(null)
+  // Somente leitura: memoriza a tabela já conferida nesta sessão para que a imagem
+  // e os dados continuem juntos ao abrir outro candidato, sem gravar no banco.
+  const tabelasConsultandoRef=useRef<Set<string>>(new Set())
+  const tabelasOriginaisRef=useRef<Map<string,Map<string,Record<string,any>>>>(new Map())
+
+  function preencherPelaTabela(c:Candidato,tabela?:Map<string,Record<string,any>>):Candidato{
+    if(c.tipo!=='produto'||!tabela)return c
+    const codigo=String(c.dados?.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
+    const extracao=tabela.get(codigo)
+    if(!extracao)return c
+    const revisao=conferirDadosCatalogo(c,extracao)
+    if(!revisao)return c
+    return {...c,dados:{...revisao.dados,divergencias_tabela:revisao.divergencias},
+      titulo:String(c.dados?.codigo||'')+' — '+String(revisao.dados.descricao||'Produto')}
+  }
 
   async function api(url:string,init?:RequestInit){
+    if(dados.somenteLeitura&&init?.method&&init.method.toUpperCase()!=='GET')throw new Error('Esta prévia é somente leitura. As alterações de cadastro estão bloqueadas para proteger a produção.')
     const token=await tokenAtual()
     if(!token)throw new Error('Sessão expirada.')
     const r=await fetch(url,{...init,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...(init?.headers||{})},cache:'no-store'})
@@ -128,8 +154,26 @@ export default function CentralAprendizadoPage(){
   }
   async function carregar(){
     setCarregando(true);setErro('')
-    try{ setDados(await api('/api/ia/central-aprendizado')) }
-    catch(e:any){setErro(e?.message||'Erro ao carregar a Central de Aprendizado.')}
+    try{
+      const resposta:DadosAPI=await api('/api/ia/central-aprendizado')
+      if(resposta.somenteLeitura){
+        // Não modifica o Supabase. Apenas restaura o teste local do mesmo usuário e código.
+        try{
+          const {data:{session}}=await supabase.auth.getSession()
+          const uid=session?.user?.id||''
+          resposta.candidatos=resposta.candidatos.map(c=>{
+            if(c.tipo!=='produto'||c.foto_cadastro||c.dados?.imagem_item_url)return c
+            const registro=lerImagemCatalogoPreview(window.localStorage,uid,c.id,String(c.dados?.codigo||''))
+            if(!registro)return c
+            return {...c,dados:{...c.dados,imagem_item_url:registro.imagem,imagem_preview_local:true}}
+          })
+        }catch{/* Navegador sem armazenamento: a consulta permanece somente leitura. */}
+      }
+      // Dados consultados no PDF são complementados apenas em memória até o usuário
+      // confirmar e validar. Vale tanto para prévia quanto para produção.
+      resposta.candidatos=resposta.candidatos.map(c=>preencherPelaTabela(c,tabelasOriginaisRef.current.get(c.entrada_id)))
+      setDados(resposta)
+    }catch(e:any){setErro(e?.message||'Erro ao carregar a Central de Aprendizado.')}
     finally{setCarregando(false)}
   }
   useEffect(()=>{void carregar()},[])
@@ -139,6 +183,7 @@ export default function CentralAprendizadoPage(){
   },[])
 
   async function uploadDireto(file:File){
+    if(dados.somenteLeitura||carregando)throw new Error('Aguarde o carregamento da Central. O envio é bloqueado na prévia de homologação.')
     const {data:{session}}=await supabase.auth.getSession()
     const uid=session?.user?.id
     if(!uid)throw new Error('Sessão expirada.')
@@ -150,6 +195,7 @@ export default function CentralAprendizadoPage(){
     return {path,nome:file.name,mediaType:file.type||'application/octet-stream',tamanho:file.size}
   }
   async function enviar(){
+    if(dados.somenteLeitura){setErro('Prévia em modo somente leitura: o envio de arquivos fica bloqueado.');return}
     if(enviando)return
     if(!descricao.trim()&&!arquivo){setErro('Escreva uma explicação ou escolha um arquivo.');return}
     if(arquivo&&arquivo.size>MAX){setErro('Arquivo maior que 50 MB.');return}
@@ -168,23 +214,28 @@ export default function CentralAprendizadoPage(){
   }
 
   function entradaDo(id:string){ return dados.entradas.find(e=>e.id===id) }
-  const pendentes=useMemo(()=>dados.candidatos
-    .filter(c=>['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
+  const pendentesBase=useMemo(()=>dados.candidatos
+    .filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor'&&!dados.entradas.find(e=>e.id===c.entrada_id)?.metadados?.arquivado_em)
     .sort((a,b)=>{
       const pa=a.tipo==='fornecedor'?0:a.tipo==='produto'?1:2
       const pb=b.tipo==='fornecedor'?0:b.tipo==='produto'?1:2
       return pa-pb
-    }),[dados.candidatos])
-  const historico=useMemo(()=>[...dados.entradas].sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime()),[dados.entradas])
+    }),[dados.candidatos,dados.entradas])
+  // Conferência local na prévia não é aprovação oficial no banco.
+  const conferidosPreview=useMemo(()=>dados.somenteLeitura
+    ?pendentesBase.filter(conferidoSomenteNaPrevia):[],[pendentesBase,dados.somenteLeitura])
+  const pendentes=useMemo(()=>dados.somenteLeitura
+    ?pendentesBase.filter(c=>!conferidoSomenteNaPrevia(c)):pendentesBase,[pendentesBase,dados.somenteLeitura])
+  const historico=useMemo(()=>[...dados.entradas].filter(e=>mostrarHistorico||(!e.metadados?.arquivado_em&&(e.status==='erro'||e.status==='analisando'||pendentes.some(c=>c.entrada_id===e.id)))).sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime()),[dados.entradas,mostrarHistorico,pendentes])
 
   function editarInicial(c:Candidato){
     setEdicoes(prev=>prev[c.id]?prev:{...prev,[c.id]:{titulo:c.titulo,modulo:c.modulo||'',dados:{...(c.dados||{})},observacao:''}})
     setAberto(v=>v===c.id?null:c.id)
   }
   function abrirValidacaoEntrada(entradaId:string){
-    const candidatos=dados.candidatos
-      .filter(c=>c.entrada_id===entradaId&&['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
+    const candidatos=pendentes.filter(c=>c.entrada_id===entradaId)
     setEntradaValidacaoFiltro(entradaId)
+    setMostrarConferidosPreview(false)
     setAba('validacoes')
     if(candidatos[0]){
       setEdicoes(prev=>prev[candidatos[0].id]?prev:{...prev,[candidatos[0].id]:{
@@ -203,6 +254,15 @@ export default function CentralAprendizadoPage(){
   function meta(id:string,chave:'titulo'|'modulo'|'observacao',valor:string){
     setEdicoes(prev=>({...prev,[id]:{...(prev[id]||{titulo:'',modulo:'',dados:{},observacao:''}),[chave]:valor}}))
   }
+  async function arquivarEntrada(e:Entrada){
+    if(arquivando)return
+    setArquivando(e.id);setErro('')
+    try{
+      const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({acao:e.metadados?.arquivado_em?'restaurar_entrada':'arquivar_entrada',entrada_id:e.id})})
+      setMensagem(j.mensagem);await carregar()
+    }catch(err:any){setErro(err?.message||'Não foi possível arquivar o material.')}
+    finally{setArquivando(null)}
+  }
   async function reprocessarEntrada(e:Entrada){
     if(reprocessando)return
     setReprocessando(e.id);setErro('');setMensagem('')
@@ -213,6 +273,66 @@ export default function CentralAprendizadoPage(){
     }catch(err:any){setErro(err?.message||'Erro ao reprocessar catálogo.')}
     finally{setReprocessando(null)}
   }
+
+  async function conferirTabela(e:Entrada,automatica=false){
+    if(tabelasConsultandoRef.current.has(e.id))return
+    if(automatica&&tabelasOriginaisRef.current.has(e.id))return
+    tabelasConsultandoRef.current.add(e.id)
+    setConferindoTabela(e.id)
+    if(!automatica){setErro('');setMensagem('')}
+    try{
+      const resultado=await api('/api/ia/central-aprendizado?conferirTabela='+encodeURIComponent(e.id))
+      const porCodigo=new Map<string,Record<string,any>>()
+      for(const item of Array.isArray(resultado.itens)?resultado.itens:[]){
+        const codigo=String(item.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
+        if(codigo&&!porCodigo.has(codigo))porCodigo.set(codigo,item)
+      }
+      // O PDF oficial é fonte da descrição, cotas e peso; a foto já confirmada prevalece.
+      tabelasOriginaisRef.current.set(e.id,porCodigo)
+      const originais=new Map(dados.candidatos.map(c=>[c.id,c]))
+      const revisados=new Map<string,Candidato>()
+      let corrigidos=0,conflitos=0
+      for(const c of dados.candidatos){
+        if(c.entrada_id!==e.id||c.tipo!=='produto')continue
+        const novo=preencherPelaTabela(c,porCodigo)
+        if(novo===c)continue
+        revisados.set(c.id,novo)
+        if((novo.dados.divergencias_tabela||[]).length)conflitos++
+        corrigidos++
+      }
+      setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>
+        c.entrada_id===e.id?preencherPelaTabela(c,porCodigo):c
+      )}))
+      // Se a edição estiver aberta mas ainda intacta, atualiza os campos visíveis.
+      // Uma alteração manual iniciada enquanto o PDF era consultado nunca é substituída.
+      setEdicoes(prev=>{
+        const proximo={...prev}
+        for(const [id,item] of revisados){
+          const edicao=prev[id],original=originais.get(id)
+          if(edicao&&original&&JSON.stringify(edicao.dados)===JSON.stringify(original.dados))
+            proximo[id]={...edicao,titulo:item.titulo,dados:{...item.dados}}
+        }
+        return proximo
+      })
+      if(!automatica)setMensagem('Tabela do PDF conferida: '+corrigidos+' item(ns) exibidos com dados de origem'+
+        (conflitos?', '+conflitos+' divergência(s) preservada(s) para revisão':'')+
+        '. Consulta visual, sem gravar cadastros; desenhos ainda exigem homologação individual.')
+    }catch(err:any){setErro('Não foi possível carregar os dados da tabela original: '+(err?.message||'tente novamente pelo botão Conferir tabela original.'))}
+    finally{
+      tabelasConsultandoRef.current.delete(e.id)
+      setConferindoTabela(v=>v===e.id?null:v)
+    }
+  }
+
+  useEffect(()=>{
+    // Leitura somente GET nos dois ambientes; nunca altera catálogo ao abrir.
+    const id=aba==='validacoes' ? dados.candidatos.find(c=>c.id===aberto)?.entrada_id : catalogoAberto
+    const entrada=dados.entradas.find(e=>e.id===id)
+    if(entrada?.mime_type==='application/pdf'&&['catalogo','tabela_preco'].includes(entrada.tipo)
+      &&!tabelasOriginaisRef.current.has(entrada.id)){
+      void conferirTabela(entrada,true)
+    }
+  },[aba,aberto,catalogoAberto,dados.entradas.length,dados.somenteLeitura])
 
   async function mapearCatalogo(e:Entrada){
     if(reprocessando)return
@@ -227,10 +347,65 @@ export default function CentralAprendizadoPage(){
   }
 
   async function salvarImagemCatalogo(candidato:Candidato,imagem:string){
+    if(dados.somenteLeitura){
+      const {data:{session}}=await supabase.auth.getSession()
+      const uid=session?.user?.id
+      if(!uid)throw new Error('Sessão expirada; entre novamente para testar a confirmação.')
+      try{
+        salvarImagemCatalogoPreview(window.localStorage,uid,candidato.id,String(candidato.dados?.codigo||''),imagem)
+      }catch(e:any){throw new Error('Não foi possível manter o desenho neste navegador: '+(e?.message||'armazenamento indisponível'))}
+      const simulado={...candidato,dados:{...candidato.dados,imagem_item_url:imagem,imagem_preview_local:true}}
+      const edicaoAtual=edicoes[candidato.id]?.dados
+      const haAlteracaoNaoSalva=Boolean(edicaoAtual && JSON.stringify(edicaoAtual)!==JSON.stringify(candidato.dados))
+      const conferenciaConcluida=conferidoSomenteNaPrevia(simulado)&&!haAlteracaoNaoSalva
+      setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id
+        ?{...c,dados:{...c.dados,imagem_item_url:imagem,imagem_preview_local:true}}:c)}))
+      if(conferenciaConcluida){
+        setAberto(v=>v===candidato.id?null:v)
+        setMostrarConferidosPreview(false)
+      }
+      setMensagem(conferenciaConcluida
+        ?'Produto '+String(candidato.dados?.codigo||'')+' retirado da fila DE TESTE: desenho, peso e medidas conferidos. Veja em "Conferidos nesta prévia". Não foi homologado no Atlas oficial.'
+        :'Desenho preservado neste navegador de teste. O item continua pendente até ter todas as informações técnicas confirmadas. Nenhum cadastro oficial foi alterado.')
+      return {demo:true,imagem_url:imagem}
+    }
     const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({
       id:candidato.id,acao:'salvar_imagem_catalogo',imagem,
     })})
-    setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id?{...c,dados:{...(c.dados||{}),imagem_item_url:j.imagem_url||imagem}}:c)}))
+    if(!j?.candidato?.dados?.imagem_confirmada || !j?.candidato?.dados?.imagem_item_url){
+      throw new Error('A confirmação não foi retornada pelo servidor. Atualize antes de tentar novamente.')
+    }
+    // Confirmar desenho só aprova automaticamente um produto pendente com a
+    // tabela completa e sem conflito. Do contrário, mantém a etapa Validar.
+    const dadosComImagem={...candidato.dados,...j.candidato.dados}
+    const atualizado={...candidato,...j.candidato,dados:dadosComImagem}
+    setDados(prev=>({...prev,candidatos:prev.candidatos.map(c=>c.id===candidato.id?atualizado:c)}))
+    const camposEditados=edicoes[candidato.id]?.dados
+    const edicaoNaoSalva=Boolean(camposEditados&&JSON.stringify(camposEditados)!==JSON.stringify(candidato.dados))
+    const temPendencia=Boolean(candidato.acao_sugerida==='revisar_ambiguidade'
+      || candidato.acao_sugerida==='revisar_conflito'
+      || !candidato.codigo_verificavel||candidato.codigo_ambiguo)
+    const pronto=conferidoSomenteNaPrevia({...atualizado,dados:{...dadosComImagem,imagem_preview_local:true}})
+      &&candidato.pode_validar&&!edicaoNaoSalva&&!temPendencia
+    if(pronto){
+      try{
+        const aprovado=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({
+          id:candidato.id,acao:'aprovar',titulo:atualizado.titulo,
+          modulo:atualizado.modulo,dados:dadosComImagem,
+          observacao:'Desenho e dados técnicos conferidos individualmente no catálogo oficial.',
+        })})
+        if(aprovado?.candidato?.status!=='aplicado')throw new Error('Aprovação ainda não foi concluída.')
+        setAberto(v=>v===candidato.id?null:v)
+        setMensagem('Produto '+String(dadosComImagem.codigo||'')+' validado e retirado da fila. Imagem, peso e medidas gravados no Atlas; disponível no catálogo e histórico.')
+        await carregar()
+        return {...j,aprovado:true}
+      }catch(e:any){
+        // A foto JÁ foi confirmada e permanece salva; nunca apagá-la por falha de aprovação.
+        setMensagem('Imagem confirmada e salva. A validação completa não foi concluída: '+String(e?.message||'revise os dados')+'. O item continuará na fila para conferência.')
+        return {...j,aprovado:false}
+      }
+    }
+    setMensagem('Desenho confirmado e salvo para o código '+String(candidato.dados?.codigo||'')+'. O cadastro continua pendente até concluir a validação dos dados.')
     return j
   }
 
@@ -262,9 +437,10 @@ export default function CentralAprendizadoPage(){
     finally{setSalvando(null)}
   }
 
+  const filaSelecionada=dados.somenteLeitura&&mostrarConferidosPreview ?conferidosPreview:pendentes
   const pendentesVisiveis=entradaValidacaoFiltro
-    ? pendentes.filter(c=>c.entrada_id===entradaValidacaoFiltro)
-    : pendentes
+    ? filaSelecionada.filter(c=>c.entrada_id===entradaValidacaoFiltro)
+    : filaSelecionada
   const entradaFiltrada=entradaValidacaoFiltro?entradaDo(entradaValidacaoFiltro):null
 
   return <main className="min-h-screen bg-slate-50 text-slate-900">
@@ -285,15 +461,16 @@ export default function CentralAprendizadoPage(){
     </header>
 
     <section className="mx-auto max-w-7xl px-4 py-6">
+      {dados.somenteLeitura&&<p className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><b>Prévia de homologação: nenhum cadastro real será alterado.</b> Você pode conferir o desenho e simular sua confirmação: a imagem fica guardada somente neste navegador de testes, mesmo após recarregar a página. Quando desenho, peso e medidas estiverem conferidos, o item sai apenas da fila de teste e fica em “Conferidos nesta prévia”. A validação oficial de produtos, a reanálise e outras gravações permanecem bloqueadas.</p>}
       <div className="mb-5 grid gap-3 md:grid-cols-3">
-        <button onClick={()=>{setEntradaValidacaoFiltro(null);setAba('validacoes')}} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{dados.totais.pendentes}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
+        <button onClick={()=>{setEntradaValidacaoFiltro(null);setMostrarConferidosPreview(false);setAba('validacoes')}} className="rounded-2xl border bg-white p-4 text-left transition hover:border-amber-300 hover:bg-amber-50/40"><div className="flex items-center gap-2 text-amber-700"><ShieldCheck size={18}/><b>{pendentes.length}</b></div><p className="mt-1 text-xs text-slate-500">Itens aguardando validação · clique para revisar</p></button>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-emerald-700"><CheckCircle2 size={18}/><b>{dados.totais.aplicados}</b></div><p className="mt-1 text-xs text-slate-500">Itens já aprovados e aplicados</p></div>
         <div className="rounded-2xl border bg-white p-4"><div className="flex items-center gap-2 text-slate-700"><History size={18}/><b>{dados.entradas.length}</b></div><p className="mt-1 text-xs text-slate-500">Materiais/conversas no histórico</p></div>
       </div>
 
       <div className="mb-5 flex gap-2 rounded-2xl border bg-white p-2">
         <button onClick={()=>setAba('entrada')} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='entrada'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Entrada geral</button>
-        <button onClick={()=>{setEntradaValidacaoFiltro(null);setAba('validacoes')}} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='validacoes'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Validações {dados.totais.pendentes>0?'('+dados.totais.pendentes+')':''}</button>
+        <button onClick={()=>{setEntradaValidacaoFiltro(null);setMostrarConferidosPreview(false);setAba('validacoes')}} className={'flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold '+(aba==='validacoes'?'bg-[#182444] text-white':'text-slate-600 hover:bg-slate-50')}>Validações {pendentes.length>0?'('+pendentes.length+')':''}</button>
       </div>
 
       {erro&&<div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
@@ -324,9 +501,11 @@ export default function CentralAprendizadoPage(){
         </aside>
 
         <div>
-          <div className="mb-3 flex items-center gap-2"><History size={18}/><h2 className="font-semibold">Histórico da equipe</h2></div>
+          <div className="mb-3 flex flex-wrap items-center gap-2"><History size={18}/><h2 className="font-semibold">{mostrarHistorico?'Histórico completo':'Materiais pendentes'}</h2>
+            <button onClick={()=>setMostrarHistorico(v=>!v)} className="rounded-lg border bg-white px-3 py-2 text-xs">{mostrarHistorico?'Mostrar só pendentes':'Ver concluídos e arquivados'}</button>
+          </div>
           {carregando?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-400"><Loader2 className="mx-auto mb-2 animate-spin"/>Carregando...</div>
-          :historico.length===0?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-500">Ainda não há materiais enviados por esta central.</div>
+          :historico.length===0?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-500">Nenhum material nesta lista. Consulte o histórico completo para ver concluídos e arquivados.</div>
           :<div className="space-y-3">{historico.map(e=><article key={e.id} className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -339,15 +518,19 @@ export default function CentralAprendizadoPage(){
                 {e.resumo_ia&&<p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{e.resumo_ia}</p>}
                 {e.fornecedor_nome_sugerido&&<div className="mt-2 flex items-center gap-1 text-xs font-semibold text-slate-600"><Building2 size={13}/>{e.fornecedor_nome_sugerido}</div>}
                 <div className="mt-3 flex flex-wrap gap-2">
+                  <button disabled={Boolean(arquivando)||e.status==='analisando'||Boolean(reprocessando)} onClick={()=>void arquivarEntrada(e)} className="rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-40">{arquivando===e.id?'Salvando...':e.metadados?.arquivado_em?'Restaurar material':'Arquivar material'}</button>
+                  {e.metadados?.arquivado_em&&<span className="rounded-lg bg-slate-100 px-2 py-1 text-xs">Arquivado — preservado no histórico</span>}
                   {e.fonte_url&&<a href={e.fonte_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={12}/>Abrir fonte</a>}
-                  {dados.candidatos.some(c=>c.entrada_id===e.id&&['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')&&<button onClick={()=>abrirValidacaoEntrada(e.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"><ShieldCheck size={13}/>Revisar agora ({dados.candidatos.filter(c=>c.entrada_id===e.id&&['pendente','corrigido'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor').length})</button>}
+                  {pendentes.some(c=>c.entrada_id===e.id)&&!e.metadados?.arquivado_em&&<button onClick={()=>abrirValidacaoEntrada(e.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"><ShieldCheck size={13}/>Revisar agora ({pendentes.filter(c=>c.entrada_id===e.id).length})</button>}
                   {['catalogo','tabela_preco'].includes(e.tipo)&&<button onClick={()=>{setCatalogoAberto(v=>v===e.id?null:e.id);setItemCatalogoAberto(null);setBuscaCatalogo('')}} className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"><PackageSearch size={13}/>Ver itens ({dados.candidatos.filter(c=>c.entrada_id===e.id&&c.tipo==='produto').length})</button>}
-                  {e.status==='erro'&&['catalogo','tabela_preco'].includes(e.tipo)&&dados.candidatos.some(c=>c.entrada_id===e.id)&&<button disabled={reprocessando===e.id} onClick={()=>void reprocessarEntrada(e)} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-50"><RefreshCcw size={13} className={reprocessando===e.id?'animate-spin':''}/>{reprocessando===e.id?'Reprocessando...':'Reprocessar catálogo'}</button>}
+                  {!e.metadados?.arquivado_em&&e.mime_type==='application/pdf'&&['catalogo','tabela_preco'].includes(e.tipo)&&<button disabled={Boolean(conferindoTabela)} onClick={()=>void conferirTabela(e)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><RefreshCcw size={13} className={conferindoTabela===e.id?'animate-spin':''}/>{conferindoTabela===e.id?'Conferindo tabela...':'Conferir códigos, pesos e medidas no PDF'}</button>}
+                  {!e.metadados?.arquivado_em&&['catalogo','tabela_preco'].includes(e.tipo)&&<button disabled={Boolean(reprocessando)} onClick={()=>void reprocessarEntrada(e)} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-50"><RefreshCcw size={13} className={reprocessando===e.id?'animate-spin':''}/>{reprocessando===e.id?'Reprocessando...':'Reanalisar com regras atuais'}</button>}
                 </div>
                 {e.erro&&<div className="mt-3 rounded-lg border border-red-100 bg-red-50 p-2 text-xs text-red-700">{String(e.erro).includes('uq_produtos_codigo_upper')?'Uma tentativa anterior encontrou um código já existente. O catálogo foi lido; agora o Atlas reconcilia o código existente em vez de criar duplicado.':e.erro}</div>}
               </div>
               <div className="shrink-0 text-right text-[11px] text-slate-400"><div>{e.criado_por_nome||'Usuário'}</div><div>{dataBr(e.created_at)}</div></div>
             </div>
+            {catalogoAberto===e.id&&conferindoTabela===e.id&&<p className="mt-3 text-xs font-semibold text-blue-700"><Loader2 className="mr-1 inline animate-spin" size={13}/>Carregando automaticamente os dados das tabelas do PDF original, sem alterar cadastros...</p>}
             {catalogoAberto===e.id&&<CatalogoDetalhes
               entrada={e}
               candidatos={dados.candidatos.filter(c=>c.entrada_id===e.id)}
@@ -359,6 +542,7 @@ export default function CentralAprendizadoPage(){
               onSalvarItem={salvarItemCatalogo}
               onMapearCatalogo={mapearCatalogo}
               onSalvarImagem={salvarImagemCatalogo}
+              somenteLeitura={Boolean(dados.somenteLeitura)}
               salvandoId={salvando}
               mapeando={reprocessando===e.id}
             />}
@@ -366,14 +550,21 @@ export default function CentralAprendizadoPage(){
         </div>
       </div> : <div>
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <b>Fila de exceções.</b> Aqui aparecem somente conflitos, ambiguidades ou informações insuficientes. Catálogos e tabelas oficiais são processados automaticamente quando os dados batem; fórmulas, planos de corte e regras operacionais continuam vindo para validação antes de virar padrão.
+          <b>Fila de exceções.</b> Aqui aparecem somente conflitos, ambiguidades ou informações insuficientes. Após a aprovação oficial, o item sai desta fila sem ser excluído do catálogo nem do histórico.
         </div>
+        {dados.somenteLeitura&&<div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-white p-3 text-sm">
+          <div><b>{pendentes.length}</b> pendência(s) para conferir{conferidosPreview.length>0&&<> · <b>{conferidosPreview.length}</b> conferido(s) neste navegador</>}</div>
+          <button type="button" onClick={()=>{setMostrarConferidosPreview(v=>!v);setAberto(null)}} className="rounded-xl border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700">
+            {mostrarConferidosPreview?'Voltar às pendências':'Ver conferidos nesta prévia ('+conferidosPreview.length+')'}
+          </button>
+          <p className="w-full text-xs text-slate-500">A conferência local não é homologação oficial. Os itens só são aprovados no Atlas após validação e gravação no sistema principal.</p>
+        </div>}
         {entradaFiltrada&&<div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-          <div><p className="text-xs font-bold uppercase tracking-wide text-blue-600">Revisando este material</p><p className="mt-1 font-semibold text-slate-800">{entradaFiltrada.titulo}</p><p className="mt-1 text-xs text-slate-500">{pendentesVisiveis.length} item(ns) aguardando sua decisão.</p></div>
+          <div><p className="text-xs font-bold uppercase tracking-wide text-blue-600">Revisando este material</p><p className="mt-1 font-semibold text-slate-800">{entradaFiltrada.titulo}</p><p className="mt-1 text-xs text-slate-500">{pendentesVisiveis.length} item(ns) {mostrarConferidosPreview?'conferido(s) somente nesta prévia':'aguardando sua decisão'}.</p></div>
           <button onClick={()=>{setEntradaValidacaoFiltro(null);setAberto(null)}} className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Ver todas as validações</button>
         </div>}
         {carregando?<div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-400"><Loader2 className="mx-auto mb-2 animate-spin"/>Carregando...</div>
-        :pendentesVisiveis.length===0?<div className="rounded-2xl border bg-white p-12 text-center"><BookOpenCheck className="mx-auto mb-3 text-slate-300" size={36}/><b>Nada aguardando validação.</b><p className="mt-1 text-sm text-slate-500">Somente exceções que realmente precisam de decisão humana aparecerão aqui.</p></div>
+        :pendentesVisiveis.length===0?<div className="rounded-2xl border bg-white p-12 text-center"><BookOpenCheck className="mx-auto mb-3 text-slate-300" size={36}/><b>{mostrarConferidosPreview?'Nenhum produto conferido nesta prévia.':'Nada aguardando validação.'}</b><p className="mt-1 text-sm text-slate-500">{mostrarConferidosPreview?'Confirme um desenho com dados técnicos completos para tirá-lo da fila local.':'Somente exceções que realmente precisam de decisão humana aparecerão aqui.'}</p></div>
         :<div className="space-y-3">{pendentesVisiveis.map(c=>{
           const e=edicoes[c.id]||{titulo:c.titulo,modulo:c.modulo||'',dados:{...(c.dados||{})},observacao:''}
           const origem=entradaDo(c.entrada_id)
@@ -381,7 +572,8 @@ export default function CentralAprendizadoPage(){
           const imagemProduto=imagemProdutoCandidato(c)
           const precisaImagem=c.tipo==='produto'&&!imagemProduto
           const precisaCodigo=c.tipo==='produto'&&(!c.codigo_verificavel||c.codigo_ambiguo)
-          const podeAprovar=c.tipo!=='produto'||(!precisaImagem&&!precisaCodigo)
+          const precisaPeso=c.tipo==='produto'&&c.dados?.categoria==='perfil'&&!(Number(String(c.dados?.peso_kg_m??'').replace(',','.'))>0)
+          const podeAprovar=c.tipo!=='produto'||(!precisaImagem&&!precisaCodigo&&!precisaPeso)
           return <article key={c.id} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
             <button onClick={()=>editarInicial(c)} className="w-full p-4 text-left hover:bg-slate-50">
               <div className="flex items-start justify-between gap-3">
@@ -393,9 +585,16 @@ export default function CentralAprendizadoPage(){
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">confiança {pct(c.confianca)}</span>
                   </div>
                   <h3 className="font-semibold">{c.titulo}</h3>
+                  {mostrarConferidosPreview&&<p className="mt-1 text-xs font-semibold text-blue-700">Conferido nesta prévia · ainda pendente de aprovação oficial</p>}
                   {c.tipo==='produto'&&<div className="mt-1 text-xs font-semibold text-slate-700">Código: {String(c.dados?.codigo||'não informado')}</div>}
+                  {c.tipo==='produto'&&c.dados?.medidas_mm&&Object.keys(c.dados.medidas_mm).length>0&&<p className="mt-1 text-xs text-slate-600">Medidas: {Object.entries(c.dados.medidas_mm).map(([k,v])=>k+': '+v+' mm').join(' · ')}</p>}
+                  {c.tipo==='produto'&&c.dados?.evidencia_tabela&&<p className="mt-1 text-xs text-slate-500">Fonte: {c.dados.evidencia_tabela}</p>}
+                  {c.tipo==='produto'&&conferindoTabela===origem?.id&&<p className="mt-1 text-xs font-semibold text-blue-700">Buscando automaticamente nome, peso e medidas da tabela original...</p>}
+                  {c.tipo==='produto'&&c.dados?.conferencia_tabela_visualizada&&<p className="mt-1 text-xs font-semibold text-blue-700">Dados conferidos no PDF nesta visualização (não gravados).</p>}
+                  {c.tipo==='produto'&&Array.isArray(c.dados?.divergencias_tabela)&&c.dados.divergencias_tabela.length>0&&<p className="mt-1 text-xs text-amber-800">Divergência na tabela: {c.dados.divergencias_tabela.join(', ')}. Valor antigo mantido para revisão.</p>}
                   {c.tipo==='produto'&&precisaCodigo&&<p className="mt-1 text-xs text-amber-700">Código não identificado com segurança; corrija antes de validar.</p>}
                   {c.tipo==='produto'&&precisaImagem&&<p className="mt-1 text-xs text-amber-700">Sem imagem vinculada: confira a foto ou anexe um desenho.</p>}
+              {c.tipo==='produto'&&c.dados?.imagem_preview_local&&<p className="mt-1 text-xs font-semibold text-blue-700">Desenho confirmado somente neste navegador de teste. Não homologado no banco.</p>}
                   {c.tipo==='produto'&&c.foto_cadastro&&<p className="mt-1 text-[11px] text-emerald-700">Foto existente encontrada por código exato no Atlas/WVetro</p>}
                   <p className="mt-1 text-xs text-slate-400">Origem: {origem?.titulo||'Material'} · enviado por {origem?.criado_por_nome||'usuário'}</p>
                   {c.deduplicacao?.produto_existente&&<p className="mt-2 text-sm text-emerald-700"><b>Já existe no Atlas:</b> {c.deduplicacao.produto_existente.codigo||''} {c.deduplicacao.produto_existente.nome}</p>}
@@ -412,8 +611,10 @@ export default function CentralAprendizadoPage(){
 
             {c.pode_validar?<div className="flex flex-wrap items-center gap-2 border-t bg-white px-4 py-3">
               <span className="mr-1 text-xs font-bold uppercase tracking-wide text-slate-400">Decisão</span>
-              <button disabled={salvando===c.id||!podeAprovar} title={!podeAprovar?'Confirme código e imagem antes de validar':'Validar item'} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
+              {!podeAprovar&&!mostrarConferidosPreview&&<p className="w-full text-xs text-amber-800">Para liberar a validação: {precisaCodigo?'confira e salve o código. ':''}{precisaImagem?'abra Revisar / corrigir e confirme o desenho correto. ':''}{precisaPeso?'informe e salve o peso kg/m.':''}</p>}
+              <button disabled={salvando===c.id||!podeAprovar||Boolean(dados.somenteLeitura)} title={dados.somenteLeitura?'Prévia: produto só pode ser homologado na versão oficial':!podeAprovar?'Confirme código, peso e imagem antes de validar':'Validar item'} onClick={()=>void acao(c,'aprovar')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-40">{salvando===c.id?<Loader2 size={15} className="animate-spin"/>:<CheckCircle2 size={15}/>}Validar</button>
               <button disabled={salvando===c.id} onClick={()=>editarInicial(c)} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40"><Eye size={15}/>Revisar / corrigir</button>
+              {c.tipo==='produto'&&origem?.mime_type==='application/pdf'&&<button disabled={Boolean(conferindoTabela)} onClick={()=>void conferirTabela(origem)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-800 disabled:opacity-50"><RefreshCcw size={15} className={conferindoTabela===origem.id?'animate-spin':''}/>Conferir tabela original</button>}
               <button disabled={salvando===c.id} onClick={()=>void acao(c,'rejeitar')} className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-semibold text-red-700 disabled:opacity-40"><XCircle size={15}/>Não validar</button>
             </div>:<div className="border-t bg-slate-50 px-4 py-3 text-xs text-slate-600"><ShieldCheck size={15} className="mr-1 inline"/>Somente Master ou responsável com edição no setor pode validar este aprendizado.</div>}
 
@@ -427,16 +628,19 @@ export default function CentralAprendizadoPage(){
                 <Campo label="Cidade" value={e.dados.cidade||''} onChange={v=>campo(c.id,'cidade',v)}/>
               </div>}
               {c.tipo==='produto'&&<div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-                <ProdutoImagemValidacao candidato={c} entrada={origem} onSalvar={imagem=>salvarImagemCatalogo(c,imagem)}/>
+                <ProdutoImagemValidacao candidato={c} entrada={origem} somenteLeitura={Boolean(dados.somenteLeitura)} onSalvar={imagem=>salvarImagemCatalogo(c,imagem)}/>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Campo label="Código" value={e.dados.codigo||''} onChange={v=>campo(c.id,'codigo',v)}/>
                   <Campo label="Descrição" value={e.dados.descricao||''} onChange={v=>campo(c.id,'descricao',v)}/>
                   <Campo label="Categoria" value={e.dados.categoria||''} onChange={v=>campo(c.id,'categoria',v)}/>
                   <Campo label="Unidade" value={e.dados.unidade||''} onChange={v=>campo(c.id,'unidade',v)}/>
-                  <Campo label="Preço do fornecedor" value={e.dados.preco_fornecedor??''} onChange={v=>campo(c.id,'preco_fornecedor',v)}/>
+                  <Campo label="Preço do fornecedor (opcional)" value={e.dados.preco_fornecedor??''} onChange={v=>campo(c.id,'preco_fornecedor',v)}/>
                   <Campo label="Peso kg/m" value={e.dados.peso_kg_m??''} onChange={v=>campo(c.id,'peso_kg_m',v)}/>
                   <Campo label="Barra (mm)" value={e.dados.tamanho_barra_mm??''} onChange={v=>campo(c.id,'tamanho_barra_mm',v)}/>
                   <Campo label="Linha" value={e.dados.linha||''} onChange={v=>campo(c.id,'linha',v)}/>
+                  {Object.entries(e.dados.medidas_mm||{}).map(([k,v])=><Campo key={'mm'+k} label={k+' (mm)'} value={String(v??'')} onChange={v=>campo(c.id,'medidas_mm',{...e.dados.medidas_mm,[k]:v})}/>)}
+                  {Object.entries(e.dados.medidas_polegadas||{}).map(([k,v])=><Campo key={'pol'+k} label={k+' (polegadas)'} value={String(v??'')} onChange={v=>campo(c.id,'medidas_polegadas',{...e.dados.medidas_polegadas,[k]:v})}/>)}
+
                   <div className="sm:col-span-2"><Campo label="Aplicação / onde é usado" value={e.dados.aplicacao||''} onChange={v=>campo(c.id,'aplicacao',v)}/></div>
                 </div>
               </div>}
@@ -469,7 +673,7 @@ export default function CentralAprendizadoPage(){
 }
 
 
-function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,salvandoId,mapeando}:{
+function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,somenteLeitura,salvandoId,mapeando}:{
   entrada:Entrada
   candidatos:Candidato[]
   busca:string
@@ -480,19 +684,14 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   onSalvarItem:(c:Candidato,dados:Record<string,any>)=>Promise<void>
   onMapearCatalogo:(e:Entrada)=>Promise<any>
   onSalvarImagem:(c:Candidato,imagem:string)=>Promise<any>
+  somenteLeitura:boolean
   salvandoId:string|null
   mapeando:boolean
 }){
   const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'>('todos')
   const [edicoesItem,setEdicoesItem]=useState<Record<string,Record<string,any>>>({})
-  const [mapeamentoTentado,setMapeamentoTentado]=useState(false)
   const produtos=candidatos.filter(c=>c.tipo==='produto')
   const semPagina=produtos.filter(c=>!Number(c.dados?.pagina_catalogo||0)).length
-  useEffect(()=>{
-    if(mapeamentoTentado||!entrada.fonte_url||!produtos.length||semPagina===0)return
-    setMapeamentoTentado(true)
-    void onMapearCatalogo(entrada).catch(()=>setMapeamentoTentado(false))
-  },[entrada.id,entrada.fonte_url,produtos.length,semPagina,mapeamentoTentado])
   const aplicados=produtos.filter(c=>c.status==='aplicado')
   const pendentes=produtos.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
   const semPreco=produtos.filter(c=>c.dados?.preco_fornecedor==null||Number(c.dados?.preco_fornecedor)===0)
@@ -571,6 +770,8 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
               </div>
               <div className="mt-1 font-semibold">{c.dados?.codigo||'Sem código'} <span className="font-normal text-slate-500">— {c.dados?.descricao||c.titulo}</span></div>
               <div className="mt-1 text-xs text-slate-400">{c.deduplicacao?.produto_existente?'Vinculado ao produto já existente no Atlas':labelAcao(c.acao_sugerida)}{c.dados?.preco_fornecedor!=null?' · preço '+String(c.dados.preco_fornecedor):' · sem preço'}</div>
+              {c.dados?.conferencia_tabela_visualizada&&<div className="mt-1 text-xs text-blue-700">Tabela consultada no PDF (sem salvar). Peso: {c.dados.peso_kg_m??'—'} kg/m · {Object.entries(c.dados.medidas_mm||{}).map(([k,v])=>k+' '+v+' mm').join(' · ')||'sem cotas'}</div>}
+              {c.dados?.imagem_preview_local&&<div className="mt-1 text-xs font-semibold text-blue-700">Imagem preservada neste navegador de teste, sem gravar o cadastro.</div>}
             </div>
             {aberto?<ChevronUp size={17}/>:<ChevronDown size={17}/>}
           </button>
@@ -585,18 +786,26 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
                 <Campo label="Peso kg/m" value={edit.peso_kg_m??''} onChange={v=>alterarItem(c,'peso_kg_m',v)}/>
                 <Campo label="Barra (mm)" value={edit.tamanho_barra_mm??''} onChange={v=>alterarItem(c,'tamanho_barra_mm',v)}/>
                 <Campo label="Preço fornecedor" value={edit.preco_fornecedor??''} onChange={v=>alterarItem(c,'preco_fornecedor',v)}/>
+                {Array.from(new Set(['A','B',...Object.keys(edit.medidas_mm||{}),...Object.keys(edit.medidas_polegadas||{})])).map(chave=><div key={'medida-'+chave} className="rounded-lg border bg-white p-2 space-y-2">
+                  <p className="text-xs font-bold text-slate-600">Medida {chave}</p>
+                  <Campo label="Milímetros (mm)" value={edit.medidas_mm?.[chave]??''} onChange={v=>alterarItem(c,'medidas_mm',{...(edit.medidas_mm||{}),[chave]:v})}/>
+                  <Campo label="Polegadas (pol)" value={edit.medidas_polegadas?.[chave]??''} onChange={v=>alterarItem(c,'medidas_polegadas',{...(edit.medidas_polegadas||{}),[chave]:v})}/>
+                </div>)}
                 <div className="sm:col-span-2"><Campo label="Aplicação / onde é usado" value={edit.aplicacao||''} onChange={v=>alterarItem(c,'aplicacao',v)}/></div>
                 <div className="sm:col-span-2 flex flex-wrap gap-2">
                   <button disabled={salvandoId===c.id} onClick={()=>void salvarEdicao(c)} className="inline-flex items-center gap-2 rounded-xl bg-[#182444] px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-40">{salvandoId===c.id?<Loader2 size={14} className="animate-spin"/>:<Save size={14}/>}Salvar alterações</button>
                   {precisaValidar&&<button onClick={()=>onAbrirValidacao(c)} className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-800">Abrir validação completa</button>}
                 </div>
               </div>:<div className="grid gap-2 text-sm">
+                {c.dados?.imagem_preview_local&&<p className="text-xs font-semibold text-blue-700">Imagem local de teste: não foi gravada no cadastro oficial.</p>}
                 <InfoItem rotulo="Código" valor={c.dados?.codigo}/>
                 <InfoItem rotulo="Descrição" valor={c.dados?.descricao}/>
                 <InfoItem rotulo="Categoria" valor={c.dados?.categoria}/>
                 <InfoItem rotulo="Unidade" valor={c.dados?.unidade}/>
                 <InfoItem rotulo="Linha" valor={c.dados?.linha}/>
                 <InfoItem rotulo="Peso kg/m" valor={c.dados?.peso_kg_m}/>
+                {Object.entries(c.dados?.medidas_mm||{}).map(([chave,valor])=><InfoItem key={'mm-'+chave} rotulo={chave+' (mm)'} valor={valor}/>)}
+                {Object.entries(c.dados?.medidas_polegadas||{}).map(([chave,valor])=><InfoItem key={'pol-'+chave} rotulo={chave+' (polegadas)'} valor={valor}/>)}
                 <InfoItem rotulo="Barra (mm)" valor={c.dados?.tamanho_barra_mm}/>
                 <InfoItem rotulo="Preço fornecedor" valor={c.dados?.preco_fornecedor}/>
               </div>}
@@ -606,7 +815,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
             <div>
               <div className="mb-2 flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><Eye size={14}/>Imagem do item</div>{fontePagina&&<a href={fontePagina} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-blue-700">Ver evidência no catálogo</a>}</div>
               {imagemItem?<img src={imagemItem} alt={String(c.dados?.descricao||c.dados?.codigo||'Item do catálogo')} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>
-              :pagina>0&&entrada.fonte_url?<ImagemPerfilCatalogo fonteUrl={entrada.fonte_url} pagina={pagina} codigo={String(c.dados?.codigo||'')} descricao={String(c.dados?.descricao||c.titulo)} onSalvar={imagem=>onSalvarImagem(c,imagem)}/>
+              :pagina>0&&entrada.fonte_url?<ImagemPerfilCatalogo fonteUrl={entrada.fonte_url} pagina={pagina} codigo={String(c.dados?.codigo||'')} descricao={String(c.dados?.descricao||c.titulo)} somenteLeitura={somenteLeitura} onSalvar={imagem=>onSalvarImagem(c,imagem)}/>
               :<div className="grid min-h-56 place-items-center rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-400"><div>{mapeando?<Loader2 className="mx-auto mb-2 animate-spin" size={22}/>:<Eye className="mx-auto mb-2" size={22}/>}<b className="text-slate-500">{mapeando?'Preparando o catálogo...':'Localizando este perfil no PDF...'}</b><p className="mt-1 text-xs">Assim que a página for identificada, o Atlas gera o recorte do desenho e salva como imagem do produto.</p></div></div>}
             </div>
           </div>}
@@ -632,10 +841,10 @@ function imagemProdutoCandidato(c:Candidato){
 function normalizarCodigoImagem(v:string){return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'')}
 function pareceCodigoImagem(v:string){
   const x=String(v||'').toUpperCase().replace(/\s+/g,'')
-  return /^[A-Z]{1,6}\d{0,3}(?:[-_/][A-Z0-9]{2,8}){1,2}$/.test(x)||/^[A-Z]{2,6}\d{2,8}$/.test(x)
+  return /^[A-Z]{1,6}\d{0,3}(?:[-_/][A-Z0-9]{2,8}){1,2}$/.test(x)||/^[A-Z]{1,6}\d{2,8}[A-Z]{0,3}$/.test(x)
 }
 
-function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidato;entrada?:Entrada|null;onSalvar:(imagem:string)=>Promise<any>}){
+function ProdutoImagemValidacao({candidato,entrada,somenteLeitura,onSalvar}:{candidato:Candidato;entrada?:Entrada|null;somenteLeitura:boolean;onSalvar:(imagem:string)=>Promise<any>}){
   const imagem=imagemProdutoCandidato(candidato)
   const pagina=Number(candidato.dados?.pagina_catalogo||0)
   const fonteUrl=entrada?.fonte_url||''
@@ -669,8 +878,9 @@ function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidat
     </div>
     <div className="mb-2 text-xs font-semibold text-slate-700">Código {codigo||'não informado'} · {descricao}</div>
     {candidato.foto_cadastro&&<p className="mb-2 text-[11px] font-semibold text-emerald-700">Imagem existente do produto localizado pelo código exato.</p>}
+    {candidato.dados?.imagem_preview_local&&<p className="mb-2 text-[11px] font-semibold text-blue-700">Desenho preservado neste navegador de testes, não gravado no banco oficial.</p>}
     {imagem?<img src={imagem} alt={descricao||codigo} className="max-h-72 w-full rounded-xl border bg-white object-contain"/>
-    :pagina>0&&fonteUrl?<ImagemPerfilCatalogo fonteUrl={fonteUrl} pagina={pagina} codigo={codigo} descricao={descricao} onSalvar={onSalvar}/>
+    :pagina>0&&fonteUrl?<ImagemPerfilCatalogo fonteUrl={fonteUrl} pagina={pagina} codigo={codigo} descricao={descricao} somenteLeitura={somenteLeitura} onSalvar={onSalvar}/>
     :<div className="grid min-h-48 place-items-center rounded-xl border border-dashed bg-slate-50 p-5 text-center text-sm text-slate-500">
       <div>
         <PackageSearch className="mx-auto mb-2 text-slate-400" size={24}/>
@@ -686,9 +896,10 @@ function ProdutoImagemValidacao({candidato,entrada,onSalvar}:{candidato:Candidat
   </div>
 }
 
-function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;onSalvar:(imagem:string)=>Promise<any>}){
+function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,onSalvar}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;somenteLeitura:boolean;onSalvar:(imagem:string)=>Promise<any>}){
   const [imagem,setImagem]=useState('')
   const [erroImagem,setErroImagem]=useState('')
+  const [erroSalvarImagem,setErroSalvarImagem]=useState('')
   const [carregandoImagem,setCarregandoImagem]=useState(true)
   const [salvandoImagem,setSalvandoImagem]=useState(false)
   const [codigoEncontrado,setCodigoEncontrado]=useState(false)
@@ -697,7 +908,7 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
   useEffect(()=>{
     let cancelado=false
     async function gerar(){
-      setCarregandoImagem(true);setErroImagem('');setCodigoEncontrado(false);setImagemConfirmada(false)
+      setCarregandoImagem(true);setErroImagem('');setErroSalvarImagem('');setCodigoEncontrado(false);setImagemConfirmada(false)
       try{
         const pdfModuleUrl='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/pdf.min.mjs'
         const pdfjs:any=await import(/* webpackIgnore: true */ pdfModuleUrl)
@@ -712,19 +923,13 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
           const t=pdfjs.Util.transform(viewport.transform,i.transform)
           return {str:String(i.str),x:Number(t[4]||0),y:Number(t[5]||0),w:Number(i.width||0)*scale,h:Math.max(10,Number(i.height||0)*scale)}
         })
-        const alvo=normalizarCodigoImagem(codigo)
-        const exatos=itens.filter((i:any)=>normalizarCodigoImagem(i.str)===alvo)
-        let target=exatos.length===1?exatos[0]:null
-        if(!target&&alvo){
-          for(let i=0;i<itens.length&&!target;i++){
-            let combinado=''
-            for(let j=i;j<Math.min(itens.length,i+4);j++){
-              combinado+=normalizarCodigoImagem(itens[j].str)
-              if(combinado===alvo){target=itens[i];break}
-              if(combinado.length>alvo.length+4)break
-            }
-          }
+        const codigoNoTexto=(str:string)=>{
+          const m=str.trim().match(/^([A-Z]{1,6}\s*[-_/]?\s*\d{2,8}[A-Z]{0,3})(?=\s|$)/i)
+          return m?normalizarCodigoImagem(m[1]):''
         }
+        const codigos=itens.map((i:any)=>{const row=itens.filter((j:any)=>Math.abs(j.y-i.y)<2*scale&&j.x>=i.x&&j.x<i.x+100*scale).sort((a:any,b:any)=>a.x-b.x);return {...i,codigo:codigoNoTexto(i.str)||codigoNoTexto(row.slice(0,3).map((j:any)=>j.str).join(''))}}).filter((i:any)=>i.codigo)
+        const localizado=localizarCodigoCatalogo(itens,codigo,scale)
+        const target=localizado.alvo
 
         const canvas=document.createElement('canvas')
         canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height)
@@ -734,36 +939,29 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
 
         let sx=0,sy=0,sw=canvas.width,sh=canvas.height
         if(target){
-          const codigos=itens.filter((i:any)=>pareceCodigoImagem(i.str))
-          const rowTol=Math.max(24,34*scale)
-          const mesmaLinha=codigos.filter((i:any)=>Math.abs(i.y-target.y)<=rowTol).sort((a:any,b:any)=>a.x-b.x)
-          const pos=mesmaLinha.findIndex((i:any)=>normalizarCodigoImagem(i.str)===alvo)
-          const anterior=pos>0?mesmaLinha[pos-1]:null
-          const proximo=pos>=0&&pos<mesmaLinha.length-1?mesmaLinha[pos+1]:null
-          const larguraPadrao=Math.min(canvas.width*.48,260*scale)
-          const left=anterior?(anterior.x+target.x)/2:target.x-larguraPadrao
-          const right=proximo?(target.x+proximo.x)/2:target.x+larguraPadrao
-
-          const ys:number[]=[]
-          for(const i of codigos.sort((a:any,b:any)=>a.y-b.y)){
-            if(!ys.length||Math.abs(i.y-ys[ys.length-1])>rowTol)ys.push(i.y)
+          const kg=itens.filter((i:any)=>/^kg$/i.test(i.str.trim())&&i.y<target.y&&i.x>target.x).sort((a:any,b:any)=>b.y-a.y)[0]
+          const titulos=itens.map((i:any)=>({...i,str:itens.filter((j:any)=>Math.abs(j.y-i.y)<2*scale&&j.x>=i.x&&j.x<i.x+180*scale).sort((a:any,b:any)=>a.x-b.x).map((j:any)=>j.str).join('')})).filter((i:any)=>/^(cantoneiras?|barra chata|tubo (quadrado|retangular|redondo))/i.test(i.str.trim()))
+          const titulo=kg? titulos.filter((i:any)=>i.y<kg.y).sort((a:any,b:any)=>b.y-a.y)[0]:null
+          if(kg&&titulo&&target.y-kg.y<300*scale){
+            // Shared family drawing is left of the table, never a single table row.
+            const proximo=titulos.filter((i:any)=>i.y>target.y).sort((a:any,b:any)=>a.y-b.y)[0]
+            sx=Math.max(0,Math.floor(titulo.x-18*scale))
+            sy=Math.max(0,Math.floor(titulo.y-titulo.h-12*scale))
+            sw=Math.min(canvas.width-sx,Math.max(100*scale,target.x-sx-12*scale))
+            sh=Math.min(canvas.height-sy,(proximo?proximo.y-proximo.h-12*scale:canvas.height-30*scale)-sy)
+          }else{
+            const colunas=codigos.filter((i:any)=>Math.abs(i.y-target.y)<24*scale).sort((a:any,b:any)=>a.x-b.x)
+            const proximo=colunas.find((i:any)=>i.x>target.x+30*scale)
+            const abaixo=codigos.filter((i:any)=>i.y>target.y+30*scale&&Math.abs(i.x-target.x)<80*scale).sort((a:any,b:any)=>a.y-b.y)[0]
+            sx=Math.max(0,Math.floor(target.x-18*scale))
+            sy=Math.max(0,Math.floor(target.y-target.h-12*scale))
+            sw=Math.min(canvas.width-sx,(proximo?proximo.x-18*scale:canvas.width-25*scale)-sx)
+            sh=Math.min(canvas.height-sy,(abaixo?abaixo.y-abaixo.h-12*scale:canvas.height-25*scale)-sy)
           }
-          const row=ys.reduce((best:number,y:number)=>Math.abs(y-target.y)<Math.abs(best-target.y)?y:best,ys[0]??target.y)
-          const ri=ys.indexOf(row)
-          const acima=ri>0?ys[ri-1]:null
-          const abaixo=ri>=0&&ri<ys.length-1?ys[ri+1]:null
-          const altoPadrao=Math.min(canvas.height*.32,210*scale)
-          const top=acima!==null?(acima+row)/2:row-altoPadrao
-          const bottom=abaixo!==null?(row+abaixo)/2:row+altoPadrao
-
-          sx=Math.max(0,Math.floor(left-16*scale))
-          sy=Math.max(0,Math.floor(top-16*scale))
-          sw=Math.min(canvas.width-sx,Math.max(220*scale,Math.ceil(right-left+32*scale)))
-          sh=Math.min(canvas.height-sy,Math.max(180*scale,Math.ceil(bottom-top+32*scale)))
         }else{
-          const maxW=Math.min(canvas.width,720*scale),maxH=Math.min(canvas.height,520*scale)
-          sx=Math.max(0,(canvas.width-maxW)/2);sy=Math.max(0,(canvas.height-maxH)/2);sw=maxW;sh=maxH
+          throw new Error('O código não foi localizado de forma única nesta página. Abra a fonte e anexe o desenho correto.')
         }
+        if(sw<=0||sh<=0)throw new Error('Não foi possível delimitar o desenho com segurança.')
 
         const limite=900
         const fator=Math.min(1,limite/sw)
@@ -775,7 +973,7 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
         octx.drawImage(canvas,sx,sy,sw,sh,0,0,out.width,out.height)
         const data=out.toDataURL('image/jpeg',0.9)
         if(cancelado)return
-        setImagem(data);setCodigoEncontrado(exatos.length===1&&Boolean(target));setCarregandoImagem(false)
+        setImagem(data);setCodigoEncontrado(localizado.ocorrencias===1&&Boolean(target));setCarregandoImagem(false)
         try{await doc.destroy()}catch{}
       }catch(e:any){
         if(cancelado)return
@@ -794,10 +992,17 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,onSalvar}:{fonte
     {!codigoEncontrado
       ?<p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Código não localizado de forma única no texto do PDF. O recorte não será vinculado automaticamente.</p>
       :imagemConfirmada
-        ?<p className="rounded-lg bg-emerald-50 p-2 text-xs font-semibold text-emerald-800">Imagem do código {codigo} confirmada e vinculada.</p>
-        :<button type="button" disabled={salvandoImagem} onClick={async()=>{setSalvandoImagem(true);try{await onSalvar(imagem);setImagemConfirmada(true)}catch(e:any){setErroImagem(e?.message||'Falha ao salvar imagem')}finally{setSalvandoImagem(false)}}} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">
-          {salvandoImagem?'Salvando...':'Confirmar: este desenho corresponde ao código '+codigo}
+        ?<p className={'rounded-lg p-2 text-xs font-semibold '+(somenteLeitura?'border border-blue-200 bg-blue-50 text-blue-800':'bg-emerald-50 text-emerald-800')}>{somenteLeitura?'Desenho do código '+codigo+' guardado somente neste navegador de testes.':'Imagem do código '+codigo+' confirmada e vinculada.'}</p>
+        :<button type="button" disabled={salvandoImagem} onClick={async()=>{
+          setSalvandoImagem(true);setErroSalvarImagem('')
+          try{await onSalvar(imagem);setImagemConfirmada(true)}
+          catch(e:any){setErroSalvarImagem(e?.message||'Falha ao salvar a imagem. O desenho continua disponível para tentar novamente.')}
+          finally{setSalvandoImagem(false)}
+        }} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">
+          {salvandoImagem?'Confirmando...':somenteLeitura?'Confirmar desenho (teste local)':'Confirmar: este desenho corresponde ao código '+codigo}
         </button>}
+    {somenteLeitura&&<p className="text-xs text-blue-700">Prévia segura: a confirmação fica somente neste navegador, não no banco do Atlas.</p>}
+    {erroSalvarImagem&&<p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Não foi possível salvar a confirmação: {erroSalvarImagem}. O desenho foi mantido na tela.</p>}
   </div>
 }
 
