@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { CheckCircle2, ChevronDown, ChevronUp, Loader2, ListChecks, ShieldAlert } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronDown, ChevronUp, Loader2, ListChecks, ShieldAlert } from 'lucide-react'
 
 type Fonte = {id:string; titulo:string; tipo:string}
 type CandidatoResumo = {entrada_id:string; tipo:string; status:string}
-type ItemApto = {id:string; codigo:string; descricao:string; entrada_id:string}
-type ItemBloqueado = {id:string; codigo:string; motivo:string}
+type ItemApto = {id:string; codigo:string; descricao:string; entrada_id:string; imagem_url:string}
+type ItemBloqueado = {id:string; codigo:string; motivo:string; imagem_url:string|null}
 type Plano = {entrada_id:string; entrada_nome:string; total:number; aptos:ItemApto[]; bloqueados:ItemBloqueado[]}
 type Resultado = {id:string; status:'aplicado'|'ignorado'|'erro'; motivo?:string}
 type Api = (url:string,init?:RequestInit)=>Promise<any>
@@ -47,6 +47,14 @@ export default function ValidacaoLoteCatalogo({
   const escolha=selecionados.filter(id=>idsAptos.has(id))
   const ocupada=preparando||executando
 
+  // Trocar o catálogo invalida o plano anterior; evita executar IDs de outra fonte.
+  useEffect(()=>{
+    setPlanos([])
+    setSelecionados([])
+    setConfirmacao(null)
+    setAviso('')
+  },[entradaAtivaId])
+
   async function preparar(){
     if(ocupada)return
     setPreparando(true);setAviso('');setPlanos([]);setSelecionados([]);setConfirmacao(null)
@@ -69,7 +77,6 @@ export default function ValidacaoLoteCatalogo({
     if(ocupada||!confirmacao)return
     const itens=confirmacao==='todos'?aptos:aptos.filter(x=>escolha.includes(x.id))
     if(!itens.length)return
-    const modo=confirmacao
     setConfirmacao(null)
     if(somenteLeitura){
       setAviso('SIMULAÇÃO: '+itens.length+' produto(s) poderiam ser enviados para homologação. Nenhum cadastro foi alterado. Na produção, o servidor confere novamente cada item antes de salvar.')
@@ -137,7 +144,9 @@ export default function ValidacaoLoteCatalogo({
         <div className="max-h-40 space-y-1 overflow-auto rounded-xl border p-2">
           {aptos.map(item=><label key={item.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50">
             <input type="checkbox" disabled={ocupada} checked={escolha.includes(item.id)} onChange={e=>setSelecionados(v=>e.target.checked?[...v,item.id]:v.filter(id=>id!==item.id))}/>
-            <b>{item.codigo}</b><span className="truncate text-slate-500">{item.descricao}</span>
+            <img loading="lazy" src={item.imagem_url} alt={'Desenho do perfil '+item.codigo}
+              className="h-12 w-12 shrink-0 rounded-md border bg-white object-contain" />
+            <span className="min-w-0"><b>{item.codigo}</b><span className="block truncate text-slate-500">{item.descricao}</span></span>
           </label>)}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -148,8 +157,16 @@ export default function ValidacaoLoteCatalogo({
       {(bloqueados.length+cruzados.length)>0&&<div className="text-xs text-amber-900">
         <button type="button" onClick={()=>setMostrarBloqueados(v=>!v)} className="inline-flex items-center gap-1 font-semibold">{mostrarBloqueados?<ChevronUp size={14}/>:<ChevronDown size={14}/>}Ver motivos das pendências ({bloqueados.length+cruzados.length})</button>
         {mostrarBloqueados&&<div className="mt-2 max-h-40 space-y-1 overflow-auto rounded-lg bg-amber-50 p-3">
-          {bloqueados.map((x,i)=><p key={x.id+i}><b>{x.codigo||'Sem código'}:</b> {x.motivo}</p>)}
-          {cruzados.map(x=><p key={x.id}><b>{x.codigo}:</b> mesmo código em mais de um catálogo; confirme individualmente.</p>)}
+          {bloqueados.map((x,i)=><div key={x.id+i} className="flex items-center gap-2 border-b border-amber-100 py-1">
+            {x.imagem_url
+              ?<img loading="lazy" src={x.imagem_url} alt={'Desenho do código '+x.codigo} className="h-11 w-11 shrink-0 rounded border bg-white object-contain"/>
+              :<span aria-label="Imagem ainda não confirmada" className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-amber-200 bg-amber-100 text-[9px] text-amber-800">Sem imagem</span>}
+            <span><b>{x.codigo||'Sem código'}:</b> {x.motivo}</span>
+          </div>)}
+          {cruzados.map(x=><div key={x.id} className="flex items-center gap-2 py-1">
+            <img loading="lazy" src={x.imagem_url} alt={'Desenho do código '+x.codigo} className="h-11 w-11 shrink-0 rounded border bg-white object-contain"/>
+            <span><b>{x.codigo}:</b> mesmo código em mais de um catálogo; confirme individualmente.</span>
+          </div>)}
         </div>}
       </div>}
     </div>}

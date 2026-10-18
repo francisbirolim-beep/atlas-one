@@ -820,8 +820,22 @@ async function planoValidacaoCatalogoLote(
     const codigo=cod(c.dados?.codigo)
     if(codigo)repetidos.set(codigo,(repetidos.get(codigo)||0)+1)
   }
-  const aptos:Array<{id:string;codigo:string;descricao:string;entrada_id:string;dados:Record<string,any>;updated_at:string}>=[]
-  const bloqueados:Array<{id:string;codigo:string;motivo:string}>=[]
+  // Também confere o cadastro geral para não misturar categorias que
+  // compartilham o mesmo código técnico ou código cadastrado em duplicidade.
+  const existentesPorCodigo=new Map<string,Array<{id:string;codigo:string;categoria:string}>>()
+  const codigosBanco=[...new Set(candidatos.map(c=>txt(c.dados?.codigo,120).toUpperCase()).filter(Boolean))]
+  for(let i=0;i<codigosBanco.length;i+=100){
+    const {data:existentes,error:exErro}=await supabaseAdmin.from('produtos')
+      .select('id,codigo,categoria').eq('empresa_id',u.empresa_id)
+      .in('codigo',codigosBanco.slice(i,i+100)).limit(300)
+    if(exErro)throw exErro
+    for(const p of existentes||[]){
+      const chave=cod(p.codigo)
+      existentesPorCodigo.set(chave,[...(existentesPorCodigo.get(chave)||[]),p])
+    }
+  }
+  const aptos:Array<{id:string;codigo:string;descricao:string;entrada_id:string;imagem_url:string;dados:Record<string,any>;updated_at:string}>=[]
+  const bloqueados:Array<{id:string;codigo:string;motivo:string;imagem_url:string|null}>=[]
   for(const candidato of candidatos){
     const codigo=txt(candidato.dados?.codigo,120)
     let motivo:string|null=null
@@ -831,13 +845,20 @@ async function planoValidacaoCatalogoLote(
     else if((repetidos.get(cod(codigo))||0)>1)motivo='Código repetido neste catálogo.'
     else if(semFornecedor)motivo='Fornecedor do catálogo ainda não validado.'
     const resultado=avaliarCatalogoLote(candidato,fontePorCodigo.get(cod(codigo))||null)
+    const existentes=existentesPorCodigo.get(cod(codigo))||[]
     if(!motivo)motivo=resultado.motivo
+    if(!motivo&&existentes.length>1)motivo='Código duplicado no cadastro de produtos Atlas.'
+    if(!motivo&&existentes.some(p=>String(p.categoria||'').toLowerCase()!==String(resultado.dados?.categoria||'').toLowerCase()))
+      motivo='Este código já existe com categoria diferente no Atlas.'
     if(motivo||!resultado.dados){
-      bloqueados.push({id:candidato.id,codigo,motivo:motivo||'Conferência individual necessária.'})
+      bloqueados.push({id:candidato.id,codigo,motivo:motivo||'Conferência individual necessária.',
+        imagem_url:candidato.dados?.imagem_confirmada===true
+          ?txt(candidato.dados?.imagem_item_url,2000)||null:null})
       continue
     }
     aptos.push({id:candidato.id,codigo,descricao:String(resultado.dados.descricao||''),
-      entrada_id:entrada.id,dados:resultado.dados,updated_at:candidato.updated_at})
+      entrada_id:entrada.id,imagem_url:txt(candidato.dados?.imagem_item_url,2000),
+      dados:resultado.dados,updated_at:candidato.updated_at})
   }
   return {entrada,aptos,bloqueados,total:candidatos.length,fonte_total:fontePorCodigo.size,fornecedorId}
 }
@@ -854,7 +875,7 @@ export async function GET(req:NextRequest){
       const plano=await planoValidacaoCatalogoLote(u,id,autorizacao)
       return NextResponse.json({
         entrada_id:plano.entrada.id,entrada_nome:plano.entrada.titulo,
-        total:plano.total,aptos:plano.aptos.map(({id,codigo,descricao,entrada_id})=>({id,codigo,descricao,entrada_id})),
+        total:plano.total,aptos:plano.aptos.map(({id,codigo,descricao,entrada_id,imagem_url})=>({id,codigo,descricao,entrada_id,imagem_url})),
         bloqueados:plano.bloqueados,fonte_total:plano.fonte_total,
         somenteLeitura:process.env.VERCEL_ENV==='preview',
       },{headers:{'Cache-Control':'private, no-store'}})
@@ -1023,7 +1044,11 @@ export async function PATCH(req:NextRequest){
             .eq('empresa_id',u.empresa_id).eq('entrada_id',entradaId).eq('id',id).eq('status','aprovado')
             .select('id').maybeSingle()
           if(ce||!concluido)throw new Error('Cadastro aplicado, mas o status final não foi confirmado. Confira este item.')
-          await log(u,'catalogo_validado_em_lote',entradaId,id,{codigo:item.codigo,destino_id:destino})
+          // O produto não deve voltar como erro se só a gravação do evento de
+          // auditoria falhar depois de a homologação já estar concluída.
+          try{
+            await log(u,'catalogo_validado_em_lote',entradaId,id,{codigo:item.codigo,destino_id:destino})
+          }catch(e){console.error('Falha no log do catálogo em lote já aplicado',e)}
           resultados.push({id,status:'aplicado'})
         }catch(e:any){
           // Conserva o status aprovado para revisão e eventual recuperação individual.
