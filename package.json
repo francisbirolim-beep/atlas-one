@@ -36,7 +36,7 @@
     "test:supabase-terminadores": "node scripts/test-supabase-terminadores-historicos.cjs",
     "test:cliente360-permissoes": "node scripts/test-cliente360-permissoes.cjs",
     "test:ia-relatorios": "node scripts/test-ia-relatorios-permissoes.cjs",
-    "test:marketing": "node scripts/test-marketing-inteligente.mjs && node scripts/test-marketing-backend.mjs",
+    "test:marketing": "node scripts/test-marketing-inteligente.mjs && node scripts/test-marketing-backend.mjs && node scripts/test-marketing-midias.mjs",
     "test:wvetro-validacao-item": "node scripts/test-wvetro-validacao-item.cjs"
   },
   "dependencies": {
