@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   const empresaId = acesso.usuario.empresa_id
   const [midias, posts] = await Promise.all([
     supabaseAdmin.from('marketing_midias')
-      .select('id,obra_id,nome,tipo_mime,tamanho_bytes,direitos_confirmados,criado_em')
+      .select('id,obra_id,nome,tipo_mime,tamanho_bytes,direitos_confirmados,versao,criado_em')
       .eq('empresa_id', empresaId).order('criado_em', { ascending: false }).limit(100),
     supabaseAdmin.from('marketing_publicacoes')
       .select('id,midia_id,titulo,legenda,canal,data_planejada,status,revisao,aprovado_em')
