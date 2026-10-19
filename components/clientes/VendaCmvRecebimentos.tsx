@@ -43,7 +43,7 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
   setAbrir(true)
  }
  async function enviar(e:FormEvent<HTMLFormElement>){
-  e.preventDefault();if(salvando)return
+  e.preventDefault();if(salvando||bloqueado)return
   const form=e.currentTarget
   const dados=new FormData(form)
   dados.set('vendaId',vendaId);dados.set('categoria',categoria)
