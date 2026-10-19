@@ -87,7 +87,7 @@ revoke all on public.producao_kanban_permissoes_iniciais_auditoria from public,a
 grant select,insert on public.producao_kanban_permissoes_iniciais_auditoria to service_role;
 
 create or replace function private.auditar_producao_kanban_permissoes_iniciais_v1()
-returns trigger language plpgsql security definer set search_path='' as $
+returns trigger language plpgsql security definer set search_path='' as $kanban_audit$
 begin
  if tg_op='UPDATE' and old.pode_movimentar=new.pode_movimentar then return new;end if;
  insert into public.producao_kanban_permissoes_iniciais_auditoria
@@ -96,7 +96,7 @@ begin
   case when tg_op='INSERT' then null else old.pode_movimentar end,
   new.pode_movimentar,new.atualizado_por);
  return new;
-end;$;
+end;$kanban_audit$;
 drop trigger if exists trg_auditar_producao_kanban_permissoes_iniciais
  on public.producao_kanban_permissoes_iniciais;
 create trigger trg_auditar_producao_kanban_permissoes_iniciais
