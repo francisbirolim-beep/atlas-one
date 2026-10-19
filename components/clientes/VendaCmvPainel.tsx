@@ -5,6 +5,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plu
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, revisaoPerfilSobrepoePerda, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 import { compararPesosCmv } from '@/lib/vendaCmvPesos'
+import {UNIDADES_CMV,unidadePadraoCmv,rotuloUnidadeCmv,mostrarQuantidadeCmv} from '@/lib/vendaCmvUnidades'
 import { separarEtapasCmv } from '@/lib/vendaCmvEtapas'
 import VendaCmvRecebimentos, { type RecebimentoCmv, type HistoricoRecebimento } from '@/components/clientes/VendaCmvRecebimentos'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
@@ -34,6 +35,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
  const [valorCompra,setValorCompra]=useState('')
  const [pesoCompra,setPesoCompra]=useState('')
  const [unidadeNova,setUnidadeNova]=useState('KG')
+ const [categoriaNova,setCategoriaNova]=useState<Categoria>('perfil')
  const [carregando,setCarregando]=useState(true)
  const [erro,setErro]=useState('')
  const [aberto,setAberto]=useState<Categoria|null>('perfil')
@@ -90,8 +92,9 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
  const recebimentosConsolidados=useMemo(()=>[
   ...recebimentos,
   ...recebimentosManuais.map(l=>({
-   id:l.id,categoria:l.categoria,peso_kg:Number(l.quantidade||0),
-   preco_kg:Number(l.quantidade)>0?Number(l.valor)/Number(l.quantidade):0,
+   id:l.id,categoria:l.categoria,peso_kg:l.unidade==='KG'?Number(l.quantidade||0):null,
+   preco_kg:l.unidade==='KG'&&Number(l.quantidade)>0?Number(l.valor)/Number(l.quantidade):null,
+   quantidade:l.quantidade,unidade:l.unidade,
    valor_total:Number(l.valor),fornecedor:l.fornecedor||'',nota_numero:l.documento,
    data_recebimento:l.data_lancamento,versao:l.versao||1
   }))
@@ -100,18 +103,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
  const porCategoria=useMemo(()=>Object.fromEntries(categories.map(c=>[c,Number(comprasExistentes[c]||0)+comprasManuais.filter(l=>l.categoria===c).reduce((s,l)=>s+Number(l.valor||0),0)])) as Record<Categoria,number>,[comprasManuais,comprasExistentes])
  const comparativos=useMemo(()=>Object.fromEntries(categories.map(c=>[c,compararPesosCmv(c,comprasManuais,recebimentosConsolidados,porCategoria[c],Number(comprasExistentes[c]||0))])) as Record<Categoria,ReturnType<typeof compararPesosCmv>>,[comprasManuais,recebimentosConsolidados,porCategoria,comprasExistentes])
  const totalRecebido=useMemo(()=>recebimentosConsolidados.reduce((s,r)=>s+Number(r.valor_total||0),0),[recebimentosConsolidados])
- // O resumo superior usa somente pesos conhecidos; não atribui kg a compras antigas sem pesagem.
- const resumoPesos=useMemo(()=>{
-  const materiais:Categoria[]=['perfil','acessorio','vidro','outros']
-  const pesoComprado=materiais.reduce((s,c)=>s+comparativos[c].pesoComprado,0)
-  const pesoRecebido=materiais.reduce((s,c)=>s+comparativos[c].pesoRecebido,0)
-  const pendenteKg=materiais.some(c=>comparativos[c].faltaPesoComprado)
-  const temRecebimento=materiais.some(c=>comparativos[c].temRecebimento)
-  const podeComparar=temRecebimento&&pesoComprado>0&&!pendenteKg
-  const diferencaKg=podeComparar?pesoRecebido-pesoComprado:null
-  const percentual=podeComparar?100*(pesoRecebido-pesoComprado)/pesoComprado:null
-  return {pesoComprado,pesoRecebido,pendenteKg,temRecebimento,diferencaKg,percentual}
- },[comparativos])
+ // O resumo geral soma apenas custos em reais, nunca unidades físicas incompatíveis.
  const existeRecebimento=recebimentosConsolidados.length>0
  async function enviar(e:FormEvent<HTMLFormElement>){
   e.preventDefault();if(enviandoRef.current)return
@@ -265,7 +257,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
  return <div className="space-y-5">
   <div className="flex flex-wrap items-center justify-between gap-3">
    <div><h3 className="font-bold text-slate-900">Custos / CMV da obra</h3><p className="text-xs text-slate-500">Previsão W.Vetro separada dos lançamentos reais e do financeiro da venda.</p></div>
-   <div className="flex flex-wrap gap-2"><Link href={`/relatorios/fornecedores?obra=${encodeURIComponent(vendaId)}`} className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">Comparar compra e recebimento</Link><button type="button" onClick={()=>void buscar()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw size={14}/> Atualizar</button><button type="button" onClick={()=>{setOrigemNova('compra');setEtapaNova('comprado');setUnidadeNova('KG');setValorCompra('');setPesoCompra('');setAdicionar(adicionar==='compra'?null:'compra')}} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14}/> Adicionar compra</button><button type="button" onClick={()=>{setOrigemNova('outro');setEtapaNova('comprado');setAdicionar(adicionar==='adicional'?null:'adicional')}} className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"><Plus size={14}/> Custo adicional</button></div>
+   <div className="flex flex-wrap gap-2"><Link href={`/relatorios/fornecedores?obra=${encodeURIComponent(vendaId)}`} className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">Comparar compra e recebimento</Link><button type="button" onClick={()=>void buscar()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><RefreshCw size={14}/> Atualizar</button><button type="button" onClick={()=>{setOrigemNova('compra');setEtapaNova('comprado');setUnidadeNova('KG');setCategoriaNova('perfil');setValorCompra('');setPesoCompra('');setAdicionar(adicionar==='compra'?null:'compra')}} className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><Plus size={14}/> Adicionar compra</button><button type="button" onClick={()=>{setOrigemNova('outro');setEtapaNova('comprado');setCategoriaNova('outros');setAdicionar(adicionar==='adicional'?null:'adicional')}} className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800"><Plus size={14}/> Custo adicional</button></div>
   </div>
   {erro&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
   {sucesso&&<p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{sucesso}</p>}
@@ -274,20 +266,20 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
    <h4 className="mb-3 font-bold">{adicionar==='compra'?(etapaNova==='recebido'?'Registrar custo recebido / material':'Registrar custo comprado / material'):'Registrar custo adicional não previsto'}</h4>
    <p className="mb-3 text-xs text-slate-600">Escolha se este lançamento pertence ao custo Comprado ou Recebido. O valor e o peso aparecem somente na etapa selecionada. Nenhum lançamento é duplicado.</p>
    {adicionar==='compra'&&<div className="mb-3 max-w-md"><label className="text-xs font-bold text-slate-800">Destino do lançamento *
-    <select name="etapa_cmv" value={etapaNova} onChange={e=>{const destino=e.target.value as 'comprado'|'recebido';setEtapaNova(destino);if(destino==='recebido'){setOrigemNova('compra');setUnidadeNova('KG')}}} className="mt-1 block w-full rounded-lg border-2 border-blue-300 bg-white p-3">
+    <select name="etapa_cmv" value={etapaNova} onChange={e=>{const destino=e.target.value as 'comprado'|'recebido';setEtapaNova(destino);if(destino==='recebido'){setOrigemNova('compra');setUnidadeNova(unidadePadraoCmv(categoriaNova))}}} className="mt-1 block w-full rounded-lg border-2 border-blue-300 bg-white p-3">
      <option value="comprado">Custo comprado — pedido / cotação</option>
      <option value="recebido">Custo recebido — nota fiscal / romaneio</option>
     </select></label></div>}
    {etapaNova==='recebido'&&!dados?.etapasDisponiveis&&<p role="alert" className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">A opção Recebido está visível para sua conferência, mas sua gravação ficará disponível após habilitar a migração do banco. Não afetará o custo comprado já lançado.</p>}
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-    <label className="text-xs font-semibold">Categoria<select required name="categoria" key={adicionar} defaultValue={adicionar==='compra'?'perfil':'outros'} className="mt-1 w-full rounded-lg border bg-white p-2.5">{(adicionar==='compra'?(['perfil','acessorio','vidro','outros'] as Categoria[]):categories).map(c=><option key={c} value={c}>{labels[c]}</option>)}</select></label>
-    <label className="text-xs font-semibold">Origem<select required name="origem" key={adicionar} value={origemNova} onChange={e=>{setOrigemNova(e.target.value);if(e.target.value==='compra')setUnidadeNova('KG')}} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option>{etapaNova!=='recebido'&&<option value="estoque">Material / sobra do estoque</option>}</>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
+    <label className="text-xs font-semibold">Categoria<select required name="categoria" key={adicionar} value={categoriaNova} onChange={e=>{const categoria=e.target.value as Categoria;setCategoriaNova(categoria);setUnidadeNova(unidadePadraoCmv(categoria));setPesoCompra('')}} className="mt-1 w-full rounded-lg border bg-white p-2.5">{(adicionar==='compra'?(['perfil','acessorio','vidro','outros'] as Categoria[]):categories).map(c=><option key={c} value={c}>{labels[c]}</option>)}</select></label>
+    <label className="text-xs font-semibold">Origem<select required name="origem" key={adicionar} value={origemNova} onChange={e=>{setOrigemNova(e.target.value);if(e.target.value==='compra')setUnidadeNova(unidadePadraoCmv(categoriaNova))}} className="mt-1 w-full rounded-lg border bg-white p-2.5">{adicionar==='compra'?<><option value="compra">Compra</option>{etapaNova!=='recebido'&&<option value="estoque">Material / sobra do estoque</option>}</>:<><option value="outro">Custo adicional</option><option value="servico">Serviço adicional</option></>}</select></label>
     <label className="text-xs font-semibold">Valor total (R$)<input required name="valor" inputMode="decimal" value={valorCompra} onChange={e=>setValorCompra(e.target.value)} placeholder="Ex.: 832,00" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold lg:col-span-2">Descrição (opcional)<input name="descricao" maxLength={500} placeholder="Ex.: compra de perfis / sobra aproveitada" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Data *<input required name="data" type="date" defaultValue={dataLocal()} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">{adicionar==='compra'&&origemNova==='compra'?(etapaNova==='recebido'?'Peso recebido (kg) *':'Peso comprado (kg) *'):'Quantidade (opcional)'}<input required={adicionar==='compra'&&origemNova==='compra'} name="quantidade" type="number" min="0.001" step="any" value={pesoCompra} onChange={e=>setPesoCompra(e.target.value)} placeholder={adicionar==='compra'?'Ex.: 100':''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Unidade {adicionar==='compra'&&origemNova==='compra'?'(KG obrigatório)':'(opcional)'}<input key={adicionar} name="unidade" value={adicionar==='compra'&&origemNova==='compra'?'KG':unidadeNova} onChange={e=>setUnidadeNova(e.target.value)} readOnly={adicionar==='compra'&&origemNova==='compra'} placeholder="UN, barra, M², KG" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    {adicionar==='compra'&&origemNova==='compra'&&<div className="rounded-lg border bg-white p-2.5 text-xs"><b>{etapaNova==='recebido'?'Preço recebido por kg':'Preço comprado por kg'}</b><p className="mt-1 text-lg font-bold">{Number(pesoCompra)>0?moedas(Number(String(valorCompra).replace(/\./g,'').replace(',','.'))/Number(pesoCompra))+'/kg':'Preencha valor e kg'}</p></div>}
+    <label className="text-xs font-semibold">{adicionar==='compra'&&origemNova==='compra'?(etapaNova==='recebido'?'Quantidade recebida *':'Quantidade comprada *'):'Quantidade (opcional)'}<input required={adicionar==='compra'&&origemNova==='compra'} name="quantidade" type="number" min="0.001" step={unidadeNova==='KG'?'any':'1'} value={pesoCompra} onChange={e=>setPesoCompra(e.target.value)} placeholder={adicionar==='compra'?'Ex.: 100':''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <label className="text-xs font-semibold">Unidade {adicionar==='compra'&&origemNova==='compra'?'*':'(opcional)'}<select name="unidade" value={unidadeNova} onChange={e=>setUnidadeNova(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2.5">{UNIDADES_CMV.map(u=><option value={u} key={u}>{u==='KG'?'Quilo (KG)':u==='UN'?'Unidade (UN)':u==='PC'?'Peça (PC)':'Pacote (PCT)'}</option>)}</select></label>
+    {adicionar==='compra'&&origemNova==='compra'&&<div className="rounded-lg border bg-white p-2.5 text-xs"><b>{etapaNova==='recebido'?'Preço por unidade recebida':'Preço por unidade comprada'}</b><p className="mt-1 text-lg font-bold">{Number(pesoCompra)>0?moedas(Number(String(valorCompra).replace(/\./g,'').replace(',','.'))/Number(pesoCompra))+'/'+rotuloUnidadeCmv(unidadeNova):'Preencha valor e quantidade'}</p></div>}
     <label className="text-xs font-semibold">Fornecedor *<input required name="fornecedor" maxLength={150} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">{etapaNova==='recebido'?'Nº nota fiscal / romaneio *':'Nº nota/documento (opcional)'}<input name="documento" required={etapaNova==='recebido'} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold lg:col-span-2">Comprovante (PDF ou foto, até 15 MB)<input name="arquivo" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" className="mt-1 w-full rounded-lg border bg-white p-2"/></label>
@@ -299,11 +291,12 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
   {dados&&<div className="space-y-4">
    {realizado<=0&&<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Ainda não há custo efetivamente registrado nesta venda. O custo previsto W.Vetro é referência; não representa o realizado. Registre compras e custos antes de avaliar margem real.</p>}
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-    <Card titulo="Custo previsto com sobra" valor={previstoFmt(totalRevisado)} nota={`Original W.Vetro com sobra: ${previstoFmt(totalBruto)} · ${dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}`}/>
-    <Card titulo="Custo comprado registrado" valor={moedas(realizado)} detalhe={'Peso comprado: '+(resumoPesos.pesoComprado>0?quilos(resumoPesos.pesoComprado):'A preencher')} nota={resumoPesos.pendenteKg?'Peso parcial: há compras ainda sem quilos conciliados':'Valor de compras e lançamentos existentes, sem duplicar pelo recebimento'}/>
-    <Card titulo="Custo recebido" valor={existeRecebimento?moedas(totalRecebido):'Aguardando recebimento'} detalhe={'Peso recebido: '+(resumoPesos.temRecebimento?quilos(resumoPesos.pesoRecebido):'Aguardando')} nota="Entregas conforme nota ou romaneio; não somar novamente ao comprado"/>
-    <Card titulo="Diferença até agora" valor={totalRevisado==null?'—':moedas(totalRevisado-(existeRecebimento?totalRecebido:realizado))} detalhe={'Diferença de peso: '+(resumoPesos.diferencaKg===null?'A conferir':(resumoPesos.diferencaKg>0?'+':'')+quilos(resumoPesos.diferencaKg)+' ('+variacaoPeso(resumoPesos.percentual??0)+')')} nota={existeRecebimento?'Previsto menos recebido em R$ · peso recebido menos comprado · parcial':'Previsto menos comprado em R$ · aguarda recebimento para diferença em kg'}/>
+    <Card titulo="Custo previsto total da obra" valor={previstoFmt(totalRevisado)} nota={`Original W.Vetro com sobra: ${previstoFmt(totalBruto)} · ${dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}`}/>
+    <Card titulo="Custo comprado total da obra" valor={moedas(realizado)} nota="Compras e custos da obra, sem duplicar recebimentos"/>
+    <Card titulo="Custo recebido total da obra" valor={existeRecebimento?moedas(totalRecebido):'Aguardando recebimento'} nota="Valores recebidos conforme notas e romaneios; entregas parciais incluídas"/>
+    <Card titulo="Diferença até agora" valor={totalRevisado==null?'—':moedas(totalRevisado-(existeRecebimento?totalRecebido:realizado))} detalhe={existeRecebimento?'Comprado − recebido: '+moedas(realizado-totalRecebido):'Aguardando recebimentos'} nota={existeRecebimento?'Previsto − recebido (parcial)':'Previsto − comprado; ainda sem recebimentos'}/>
     <Card titulo="Lançamentos" valor={String(dados.lancamentos.length)} nota="Registros de custos desta venda"/>
+
    </div>
    <section aria-label="Conferência do valor de venda" className="rounded-xl border border-blue-200 bg-blue-50/40 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -388,14 +381,15 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
         {c==='perda'&&p?.perda_fonte==='conciliacao_wvetro'&&<p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Perda obtida pela conciliação do resultado da obra com perfis usados, acessórios e vidros. Confirme no quadro Conferir Valores do W.Vetro antes de validar.</p>}
         {(c==='perfil'||c==='acessorio'||c==='vidro'||c==='outros')&&<>
          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Card titulo="Peso comprado" valor={compara.pesoComprado>0?compara.pesoComprado.toLocaleString('pt-BR',{maximumFractionDigits:3})+' kg':'A preencher'} nota={compara.faltaPesoComprado?'Existem compras sem quilos vinculados nesta categoria':''}/>
-          <Card titulo="Peso recebido" valor={compara.temRecebimento?compara.pesoRecebido.toLocaleString('pt-BR',{maximumFractionDigits:3})+' kg':'Aguardando'} />
-          <Card titulo="Diferença de peso" valor={compara.diferencaKg!==null&&compara.temRecebimento?(compara.diferencaKg>0?'+':'')+compara.diferencaKg.toLocaleString('pt-BR',{maximumFractionDigits:3})+' kg':'A conferir'} nota="Recebido menos comprado"/>
-          <Card titulo="Variação de peso" valor={compara.percentualKg!==null&&compara.temRecebimento?(compara.percentualKg>0?'+':'')+compara.percentualKg.toLocaleString('pt-BR',{maximumFractionDigits:2})+'%':'A conferir'} nota="Em relação aos quilos comprados"/>
+          <Card titulo={compara.unidade==='KG'?'Peso comprado':'Quantidade comprada'} valor={compara.quantidadeComprada>0?mostrarQuantidadeCmv(compara.quantidadeComprada,compara.unidade):'A preencher'} nota={compara.faltaQuantidadeComprada?'Há compras sem quantidades conciliadas nesta unidade':''}/>
+          <Card titulo={compara.unidade==='KG'?'Peso recebido':'Quantidade recebida'} valor={compara.temRecebimento&&!compara.unidadesMisturadas?mostrarQuantidadeCmv(compara.quantidadeRecebida,compara.unidade):'A conferir'}/>
+          <Card titulo={compara.unidade==='KG'?'Diferença de peso':'Diferença de quantidade'} valor={compara.diferencaQuantidade!==null&&compara.temRecebimento&&!compara.unidadesMisturadas?mostrarQuantidadeCmv(compara.diferencaQuantidade,compara.unidade):'A conferir'} nota="Recebido menos comprado; parcial"/>
+          <Card titulo="Variação de quantidade" valor={compara.percentualQuantidade!==null&&compara.temRecebimento&&!compara.unidadesMisturadas?variacaoPeso(compara.percentualQuantidade):'A conferir'} nota="Na mesma unidade de medida"/>
          </div>
+         {compara.unidadesMisturadas&&<p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">Existem unidades diferentes ou registros antigos em kg nesta categoria. Confira os lançamentos antes de comparar quantidades; kg não é convertido em peças.</p>}
          {compara.temRecebimento&&<div className="mt-2 rounded-lg border bg-white p-3 text-xs">Diferença de valor entre recebido e comprado nesta categoria: <b className={compara.diferencaCompraRecebido!==null&&compara.diferencaCompraRecebido>0?'text-red-700':'text-slate-800'}>{compara.diferencaCompraRecebido!==null?moedas(compara.diferencaCompraRecebido):'—'}</b>. Enquanto houver entrega pendente, os resultados são parciais.</div>}
-         {compara.faltaPesoComprado&&<p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Há compras sem o peso em kg disponível neste painel. Informe os quilos nas compras manuais ou concilie os dados da aba Compras antes de confiar na variação percentual.</p>}
-         {(!dados.etapasDisponiveis||recebimentos.some(r=>r.categoria===c))&&<VendaCmvRecebimentos vendaId={vendaId} categoria={c} registros={recebimentos} historico={historicoRecebimentos} disponivel={recebimentosDisponiveis&&!dados.etapasDisponiveis} onAtualizar={buscar}/>}
+         {compara.faltaQuantidadeComprada&&<p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Há compras sem quantidade compatível. Confira os lançamentos e unidades na aba Compras antes de confiar na variação percentual.</p>}
+         <VendaCmvRecebimentos vendaId={vendaId} categoria={c} registros={recebimentos} historico={historicoRecebimentos} disponivel={recebimentosDisponiveis&&!dados.etapasDisponiveis} onAtualizar={buscar}/>
         </>}
         <div className="mt-3 space-y-2">
          {Number(comprasExistentes[c]||0)>0&&<p className="text-xs text-slate-600">Compras vinculadas anteriormente: {moedas(Number(comprasExistentes[c]))}</p>}
@@ -467,8 +461,8 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
              <label className="text-xs font-semibold">Valor total (R$) *<input required name="valor" inputMode="decimal" defaultValue={String(l.valor).replace('.',',')} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
              <label className="text-xs font-semibold lg:col-span-2">Descrição (opcional)<input name="descricao" maxLength={500} defaultValue={l.descricao} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
              <label className="text-xs font-semibold">Data *<input required name="data" type="date" defaultValue={l.data_lancamento} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-             <label className="text-xs font-semibold">{etapaEdicao==='recebido'?'Peso recebido (kg) *':'Quantidade / peso comprado (kg)'}<input name="quantidade" type="number" min="0.001" step="any" required={etapaEdicao==='recebido'} defaultValue={l.quantidade??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-             <label className="text-xs font-semibold">Unidade {etapaEdicao==='recebido'?'(KG obrigatório)':'(opcional)'}<input name="unidade" key={etapaEdicao} readOnly={etapaEdicao==='recebido'} defaultValue={etapaEdicao==='recebido'?'KG':l.unidade??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+             <label className="text-xs font-semibold">{etapaEdicao==='recebido'?'Quantidade recebida *':'Quantidade comprada'}<input name="quantidade" type="number" min="0.001" step="any" required={etapaEdicao==='recebido'} defaultValue={l.quantidade??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+             <label className="text-xs font-semibold">Unidade *<select name="unidade" key={etapaEdicao} defaultValue={l.unidade||unidadePadraoCmv(l.categoria)} className="mt-1 w-full rounded-lg border bg-white p-2.5">{UNIDADES_CMV.map(u=><option key={u} value={u}>{u==='KG'?'Quilo (KG)':u==='UN'?'Unidade (UN)':u==='PC'?'Peça (PC)':'Pacote (PCT)'}</option>)}</select></label>
              <label className="text-xs font-semibold">Fornecedor *<input required name="fornecedor" maxLength={150} defaultValue={l.fornecedor??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
              <label className="text-xs font-semibold">{etapaEdicao==='recebido'?'Nº nota fiscal / romaneio *':'Nº nota/documento (opcional)'}<input name="documento" required={etapaEdicao==='recebido'} defaultValue={l.documento??''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
              <label className="text-xs font-semibold lg:col-span-2">Anexar ou substituir comprovante (opcional, até 15 MB)

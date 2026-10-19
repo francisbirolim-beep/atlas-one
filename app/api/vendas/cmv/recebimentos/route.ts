@@ -1,3 +1,5 @@
+import {unidadeCmvValida,quantidadeCmvValida} from '@/lib/vendaCmvUnidades'
+import {recebimentoConferivelCmv} from '@/lib/vendaCmvConferencia'
 // Registra peso e valor da mercadoria recebida em etapa INDEPENDENTE do CMV comprado.
 // Nunca grava na tabela de custos do orçamento, nos lançamentos comprados ou no Kanban.
 import {NextRequest,NextResponse} from 'next/server'
@@ -28,21 +30,26 @@ async function vendaTenant(empresa:string,id:string){
 }
 function validarCampos(form:FormData){
  const categoria=txt(form.get('categoria'),30)
- const peso=numero(form.get('peso_kg'))
- const preco=numero(form.get('preco_kg'))
+ const unidade=txt(form.get('unidade')||'KG',10).toUpperCase()
+ const quantidade=numero(form.get('quantidade')??form.get('peso_kg'))
+ const preco=numero(form.get('preco_unitario')??form.get('preco_kg'))
  const data=txt(form.get('data_recebimento'),10)
  const fornecedor=txt(form.get('fornecedor'),150)
  const nota=txt(form.get('nota_numero'),100)||null
  const romaneio=txt(form.get('romaneio_numero'),100)||null
  if(!categorias.includes(categoria))throw new Error('Categoria inválida.')
- if(peso===null||peso<=0||peso>999999999)throw new Error('Informe os quilos recebidos (maior que zero).')
- if(preco===null||preco<=0||preco>99999999)throw new Error('Informe o preço por quilo (maior que zero).')
+ if(!unidadeCmvValida(unidade)||!quantidadeCmvValida(quantidade,unidade))
+  throw new Error('Informe quantidade obrigatória válida e unidade (KG, UN, PC ou PCT).')
+ if(preco===null||preco<=0||preco>99999999)throw new Error('Informe o preço por unidade de compra (maior que zero).')
  if(!fornecedor)throw new Error('Fornecedor obrigatório.')
  if(!nota&&!romaneio)throw new Error('Informe o número da nota ou do romaneio.')
  if(!/^\d{4}-\d{2}-\d{2}$/.test(data)||Number.isNaN(Date.parse(data)))throw new Error('Data de recebimento inválida.')
- const valorTotal=Math.round(Math.round(peso*1000)/1000*Math.round(preco*10000)/10000*100)/100
+ const quantidadeFinal=unidade==='KG'?Math.round(quantidade!*1000)/1000:quantidade!
+ const precoFinal=Math.round(preco*10000)/10000
+ const valorTotal=Math.round(quantidadeFinal*precoFinal*100)/100
  if(valorTotal<=0||valorTotal>999999999999)throw new Error('Valor total do recebimento inválido.')
- return {categoria,peso_kg:Math.round(peso*1000)/1000,preco_kg:Math.round(preco*10000)/10000,
+ return {categoria,quantidade:quantidadeFinal,unidade,preco_unitario:precoFinal,
+  peso_kg:unidade==='KG'?quantidadeFinal:null,preco_kg:unidade==='KG'?precoFinal:null,
   valor_total:valorTotal,fornecedor,nota_numero:nota,romaneio_numero:romaneio,data_recebimento:data,
   observacoes:txt(form.get('observacoes'),1000)||null}
 }
@@ -68,6 +75,9 @@ export async function GET(req:NextRequest){
    .order('criado_em',{ascending:false})
   if(ausente(error))return NextResponse.json({ok:true,disponivel:false,recebimentos:[],historico:[]})
   if(error)throw error
+  // Sem migração: leitura dos antigos preservada e gravação de novos recebimentos desabilitada.
+  const {error:erroUnidades}=await supabaseAdmin.from(TABELA).select('quantidade,unidade,preco_unitario,conferido_em').limit(1)
+  const unidadesDisponiveis=!erroUnidades
   const linhas=await Promise.all((data||[]).map(async r=>{
    let anexo_url:string|null=null
    if(r.anexo_path){
@@ -81,7 +91,7 @@ export async function GET(req:NextRequest){
    .eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId)
    .order('alterado_em',{ascending:false}).limit(100)
   if(eh&&!ausente(eh))throw eh
-  return NextResponse.json({ok:true,disponivel:true,
+  return NextResponse.json({ok:true,disponivel:unidadesDisponiveis,unidadesDisponiveis,
    recebimentos:linhas.filter(l=>!l.cancelado_em),excluidos:linhas.filter(l=>Boolean(l.cancelado_em)),
    historico:historico||[]})
  }catch(e){console.error('Falha no recebimento CMV (GET):',e);return erro('Falha ao consultar recebimentos.',500)}
@@ -135,6 +145,7 @@ export async function PATCH(req:NextRequest){
   const arquivo=await arquivoUpload(form,user.empresa_id,vendaId)
   path=arquivo?.anexo_path||null
   const {data,error}=await supabaseAdmin.from(TABELA).update({...dados,...arquivo,
+   conferido_em:null,conferido_por_id:null,conferido_por_nome:null,
    versao:versao+1,atualizado_em:new Date().toISOString(),atualizado_por_id:user.id,atualizado_por_nome:user.nome})
    .eq('id',id).eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId)
    .eq('orcamento_id',venda.orcamento_id).eq('versao',versao).is('cancelado_em',null).select('id').maybeSingle()
@@ -174,4 +185,38 @@ export async function DELETE(req:NextRequest){
   if(!data)return erro('Recebimento alterado em outra sessão.',409)
   return NextResponse.json({ok:true,id:data.id})
  }catch(e){console.error('Falha no recebimento CMV (DELETE):',e);return erro('Falha ao cancelar recebimento.',500)}
+}
+
+/** Confirma recebimentos já lançados sem tocar na compra nem gerar custo duplicado. */
+export async function PUT(req:NextRequest){
+ const user=await autenticarTenant(req)
+ if(!user)return erro('Sessão inválida.',401)
+ try{
+  const body=await req.json().catch(()=>null)
+  const vendaId=txt(body?.vendaId,80)
+  const ids:unknown[]=Array.isArray(body?.ids)?body.ids:[]
+  const unicos=[...new Set(ids)]
+  if(unicos.length<1||unicos.length>100||unicos.some(id=>typeof id!=='string'||!uuid(id)))
+   return erro('Selecione entre 1 e 100 recebimentos válidos.')
+  const venda=await vendaTenant(user.empresa_id,vendaId)
+  if(!venda)return erro('Venda não localizada.',404)
+  const {data:linhas,error:buscaErro}=await supabaseAdmin.from(TABELA)
+   .select('id,criado_por_id,conferido_em,categoria,unidade,quantidade,peso_kg,preco_unitario,preco_kg')
+   .eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id)
+   .is('cancelado_em',null).in('id',unicos)
+  if(buscaErro)throw buscaErro
+  if((linhas||[]).length!==unicos.length)return erro('Algum recebimento não foi localizado.',404)
+  if((linhas||[]).some(l=>!recebimentoConferivelCmv(l)))return erro('Corrija a unidade e a quantidade dos recebimentos antes de confirmar. Vidros e acessórios antigos em KG não são convertidos automaticamente.',409)
+  if(user.role!=='master'&&(linhas||[]).some(l=>l.criado_por_id!==user.id))
+   return erro('Somente o autor ou Master pode conferir estes recebimentos.',403)
+  const {data:validados,error}=await supabaseAdmin.rpc('fn_venda_cmv_validar_recebimentos_v2',{
+   p_empresa:user.empresa_id,p_venda:vendaId,p_orcamento:venda.orcamento_id,
+   p_ids:unicos,p_usuario_id:user.id,p_usuario_nome:user.nome
+  })
+  if(error)throw error
+  return NextResponse.json({ok:true,validados:Number(validados||0)})
+ }catch(e){
+  console.error('Falha ao conferir lote CMV:',e)
+  return erro('Não foi possível confirmar os recebimentos. Confira se a atualização do banco foi habilitada.',500)
+ }
 }
