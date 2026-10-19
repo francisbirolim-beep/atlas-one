@@ -34,8 +34,11 @@ export async function GET(req:NextRequest){
   if(cli.error||alocs.error)throw cli.error||alocs.error
   if(!cli.data)return bad('Cliente do recebimento indisponível.',404)
   const idsObras=[...new Set([rec.obra_id,...(alocs.data||[]).map(a=>a.obra_id)].filter((v):v is string=>!!v))]
-  let obraId=idsObras.length===1?idsObras[0]:null
-  if(!obraId){
+  const filtroObra=req.nextUrl.searchParams.get('obraId')
+  if(filtroObra&&filtroObra!=='sem-obra'&&!uuid.test(filtroObra))return bad('Obra inválida.',400)
+  if(filtroObra && !(alocs.data||[]).some(a=>a.tipo==='conta' && (a.obra_id||'sem-obra')===filtroObra))return bad('Não existe alocação desse recebimento na obra selecionada.',422)
+  let obraId:string|null=filtroObra==='sem-obra'?null:(filtroObra||(idsObras.length===1?idsObras[0]:null))
+  if(!obraId&&!filtroObra){
    const contasAlocadas=[...new Set((alocs.data||[]).map(a=>a.conta_receber_id).filter((v):v is string=>!!v))]
    if(contasAlocadas.length){
     const resp=await supabaseAdmin.from('financeiro_contas_receber').select('obra_id').eq('empresa_id',u.empresa_id).in('id',contasAlocadas)
@@ -46,14 +49,17 @@ export async function GET(req:NextRequest){
   }
   const obra=obraId?await supabaseAdmin.from('obras').select('id,nome').eq('empresa_id',u.empresa_id).eq('id',obraId).eq('cliente_id',rec.cliente_id).maybeSingle():null
   let contas=supabaseAdmin.from('financeiro_contas_receber').select('id,valor,valor_pago,valor_desconto,status').eq('empresa_id',u.empresa_id).eq('cliente_id',rec.cliente_id)
-  if(idsObras.length>1)contas=contas.in('obra_id',idsObras)
+  if(filtroObra==='sem-obra')contas=contas.is('obra_id',null)
+  else if(filtroObra&&obraId)contas=contas.eq('obra_id',obraId)
+  else if(idsObras.length>1)contas=contas.in('obra_id',idsObras)
   else if(obraId)contas=contas.eq('obra_id',obraId)
   else contas=contas.is('obra_id',null) // Sem obra: não somar dívidas de obras distintas.
   const {data:titulos,error:erroTitulos}=await contas.limit(1000)
   if(erroTitulos)throw erroTitulos
   const valorOriginal=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Number(c.valor||0),0)
   const saldo=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
-  const recibo:ReciboInfo={tipo:'receber',id,nome:cli.data.nome,documento:cli.data.cpf_cnpj,obra:obra?.data?.nome|| (idsObras.length>1?'Recebimento de múltiplas obras — consulte os extratos individualizados':'Sem obra vinculada'),descricao:rec.observacoes||null,referencia:rec.referencia,data:rec.data_recebimento,forma:rec.forma,valorOriginal:valorOriginal||Number(rec.valor),valorMovimento:Number(rec.valor),saldo}
+  const recebidoNaObra=filtroObra?(alocs.data||[]).filter(a=>a.tipo==='conta'&&(a.obra_id||'sem-obra')===filtroObra).reduce((v,a)=>v+Number(a.valor||0),0):Number(rec.valor)
+  const recibo:ReciboInfo={tipo:'receber',id,nome:cli.data.nome,documento:cli.data.cpf_cnpj,obra:obra?.data?.nome|| (idsObras.length>1&&!filtroObra?'Recebimento de múltiplas obras — consulte os extratos individualizados':'Sem obra vinculada'),descricao:rec.observacoes||null,referencia:rec.referencia,data:rec.data_recebimento,forma:rec.forma,valorOriginal:valorOriginal||Number(rec.valor),valorMovimento:recebidoNaObra,saldo}
   return NextResponse.json({ok:true,recibo})
  }catch(e){console.error('recibo financeiro',e);return bad('Não foi possível carregar os dados do recibo.',500)}
 }

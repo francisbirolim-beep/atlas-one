@@ -6,7 +6,7 @@ import { RefreshCw, Search, WalletCards } from 'lucide-react'
 import BarraFiltrosPeriodo from '@/components/financeiro/BarraFiltrosPeriodo'
 import FormLancamentoManual from '@/components/financeiro/FormLancamentoManual'
 import {baixarCSV,csvFinanceiro,isoLocal,noPeriodo,periodoRapido,type PeriodoFinanceiro} from '@/lib/financeiroPeriodo'
-import { supabase } from '@/lib/supabase'
+import { tokenAtual } from '@/lib/auth'
 import type { ContaReceberCliente360 } from '@/lib/cliente360'
 import { saldoParcela } from '@/lib/cliente360Recebimentos'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
@@ -47,58 +47,20 @@ export default function ContasReceberPage() {
   async function carregar() {
     setCarregando(true)
     setErro('')
-    const [contasResp, recebimentosResp] = await Promise.all([
-      supabase
-        .from('financeiro_contas_receber')
-        .select('*')
-        .order('vencimento', { ascending: true, nullsFirst: false })
-        .limit(1500),
-      supabase
-        .from('financeiro_recebimentos')
-        .select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,forma,referencia,observacoes,status,criado_por_nome,created_at')
-        .neq('status','cancelado')
-        .order('data_recebimento', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(1000),
-    ])
-
-    if (contasResp.error) {
-      setErro('Não foi possível carregar as contas a receber.')
+    try {
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const r=await fetch('/api/financeiro/contas-receber',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
+      const dados=await r.json()
+      if(!r.ok)throw new Error(dados.error||'Erro ao consultar os títulos.')
+      setContas((dados.contas||[]) as ContaReceberCliente360[])
+      setRecebimentos((dados.recebimentos||[]) as RecebimentoGeral[])
+      setNomesObras(dados.nomesObras||{})
+    } catch(e){
+      setErro(e instanceof Error?e.message:'Não foi possível carregar as contas a receber.')
       setContas([])
-    } else {
-      setContas((contasResp.data || []) as ContaReceberCliente360[])
-    }
-
-    if (recebimentosResp.error) {
-      setErro(prev => prev || 'Não foi possível carregar o histórico de recebimentos.')
       setRecebimentos([])
-    } else {
-      const lista = (recebimentosResp.data || []) as RecebimentoGeral[]
-      const ids = lista.map(r => r.id)
-      const descontos:Record<string,number> = {}
-      if (ids.length) {
-        const { data: alocacoes } = await supabase
-          .from('financeiro_recebimento_alocacoes')
-          .select('recebimento_id,tipo,valor')
-          .in('recebimento_id', ids)
-        ;(alocacoes || []).filter((a:any)=>a.tipo==='desconto').forEach((a:any)=>{
-          descontos[a.recebimento_id]=(descontos[a.recebimento_id]||0)+Number(a.valor||0)
-        })
-      }
-      setRecebimentos(lista.map(r=>({...r,desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})))
-    }
-    if(!contasResp.error){
-      const ids=[...new Set(((contasResp.data||[]) as ContaReceberCliente360[]).map(c=>c.obra_id).filter((v):v is string=>!!v))]
-      if(ids.length){
-        const nomes:Record<string,string>={}
-        for(let i=0;i<ids.length;i+=80){
-          const r=await supabase.from('obras').select('id,nome,numero').in('id',ids.slice(i,i+80))
-          if(!r.error)for(const o of r.data||[])nomes[o.id]=`${o.nome}${o.numero?` #${o.numero}`:''}`
-        }
-        setNomesObras(nomes)
-      }else setNomesObras({})
-    }
-    setCarregando(false)
+    } finally{setCarregando(false)}
   }
 
   useEffect(() => { void carregar() }, [])

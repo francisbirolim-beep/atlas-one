@@ -1,3 +1,12 @@
+## 2026-10-19 — Recebimento parcial e permissões (PRÉVIA, não publicado)
+
+- Branch isolada `feat/financeiro-recebimento-parcial-preview-20261019` baseada na prévia do PR #902. Correção do erro mostrado ao registrar recebimento no Cliente 360 (`permission denied for table financeiro_contas_receber`), sem abrir permissão direta no banco.
+- GET/POST autenticados em `/api/financeiro/cliente-recebimento` com usuário, setor/permissão de consulta ou baixa, `empresa_id`, `cliente_id`, validação das parcelas/valores e guarda contra pagamento acima do saldo; POST usa o RPC existente via backend em produção.
+- GET `/api/financeiro/contas-receber` para a visão geral sem SELECT direto do browser, com escopo do tenant e relatório preservado.
+- Interface: `Receber tudo` ou `Receber parcial`, saldo projetado por parcela e total antes de confirmar; parcial permanece em aberto após a baixa. Em preview, confirmação é simulação, NÃO cria recebimento real nem altera saldo.
+- Recibos A4: simulação destacada como não comprovante, com valor recebido e saldo projetado por obra; após recebimento real, links separados por obra, com filtro autorizado em `/api/financeiro/recibo?obraId=...`.
+- Contas a Pagar e demais fluxos intocados. Nenhuma migração, nenhuma modificação no Supabase de produção. Publicação apenas após teste na prévia e aprovação explícita.
+
 ## 2026-10-19 — Financeiro manual + relatórios + recibos (PRÉVIA NÃO publicada)
 
 - Branch isolada `feat/financeiro-manual-preview-20261019`, base da `main` em 19/10 (`d790db6`, sincronizar antes de publicar). Não houve alteração de dados, migrações ou implantação em produção.
