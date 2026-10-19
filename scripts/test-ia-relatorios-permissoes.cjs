@@ -253,6 +253,12 @@ async function testarAprendizado(){
   '@/lib/ai/permissoesServer':ia,'@/lib/supabaseAdmin':{supabaseAdmin:db},
   '@/lib/tenantServer':{autenticarTenant:async()=>user},
   '@/lib/ai/opencode':{},'@/lib/ai/specialists':registry,
+  // O catálogo homologado passou a ter auxiliares modulares. Aqui são mocks:
+  // este teste exercita somente autorização, sem interpretar PDFs ou escrever catálogo.
+  '@/lib/ai/catalogoPdfTexto':{},'@/lib/ai/catalogoPeso':{},
+  '@/lib/ai/catalogoReanalise':{},'@/lib/ai/catalogoLinhas':{},
+  '@/lib/ai/catalogoCartoesGeometria':{},'@/lib/ai/catalogoPaginasSeguras':{},
+  '@/lib/ai/catalogoLoteSeguro':{},'@/lib/ai/equivalenciaPerfilTecnico':{},
  },'\nexport {podeValidar,aplicar,processarCatalogoAutomatico}')
  check(await source.podeValidar(user,{tipo:'produto',modulo:'engenharia'}),'Edição autorizada aplica produto')
  config.acoes['admin.cadastros.produtos']='consulta'

@@ -22,6 +22,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
 import ConferenciaItemWVetro, { TipoImportadoWVetro, EditorTecnicoWVetro } from './ConferenciaItemWVetro'
 import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wvetroValidacaoItem'
+import { prepararRascunhoWVetro } from '@/lib/wvetroRascunhoOrcamento'
 import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
 import { linkRotaObra, localizacaoRegistradaNaObra, enderecoCompletoObra } from '@/lib/enderecoObra'
 
@@ -289,6 +290,7 @@ const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
 const [usuario, setUsuario] = useState<Usuario | null>(null)
 const [agora, setAgora] = useState(Date.now())
 const [novoAnexoTitulo, setNovoAnexoTitulo] = useState('')
+const [enviandoAnexo, setEnviandoAnexo] = useState(false)
 const [sessaoAtiva, setSessaoAtiva] = useState(false)
 const [vendedorInfo, setVendedorInfo] = useState<Usuario | null>(null)
 const [whatsappVendedor, setWhatsappVendedor] = useState('')
@@ -708,7 +710,7 @@ setCards(prev => prev.filter(c => c.id !== json.ocultadoId).map(c => c.id === ex
 setHistorico(await listarHistorico(exibicao.id))
 }
 setCandidatosWVetro([])
-setMensagemWVetro(json.mensagem || `Orçamento W.Vetro #${numeroWvetro} sincronizado.`)
+setMensagemWVetro([json.mensagem || `Orçamento W.Vetro #${numeroWvetro} sincronizado.`, json.avisoAnexo].filter(Boolean).join(' '))
 } catch (e) {
 setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao sincronizar o W.Vetro.')
 } finally {
@@ -814,42 +816,66 @@ setBuscandoWVetro(false)
 }
 
 async function adicionarAnexo(file: File | undefined) {
-if (!file || !novoAnexoTitulo.trim() || !editando) return
+if (!file || !novoAnexoTitulo.trim() || !editando || !cardSelecionado || enviandoAnexo) return
+const cardId = cardSelecionado.id
 const titulo = novoAnexoTitulo.trim()
+setEnviandoAnexo(true)
+try {
 const url = await uploadArquivo(file)
-if (!url) return
-
+if (!url) throw new Error('Não foi possível enviar o arquivo. Confira o tamanho ou tente novamente.')
 const novo: Anexo = { titulo, nome: file.name, url }
-const finalizado = !!cardSelecionado?.orcamento_finalizado_em
-const anexosBase = finalizado ? (cardSelecionado?.anexos || []) : (editando.anexos || [])
-const anexosPersistidos = [...anexosBase, novo]
+let anexosPersistidos: Anexo[] | null = null
 
-if (finalizado && cardSelecionado) {
-const { error } = await supabase
-.from('orcamentos')
-.update({ anexos: anexosPersistidos })
-.eq('id', cardSelecionado.id)
+// Gravar imediatamente, inclusive quando o orçamento ainda está em andamento.
+// Ler do banco evita sobrescrever anexos acrescentados pela sincronização W.Vetro.
+for (let tentativa = 0; tentativa < 3; tentativa++) {
+const { data: atual, error: leituraErro } = await supabase
+.from('orcamentos').select('anexos,updated_at').eq('id', cardId).maybeSingle()
+if (leituraErro || !atual) throw new Error('Não foi possível consultar os anexos atuais do orçamento.')
 
-if (error) {
-console.error('Erro ao salvar novo anexo no orçamento finalizado:', error)
-alert('Não foi possível salvar o novo anexo. Tente novamente.')
-return
+const anexosPorUrl = new Map<string, Anexo>()
+for (const anexo of [
+...(editando.anexos || []),
+...(Array.isArray(atual.anexos) ? atual.anexos as Anexo[] : []),
+novo,
+]) {
+if (anexo?.url) anexosPorUrl.set(anexo.url, anexo)
 }
-
-setCardSelecionado(prev => (prev ? { ...prev, anexos: anexosPersistidos } : prev))
-setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? { ...c, anexos: anexosPersistidos } : c)))
-await registrarHistorico(
-cardSelecionado.id,
-usuario,
-'Anexou nova versão/arquivo ao orçamento',
-titulo + ' — ' + file.name
-)
-listarHistorico(cardSelecionado.id).then(setHistorico)
+const anexosMesclados = Array.from(anexosPorUrl.values())
+let gravacao = supabase.from('orcamentos')
+.update({ anexos: anexosMesclados, updated_at: new Date().toISOString() })
+.eq('id', cardId)
+gravacao = atual.updated_at
+? gravacao.eq('updated_at', atual.updated_at)
+: gravacao.is('updated_at', null)
+const { data: gravado, error: gravacaoErro } = await gravacao
+.select('anexos').maybeSingle()
+if (gravacaoErro) throw gravacaoErro
+if (gravado && Array.isArray(gravado.anexos) && gravado.anexos.some((a: Anexo) => a.url === url)) {
+anexosPersistidos = gravado.anexos as Anexo[]
+break
 }
+}
+if (!anexosPersistidos) throw new Error('O orçamento mudou durante o envio. Reabra o card e tente anexar novamente.')
 
-const anexosExibicao = finalizado ? normalizarVersoesLegadas(anexosPersistidos) : anexosPersistidos
-setEditando(prev => (prev ? { ...prev, anexos: anexosExibicao } : prev))
+const exibicao = normalizarVersoesLegadas(anexosPersistidos)
+setEditando(prev => prev?.id === cardId ? { ...prev, anexos: exibicao } : prev)
+setCardSelecionado(prev => prev?.id === cardId ? { ...prev, anexos: anexosPersistidos } : prev)
+setCards(prev => prev.map(c => c.id === cardId ? { ...c, anexos: anexosPersistidos! } : c))
 setNovoAnexoTitulo('')
+try {
+await registrarHistorico(cardId, usuario, 'Anexou arquivo ao orçamento', titulo + ' — ' + file.name)
+setHistorico(await listarHistorico(cardId))
+} catch (historicoErro) {
+console.warn('Anexo salvo; histórico ainda não atualizado:', historicoErro)
+}
+} catch (erro) {
+console.error('Erro ao salvar anexo do orçamento:', erro)
+window.alert('O anexo não foi confirmado no orçamento. ' +
+(erro instanceof Error ? erro.message : 'Tente novamente.'))
+} finally {
+setEnviandoAnexo(false)
+}
 }
 
 async function excluirAnexo(idx: number) {
@@ -1227,17 +1253,15 @@ setValidandoIA(false)
 
 async function salvarCard() {
 if (!editando || !cardSelecionado) return
-if(ehOrcamentoWVetro(cardSelecionado)){
-const pendentes=(editando.itens||[]).map((i,idx)=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))==='pendente'?idx+1:0).filter(Boolean)
-if(pendentes.length){alert('Esquadrias ainda pendentes: '+pendentes.join(', ')+'. As demais estão salvas.');return}
+if (enviandoAnexo) {
+alert('Espere o arquivo terminar de ser salvo antes de fechar o orçamento.')
+return
 }
-if(ehOrcamentoWVetro(cardSelecionado)&&(editando.itens||[]).some(i=>{
- const original=cardSelecionado.itens?.find(o=>o.id===i.id)
- return original&&Object.keys(diferencasItemWVetro(original,i)).length>0
-})){
- alert('Registre as alterações usando “Corrigir e ensinar” na esquadria alterada. Os demais campos continuam preservados nesta ficha.')
- return
-}
+// Campos e variáveis incompletos são rascunho, não exigência para salvar.
+// Esquadrias sem conferência continuam pendentes, nunca validam por acidente.
+const rascunhoWVetro = ehOrcamentoWVetro(cardSelecionado)
+? prepararRascunhoWVetro(cardSelecionado.itens || [], editando.itens || [], fluxoWVetro(cardSelecionado))
+: null
 setSalvando(true)
 
 const colunaAnterior = cardSelecionado.coluna_id
@@ -1257,8 +1281,8 @@ tipo_medida: editando.tipo_medida,
 temperatura: editando.temperatura,
 arquiteto_nome: editando.arquiteto_nome,
 arquiteto_contato: editando.arquiteto_contato,
-itens: editando.itens,
-...(fluxoWVetro(cardSelecionado).validacao_por_item?{wvetro_fluxo:{...fluxoWVetro(cardSelecionado),validacao_status:(editando.itens||[]).length&&(editando.itens||[]).every(i=>statusItemWVetro(i,fluxoWVetro(cardSelecionado))!=='pendente')?'validado':'aguardando'}}:{}),
+itens: rascunhoWVetro?.itens ?? editando.itens,
+...(rascunhoWVetro?.fluxo.validacao_por_item ? { wvetro_fluxo: rascunhoWVetro.fluxo } : {}),
 valor_estimado: editando.valor_estimado,
 tipo_esquadria: editando.itens?.[0]?.tipo_esquadria || editando.tipo_esquadria,
 largura_mm: editando.itens?.[0]?.largura_mm ?? editando.largura_mm,
@@ -1286,6 +1310,7 @@ criado_por_id: editando.criado_por_id,
 }
 const atualizado = {
 ...editando,
+...(rascunhoWVetro ? { itens: rascunhoWVetro.itens, wvetro_fluxo: rascunhoWVetro.fluxo } : {}),
 coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
 }
 setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? atualizado : c)))
@@ -2135,7 +2160,7 @@ className="w-full border border-slate-300 rounded-lg p-2 text-xs resize-none h-1
 <button
 type="button"
 onClick={() => void buscarWVetroCard()}
-disabled={buscandoWVetro || sincronizandoWVetro}
+disabled={buscandoWVetro || sincronizandoWVetro || enviandoAnexo}
 className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
 >
 {buscandoWVetro || sincronizandoWVetro ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
@@ -2169,7 +2194,7 @@ className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg
 <button
 type="button"
 onClick={() => void vincularWVetroCard(c.numero)}
-disabled={sincronizandoWVetro}
+disabled={sincronizandoWVetro || enviandoAnexo}
 className="rounded-lg bg-brand-navy px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50"
 >
 Usar este
@@ -2208,7 +2233,7 @@ className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white p-2 text-x
 />
 <label className={`flex flex-shrink-0 items-center gap-1 rounded-lg border border-dashed px-2.5 py-2 text-xs ${novoAnexoTitulo.trim() ? 'cursor-pointer border-brand-navy text-brand-navy hover:bg-brand-navyLight' : 'border-slate-200 text-slate-300'}`}>
 <Paperclip size={13} /> Anexar
-<input type="file" className="hidden" disabled={!novoAnexoTitulo.trim()} onChange={e => void adicionarAnexo(e.target.files?.[0])} />
+<input type="file" className="hidden" disabled={!novoAnexoTitulo.trim() || enviandoAnexo} onChange={e => void adicionarAnexo(e.target.files?.[0])} />
 </label>
 </div>
 <p className="mt-1 text-[11px] text-slate-400">Anexar ou sincronizar não apaga versões anteriores nem outros dados já preenchidos.</p>
@@ -2317,7 +2342,7 @@ novoAnexoTitulo.trim()
 <input
 type="file"
 className="hidden"
-disabled={!novoAnexoTitulo.trim()}
+disabled={!novoAnexoTitulo.trim() || enviandoAnexo}
 onChange={e => adicionarAnexo(e.target.files?.[0])}
 />
 </label>
@@ -2380,7 +2405,7 @@ novoAnexoTitulo.trim()
 <input
 type="file"
 className="hidden"
-disabled={!novoAnexoTitulo.trim()}
+disabled={!novoAnexoTitulo.trim() || enviandoAnexo}
 onChange={e => adicionarAnexo(e.target.files?.[0])}
 />
 </label>
@@ -2467,10 +2492,10 @@ className="w-full border border-slate-300 rounded-xl p-3 text-sm"
 
 <button
 onClick={salvarCard}
-disabled={salvando}
+disabled={salvando || enviandoAnexo}
 className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-brand-navyDark transition disabled:opacity-50"
 >
-{salvando ? 'Salvando...' : 'Salvar alterações'}
+{salvando ? 'Salvando...' : ehOrcamentoWVetro(cardSelecionado) ? 'Salvar rascunho / alterações' : 'Salvar alterações'}
 </button>
 
 {usuario?.role === 'master' && (

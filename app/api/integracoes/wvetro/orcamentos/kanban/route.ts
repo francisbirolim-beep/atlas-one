@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { consultarRecursoOperacionalWVetro } from '@/lib/wvetroOperacionalConsultaServer'
 import { transformarPayloadWVetroEmStaging } from '@/lib/wvetroMigracaoOperacionalServer'
 import { sincronizar } from '../sincronizar/route'
+import { anexosComPdfWVetro } from '@/lib/wvetroPdfAnexo'
 import type { UsuarioWVetro } from '@/lib/wvetroAcessoServer'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import { materializarPacoteTecnicoWVetro } from '@/lib/wvetroPacoteTecnicoServer'
@@ -304,6 +305,68 @@ async function inserirHistorico(orcamentoId: string, usuario: UsuarioTenant, aca
   })
 }
 
+// Recupera o PDF original SOMENTE se o detalhe da API W.Vetro trouxer uma URL de PDF.
+// Não inventa um PDF nem modifica itens, medidas, validações ou outros dados do card.
+async function completarPdfOriginalWVetro(empresaId: string, card: any, numeroWvetro: string) {
+  const anexosAtuais = Array.isArray(card.anexos) ? card.anexos : []
+  const pdfJaAnexado = anexosAtuais.some((anexo: any) =>
+    /pdf original w\.?vetro/i.test(String(anexo?.titulo || '')) && !anexo?.excluido_em
+  )
+  if (pdfJaAnexado) {
+    return { orcamento: card, mensagem: 'O PDF original W.Vetro já consta nos anexos.' }
+  }
+
+  let detalhe: unknown
+  try {
+    // /vendas/pedidoByKey é a consulta por número documentada para detalhes.
+    // O endpoint de listagem frequentemente não inclui o link do arquivo.
+    detalhe = await consultarRecursoOperacionalWVetro('pedido', { id: numeroWvetro })
+  } catch (error) {
+    console.warn('W.Vetro não disponibilizou o detalhe necessário ao PDF:', error)
+    return { orcamento: card, mensagem: 'O PDF original não pôde ser consultado no W.Vetro; os anexos anteriores foram preservados.' }
+  }
+
+  if (anexosComPdfWVetro(anexosAtuais, detalhe, numeroWvetro).length === anexosAtuais.length) {
+    return {
+      orcamento: card,
+      mensagem: 'A API W.Vetro não forneceu um link para o PDF original. O orçamento foi vinculado; para ter o PDF original, anexe-o manualmente.',
+    }
+  }
+
+  // Releitura + controle de versão impedem sobrescrever anexos enviados
+  // enquanto a consulta externa estava em andamento.
+  const { data: atual, error: erroLeitura } = await supabaseAdmin
+    .from('orcamentos')
+    .select('id,anexos,updated_at')
+    .eq('empresa_id', empresaId)
+    .eq('id', card.id)
+    .maybeSingle()
+  if (erroLeitura || !atual) {
+    return { orcamento: card, mensagem: 'O PDF foi localizado, mas não foi possível confirmar o anexo no Atlas. Tente novamente.' }
+  }
+  const anexosMesclados = anexosComPdfWVetro(atual.anexos, detalhe, numeroWvetro)
+  if (anexosMesclados.length === (Array.isArray(atual.anexos) ? atual.anexos.length : 0)) {
+    const { data: recarregado } = await supabaseAdmin.from('orcamentos').select('*')
+      .eq('empresa_id', empresaId).eq('id', card.id).maybeSingle()
+    return { orcamento: recarregado || card, mensagem: 'O PDF original W.Vetro já consta nos anexos.' }
+  }
+  const { data: gravado, error: erroGravacao } = await supabaseAdmin
+    .from('orcamentos')
+    .update({ anexos: anexosMesclados, updated_at: new Date().toISOString() })
+    .eq('empresa_id', empresaId)
+    .eq('id', card.id)
+    .eq('updated_at', atual.updated_at)
+    .select('*')
+    .maybeSingle()
+  if (erroGravacao || !gravado) {
+    return {
+      orcamento: card,
+      mensagem: 'O PDF foi localizado, mas outro salvamento ocorreu durante a sincronização. Nenhum anexo foi substituído; sincronize novamente.',
+    }
+  }
+  return { orcamento: gravado, mensagem: 'Link do PDF original W.Vetro vinculado aos anexos do orçamento.' }
+}
+
 async function mesclarFonteNoCard(empresaId: string, alvo: any, fonte: any, usuario: UsuarioTenant) {
   const fluxoAlvo = obj(alvo.wvetro_fluxo)
   if (houveConferenciaHumanaWVetro(fluxoAlvo)) {
@@ -479,11 +542,13 @@ export async function POST(req: NextRequest) {
         if (numeroAtual !== numeroWvetro) {
           return NextResponse.json({error: 'Este orçamento possui esquadrias validadas. A vinculação a outro número exige revisão manual para não apagar as conferências.'}, {status:409})
         }
-        // Escolher novamente o mesmo W.Vetro não pode reimportar nem apagar aprovações.
+        // Mesmo orçamento já validado: somente anexa o PDF, sem reimportar
+        // os itens nem apagar as conferências feitas pela equipe.
+        const pdf = await completarPdfOriginalWVetro(usuario.empresa_id, alvo, numeroWvetro)
         return NextResponse.json({
-          ok:true, orcamento:alvo, numeroWvetro, ocultadoId:null,
+          ok:true, orcamento:pdf.orcamento, numeroWvetro, ocultadoId:null,
           divergenciaItens:false,
-          mensagem:'Este W.Vetro já está vinculado. As conferências e correções gravadas foram preservadas; continue apenas os itens pendentes.',
+          mensagem:'Este W.Vetro já está vinculado. Conferências preservadas. ' + pdf.mensagem,
         }, {headers:{'Cache-Control':'no-store'}})
       }
 
@@ -576,6 +641,8 @@ export async function POST(req: NextRequest) {
           ? { atualizado: fonte, divergenciaItens: false }
           : await mesclarFonteNoCard(usuario.empresa_id, alvo, fonte, usuario)
 
+        const pdfHistorico = await completarPdfOriginalWVetro(usuario.empresa_id, resultadoMescla.atualizado, numeroWvetro)
+
         await inserirHistorico(
           alvo.id,
           usuario,
@@ -585,13 +652,14 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
           ok: true,
-          orcamento: resultadoMescla.atualizado,
+          orcamento: pdfHistorico.orcamento,
           numeroWvetro,
           ocultadoId: fonte.id !== alvo.id ? fonte.id : null,
           divergenciaItens: resultadoMescla.divergenciaItens,
           mensagem: resultadoMescla.divergenciaItens
             ? `W.Vetro #${numeroWvetro} vinculado. Como a quantidade de itens é diferente, as tipologias atuais do Atlas foram preservadas para conferência.`
             : `W.Vetro #${numeroWvetro} vinculado. Dados técnicos foram atualizados sem apagar fotos nem medidas de campo.`,
+          avisoAnexo: pdfHistorico.mensagem,
         })
       }
 
@@ -655,6 +723,8 @@ export async function POST(req: NextRequest) {
         ? await mesclarFonteNoCard(usuario.empresa_id, alvoAtual, fonteAtual, usuario)
         : { atualizado: alvoAtual, divergenciaItens: false }
 
+      const pdfRecente = await completarPdfOriginalWVetro(usuario.empresa_id, resultadoMescla.atualizado, numeroWvetro)
+
       await inserirHistorico(
         alvo.id,
         usuario,
@@ -664,13 +734,14 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         ok: true,
-        orcamento: resultadoMescla.atualizado,
+        orcamento: pdfRecente.orcamento,
         numeroWvetro,
         ocultadoId: fonteAtual?.id || null,
         divergenciaItens: resultadoMescla.divergenciaItens,
         mensagem: resultadoMescla.divergenciaItens
           ? `W.Vetro #${numeroWvetro} vinculado, mas os itens têm quantidades diferentes. O Atlas preservou as tipologias atuais para conferência.`
           : `Orçamento W.Vetro #${numeroWvetro} sincronizado sem apagar fotos nem medidas de campo.`,
+        avisoAnexo: pdfRecente.mensagem,
       })
     }
 
