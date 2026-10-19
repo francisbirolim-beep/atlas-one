@@ -1,3 +1,4 @@
+import {unidadeCmvValida,quantidadeCmvValida} from '@/lib/vendaCmvUnidades'
 // Registra peso e valor da mercadoria recebida em etapa INDEPENDENTE do CMV comprado.
 // Nunca grava na tabela de custos do orçamento, nos lançamentos comprados ou no Kanban.
 import {NextRequest,NextResponse} from 'next/server'
@@ -28,21 +29,26 @@ async function vendaTenant(empresa:string,id:string){
 }
 function validarCampos(form:FormData){
  const categoria=txt(form.get('categoria'),30)
- const peso=numero(form.get('peso_kg'))
- const preco=numero(form.get('preco_kg'))
+ const unidade=txt(form.get('unidade')||'KG',10).toUpperCase()
+ const quantidade=numero(form.get('quantidade')??form.get('peso_kg'))
+ const preco=numero(form.get('preco_unitario')??form.get('preco_kg'))
  const data=txt(form.get('data_recebimento'),10)
  const fornecedor=txt(form.get('fornecedor'),150)
  const nota=txt(form.get('nota_numero'),100)||null
  const romaneio=txt(form.get('romaneio_numero'),100)||null
  if(!categorias.includes(categoria))throw new Error('Categoria inválida.')
- if(peso===null||peso<=0||peso>999999999)throw new Error('Informe os quilos recebidos (maior que zero).')
- if(preco===null||preco<=0||preco>99999999)throw new Error('Informe o preço por quilo (maior que zero).')
+ if(!unidadeCmvValida(unidade)||!quantidadeCmvValida(quantidade,unidade))
+  throw new Error('Informe quantidade obrigatória válida e unidade (KG, UN, PC ou PCT).')
+ if(preco===null||preco<=0||preco>99999999)throw new Error('Informe o preço por unidade de compra (maior que zero).')
  if(!fornecedor)throw new Error('Fornecedor obrigatório.')
  if(!nota&&!romaneio)throw new Error('Informe o número da nota ou do romaneio.')
- if(!/^\d{4}-\d{2}-\d{2}$/.test(data)||Number.isNaN(Date.parse(data)))throw new Error('Data de recebimento inválida.')
- const valorTotal=Math.round(Math.round(peso*1000)/1000*Math.round(preco*10000)/10000*100)/100
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(data)||Number.isNaN(Date.parse(data)))throw new Error('Data de recebimento inválida.')
+ const quantidadeFinal=unidade==='KG'?Math.round(quantidade!*1000)/1000:quantidade!
+ const precoFinal=Math.round(preco*10000)/10000
+ const valorTotal=Math.round(quantidadeFinal*precoFinal*100)/100
  if(valorTotal<=0||valorTotal>999999999999)throw new Error('Valor total do recebimento inválido.')
- return {categoria,peso_kg:Math.round(peso*1000)/1000,preco_kg:Math.round(preco*10000)/10000,
+ return {categoria,quantidade:quantidadeFinal,unidade,preco_unitario:precoFinal,
+  peso_kg:unidade==='KG'?quantidadeFinal:null,preco_kg:unidade==='KG'?precoFinal:null,
   valor_total:valorTotal,fornecedor,nota_numero:nota,romaneio_numero:romaneio,data_recebimento:data,
   observacoes:txt(form.get('observacoes'),1000)||null}
 }
@@ -68,6 +74,9 @@ export async function GET(req:NextRequest){
    .order('criado_em',{ascending:false})
   if(ausente(error))return NextResponse.json({ok:true,disponivel:false,recebimentos:[],historico:[]})
   if(error)throw error
+  // Sem migração: leitura dos antigos preservada e gravação de novos recebimentos desabilitada.
+  const {error:erroUnidades}=await supabaseAdmin.from(TABELA).select('quantidade,unidade,preco_unitario').limit(1)
+  const unidadesDisponiveis=!erroUnidades
   const linhas=await Promise.all((data||[]).map(async r=>{
    let anexo_url:string|null=null
    if(r.anexo_path){
@@ -81,7 +90,7 @@ export async function GET(req:NextRequest){
    .eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId)
    .order('alterado_em',{ascending:false}).limit(100)
   if(eh&&!ausente(eh))throw eh
-  return NextResponse.json({ok:true,disponivel:true,
+  return NextResponse.json({ok:true,disponivel:unidadesDisponiveis,unidadesDisponiveis,
    recebimentos:linhas.filter(l=>!l.cancelado_em),excluidos:linhas.filter(l=>Boolean(l.cancelado_em)),
    historico:historico||[]})
  }catch(e){console.error('Falha no recebimento CMV (GET):',e);return erro('Falha ao consultar recebimentos.',500)}
