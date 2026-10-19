@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, FileText, Play, UserRound, AlertTriangle, Paperclip, Building2, Plus, Trash2 } from 'lucide-react'
 import { OrcamentoRapido, Usuario } from '@/lib/tipos'
+import SelecaoItensVenda from '@/components/vendas/SelecaoItensVenda'
+import type { SelecionadoVenda, ItemOrcamentoVenda } from '@/lib/vendaSelecaoItens'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { criarObraCliente, listarObrasCliente, type ObraCliente360 } from '@/lib/cliente360'
@@ -64,6 +66,8 @@ export default function ConfirmarVendaPage() {
   const [importandoItens, setImportandoItens] = useState(false)
   const [salvandoItensPreview, setSalvandoItensPreview] = useState(false)
   const [itensPreview, setItensPreview] = useState<any[] | null>(null)
+  const [modoVenda, setModoVenda] = useState<'total'|'parcial'>('total')
+  const [selecaoVenda, setSelecaoVenda] = useState<SelecionadoVenda[]>([])
   const [cadastroSalvo, setCadastroSalvo] = useState(false)
   const [erro, setErro] = useState('')
   const [mensagem, setMensagem] = useState('')
@@ -145,6 +149,8 @@ export default function ConfirmarVendaPage() {
     setSelecionadoId(o.id)
     setCadastroSalvo(false)
     setItensPreview(null)
+    setModoVenda('total')
+    setSelecaoVenda([])
     setErro('')
     setMensagem('')
     setObraId((o as any).obra_id || '')
@@ -204,6 +210,10 @@ export default function ConfirmarVendaPage() {
       return
     }
 
+    if (modoVenda === 'parcial') {
+      setErro('A venda parcial está em conferência. Para não lançar peças não vendidas no Financeiro e na Produção, a confirmação parcial permanece bloqueada até a integração segura.')
+      return
+    }
     if (!prontoCadastro) {
       setErro('Salve o cadastro completo do cliente antes de iniciar o processo.')
       return
@@ -342,6 +352,8 @@ export default function ConfirmarVendaPage() {
       const itensSalvos = Array.isArray(json?.itens) ? json.itens : []
       setOrcamentos(prev => prev.map(o => o.id === selecionado.id ? { ...o, itens: itensSalvos } : o))
       setItensPreview(null)
+      setModoVenda('total')
+      setSelecaoVenda([])
       setMensagem(`${itensSalvos.length} item(ns) conferidos e salvos no orçamento.`)
     } catch {
       setErro('Erro ao salvar os itens conferidos. Tente novamente.')
@@ -598,6 +610,18 @@ export default function ConfirmarVendaPage() {
               )}
             </div>
           )}
+          {selecionado && itens.length > 0 && !(origemFluxo === 'medicao-final' && wvetroMedicaoDireta) && (
+            <div className="mt-5">
+              <SelecaoItensVenda
+                itens={itens as ItemOrcamentoVenda[]}
+                modo={modoVenda}
+                onModo={v=>{setModoVenda(v);setSelecaoVenda([]);setErro('')}}
+                selecao={selecaoVenda}
+                onSelecao={setSelecaoVenda}
+                orcamentoValor={Number(selecionado.valor_estimado||0)}
+              />
+            </div>
+          )}
         </section>
 
         <section className="bg-brand-navy text-white rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
@@ -619,14 +643,14 @@ export default function ConfirmarVendaPage() {
             disabled={
               origemFluxo === 'medicao-final' && wvetroMedicaoDireta
                 ? !prontoItens || iniciando || !!itensPreview
-                : !prontoCadastro || !prontoItens || iniciando || !!itensPreview
+                : !prontoCadastro || !prontoItens || iniciando || !!itensPreview || modoVenda === 'parcial'
             }
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40"
           >
             <Play size={16} />
             {iniciando
               ? origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciando...' : 'Confirmando...'
-              : origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciar Medida Final' : 'Confirmar venda'}
+              : origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciar Medida Final' : modoVenda === 'parcial' ? 'Venda parcial — aguardando integração' : 'Confirmar venda'}
           </button>
         </section>
 
