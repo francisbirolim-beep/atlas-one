@@ -1,4 +1,5 @@
 import {unidadeCmvValida,quantidadeCmvValida} from '@/lib/vendaCmvUnidades'
+import {recebimentoConferivelCmv} from '@/lib/vendaCmvConferencia'
 // Registra peso e valor da mercadoria recebida em etapa INDEPENDENTE do CMV comprado.
 // Nunca grava na tabela de custos do orçamento, nos lançamentos comprados ou no Kanban.
 import {NextRequest,NextResponse} from 'next/server'
@@ -42,7 +43,7 @@ function validarCampos(form:FormData){
  if(preco===null||preco<=0||preco>99999999)throw new Error('Informe o preço por unidade de compra (maior que zero).')
  if(!fornecedor)throw new Error('Fornecedor obrigatório.')
  if(!nota&&!romaneio)throw new Error('Informe o número da nota ou do romaneio.')
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(data)||Number.isNaN(Date.parse(data)))throw new Error('Data de recebimento inválida.')
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(data)||Number.isNaN(Date.parse(data)))throw new Error('Data de recebimento inválida.')
  const quantidadeFinal=unidade==='KG'?Math.round(quantidade!*1000)/1000:quantidade!
  const precoFinal=Math.round(preco*10000)/10000
  const valorTotal=Math.round(quantidadeFinal*precoFinal*100)/100
@@ -200,11 +201,12 @@ export async function PUT(req:NextRequest){
   const venda=await vendaTenant(user.empresa_id,vendaId)
   if(!venda)return erro('Venda não localizada.',404)
   const {data:linhas,error:buscaErro}=await supabaseAdmin.from(TABELA)
-   .select('id,criado_por_id,conferido_em')
+   .select('id,criado_por_id,conferido_em,categoria,unidade,quantidade,peso_kg,preco_unitario,preco_kg')
    .eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id)
    .is('cancelado_em',null).in('id',unicos)
   if(buscaErro)throw buscaErro
   if((linhas||[]).length!==unicos.length)return erro('Algum recebimento não foi localizado.',404)
+  if((linhas||[]).some(l=>!recebimentoConferivelCmv(l)))return erro('Corrija a unidade e a quantidade dos recebimentos antes de confirmar. Vidros e acessórios antigos em KG não são convertidos automaticamente.',409)
   if(user.role!=='master'&&(linhas||[]).some(l=>l.criado_por_id!==user.id))
    return erro('Somente o autor ou Master pode conferir estes recebimentos.',403)
   const {data:validados,error}=await supabaseAdmin.rpc('fn_venda_cmv_validar_recebimentos_v2',{
