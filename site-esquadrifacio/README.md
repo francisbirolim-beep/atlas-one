@@ -10,6 +10,9 @@
 ## Contatos provisórios para confirmação antes de publicar
 - WhatsApp configurado: (17) 99636-1318, previamente usado em material público da Esquadrifácio. Confirmar se este será o destino de orçamento do site ou trocar pelo WhatsApp Business oficial.
 - Instagram: https://www.instagram.com/esquadrifacio/.
+- Endereço conferido para a prévia: Av. Leonel Guilherme Pereira, 775, Residencial Veneza, José Bonifácio - SP, CEP 15202-420.
+- Link de localização fornecido pelo proprietário: https://maps.app.goo.gl/SnZxkUvSYJLgceed6. O botão **Como chegar** abre rota para o ponto `-21.050927,-49.667694` informado no Google Maps. O endereço escrito também abre a ficha do local.
+- Rodapé: Instagram e Como chegar em destaque responsivo, sem alterar o visual principal do site.
 - Região atendida: José Bonifácio — SP e região.
 - Verificar endereço informado na política e escolher dado oficial de contato LGPD.
 
