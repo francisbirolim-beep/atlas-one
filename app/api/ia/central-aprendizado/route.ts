@@ -3,6 +3,7 @@ import {pesoDecimalCatalogo} from '@/lib/ai/catalogoPeso'
 import {podeAtualizarCandidatoCatalogo,dadosReanaliseCatalogo} from '@/lib/ai/catalogoReanalise'
 import {extrairLinhasCatalogo, VERSAO_REGRAS_CATALOGO} from '@/lib/ai/catalogoLinhas'
 import {extrairCartoesGeometricos,codigoColadoDeOutrasColunas} from '@/lib/ai/catalogoCartoesGeometria'
+import {indexarPaginasSeguras} from '@/lib/ai/catalogoPaginasSeguras'
 import {avaliarCatalogoLote} from '@/lib/ai/catalogoLoteSeguro'
 import {compararGeometria, codigoPerfil} from '@/lib/ai/equivalenciaPerfilTecnico'
 import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
@@ -328,21 +329,13 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
   const fornecedorNome=nomeFornecedorCatalogo(lido.texto)
   const extraidos=extrairProdutosCatalogoLocal(lido.texto,fornecedorNome,lido.paginas)
   const porCodigo=new Map(extraidos.map((i:any)=>[cod(i.codigo),i]))
-  const paginaPorCodigo=new Map<string,number>()
-  for(const pg of lido.paginas){
-    for(const token of pg.items||[]){
-      const codigo=ehCodigoCatalogo(token?.str)
-      if(codigo&&!paginaPorCodigo.has(cod(codigo)))paginaPorCodigo.set(cod(codigo),pg.pagina)
-    }
-    for(const linha of String(pg.texto||'').split(/\\r?\\n/)){
-      const codigo=ehCodigoCatalogo(linha)
-      if(codigo&&!paginaPorCodigo.has(cod(codigo)))paginaPorCodigo.set(cod(codigo),pg.pagina)
-    }
-  }
+  // Só identifica uma página quando todas as evidências do PDF apontam
+  // para a mesma posição. Referências repetidas continuam para revisão.
+  const indice=indexarPaginasSeguras(lido.paginas,extraidos)
   const {data:candidatos,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
     .select('id,dados,status,validado_em,updated_at').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').eq('status','pendente').limit(2000)
   if(ce)throw ce
-  let mapeados=0
+  let mapeados=0,ambiguos=0,jaIdentificados=0,naoLocalizados=0
   const lista=candidatos||[]
   for(let i=0;i<lista.length;i+=20){
     const lote=lista.slice(i,i+20)
@@ -351,8 +344,16 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
       if(!podeAtualizarCandidatoCatalogo(c))return
       const codigo=cod(c?.dados?.codigo)
       const item=porCodigo.get(codigo) as any
-      const pagina=paginaPorCodigo.get(codigo)||num(item?.pagina_catalogo)
-      if(!pagina&&!item)return
+      if(indice.ambiguas.has(codigo)){ambiguos++;return}
+      const pagina=indice.unicas.get(codigo)
+      if(!pagina){naoLocalizados++;return}
+      const paginaAnterior=Number(c.dados?.pagina_catalogo||0)
+      // Não trocar página já definida em uma revisão anterior.
+      if(paginaAnterior>0){
+        if(paginaAnterior===pagina)jaIdentificados++
+        else ambiguos++
+        return
+      }
       const linhaNova=txt(item?.linha,120)||null
       const linhaAtual=txt(c?.dados?.linha,120)||null
       const linhaAtualValida=linhaAtual&&!ruidoCatalogo(linhaAtual,fornecedorNome)?linhaAtual:null
@@ -372,8 +373,9 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
     metadados:{...(entrada.metadados||{}),paginas_mapeadas_em:new Date().toISOString(),itens_com_pagina:mapeados},
     updated_at:new Date().toISOString()
   }).eq('empresa_id',usuario.empresa_id).eq('id',entrada.id)
-  await log(usuario,'catalogo_paginas_mapeadas',entrada.id,null,{mapeados,total:lista.length})
-  return {mapeados,total:lista.length}
+  await log(usuario,'catalogo_paginas_mapeadas',entrada.id,null,
+    {mapeados,total:lista.length,ambiguos,jaIdentificados,naoLocalizados})
+  return {mapeados,total:lista.length,ambiguos,jaIdentificados,naoLocalizados}
 }
 
 async function analisar(token:string,tipo:string,descricao:string,nome:string|null,texto:string,imagens:OpenCodeAnexo[],paginas:Array<{pagina:number;texto:string;items?:any[]}>=[]){
@@ -1195,7 +1197,7 @@ export async function PATCH(req:NextRequest){
       if(u.role!=='master'&&entrada.criado_por_id!==u.id)return NextResponse.json({error:'Material não encontrado.'},{status:404})
       if(!['catalogo','tabela_preco'].includes(String(entrada.tipo)))return NextResponse.json({error:'Somente catálogo ou tabela pode ter imagens preparadas.'},{status:400})
       const mapa=await remapearCatalogoExistente(u,entrada)
-      return NextResponse.json({mensagem:'Catálogo preparado: '+mapa.mapeados+' de '+mapa.total+' item(ns) foram ligados à página correta para gerar o recorte visual.',...mapa})
+      return NextResponse.json({mensagem:'Catálogo conferido: '+mapa.mapeados+' nova(s) página(s) identificada(s), '+mapa.jaIdentificados+' já identificada(s), '+mapa.ambiguos+' referência(s) para revisão e '+mapa.naoLocalizados+' ainda sem página. Nenhuma foto foi validada automaticamente.',...mapa})
     }
     if(acao==='reprocessar_entrada'){
       if(!await podeValidar(u,{tipo:'produto',modulo:'engenharia'})||!await podeValidar(u,{tipo:'fornecedor',modulo:'compras'}))return NextResponse.json({error:'Sem permissão para alterar este catálogo.'},{status:403})
