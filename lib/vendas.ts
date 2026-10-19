@@ -232,3 +232,49 @@ export async function iniciarProcessoVenda(
     contaId: resultado?.conta_id || undefined,
   }
 }
+
+
+/** Venda parcial: o banco cria um registro operacional só com os itens vendidos,
+ * preservando o orçamento original e sem mudar o fluxo da venda total.
+ */
+export async function iniciarProcessoVendaParcial(
+  orcamentoOriginalId: string,
+  itensVendidos: Array<{ indice: number; valor: number }>,
+  usuario: Usuario | null,
+  camposConfigurados: CampoConfiguravel[] = []
+): Promise<{ success: boolean; projetoCardId?: string; vendaId?: string; contaId?: string; orcamentoVendidoId?: string; error?: string }> {
+  if (!usuario?.id) return { success: false, error: 'Faça login para confirmar a venda.' }
+  const indices = new Set(itensVendidos.map(i => i.indice))
+  if (indices.size !== itensVendidos.length || !itensVendidos.length
+    || itensVendidos.some(i => !Number.isInteger(i.indice) || i.indice < 0 || !Number.isFinite(i.valor) || i.valor < 0)
+    || itensVendidos.reduce((s, i) => s + i.valor, 0) <= 0) {
+    return { success: false, error: 'Selecione as tipologias vendidas e informe os valores corretos.' }
+  }
+  if (camposConfigurados.length > 0) {
+    const { data: orcamento } = await supabase.from('orcamentos')
+      .select('id,cliente_id,cliente_nome,itens').eq('id', orcamentoOriginalId).maybeSingle()
+    if (!orcamento?.cliente_id) return { success: false, error: 'Salve o cadastro do cliente antes da venda.' }
+    const { data: cliente } = await supabase.from('clientes').select('*').eq('id', orcamento.cliente_id).maybeSingle()
+    const salvos = await carregarDadosVendaSalvos(orcamentoOriginalId)
+    const base = cadastroVendaDoCliente((cliente as Cliente) || null, orcamento as OrcamentoRapido)
+    const preenchidos = Object.fromEntries(Object.entries(salvos).filter(([, v]) => String(v ?? '').trim())) as CadastroVenda
+    const faltantes = camposFaltantesCadastroVenda({ ...base, ...preenchidos }, camposConfigurados)
+    if (faltantes.length) return { success: false, error: 'Cadastro incompleto: ' + faltantes.map(c => c.label).join(', ') }
+  }
+  const { data, error } = await supabase.rpc('fn_iniciar_fluxo_venda_parcial_v1', {
+    p_orcamento_id: orcamentoOriginalId,
+    p_itens: itensVendidos.map(item => ({ indice: item.indice, valor: Number(item.valor.toFixed(2)) })),
+    p_usuario_id: usuario.id,
+    p_usuario_nome: usuario.nome || null,
+  })
+  if (error) return { success: false, error: error.message }
+  const result = Array.isArray(data) ? data[0] : data
+  if (!result?.venda_id || !result?.orcamento_vendido_id) {
+    return { success: false, error: 'A confirmação da venda parcial não retornou um registro válido.' }
+  }
+  return {
+    success: true, projetoCardId: result.projeto_card_id || undefined,
+    vendaId: result.venda_id, contaId: result.conta_id || undefined,
+    orcamentoVendidoId: result.orcamento_vendido_id,
+  }
+}
