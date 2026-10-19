@@ -89,7 +89,7 @@ function acharPdfWVetro(valor: unknown, profundidade = 0): string | null {
   return null
 }
 
-function anexosComPdfWVetro(anexosAtuais: unknown, payload: unknown, numeroWvetro: string) {
+export function anexosComPdfWVetro(anexosAtuais: unknown, payload: unknown, numeroWvetro: string) {
   const atuais = Array.isArray(anexosAtuais) ? [...anexosAtuais] : []
   const pdfUrl = acharPdfWVetro(payload)
   if (!pdfUrl) return atuais
