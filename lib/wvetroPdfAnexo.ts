@@ -3,7 +3,7 @@ function acharPdfWVetro(valor: unknown, profundidade = 0): string | null {
   if (profundidade > 8 || valor == null) return null
   if (typeof valor === 'string') {
     const s = valor.trim()
-    if (/^https?:\/\//i.test(s) && /(?:\.pdf(?:$|[?#])|pdf)/i.test(s)) return s
+    if (/^https?:\/\//i.test(s) && /\.pdf(?:$|[?#])/i.test(s)) return s
     return null
   }
   if (Array.isArray(valor)) {
