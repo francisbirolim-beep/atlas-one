@@ -6,7 +6,7 @@ import type {GrupoConta} from '@/lib/financeiroPlanoContas'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 const erro=(m:string,s=400)=>NextResponse.json({error:m},{status:s})
-async function autorizado(u:any,acao:string,minimo:'consulta'|'edicao'='consulta'){return usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'financeiro',acaoId:acao,minimo})}
+async function autorizado(u:any,acao:string,minimo:'consulta'|'edicao'='consulta'){return usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:acao.startsWith('financeiro.contas_receber.')?'caixa-balcao':'financeiro',acaoId:acao,minimo})}
 export async function GET(req:NextRequest){
  const u=await autenticarCompras(req);if(!u)return erro('Sessão inválida.',401)
  const [ap,ar]=await Promise.all([autorizado(u,'financeiro.contas_pagar.consultar'),autorizado(u,'financeiro.contas_receber.consultar')])

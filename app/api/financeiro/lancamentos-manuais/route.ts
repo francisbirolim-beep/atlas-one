@@ -15,7 +15,7 @@ export async function POST(req:NextRequest){
   const b=await req.json(),tipo=b.tipo==='pagar'?'pagar':b.tipo==='receber'?'receber':null
   if(!tipo)return erro('Tipo de título inválido.')
   const acao=tipo==='pagar'?'financeiro.contas_pagar.cadastrar':'financeiro.contas_receber.cadastrar'
-  if(!(await usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'financeiro',acaoId:acao,minimo:'edicao'})))return erro('Sem permissão para cadastrar este título.',403)
+  if(!(await usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:tipo==='pagar'?'financeiro':'caixa-balcao',acaoId:acao,minimo:'edicao'})))return erro('Sem permissão para cadastrar este título.',403)
   const pessoaId=str(b.pessoaId,40),documento=str(b.documento,100),descricao=str(b.descricao,500),forma=str(b.forma,60),obraId=str(b.obraId,40)
   if(!uid.test(pessoaId))return erro('Selecione um fornecedor ou cliente cadastrado.')
   if(!documento&&!descricao)return erro('Informe documento ou descrição do lançamento.')

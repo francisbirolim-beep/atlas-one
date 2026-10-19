@@ -8,7 +8,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const erro=(m:string,s=400)=>NextResponse.json({error:m},{status:s})
 export async function GET(req:NextRequest){
  const u=await autenticarCompras(req);if(!u)return erro('Sessão inválida.',401)
- const permitido=await usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'financeiro',acaoId:'financeiro.contas_receber.recibo',minimo:'consulta'})
+ const permitido=await usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'caixa-balcao',acaoId:'financeiro.contas_receber.recibo',minimo:'consulta'})
  if(!permitido)return erro('Sem permissão para gerar recibos.',403)
  const id=req.nextUrl.searchParams.get('id')||''
  if(!uuid.test(id))return erro('Recebimento inválido.')
