@@ -1,0 +1,29 @@
+{
+  "verificado_em": "2026-10-19",
+  "dominio": "esquadrifacio.com.br",
+  "evidencia": "Capturas da sessão do proprietário no Hostinger hPanel: domínio ativo listado na conta e tela de edição dos registros DNS acessível.",
+  "vencimento_exibido": "2029-09-19",
+  "provedor_dns": "Hostinger (dns-parking.com)",
+  "servidores_de_nomes": [
+    "ns1.dns-parking.com",
+    "ns2.dns-parking.com"
+  ],
+  "servidores_mx": [
+    "mx1.hostinger.com",
+    "mx2.hostinger.com"
+  ],
+  "registros_site_visiveis_no_painel": [
+    {
+      "tipo": "CNAME",
+      "nome": "www",
+      "destino": "www.esquadrifacio.com.br.cdn.hstgr.net"
+    },
+    {
+      "tipo": "ALIAS",
+      "nome": "@",
+      "destino": "equifacio.com.br.cdn.hstgr.net"
+    }
+  ],
+  "observacao": "O ALIAS @ aparece com grafia equifacio no print: verificar a origem no hPanel antes de qualquer alteração. Captura parcial de TXT/DKIM; não usar esta relação como backup exaustivo.",
+  "restricao": "Controle do domínio constatado para preparação; não autoriza modificar DNS, interromper hospedagem, migrar e-mail ou publicar."
+}

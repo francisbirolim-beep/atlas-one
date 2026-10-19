@@ -29,7 +29,7 @@
 Executar `node site-esquadrifacio/validar-site.mjs` e `node site-esquadrifacio/testar-lancamento.mjs` na raiz do repositório. Nenhum dos dois testes faz requisições externas nem altera o site publicado.
 
 ## Limites desta etapa
-- O WhatsApp comercial e a divulgação das oito fotografias exatas da prévia foram aprovados em 19/10/2026. **Permanecem pendentes** revisão legal, comprovação da administração do domínio e autorização explícita para a troca do site.
+- O WhatsApp comercial e a divulgação das oito fotografias exatas da prévia foram aprovados em 19/10/2026. **Permanecem pendentes** revisão legal e autorização explícita para a troca do site. A administração do domínio foi identificada em capturas do hPanel em 19/10/2026.
 - Não há formulário, banco, CRM, integração com Marketing Inteligente, automação IA nem publicações em redes sociais.
 - As oito fotografias já estão em arquivos WebP independentes; o HTML e as imagens originais não são substituídos na geração da versão de lançamento.
 - **Não publicar esta versão na internet ou indexá-la sem aprovação expressa.**
@@ -52,7 +52,7 @@ node site-esquadrifacio/preparar-publicacao.mjs --modo=producao --dominio=https:
 # BLOQUEADO por padrão até quatro liberações explícitas.
 ```
 
-Em `controle-lancamento.json`, **somente `fotos_autorizadas` está como `true`**, com autorização do proprietário em 19/10/2026 registrada em `autorizacao-fotos.json` e hash SHA-256 de cada arquivo. Os outros três controles continuam `false`: `privacidade_revisada`, `dominio_controlado` e `publicacao_autorizada`. Não usar aprovações simuladas na produção. Uma foto alterada ou substituída bloqueia a compilação até nova aprovação. A confirmação de uso das fotos não autoriza publicar nem trocar DNS.
+Em `controle-lancamento.json`, **fotos e controle do domínio identificados**, com autorização do proprietário em 19/10/2026 registrada em `autorizacao-fotos.json` e hash SHA-256 de cada arquivo. Os dois controles restantes continuam false: privacidade_revisada e publicacao_autorizada. O domínio aparece no hPanel autenticado do proprietário, com painel de DNS acessível; veja evidencia-dominio.json. Isso não autoriza trocar registros. Não usar aprovações simuladas na produção. Uma foto alterada ou substituída bloqueia a compilação até nova aprovação. A confirmação de uso das fotos não autoriza publicar nem trocar DNS.
 
 Após confirmar cada etapa e registrar a autorização do proprietário, o gerador de candidato público cria `.gerado/producao/`, contendo canonical HTTPS correto na homepage, soluções e privacidade; metadados de compartilhamento, imagem OG, dados estruturados LocalBusiness, `robots.txt` liberado, `sitemap.xml` e cabeçalho CSP com hash da marcação estruturada. **Não publica nada nem altera DNS**; é necessário um deploy manual do diretório gerado em projeto Vercel próprio e separado do Atlas.
 
@@ -60,10 +60,25 @@ No projeto Vercel exclusivo do site, usar os **arquivos gerados** como raiz est�
 
 **Observação sobre domínio:** em 19/10/2026, `esquadrifacio.com.br` respondia HTTP 200 e apontava para a hospedagem existente. Isso **não comprova a titularidade do domínio nem autoriza sua substituição**. Conferir posse e capacidade de editar DNS no Registro.br/Hostinger com o proprietário.
 
-**Pendente para liberação:** revisão jurídica e aprovação do texto de privacidade; confirmação da administração do domínio e autorização expressa do lançamento. **Oito fotos atuais autorizadas e registradas**, sem abranger futuras trocas ou novas mídias.
+**Pendente para liberação:** revisão jurídica e aprovação do texto de privacidade; revisão do plano de DNS e autorização expressa do lançamento. **Oito fotos atuais autorizadas e registradas**, sem abranger futuras trocas ou novas mídias.
 
 ## Autorização de imagens (19/10/2026)
 
 O proprietário respondeu `pode seguir assim` à pergunta sobre a divulgação pública das oito fotos da prévia. Essa autorização foi interpretada exclusivamente para **as oito imagens existentes e inalteradas** no site institucional, e registrada no manifesto `autorizacao-fotos.json` com data, finalidade e SHA-256 de cada WebP. O preparo do site verifica os oito hashes e falha se algum arquivo for trocado ou modificado. Não se estende a anúncios pagos, novos arquivos nem integrações com redes sociais.
 
 **Esta autorização não significa aprovação do deploy.** Confirmar política, domínio, acesso ao DNS e receber autorização de publicação da versão final antes de abrir o site ao público.
+
+## Domínio e preservação de e-mail — 19/10/2026
+
+A administração do domínio foi observada por capturas do hPanel autenticado enviadas pelo proprietário: domínio ativo, gerenciamento e DNS acessíveis. Por isso, dominio_controlado=true significa apenas acesso para planejamento, NUNCA autorização para mudar o DNS. Evidência sem dados pessoais em evidencia-dominio.json.
+
+O registro ALIAS @ mostrado no hPanel apontava para equifacio.com.br.cdn.hstgr.net, grafia distinta da marca. O site atual responde HTTP 200 na Hostinger: NÃO presumir erro nem alterar o alvo antes de comparar com um backup completo dos registros.
+
+Regra obrigatória do corte: preservar nameservers e registros MX, TXT de SPF/DKIM/DMARC, autoconfig/autodiscover. Se a troca for expressamente autorizada, alterar somente registros necessários de site (raiz/www), com valores conferidos para o projeto separado na Vercel. Capturar estado imediatamente anterior, testar HTTPS, www e e-mails pós-corte, e manter rollback.
+
+
+## Minuta de privacidade em revisão — 19/10/2026
+
+Texto da política complementado para informar responsável (razão social da Esquadrifácio), exemplos de dados recebidos no atendimento, finalidades de elaboração de propostas, compartilhamento com provedores e conservação proporcional às obrigações. É uma **minuta técnica**, sem parecer jurídico ou aprovação do usuário. O controle privacidade_revisada permanece false até aceite explícito do proprietário ou revisão especializada.
+
+A prévia online existente deverá ser atualizada apenas no projeto independente, com autenticação Vercel e noindex. Não configurar o domínio oficial nem permitir indexação enquanto faltar a aprovação do texto.

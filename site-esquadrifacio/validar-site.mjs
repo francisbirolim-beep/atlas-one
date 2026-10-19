@@ -43,9 +43,14 @@ check('soluções preservam canais oficiais', solucoes.includes('wa.me/551799636
 check('soluções têm navegação e conteúdo sem JS externo', solucoes.includes('href="#conteudo"') && solucoes.includes('<details>') && !solucoes.includes('<script'))
 check('soluções protegidas da indexação na homologação', solucoes.includes('name="robots" content="noindex,nofollow"'))
 const controle = JSON.parse(readFileSync(join(root, 'controle-lancamento.json'), 'utf8'))
-check('fotos aprovadas, demais liberações bloqueadas', controle.fotos_autorizadas === true &&
-  controle.privacidade_revisada === false && controle.dominio_controlado === false &&
+check('fotos e domínio conferidos, lançamento bloqueado', controle.fotos_autorizadas === true &&
+  controle.privacidade_revisada === false && controle.dominio_controlado === true &&
   controle.publicacao_autorizada === false)
+const dominio = JSON.parse(readFileSync(join(root,'evidencia-dominio.json'),'utf8'))
+check('domínio oficial e e-mail preservados em plano de corte',
+  dominio.dominio === 'esquadrifacio.com.br' &&
+  dominio.servidores_mx.includes('mx1.hostinger.com') && dominio.servidores_mx.includes('mx2.hostinger.com') &&
+  dominio.restricao.includes('não autoriza modificar DNS'))
 const fotosAprovadas = JSON.parse(readFileSync(join(root, 'autorizacao-fotos.json'), 'utf8'))
 check('autorização específica das oito fotografias', fotosAprovadas.arquivos.length === 8 &&
   fotosAprovadas.aprovado_em === '2026-10-19')
@@ -61,6 +66,10 @@ check('GPS rápido no menu mobile com acessibilidade', home.includes('class="mob
 check('rodapé com referência direta de localização', home.includes('class="footer-info" id="localizacao"'))
 check('privacidade visualmente integrada à marca', privacidade.includes('background:#FAFBF8;color:#2B403F') && privacidade.includes('border-left:3px solid #649E94'))
 check('privacidade com canais e endereço completos', privacidade.includes('CEP 15202-420') && privacidade.includes('maps.app.goo.gl/SnZxkUvSYJLgceed6') && privacidade.includes('instagram.com/esquadrifacio/'))
+check('privacidade menciona responsável, finalidade e conservação', privacidade.includes('Esquadrifácio Soluções em Alumínio Ltda.') &&
+  privacidade.includes('Conservação das informações') && privacidade.includes('Uso e compartilhamento das informações'))
+check('privacidade continua aguardando revisão expressa', privacidade.includes('Revisão jurídica final pendente antes da publicação pública'))
+
 check('cores com contraste reforçado em textos pequenos', home.includes('body.light .eyebrow{color:#3F766C}') && home.includes('body.light .wordmark small,body.light .card-caption span{color:#437C70}'))
 check('identidade suave no navegador e na política de privacidade', home.includes('name="theme-color" content="#FAFBF8"') && privacidade.includes('name="theme-color" content="#FAFBF8"'))
 

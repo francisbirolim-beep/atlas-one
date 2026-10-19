@@ -1,6 +1,6 @@
 {
   "fotos_autorizadas": true,
   "privacidade_revisada": false,
-  "dominio_controlado": false,
+  "dominio_controlado": true,
   "publicacao_autorizada": false
 }
