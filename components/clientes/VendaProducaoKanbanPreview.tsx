@@ -95,9 +95,14 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   const [modoInicial,setModoInicial]=useState(false)
   const [podeConfigurar,setPodeConfigurar]=useState(false)
   const [modoInicialDisponivel,setModoInicialDisponivel]=useState(true)
+  const [podeMovimentarInicial,setPodeMovimentarInicial]=useState(false)
+  const [mostrarPermissoes,setMostrarPermissoes]=useState(false)
+  const [usuariosPermissoes,setUsuariosPermissoes]=useState<Array<{id:string;nome:string;role:string}>>([])
+  const [permissoesEquipe,setPermissoesEquipe]=useState<Record<string,boolean>>({})
+  const [salvandoPermissao,setSalvandoPermissao]=useState<string|null>(null)
   const [configurandoModo,setConfigurandoModo]=useState(false)
   const [versaoEstado,setVersaoEstado]=useState(0)
-  const [etapasIniciais,setEtapasIniciais]=useState<Record<string,{etapa:Etapa;motivo_pendencia?:string|null;categoria_pendencia?:string|null}>>({})
+  const [etapasIniciais,setEtapasIniciais]=useState<Record<string,{etapa:Etapa;motivo_pendencia?:string|null;categoria_pendencia?:string|null;atualizado_em?:string|null}>>({})
 
   const [entradaSim,setEntradaSim]=useState<Record<string,number>>({})
   const [aberto,setAberto]=useState<string|null>(null)
@@ -143,7 +148,10 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
           setModoInicial(Boolean(dados.modoInicial))
           setPodeConfigurar(Boolean(dados.podeConfigurar))
           setModoInicialDisponivel(dados.modoInicialDisponivel!==false)
-          setEtapasIniciais(Object.fromEntries((dados.etapasIniciais||[]).map((x:{item_ref:string;etapa:Etapa;motivo_pendencia?:string|null;categoria_pendencia?:string|null})=>[x.item_ref,x])))
+          setPodeMovimentarInicial(Boolean(dados.podeMovimentarInicial))
+          setUsuariosPermissoes(dados.usuariosPermissoes||[])
+          setPermissoesEquipe(Object.fromEntries((dados.permissoesEquipe||[]).map((p:{usuario_id:string;pode_movimentar:boolean})=>[p.usuario_id,p.pode_movimentar])))
+          setEtapasIniciais(Object.fromEntries((dados.etapasIniciais||[]).map((x:{item_ref:string;etapa:Etapa;motivo_pendencia?:string|null;categoria_pendencia?:string|null;atualizado_em?:string|null})=>[x.item_ref,x])))
           setPendenciasCarregadas(true)
         }
       }catch(e){if(ativo){setPendenciasCarregadas(false);setDiagnostico(null);setAviso(e instanceof Error?e.message:'Falha ao carregar pendências.')}}
@@ -205,6 +213,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     }
     if(!pendenciasCarregadas){recusar('Aguarde a verificação da produção e tente novamente.');return}
     if(modoInicial){
+      if(!podeMovimentarInicial){recusar('Seu usuário tem somente acesso de consulta. Peça ao Master para liberar a movimentação em Permissões da Produção.');return}
       setJustificativa('');setCategoriaPendencia('perfil')
       setQtdConferencia(Math.max(1,card.qtd-card.produzidas))
       setModalMovimento({ref,destino});setAviso('')
@@ -279,6 +288,24 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     }catch(e){setAviso(e instanceof Error?e.message:'Erro na configuração do modo inicial.')}
     finally{setConfigurandoModo(false)}
   }
+  async function alterarPermissaoEquipe(usuarioId:string){
+    if(!podeConfigurar||salvandoPermissao)return
+    setSalvandoPermissao(usuarioId);setAviso('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw Error('Sessão expirada.')
+      const permitir=!Boolean(permissoesEquipe[usuarioId])
+      const resp=await fetch('/api/producao/kanban/movimentar',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({acao:'autorizar_usuario_modo_inicial',vendaId,usuarioId,permitir}),
+      })
+      const dados=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw Error(dados.error||'Não foi possível atualizar a permissão.')
+      setPermissoesEquipe(prev=>({...prev,[usuarioId]:Boolean(dados.podeMovimentar)}))
+      setAviso(permitir?'Usuário liberado para movimentar o Kanban inicial.':'Permissão de movimentação revogada. O usuário continua podendo consultar conforme seus acessos existentes.')
+    }catch(e){setAviso(e instanceof Error?e.message:'Não foi possível atualizar a permissão.')}
+    finally{setSalvandoPermissao(null)}
+  }
   async function prepararImpressao(refs:string[]){
     if(!refs.length){setAviso('Selecione ao menos uma tipologia para imprimir.');return}
     if(carregandoDesenhos){setAviso('Aguarde o carregamento dos desenhos das tipologias antes de gerar o plano de corte.');return}
@@ -327,8 +354,25 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     </div>
     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
       <div><b>Movimentação inicial da obra: {!modoInicialDisponivel?'aguardando atualização do banco':modoInicial?'ativada':'desativada'}.</b><p className="mt-1">Quando ativada, as etapas do Kanban são um acompanhamento administrativo. A Medição Final, as ordens e a liberação técnica permanecem pendentes até serem regularizadas.</p>{!modoInicialDisponivel&&<p className="mt-1 font-semibold text-amber-800">A função inicial ainda precisa da migração no banco. A movimentação técnica anterior continua disponível.</p>}</div>
-      {podeConfigurar&&<button type="button" disabled={configurandoModo||!pendenciasCarregadas} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" onClick={()=>void alterarModoInicial()}>{configurandoModo?'Salvando...':modoInicial?'Voltar às regras técnicas':'Permitir movimentação inicial'}</button>}
+      <div className="flex flex-wrap gap-2">
+        {podeConfigurar&&<button type="button" disabled={configurandoModo||!pendenciasCarregadas} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" onClick={()=>void alterarModoInicial()}>{configurandoModo?'Salvando...':modoInicial?'Voltar às regras técnicas':'Autorizar movimentação inicial'}</button>}
+        {podeConfigurar&&<button type="button" className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold" aria-expanded={mostrarPermissoes} onClick={()=>setMostrarPermissoes(prev=>!prev)}>{mostrarPermissoes?'Fechar permissões':'Permissões da Produção'}</button>}
+        {modoInicial&&!podeMovimentarInicial&&<span className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-bold text-amber-800">Você pode consultar, mas não movimentar cards.</span>}
+      </div>
     </div>
+    {mostrarPermissoes&&podeConfigurar&&<div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <h4 className="text-sm font-bold text-slate-900">Permissões da Produção — funcionários</h4>
+      <p className="mt-1 text-xs text-slate-600">Libere ou revogue a movimentação inicial individualmente. A permissão vale para o Kanban inicial das vendas desta empresa, sem liberar financeiramente a obra, sem autorizar a produção técnica e sem conceder acesso a outros setores. Somente o Master altera essas permissões.</p>
+      <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+        {usuariosPermissoes.map(u=><div key={u.id} className="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2">
+          <div className="min-w-0"><b className="block truncate text-xs text-slate-800">{u.nome}</b><span className="text-[11px] text-slate-500">{u.role} · {permissoesEquipe[u.id]?'Pode movimentar':'Somente consulta (se autorizada)'}</span></div>
+          <button type="button" disabled={Boolean(salvandoPermissao)} onClick={()=>void alterarPermissaoEquipe(u.id)} className={'shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold disabled:opacity-50 '+(permissoesEquipe[u.id]?'border-amber-400 bg-amber-50 text-amber-800':'border-blue-500 bg-blue-700 text-white')}>
+            {salvandoPermissao===u.id?'Salvando...':permissoesEquipe[u.id]?'Revogar movimentação':'Liberar movimentação'}
+          </button>
+        </div>)}
+        {!usuariosPermissoes.length&&<p className="py-3 text-xs text-slate-500">Nenhum outro usuário cadastrado nesta empresa.</p>}
+      </div>
+    </div>}
     {aviso&&<p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">{aviso}</p>}
     {!modoInicial&&cards.some(c=>!c.ordens.length)&&<div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" role="status">
       <div><b>{cards.filter(c=>!c.ordens.length).length} tipologia(s) sem ordem de produção.</b>{' '}Esses cards não podem avançar até a geração das ordens e a liberação técnica.
@@ -343,7 +387,8 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         return <div key={etapa.id} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const ref=e.dataTransfer.getData('text/plain');mover(ref,etapa.id)}} className={'w-[235px] min-w-[235px] rounded-xl border p-2 '+cores[idx]}>
           <div className="mb-2 flex items-center justify-between px-1"><b className="text-xs text-slate-800">{etapa.nome}</b><span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold">{lista.length}</span></div>
           <div className="space-y-2 min-h-20">{lista.map(c=>{
-            const dur=entradaSim[c.ref]?agora-entradaSim[c.ref]:null
+            const entrada=entradaSim[c.ref]||(c.provisorio&&etapasIniciais[c.ref]?.atualizado_em?Date.parse(etapasIniciais[c.ref].atualizado_em!):0)
+            const dur=entrada?agora-entrada:null
             const atraso=dur!=null&&dur>24*3600000?'text-red-700':dur!=null&&dur>8*3600000?'text-amber-700':'text-slate-500'
             return <div key={c.ref} draggable onDragStart={e=>e.dataTransfer.setData('text/plain',c.ref)} title={modoInicial?'Arraste para avançar no acompanhamento inicial':!c.pronta?'A movimentação depende da liberação técnica':'Arraste para movimentar'} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex items-start gap-2"><input type="checkbox" aria-label={'Selecionar '+c.nome} checked={selecionadosValidos.includes(c.ref)} onChange={e=>setSelecionados(prev=>e.target.checked?[...new Set([...prev,c.ref])]:prev.filter(r=>r!==c.ref))}/>
@@ -385,11 +430,11 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       {abertoCard.etapa==='em_producao'&&<div className="mb-4 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
         <p className="mb-2 text-xs font-bold text-violet-900">Etapas internas de Em produção</p>
         <div className="flex flex-wrap gap-2">{FASES.map(f=><button key={f.id} type="button" aria-pressed={abertoCard.fase===f.id}
-          onClick={()=>{if(f.id==='conferencia'){setJustificativa('');setModalMovimento({ref:abertoCard.ref,destino:'conferencia' as Etapa})}else{setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' é um controle visual; confirme a conferência para gravar o avanço real.')}}}
+          onClick={()=>{if(modoInicial){setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' no acompanhamento inicial é apenas visual. A conferência operacional continua exigindo liberação técnica.')}else if(f.id==='conferencia'){setJustificativa('');setModalMovimento({ref:abertoCard.ref,destino:'conferencia' as Etapa})}else{setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' é um controle visual; confirme a conferência para gravar o avanço real.')}}}
           className={'rounded-lg border px-3 py-2 text-xs font-semibold '+(abertoCard.fase===f.id?'border-violet-700 bg-violet-700 text-white':'border-violet-200 bg-white text-violet-800')}>
           {f.nome}
         </button>)}</div>
-        <p className="mt-2 text-[11px] text-violet-700">Após conferir, mova para Produção concluída e informe as unidades aprovadas. A conclusão usa o registro operacional existente.</p>
+        <p className="mt-2 text-[11px] text-violet-700">{modoInicial?'As fases internas ainda são visuais; mover para Produção concluída neste modo não registra unidades nem libera a Instalação.':'Após conferir, mova para Produção concluída e informe as unidades aprovadas. A conclusão usa o registro operacional existente.'}</p>
       </div>}
       <VendaListaCorteWVetro
         materiais={materialDoCard(abertoCard.ref).map(m=>({...m,unidade:m.unidade||'UN'}))}
