@@ -710,7 +710,7 @@ setCards(prev => prev.filter(c => c.id !== json.ocultadoId).map(c => c.id === ex
 setHistorico(await listarHistorico(exibicao.id))
 }
 setCandidatosWVetro([])
-setMensagemWVetro(json.mensagem || `Orçamento W.Vetro #${numeroWvetro} sincronizado.`)
+setMensagemWVetro([json.mensagem || `Orçamento W.Vetro #${numeroWvetro} sincronizado.`, json.avisoAnexo].filter(Boolean).join(' '))
 } catch (e) {
 setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao sincronizar o W.Vetro.')
 } finally {
