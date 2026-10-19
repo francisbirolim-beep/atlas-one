@@ -101,8 +101,10 @@ export async function POST(req:NextRequest){
   const {data:orcamento,error:erroOrcamento}=await supabaseAdmin.from('orcamentos')
     .select('itens').eq('id',venda.orcamento_id).eq('empresa_id',user.empresa_id).maybeSingle()
   if(erroOrcamento)return erro('Não foi possível conferir as tipologias vendidas.',503)
-  const itens=Array.isArray(orcamento?.itens)?orcamento.itens:
-    Array.isArray(venda.itens_snapshot)?venda.itens_snapshot:[]
+  const itensOrcamento=Array.isArray(orcamento?.itens)?orcamento.itens:[]
+  const itensVendidos=Array.isArray(venda.itens_snapshot)?venda.itens_snapshot:[]
+  // Deve usar a mesma regra da visualização para validar as referências WVetro.
+  const itens=itensVendidos.length>=itensOrcamento.length?itensVendidos:itensOrcamento
   const referencias=itens.map((item:Record<string,unknown>,indice:number)=>refItemProducaoInstalacao(item,indice))
   if(!referencias.includes(ref)){
     const {data:ordem}=await supabaseAdmin.from('ordens_producao').select('id').eq('empresa_id',user.empresa_id)
