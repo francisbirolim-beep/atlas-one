@@ -43,7 +43,8 @@ export function resumirSelecaoVenda(itens:ItemOrcamentoVenda[],selecao:Seleciona
  const validacao=validarSelecaoVenda(itens,selecao)
  let estimativa=0,semPreco=false,pecas=0
  if(validacao.valida)for(const s of selecao){
-  const item=itens[s.indice],total=s.valorFechado??(precoTotalItem(item)===null?null:precoTotalItem(item)!*(s.quantidade/quantidadeOriginal(item)))
+  const item=itens[s.indice],precoOriginal=precoTotalItem(item)
+  const total=s.valorFechado??(precoOriginal===null?null:precoOriginal*(s.quantidade/quantidadeOriginal(item)))
   pecas+=s.quantidade
   if(total===null)semPreco=true
   else estimativa+=total
