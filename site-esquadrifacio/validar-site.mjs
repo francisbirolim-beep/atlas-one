@@ -44,7 +44,7 @@ check('detalhes de produtos possuem nove âncoras sem duplicação', (solucoes.m
 check('cartões mantêm uma chamada acessível sem JS', home.includes('aria-label="Ver detalhes sobre painéis e ripados"') &&
  home.includes('class="card-link"') && solucoes.includes('article:target{outline:2px solid #87BBAE'))
 check('soluções com SEO local próprio', solucoes.includes('<title>Nossas soluções') && solucoes.includes('José Bonifácio') && solucoes.includes('name="description"'))
-check('nove soluções efetivas cadastradas em página separada', (solucoes.match(/<article>/g) || []).length === 9)
+check('nove soluções efetivas cadastradas em página separada', (solucoes.match(/<article\b[^>]*>/g) || []).length === 9)
 check('soluções preservam canais oficiais', solucoes.includes('wa.me/5517996361318') && solucoes.includes('instagram.com/esquadrifacio/') && solucoes.includes('maps.app.goo.gl/SnZxkUvSYJLgceed6'))
 check('soluções têm navegação e conteúdo sem JS externo', solucoes.includes('href="#conteudo"') && solucoes.includes('<details>') && !solucoes.includes('<script'))
 check('soluções protegidas da indexação na homologação', solucoes.includes('name="robots" content="noindex,nofollow"'))
