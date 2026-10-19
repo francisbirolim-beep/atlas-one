@@ -36,7 +36,8 @@
     "test:supabase-terminadores": "node scripts/test-supabase-terminadores-historicos.cjs",
     "test:cliente360-permissoes": "node scripts/test-cliente360-permissoes.cjs",
     "test:ia-relatorios": "node scripts/test-ia-relatorios-permissoes.cjs",
-    "test:wvetro-validacao-item": "node scripts/test-wvetro-validacao-item.cjs"
+    "test:wvetro-validacao-item": "node scripts/test-wvetro-validacao-item.cjs",
+    "test:wvetro-valor-venda": "node scripts/test-wvetro-valor-venda.cjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
