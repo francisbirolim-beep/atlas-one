@@ -37,6 +37,12 @@ check('sem bibliotecas externas para imagens ou rastreamento', !home.includes('<
 
 check('SEO institucional e geolocalização', home.includes('Esquadrias de alumínio sob medida em José Bonifácio') && home.includes('name="geo.region"'))
 check('link para catálogo completo sem mudar hero', home.includes('href="/solucoes.html"') && home.includes('Conheça todas as soluções'))
+check('três cartões de soluções navegáveis preservam apresentação', (home.match(/class="card-link"/g)||[]).length === 3 &&
+  ['ripados','entradas','fachadas'].every(id => home.includes('href="/solucoes.html#'+id+'"') && solucoes.includes('id="'+id+'"')))
+check('detalhes de produtos possuem nove âncoras sem duplicação', (solucoes.match(/<article id="[a-z-]+">/g)||[]).length===9 &&
+  (new Set([...solucoes.matchAll(/<article id="([a-z-]+)">/g)].map(x=>x[1]))).size===9)
+check('cartões mantêm uma chamada acessível sem JS', home.includes('aria-label="Ver detalhes sobre painéis e ripados"') &&
+ home.includes('class="card-link"') && solucoes.includes('article:target{outline:2px solid #87BBAE'))
 check('soluções com SEO local próprio', solucoes.includes('<title>Nossas soluções') && solucoes.includes('José Bonifácio') && solucoes.includes('name="description"'))
 check('nove soluções efetivas cadastradas em página separada', (solucoes.match(/<article>/g) || []).length === 9)
 check('soluções preservam canais oficiais', solucoes.includes('wa.me/5517996361318') && solucoes.includes('instagram.com/esquadrifacio/') && solucoes.includes('maps.app.goo.gl/SnZxkUvSYJLgceed6'))

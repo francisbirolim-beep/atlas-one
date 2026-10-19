@@ -38,6 +38,8 @@
     h2{font-size:clamp(36px,3.9vw,52px);margin:18px 0 0}
     .section-heading p{max-width:380px;color:#647774;margin:0}
     .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+    article{scroll-margin-top:26px}
+    article:target{outline:2px solid #87BBAE;outline-offset:3px}
     article{background:#fff;border:1px solid #e2eae4;padding:35px 28px 34px;min-height:240px;display:flex;flex-direction:column;align-items:start}
     article .num{font-size:11px;letter-spacing:2px;color:#437C70;font-weight:700;margin-bottom:30px}
     article h3{font:normal 24px/1.22 Georgia,serif;margin:0 0 14px;color:#2B403F}
@@ -80,15 +82,15 @@
     <section class="section" aria-labelledby="produtos">
       <div class="section-heading"><div><span class="eyebrow">O que produzimos</span><h2 id="produtos">Esquadrias para <em>cada espaço.</em></h2></div><p>Escolha uma solução para seu projeto e converse com nossa equipe sobre medidas, acabamentos, vidros e possibilidades.</p></div>
       <div class="grid">
-        <article><span class="num">01 — PORTAS</span><h3>Portas de correr</h3><p>Com diferentes quantidades de folhas e configurações de abertura, para conectar ambientes com praticidade.</p></article>
-        <article><span class="num">02 — ENTRADAS</span><h3>Portas pivotantes e de giro</h3><p>Portas de entrada em alumínio, com opções de desenho, acabamento e puxadores sob medida.</p></article>
-        <article><span class="num">03 — JANELAS</span><h3>Janelas e venezianas</h3><p>Modelos de correr, maxim-ar e venezianas para diferentes cômodos e necessidades de ventilação.</p></article>
-        <article><span class="num">04 — ARQUITETURA</span><h3>Painéis ripados e lambris</h3><p>Composições em alumínio para destacar fachadas, paredes, portas e outros elementos decorativos.</p></article>
-        <article><span class="num">05 — VIDROS</span><h3>Fachadas e quadros fixos</h3><p>Esquadrias e estruturas envidraçadas para valorizar a iluminação e compor ambientes residenciais ou comerciais.</p></article>
-        <article><span class="num">06 — PROTEÇÃO</span><h3>Guarda-corpos</h3><p>Soluções de proteção e acabamento para projetos que precisam integrar alumínio e vidro.</p></article>
-        <article><span class="num">07 — CONFORTO</span><h3>Persianas automatizadas</h3><p>Opções integradas aos projetos de esquadrias, conforme a necessidade de cada ambiente.</p></article>
-        <article><span class="num">08 — PRATICIDADE</span><h3>Telas mosquiteiras</h3><p>Alternativas sob medida para complementar portas e janelas com mais funcionalidade.</p></article>
-        <article><span class="num">09 — SOB MEDIDA</span><h3>Divisórias e fechamentos</h3><p>Quadros fixos, divisórias, fechamentos de armários e outras soluções personalizadas em alumínio.</p></article>
+        <article id="correr"><span class="num">01 — PORTAS</span><h3>Portas de correr</h3><p>Com diferentes quantidades de folhas e configurações de abertura, para conectar ambientes com praticidade.</p></article>
+        <article id="entradas"><span class="num">02 — ENTRADAS</span><h3>Portas pivotantes e de giro</h3><p>Portas de entrada em alumínio, com opções de desenho, acabamento e puxadores sob medida.</p></article>
+        <article id="janelas"><span class="num">03 — JANELAS</span><h3>Janelas e venezianas</h3><p>Modelos de correr, maxim-ar e venezianas para diferentes cômodos e necessidades de ventilação.</p></article>
+        <article id="ripados"><span class="num">04 — ARQUITETURA</span><h3>Painéis ripados e lambris</h3><p>Composições em alumínio para destacar fachadas, paredes, portas e outros elementos decorativos.</p></article>
+        <article id="fachadas"><span class="num">05 — VIDROS</span><h3>Fachadas e quadros fixos</h3><p>Esquadrias e estruturas envidraçadas para valorizar a iluminação e compor ambientes residenciais ou comerciais.</p></article>
+        <article id="guarda-corpos"><span class="num">06 — PROTEÇÃO</span><h3>Guarda-corpos</h3><p>Soluções de proteção e acabamento para projetos que precisam integrar alumínio e vidro.</p></article>
+        <article id="persianas"><span class="num">07 — CONFORTO</span><h3>Persianas automatizadas</h3><p>Opções integradas aos projetos de esquadrias, conforme a necessidade de cada ambiente.</p></article>
+        <article id="mosquiteiras"><span class="num">08 — PRATICIDADE</span><h3>Telas mosquiteiras</h3><p>Alternativas sob medida para complementar portas e janelas com mais funcionalidade.</p></article>
+        <article id="divisorias"><span class="num">09 — SOB MEDIDA</span><h3>Divisórias e fechamentos</h3><p>Quadros fixos, divisórias, fechamentos de armários e outras soluções personalizadas em alumínio.</p></article>
       </div>
     </section>
     <section class="process" aria-labelledby="processo">
