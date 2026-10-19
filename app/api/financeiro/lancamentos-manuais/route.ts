@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { autenticarCompras } from '@/lib/comprasServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
@@ -24,6 +24,17 @@ function partesParcelas(valorCentavos:number,n:number){
  const basica=Math.floor(valorCentavos/n),resto=valorCentavos%n
  return Array.from({length:n},(_,i)=>(basica+(i<resto?1:0))/100)
 }
+function valoresParcelasCustomizados(b:any,quantidade:number,valorTotalCentavos:number){
+ if(b.valoresParcelas===undefined||b.valoresParcelas===null)return {parcelas:partesParcelas(valorTotalCentavos,quantidade)}
+ if(!Array.isArray(b.valoresParcelas)||b.valoresParcelas.length!==quantidade)return {error:'Informe o valor de cada parcela.'}
+ const centavos:number[]=[]
+ for(const bruto of b.valoresParcelas){
+  if(typeof bruto!=='number'||!Number.isFinite(bruto)||bruto<=0||Math.abs(bruto*100-Math.round(bruto*100))>0.001)return {error:'Cada parcela deve ter valor positivo com até duas casas decimais.'}
+  centavos.push(Math.round(bruto*100))
+ }
+ if(centavos.reduce((a,v)=>a+v,0)!==valorTotalCentavos)return {error:'A soma das parcelas precisa ser igual ao valor total informado. Ajuste os boletos ou atualize o valor total.'}
+ return {parcelas:centavos.map(c=>c/100)}
+}
 function validarParcelas(b:any) {
  const vencimentos=Array.isArray(b.vencimentos)?b.vencimentos.map((v:unknown)=>str(v,10)):[]
  const quantidade=inteiro(b.quantidade)
@@ -33,7 +44,9 @@ function validarParcelas(b:any) {
  if(vencimentos.length!==quantidade||!vencimentos.every(dataValida))return {error:'Informe a data de vencimento de todas as parcelas.'}
  if(!dataValida(str(b.dataEmissao,10)))return {error:'Data de emissão inválida.'}
  if(!uuid.test(str(b.chaveLote,60)))return {error:'Identificação do lote inválida.'}
- return {vencimentos,quantidade,valor,parcelas:partesParcelas(valor,quantidade)}
+ const valores=valoresParcelasCustomizados(b,quantidade,valor)
+ if(valores.error)return {error:valores.error}
+ return {vencimentos,quantidade,valor,parcelas:valores.parcelas!}
 }
 
 // A prévia permite conferência sem gravar transações reais na empresa.
@@ -66,9 +79,9 @@ export async function POST(req:NextRequest){
   const b=await req.json()
   const tipo=str(b.tipo,30)
   const operacao=str(b.operacao,20)||'titulo'
-  const permissao=operacao==='classificar'?'financeiro.contas_pagar.editar':tipo==='pagar'?'financeiro.contas_pagar.cadastrar':'financeiro.contas_receber.cadastrar'
+  const permissao=['classificar','editar-categoria','excluir-categoria'].includes(operacao)?'financeiro.contas_pagar.editar':tipo==='pagar'?'financeiro.contas_pagar.cadastrar':'financeiro.contas_receber.cadastrar'
   if(!['pagar','receber'].includes(tipo))return erro('Tipo de lançamento inválido.')
-  if(!(await autorizado(u,permissao,'edicao')))return erro('Sem permissão para cadastrar ou classificar títulos.',403)
+  if(!(await autorizado(u,permissao,'edicao')))return erro('Sem permissão para editar categorias ou cadastrar títulos.',403)
   if(operacao==='classificar'){
    if(tipo!=='pagar')return erro('Somente títulos a pagar recebem classificação DRE nesta tela.')
    const tituloId=str(b.tituloId,60),planoContaId=str(b.categoriaId,60)
@@ -82,6 +95,32 @@ export async function POST(req:NextRequest){
    const {error}=await supabaseAdmin.from('financeiro_conta_classificacoes').upsert({empresa_id:u.empresa_id,conta_pagar_id:tituloId,plano_conta_id:planoContaId,classificado_por_id:u.id,classificado_por_nome:u.nome,classificado_em:new Date().toISOString()},{onConflict:'empresa_id,conta_pagar_id'})
    if(error)throw error
    return NextResponse.json({ok:true})
+  }
+  if(operacao==='editar-categoria'||operacao==='excluir-categoria'){
+   if(tipo!=='pagar')return erro('Categoria de despesa disponível somente no Contas a Pagar.')
+   const id=str(b.categoriaId,60)
+   if(!uuid.test(id))return erro('Categoria inválida.')
+   const {data:existente,error:ee}=await supabaseAdmin.from('financeiro_plano_contas').select('id,codigo,nome,grupo').eq('empresa_id',u.empresa_id).eq('id',id).eq('ativo',true).maybeSingle()
+   if(ee)throw ee
+   if(!existente)return erro('Categoria inexistente ou desativada.',404)
+   if(operacao==='excluir-categoria'){
+    const {data:vinculos,error:ev}=await supabaseAdmin.from('financeiro_conta_classificacoes').select('id').eq('empresa_id',u.empresa_id).eq('plano_conta_id',id).limit(1)
+    if(ev)throw ev
+    if(vinculos?.length)return erro('Essa categoria já está vinculada a lançamentos financeiros. Não pode ser excluída, pois isso apagaria o histórico do DRE. Você pode corrigir o nome e o código.',409)
+    const {data:removida,error:ed}=await supabaseAdmin.from('financeiro_plano_contas').delete().eq('empresa_id',u.empresa_id).eq('id',id).select('id').maybeSingle()
+    if(ed)throw ed
+    if(!removida)return erro('Não foi possível excluir. Confira se a categoria ainda existe.',409)
+    return NextResponse.json({ok:true,excluida:true,categoriaId:id})
+   }
+   const nome=str(b.nome,170),codigo=str(b.codigo,35),grupo=str(b.grupo,40)
+   if(nome.length<3||!codigo||!(/^[0-9a-zA-Z._-]{1,35}$/).test(codigo)||!Object.prototype.hasOwnProperty.call(TITULOS_GRUPOS,grupo))return erro('Informe código sem espaços, nome e grupo válidos.')
+   const {data:outra,error:outraErro}=await supabaseAdmin.from('financeiro_plano_contas').select('id').eq('empresa_id',u.empresa_id).eq('codigo',codigo).neq('id',id).limit(1)
+   if(outraErro)throw outraErro
+   if(outra?.length)return erro('Esse código já está usado por outra categoria.',409)
+   const {data:editada,error:eUpdate}=await supabaseAdmin.from('financeiro_plano_contas').update({codigo,nome,grupo}).eq('empresa_id',u.empresa_id).eq('id',id).eq('ativo',true).select('id,codigo,nome,grupo').maybeSingle()
+   if(eUpdate){if(eUpdate.code==='23505')return erro('Código de categoria já utilizado.',409);throw eUpdate}
+   if(!editada)return erro('Não foi possível atualizar a categoria.',409)
+   return NextResponse.json({ok:true,categoria:editada})
   }
   if(operacao==='novo-cadastro'){
    const nome=str(b.nome,170)
@@ -106,9 +145,22 @@ export async function POST(req:NextRequest){
    if(tipo!=='pagar')return erro('Categoria de despesa disponível somente no Contas a Pagar.')
    const nome=str(b.nome,170),grupo=str(b.grupo,40)
    if(nome.length<3||!Object.prototype.hasOwnProperty.call(TITULOS_GRUPOS,grupo))return erro('Nome ou grupo de DRE inválido.')
-   const codigo=`8.${randomUUID().replace(/-/g,'').slice(0,10)}`
+   const codigoInformado=str(b.codigo,35)
+   if(codigoInformado&&!(/^[0-9a-zA-Z._-]{1,35}$/).test(codigoInformado))return erro('Código inválido: use somente letras, números, ponto, hífen ou sublinhado.')
+   let codigo=codigoInformado
+   if(!codigo){
+    const {data:existentes,error:eCod}=await supabaseAdmin.from('financeiro_plano_contas').select('codigo').eq('empresa_id',u.empresa_id).limit(1000)
+    if(eCod)throw eCod
+    const usados=new Set((existentes||[]).map(x=>x.codigo))
+    let n=1
+    while(usados.has(`8.${String(n).padStart(3,'0')}`)&&n<9999)n++
+    codigo=`8.${String(n).padStart(3,'0')}`
+   }
+   const {data:duplicado,error:edup}=await supabaseAdmin.from('financeiro_plano_contas').select('id').eq('empresa_id',u.empresa_id).eq('codigo',codigo).limit(1)
+   if(edup)throw edup
+   if(duplicado?.length)return erro('Código de categoria já utilizado.',409)
    const {data,error}=await supabaseAdmin.from('financeiro_plano_contas').insert({empresa_id:u.empresa_id,codigo,nome,grupo,ativo:true}).select('id,codigo,nome,grupo').single()
-   if(error)throw error
+   if(error){if(error.code==='23505')return erro('Esse código de categoria já existe.',409);throw error}
    return NextResponse.json({ok:true,categoria:data})
   }
   if(operacao!=='titulo')return erro('Operação inválida.')
