@@ -271,7 +271,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   async function alterarModoInicial(){
     if(configurandoModo||!podeConfigurar)return
     const proximo=!modoInicial
-    if(!proximo&&!window.confirm('Desativar o acompanhamento inicial desta venda para o Master? A autorização permanente dos funcionários não será alterada. Os avanços continuarão no histórico.'))return
+    if(!proximo&&!window.confirm('Bloquear a movimentação inicial em TODAS as obras desta empresa? Os funcionários deixarão de poder avançar os cards até você liberar novamente. As permissões e o histórico serão preservados.'))return
     setConfigurandoModo(true);setAviso('')
     try{
       const token=await tokenAtual()
@@ -284,7 +284,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       if(!resp.ok)throw Error(dados.error||'Não foi possível alterar o modo inicial.')
       setModoInicial(proximo)
       setVersaoEstado(v=>v+1)
-      setAviso(proximo?'Acompanhamento inicial ativado nesta venda. O arraste será salvo sem gerar liberação técnica. Autorizações permanentes dos funcionários seguem válidas em todas as vendas.':'Acompanhamento inicial desativado nesta venda para o Master. As permissões permanentes dos funcionários não foram revogadas; para retirar o acesso use Permissões da Produção.')
+      setAviso(proximo?'Movimentação inicial liberada em TODAS as obras, inclusive as futuras. As permissões individuais continuam valendo.':'Movimentação inicial BLOQUEADA em todas as obras. As permissões individuais e o histórico foram preservados para quando você liberar novamente.')
     }catch(e){setAviso(e instanceof Error?e.message:'Erro na configuração do modo inicial.')}
     finally{setConfigurandoModo(false)}
   }
@@ -346,23 +346,23 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   return <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="flex items-center gap-2 font-bold text-slate-900"><Layers3 size={19} className="text-blue-700"/>Kanban de tipologias · {modoInicial?'acompanhamento inicial':'movimentação controlada'}</h3>
-        <p className="mt-1 text-xs text-slate-600">Uma tipologia por card, com cinco colunas. {modoInicial?'Modo inicial: cards avançam e são salvos sem exigir a Medição Final ou ordem. Isso não libera tecnicamente a fabricação nem altera estoque, contagem de peças ou Instalação.':'Movimentações reais exigem confirmação e liberação técnica.'} Pendências têm justificativa obrigatória.</p></div>
+        <p className="mt-1 text-xs text-slate-600">{cards.length} tipologia(s) encontrada(s) nesta venda · cinco colunas. {modoInicial?'Modo inicial: cards avançam e são salvos sem exigir a Medição Final ou ordem. Isso não libera tecnicamente a fabricação nem altera estoque, contagem de peças ou Instalação.':'Movimentações reais exigem confirmação e liberação técnica.'} Pendências têm justificativa obrigatória.</p></div>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="rounded-lg border px-3 py-2 text-xs font-bold" onClick={()=>setSelecionados(selecionadosValidos.length===cards.length?[]:cards.map(c=>c.ref))}>{selecionadosValidos.length===cards.length?'Desmarcar todas':'Selecionar todas'}</button>
         <button type="button" className="inline-flex items-center gap-1 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white" onClick={()=>prepararImpressao(selecionadosValidos)}><FileDown size={14}/>Imprimir selecionadas ({selecionadosValidos.length})</button>
       </div>
     </div>
     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-      <div><b>Movimentação inicial da obra: {!modoInicialDisponivel?'aguardando atualização do banco':modoInicial?'ativada':'desativada'}.</b><p className="mt-1">Quando ativada, as etapas do Kanban são um acompanhamento administrativo. A Medição Final, as ordens e a liberação técnica permanecem pendentes até serem regularizadas.</p>{!modoInicialDisponivel&&<p className="mt-1 font-semibold text-amber-800">A função inicial ainda precisa da migração no banco. A movimentação técnica anterior continua disponível.</p>}</div>
+      <div><b>Movimentação inicial em TODAS as obras: {!modoInicialDisponivel?'aguardando atualização do banco':modoInicial?'LIBERADA':'BLOQUEADA'}.</b><p className="mt-1">O acompanhamento inicial fica liberado por padrão para todas as obras, inclusive as novas, até o Master bloquear. Funcionários autorizados podem movimentar cards independentemente de Medição Final e ordens. A fabricação técnica e a Instalação continuam protegidas.</p>{!modoInicialDisponivel&&<p className="mt-1 font-semibold text-amber-800">A função inicial ainda precisa da migração no banco. A movimentação técnica anterior continua disponível.</p>}</div>
       <div className="flex flex-wrap gap-2">
-        {podeConfigurar&&<button type="button" disabled={configurandoModo||!pendenciasCarregadas||!modoInicialDisponivel} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" onClick={()=>void alterarModoInicial()}>{configurandoModo?'Salvando...':modoInicial?'Desativar acompanhamento desta venda':'Ativar acompanhamento nesta venda'}</button>}
+        {podeConfigurar&&<button type="button" disabled={configurandoModo||!pendenciasCarregadas||!modoInicialDisponivel} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" onClick={()=>void alterarModoInicial()}>{configurandoModo?'Salvando...':modoInicial?'Bloquear movimentação em todas as obras':'Liberar movimentação em todas as obras'}</button>}
         {podeConfigurar&&<button type="button" disabled={!modoInicialDisponivel} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" aria-expanded={mostrarPermissoes} onClick={()=>setMostrarPermissoes(prev=>!prev)}>{mostrarPermissoes?'Fechar permissões':'Permissões da Produção'}</button>}
         {modoInicial&&!podeMovimentarInicial&&<span className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-bold text-amber-800">Você pode consultar, mas não movimentar cards.</span>}
       </div>
     </div>
     {mostrarPermissoes&&podeConfigurar&&<div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
       <h4 className="text-sm font-bold text-slate-900">Permissões da Produção — funcionários</h4>
-      <p className="mt-1 text-xs text-slate-600">Libere ou revogue a movimentação inicial individualmente. Depois de liberado, o funcionário pode movimentar os cards de todas as vendas às quais já tem acesso, inclusive novas vendas, sem pedir autorização novamente em cada obra. A permissão só termina quando o Master a revogar. Isso não libera financeiramente a obra, não autoriza a produção técnica e não concede acesso a outros setores. Somente o Master altera essas permissões.</p>
+      <p className="mt-1 text-xs text-slate-600">Libere ou revogue a movimentação inicial individualmente. Depois de liberado, o funcionário pode movimentar os cards de todas as vendas às quais já tem acesso, inclusive novas vendas. A permissão só termina quando o Master a revogar. O bloqueio geral prevalece sobre todas as permissões; isso não libera fabricação, financeiro nem outros setores. Somente o Master altera essas permissões.</p>
       <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
         {usuariosPermissoes.map(u=><div key={u.id} className="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2">
           <div className="min-w-0"><b className="block truncate text-xs text-slate-800">{u.nome}</b><span className="text-[11px] text-slate-500">{u.role} · {permissoesEquipe[u.id]?'Pode movimentar':'Somente consulta (se autorizada)'}</span></div>
