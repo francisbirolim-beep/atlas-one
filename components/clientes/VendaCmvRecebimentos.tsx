@@ -101,15 +101,15 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
    <div><b className="text-sm text-slate-800">Recebimento de material</b>
     <p className="text-[11px] text-slate-500">Quantidade recebida na unidade selecionada (kg, unidade, peça ou pacote) e valor recebido. Sem alterar Compras ou o orçamento.</p>
    </div>
-   <button type="button" disabled={bloqueado||salvando} onClick={()=>abrir?setAbrir(false):abrirForm()}
+   <button type="button" disabled={salvando} onClick={()=>abrir?setAbrir(false):abrirForm()}
     className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-40">
     <Plus size={13}/>{abrir?'Fechar formulário':'Cadastrar recebido'}
    </button>
   </div>
-  {bloqueado&&<p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">Prévia: os recebimentos poderão ser salvos depois que a nova estrutura de dados for aprovada e habilitada. As compras existentes não foram alteradas.</p>}
+  {bloqueado&&<p role="status" className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">Prévia de conferência: você pode abrir o formulário e escolher KG, UN, PC ou PCT, mas não pode salvar nem confirmar até homologarmos a estrutura de recebimentos em um banco separado. Nenhuma compra existente será alterada.</p>}
   {erro&&<p role="alert" className="rounded-md bg-red-50 p-2 text-xs text-red-700">{erro}</p>}
   {sucesso&&<p className="rounded-md bg-emerald-50 p-2 text-xs text-emerald-700">{sucesso}</p>}
-  {abrir&&!bloqueado&&<form key={editar||'novo'} onSubmit={enviar} className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+  {abrir&&<form key={editar||'novo'} onSubmit={enviar} className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
    <p className="mb-3 text-xs font-bold">{editar?'Corrigir recebimento existente':'Cadastrar o que chegou (nota/romaneio)'}</p>
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
     <label className="text-xs font-semibold">Quantidade recebida ({rotuloUnidadeCmv(unidade)}) *<input name="quantidade" required inputMode="decimal" value={peso} onChange={e=>onChangePeso(e.target.value)}
@@ -133,11 +133,11 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
    </div>
    <p className="mt-2 text-[11px] text-slate-500">Informe pelo menos a nota fiscal ou o romaneio. Cada entrega parcial pode ter um registro. A correção mantém histórico.</p>
    <div className="mt-3 flex justify-end gap-2"><button type="button" onClick={()=>setAbrir(false)} className="rounded-lg border bg-white px-3 py-2 text-xs">Cancelar</button>
-    <button disabled={salvando||num(peso)<=0||num(preco)<=0} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+    <button disabled={bloqueado||salvando||num(peso)<=0||num(preco)<=0} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
      {salvando?'Salvando...':editar?'Salvar correção':'Registrar recebimento'}</button></div>
   </form>}
   {pendentesConferencia.length>0&&<div className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-2 text-xs">
-    <button type="button" disabled={bloqueado||salvando} onClick={()=>setSelecionados(todosSelecionados?[]:pendentesConferencia.map(r=>r.id))} className="rounded-lg border bg-white px-3 py-2 disabled:opacity-50">{todosSelecionados?'Desmarcar todos':'Selecionar todos'}</button>
+    <button type="button" disabled={salvando} onClick={()=>setSelecionados(todosSelecionados?[]:pendentesConferencia.map(r=>r.id))} className="rounded-lg border bg-white px-3 py-2 disabled:opacity-50">{todosSelecionados?'Desmarcar todos':'Selecionar todos'}</button>
     <button type="button" disabled={bloqueado||salvando||selecionados.filter(id=>pendentesConferencia.some(r=>r.id===id)).length===0} onClick={()=>void validarRecebidos(selecionados.filter(id=>pendentesConferencia.some(r=>r.id===id)))} className="rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white disabled:opacity-50">Confirmar selecionados ({selecionados.filter(id=>pendentesConferencia.some(r=>r.id===id)).length})</button>
     <span className="text-slate-500">Confirma recebimentos já registrados; não lança novos custos.</span>
    </div>}
@@ -150,7 +150,7 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
      {r.anexo_url&&<a href={r.anexo_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-blue-700 underline"><FileText size={12}/>{r.anexo_nome||'Anexo'}</a>}
     </div>
     <div className="flex flex-wrap items-center gap-2">
-     {!r.conferido_em&&<label className="inline-flex items-center gap-1 text-slate-600"><input type="checkbox" aria-label="Selecionar recebimento" disabled={bloqueado||salvando} checked={selecionados.includes(r.id)} onChange={e=>setSelecionados(prev=>e.target.checked?[...prev,r.id]:prev.filter(id=>id!==r.id))}/> Selecionar</label>}
+     {!r.conferido_em&&<label className="inline-flex items-center gap-1 text-slate-600"><input type="checkbox" aria-label="Selecionar recebimento" disabled={salvando} checked={selecionados.includes(r.id)} onChange={e=>setSelecionados(prev=>e.target.checked?[...prev,r.id]:prev.filter(id=>id!==r.id))}/> Selecionar</label>}
      {r.conferido_em&&<span className="rounded-md bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">Recebido confirmado{r.conferido_por_nome?' por '+r.conferido_por_nome:''}</span>}
      <b className="text-sm">{moedas(Number(r.valor_total))}</b>
      {!r.conferido_em&&<button type="button" disabled={salvando||bloqueado} onClick={()=>void validarRecebidos([r.id])} className="rounded-lg border border-emerald-300 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50">Confirmar este</button>}
