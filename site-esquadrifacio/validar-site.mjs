@@ -45,6 +45,9 @@ check('GPS rápido no menu mobile com acessibilidade', home.includes('class="mob
 check('rodapé com referência direta de localização', home.includes('class="footer-info" id="localizacao"'))
 check('privacidade visualmente integrada à marca', privacidade.includes('background:#FAFBF8;color:#2B403F') && privacidade.includes('border-left:3px solid #649E94'))
 check('privacidade com canais e endereço completos', privacidade.includes('CEP 15202-420') && privacidade.includes('maps.app.goo.gl/SnZxkUvSYJLgceed6') && privacidade.includes('instagram.com/esquadrifacio/'))
+check('cores com contraste reforçado em textos pequenos', home.includes('body.light .eyebrow{color:#3F766C}') && home.includes('body.light .wordmark small,body.light .card-caption span{color:#437C70}'))
+check('identidade suave no navegador e na política de privacidade', home.includes('name="theme-color" content="#FAFBF8"') && privacidade.includes('name="theme-color" content="#FAFBF8"'))
+
 
 check('CTA principal conectado ao WhatsApp', (home.match(/https:\/\/wa\.me\/5517996361318/g) || []).length >= 3)
 check('links externos protegidos', !/<a(?=[^>]*href="https:\/\/)(?![^>]*rel="noopener noreferrer")[^>]*>/i.test(home))
