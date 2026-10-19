@@ -104,6 +104,7 @@ declare
   v_categoria text;
   v_config record;
   v_estado record;
+  v_permissao_global boolean := false;
 begin
   if p_empresa is null or p_venda is null or p_usuario is null or
      nullif(trim(coalesce(p_ref,'')), '') is null or length(p_ref)>250 then
@@ -118,8 +119,13 @@ begin
   end if;
   select * into v_config from public.producao_kanban_fluxo_inicial
     where empresa_id=p_empresa and venda_obra_id=p_venda for update;
-  if not found or not v_config.habilitado then
-    raise exception 'O modo inicial desta venda nao esta habilitado.';
+  -- Conceder permissão a um funcionário vale para todas as vendas até revogação.
+  select coalesce((
+    select perm.pode_movimentar from public.producao_kanban_permissoes_iniciais perm
+    where perm.empresa_id=p_empresa and perm.usuario_id=p_usuario
+  ),false) into v_permissao_global;
+  if not coalesce(v_config.habilitado,false) and not v_permissao_global then
+    raise exception 'O modo inicial nao esta habilitado para esta venda nem para o usuario.';
   end if;
   -- Verificacao no banco impede contornar a permissao enviando requisicao diretamente.
   if not exists (select 1 from public.usuarios u
