@@ -11,7 +11,7 @@ export type ItemOrcamentoVenda = {
  wvetro_item?: {ValorTotalAlterado?:number|string|null;ValorTotal?:number|string|null;Total?:number|string|null}|null
  [chave:string]:unknown
 }
-export type SelecionadoVenda = {indice:number;quantidade:number}
+export type SelecionadoVenda = {indice:number;quantidade:number;valorFechado?:number|null}
 export function quantidadeOriginal(item:ItemOrcamentoVenda):number {
  const n=Number(item.quantidade??1)
  return Number.isFinite(n)&&n>0?Math.max(1,Math.floor(n)):1
@@ -34,6 +34,7 @@ export function validarSelecaoVenda(itens:ItemOrcamentoVenda[],selecao:Seleciona
   if(vistos.has(s.indice)){erros.push('Item selecionado duas vezes');continue}
   vistos.add(s.indice)
   if(!Number.isInteger(s.quantidade)||s.quantidade<1||s.quantidade>quantidadeOriginal(itens[s.indice]))erros.push(`Quantidade do item ${s.indice+1} fora do permitido`)
+  if(s.valorFechado!==undefined&&s.valorFechado!==null&&(!Number.isFinite(s.valorFechado)||s.valorFechado<0))erros.push(`Preço do item ${s.indice+1} inválido`)
  }
  if(!selecao.length)erros.push('Selecione pelo menos uma tipologia')
  return {valida:erros.length===0,erros,parcial:selecao.length<itens.length||selecao.some(s=>s.quantidade<quantidadeOriginal(itens[s.indice]))}
@@ -42,10 +43,10 @@ export function resumirSelecaoVenda(itens:ItemOrcamentoVenda[],selecao:Seleciona
  const validacao=validarSelecaoVenda(itens,selecao)
  let estimativa=0,semPreco=false,pecas=0
  if(validacao.valida)for(const s of selecao){
-  const item=itens[s.indice],total=precoTotalItem(item)
+  const item=itens[s.indice],total=s.valorFechado??(precoTotalItem(item)===null?null:precoTotalItem(item)!*(s.quantidade/quantidadeOriginal(item)))
   pecas+=s.quantidade
   if(total===null)semPreco=true
-  else estimativa+=total*(s.quantidade/quantidadeOriginal(item))
+  else estimativa+=total
  }
  return {...validacao,pecas,valorEstimado:semPreco?null:Math.round(estimativa*100)/100}
 }
