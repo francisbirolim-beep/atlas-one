@@ -165,6 +165,13 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   const [alocacoes,setAlocacoes]=useState<AlocacaoRecebimento360[]>([])
   const [documentos,setDocumentos]=useState<DocumentoCliente360[]>([])
   const [aba,setAba]=useState<Aba>('visao')
+  // Informa ao atalho global do Master qual aba do Cliente 360 está em exibição.
+  // Não altera navegação, validação ou comportamento funcional do cliente.
+  useEffect(() => {
+    document.documentElement.dataset.atlasClienteAba = aba
+    window.dispatchEvent(new CustomEvent('atlas:cliente360-aba', { detail: { aba } }))
+    return () => { delete document.documentElement.dataset.atlasClienteAba }
+  }, [aba])
   const [carregando,setCarregando]=useState(true)
   const [erro,setErro]=useState('')
   const [menu,setMenu]=useState(false)
