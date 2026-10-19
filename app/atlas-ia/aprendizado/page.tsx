@@ -12,6 +12,7 @@ import {
 import { tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
+import { codigoColadoDeOutrasColunas } from '@/lib/ai/catalogoCartoesGeometria'
 import { conferirDadosCatalogo } from '@/lib/ai/catalogoConferencia'
 import { lerImagemCatalogoPreview, salvarImagemCatalogoPreview } from '@/lib/ai/catalogoImagemPreview'
 import { conferidoSomenteNaPrevia } from '@/lib/ai/catalogoFilaValidacao'
@@ -124,6 +125,7 @@ export default function CentralAprendizadoPage(){
   const [arquivando,setArquivando]=useState<string|null>(null)
   const [reprocessando,setReprocessando]=useState<string|null>(null)
   const [conferindoTabela,setConferindoTabela]=useState<string|null>(null)
+  const [consultaPdfDiagnostico,setConsultaPdfDiagnostico]=useState<Record<string,Array<Record<string,any>>>>({})
   const [salvando,setSalvando]=useState<string|null>(null)
   const [entradaValidacaoFiltro,setEntradaValidacaoFiltro]=useState<string|null>(null)
   const [mostrarConferidosPreview,setMostrarConferidosPreview]=useState(false)
@@ -258,6 +260,11 @@ export default function CentralAprendizadoPage(){
   }
   async function arquivarEntrada(e:Entrada){
     if(arquivando)return
+    if(dados.somenteLeitura){
+      setMensagem('Prévia de testes: nenhum catálogo será arquivado. No Atlas oficial, arquivar retira as pendências sem excluir cadastros e históricos já aplicados.')
+      return
+    }
+    if(!e.metadados?.arquivado_em&&!window.confirm('Cancelar a revisão do catálogo "'+e.titulo+'"? O material sairá da fila, mas os produtos já aplicados e o histórico continuarão preservados. Você poderá restaurá-lo depois.'))return
     setArquivando(e.id);setErro('')
     try{
       const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({acao:e.metadados?.arquivado_em?'restaurar_entrada':'arquivar_entrada',entrada_id:e.id})})
@@ -284,8 +291,10 @@ export default function CentralAprendizadoPage(){
     if(!automatica){setErro('');setMensagem('')}
     try{
       const resultado=await api('/api/ia/central-aprendizado?conferirTabela='+encodeURIComponent(e.id))
+      const itensLidos:Array<Record<string,any>>=Array.isArray(resultado.itens)?resultado.itens:[]
+      setConsultaPdfDiagnostico(prev=>({...prev,[e.id]:itensLidos}))
       const porCodigo=new Map<string,Record<string,any>>()
-      for(const item of Array.isArray(resultado.itens)?resultado.itens:[]){
+      for(const item of itensLidos){
         const codigo=String(item.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
         if(codigo&&!porCodigo.has(codigo))porCodigo.set(codigo,item)
       }
@@ -520,7 +529,7 @@ export default function CentralAprendizadoPage(){
                 {e.resumo_ia&&<p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{e.resumo_ia}</p>}
                 {e.fornecedor_nome_sugerido&&<div className="mt-2 flex items-center gap-1 text-xs font-semibold text-slate-600"><Building2 size={13}/>{e.fornecedor_nome_sugerido}</div>}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button disabled={Boolean(arquivando)||e.status==='analisando'||Boolean(reprocessando)} onClick={()=>void arquivarEntrada(e)} className="rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-40">{arquivando===e.id?'Salvando...':e.metadados?.arquivado_em?'Restaurar material':'Arquivar material'}</button>
+                  <button disabled={Boolean(arquivando)||e.status==='analisando'||Boolean(reprocessando)} onClick={()=>void arquivarEntrada(e)} className="rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-40">{arquivando===e.id?'Salvando...':e.metadados?.arquivado_em?'Restaurar material':'Cancelar revisão / Arquivar material'}</button>
                   {e.metadados?.arquivado_em&&<span className="rounded-lg bg-slate-100 px-2 py-1 text-xs">Arquivado — preservado no histórico</span>}
                   {e.fonte_url&&<a href={e.fonte_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={12}/>Abrir fonte</a>}
                   {pendentes.some(c=>c.entrada_id===e.id)&&!e.metadados?.arquivado_em&&<button onClick={()=>abrirValidacaoEntrada(e.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"><ShieldCheck size={13}/>Revisar agora ({pendentes.filter(c=>c.entrada_id===e.id).length})</button>}
@@ -533,6 +542,24 @@ export default function CentralAprendizadoPage(){
               <div className="shrink-0 text-right text-[11px] text-slate-400"><div>{e.criado_por_nome||'Usuário'}</div><div>{dataBr(e.created_at)}</div></div>
             </div>
             {catalogoAberto===e.id&&conferindoTabela===e.id&&<p className="mt-3 text-xs font-semibold text-blue-700"><Loader2 className="mr-1 inline animate-spin" size={13}/>Carregando automaticamente os dados das tabelas do PDF original, sem alterar cadastros...</p>}
+            {catalogoAberto===e.id&&consultaPdfDiagnostico[e.id]&&<div className="my-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+              <b className="text-xs text-blue-900">Leitura corrigida do PDF original: {consultaPdfDiagnostico[e.id].length} códigos identificados</b>
+              <p className="mt-1 text-xs text-blue-700">Verificação somente leitura, sem alterar os cadastros aprovados. Pesquise o código abaixo para comparar com o que foi importado anteriormente.</p>
+              <p className="mt-2 text-xs font-semibold text-blue-900">Digite o código completo na busca do catálogo para abrir o desenho individual encontrado no PDF.</p>
+              {buscaCatalogo.trim()&&consultaPdfDiagnostico[e.id]
+                .filter(i=>String(i.codigo||'').toUpperCase()===buscaCatalogo.trim().toUpperCase())
+                .slice(0,1).map(i=><div key={i.codigo} className="mt-2 rounded-xl border bg-white p-3">
+                  <div className="mb-2 text-xs"><b>{i.codigo}</b> — {i.descricao}
+                    <p>Peso: {i.peso_kg_m??'não informado'} kg/m · Página: {i.pagina_catalogo||'a conferir'}</p>
+                  </div>
+                  {e.fonte_url&&i.pagina_catalogo
+                    ?<ImagemPerfilCatalogo fonteUrl={e.fonte_url} pagina={Number(i.pagina_catalogo)}
+                      codigo={String(i.codigo)} descricao={String(i.descricao||'')}
+                      somenteLeitura={true} apenasVisualizacao={true} onSalvar={async()=>null}/>
+                    :<p className="text-xs text-amber-700">Desenho não localizado com segurança. Consulte o PDF original.</p>}
+                </div>)}
+
+            </div>}
             {catalogoAberto===e.id&&<CatalogoDetalhes
               entrada={e}
               candidatos={dados.candidatos.filter(c=>c.entrada_id===e.id)}
@@ -783,6 +810,9 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
                 <span className="text-[10px] text-slate-400">confiança {pct(c.confianca)}</span>
               </div>
               <div className="mt-1 font-semibold">{c.dados?.codigo||'Sem código'} <span className="font-normal text-slate-500">— {c.dados?.descricao||c.titulo}</span></div>
+              {codigoColadoDeOutrasColunas(c.dados?.codigo)&&<p className="mt-1 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">
+                Atenção: códigos de produtos diferentes ficaram unidos nesta importação. Não valide este item. Consulte o PDF original e reanalise o catálogo com o leitor de colunas corrigido; os produtos já aplicados serão preservados.
+              </p>}
               <div className="mt-1 text-xs text-slate-400">{c.deduplicacao?.produto_existente?'Vinculado ao produto já existente no Atlas':labelAcao(c.acao_sugerida)}{c.dados?.preco_fornecedor!=null?' · preço '+String(c.dados.preco_fornecedor):' · sem preço'}</div>
               {c.dados?.conferencia_tabela_visualizada&&<div className="mt-1 text-xs text-blue-700">Tabela consultada no PDF (sem salvar). Peso: {c.dados.peso_kg_m??'—'} kg/m · {Object.entries(c.dados.medidas_mm||{}).map(([k,v])=>k+' '+v+' mm').join(' · ')||'sem cotas'}</div>}
               {c.dados?.imagem_preview_local&&<div className="mt-1 text-xs font-semibold text-blue-700">Imagem preservada neste navegador de teste, sem gravar o cadastro.</div>}
@@ -914,7 +944,7 @@ function ProdutoImagemValidacao({candidato,entrada,somenteLeitura,onSalvar}:{can
   </div>
 }
 
-function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,onSalvar}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;somenteLeitura:boolean;onSalvar:(imagem:string)=>Promise<any>}){
+function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,onSalvar,apenasVisualizacao=false}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;somenteLeitura:boolean;onSalvar:(imagem:string)=>Promise<any>;apenasVisualizacao?:boolean}){
   const [imagem,setImagem]=useState('')
   const [erroImagem,setErroImagem]=useState('')
   const [erroSalvarImagem,setErroSalvarImagem]=useState('')
@@ -1007,7 +1037,9 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,o
   if(erroImagem)return <div className="grid min-h-56 place-items-center rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800"><div><Eye className="mx-auto mb-2" size={22}/><b>Não consegui recortar automaticamente.</b><p className="mt-1 text-xs">{erroImagem}</p><a href={fonteUrl+'#page='+pagina} target="_blank" rel="noreferrer" className="mt-3 inline-block font-semibold text-blue-700">Abrir página {pagina}</a></div></div>
   return <div className="space-y-2">
     <img src={imagem} alt={'Prévia do catálogo para '+(codigo||descricao)} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>
-    {!codigoEncontrado
+    {apenasVisualizacao
+      ?<p className="rounded-lg bg-blue-50 p-2 text-xs text-blue-800">Visualização do PDF original. Para confirmar e salvar este desenho, abra a validação individual do produto.</p>
+      :!codigoEncontrado
       ?<p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Código não localizado de forma única no texto do PDF. O recorte não será vinculado automaticamente.</p>
       :imagemConfirmada
         ?<p className={'rounded-lg p-2 text-xs font-semibold '+(somenteLeitura?'border border-blue-200 bg-blue-50 text-blue-800':'bg-emerald-50 text-emerald-800')}>{somenteLeitura?'Desenho do código '+codigo+' guardado somente neste navegador de testes.':'Imagem do código '+codigo+' confirmada e vinculada.'}</p>
@@ -1019,7 +1051,7 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,o
         }} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">
           {salvandoImagem?'Confirmando...':somenteLeitura?'Confirmar desenho (teste local)':'Confirmar: este desenho corresponde ao código '+codigo}
         </button>}
-    {somenteLeitura&&<p className="text-xs text-blue-700">Prévia segura: a confirmação fica somente neste navegador, não no banco do Atlas.</p>}
+    {somenteLeitura&&!apenasVisualizacao&&<p className="text-xs text-blue-700">Prévia segura: a confirmação fica somente neste navegador, não no banco do Atlas.</p>}
     {erroSalvarImagem&&<p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Não foi possível salvar a confirmação: {erroSalvarImagem}. O desenho foi mantido na tela.</p>}
   </div>
 }

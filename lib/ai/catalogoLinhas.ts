@@ -1,6 +1,6 @@
 import {celulasTabela} from './catalogoTabelaGeometria'
 // Regras comuns a fornecedores; somente dados explicitamente presentes na fonte.
-export const VERSAO_REGRAS_CATALOGO = '2026-10-17.1'
+export const VERSAO_REGRAS_CATALOGO = '2026-10-18.2'
 const codigoRE = /\b([A-Z]{1,6}\s*[-_/]?\s*\d{2,8}[A-Z]{0,3})\b/gi
 const limpar = (v:string) => v.replace(/\s+/g,' ').trim()
 const numero = (v:string) => Number(v.replace(',','.'))
