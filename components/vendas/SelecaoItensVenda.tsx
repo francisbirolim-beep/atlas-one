@@ -1,6 +1,6 @@
 'use client'
 import { CheckCircle2, CircleAlert, CircleCheck, ListChecks } from 'lucide-react'
-import { quantidadeOriginal, resumirSelecaoVenda, type ItemOrcamentoVenda, type SelecionadoVenda } from '@/lib/vendaSelecaoItens'
+import { quantidadeOriginal, precoTotalItem, resumirSelecaoVenda, type ItemOrcamentoVenda, type SelecionadoVenda } from '@/lib/vendaSelecaoItens'
 
 type Modo='total'|'parcial'
 export default function SelecaoItensVenda({
@@ -15,6 +15,10 @@ export default function SelecaoItensVenda({
   const existente=selecao.find(s=>s.indice===indice)
   if(existente)onSelecao(selecao.filter(s=>s.indice!==indice))
   else onSelecao([...selecao,{indice,quantidade:quantidadeOriginal(itens[indice])}])
+ }
+ function mudarValor(indice:number,valor:string){
+  const n=valor.trim()===''?null:Number(valor)
+  onSelecao(selecao.map(s=>s.indice===indice?{...s,valorFechado:n}:s))
  }
  function mudarQuantidade(indice:number,n:number){
   onSelecao(selecao.map(s=>s.indice===indice?{...s,quantidade:Math.min(quantidadeOriginal(itens[indice]),Math.max(1,Math.floor(n)||1))}:s))
@@ -42,16 +46,21 @@ export default function SelecaoItensVenda({
          <span className="block text-xs text-slate-500">{String(item.descricao||item.tipo_esquadria||'')} · {total} peça(s) orçada(s)</span>
        </span>
       </label>
-      {atual&&<label className="text-xs font-semibold text-slate-600">Quantidade vendida
-       <input type="number" min={1} max={total} step={1} value={atual.quantidade} onChange={e=>mudarQuantidade(indice,Number(e.target.value))} className="ml-2 w-20 rounded-lg border p-2 text-sm" aria-label={`Quantidade vendida do item ${indice+1}`}/>
-      </label>}
+      {atual&&<div className="flex flex-wrap items-end gap-2">
+       <label className="text-xs font-semibold text-slate-600">Quantidade vendida
+        <input type="number" min={1} max={total} step={1} value={atual.quantidade} onChange={e=>mudarQuantidade(indice,Number(e.target.value))} className="mt-1 block w-24 rounded-lg border p-2 text-sm" aria-label={`Quantidade vendida do item ${indice+1}`}/>
+       </label>
+       <label className="text-xs font-semibold text-slate-600">Valor fechado (R$)
+        <input type="number" min={0} step="0.01" value={atual.valorFechado??''} onChange={e=>mudarValor(indice,e.target.value)} placeholder={precoTotalItem(item)===null?'Informe valor':String(Math.round(precoTotalItem(item)!*atual.quantidade/total*100)/100)} className="mt-1 block w-32 rounded-lg border p-2 text-sm" aria-label={`Valor fechado do item ${indice+1}`}/>
+       </label>
+      </div>}
     </div>
    })}
    <div className="rounded-xl border border-blue-200 bg-white p-3 text-xs">
     <div className="flex items-center justify-between gap-3"><b className="text-slate-800">Resumo da seleção</b><b>{resumo.pecas} peça(s)</b></div>
     <p className="mt-1 text-slate-600">{selecao.length} tipologia(s) selecionada(s) de {itens.length}</p>
     <p className="mt-1 text-slate-600">Orçamento original: {orcamentoValor.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
-    <p className="mt-1 text-slate-600">Subtotal estimado dos itens: {resumo.valorEstimado===null?'Precificação individual não disponível':resumo.valorEstimado.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
+    <p className="mt-1 text-slate-600">Valor selecionado (estimado ou informado): {resumo.valorEstimado===null?'Precificação individual não disponível':resumo.valorEstimado.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</p>
     {!resumo.valida&&<p className="mt-2 flex items-center gap-1 font-semibold text-amber-700"><CircleAlert size={13}/>{resumo.erros.join('; ')}</p>}
     {resumo.valida&&!resumo.parcial&&<p className="mt-2 text-amber-700">Todas as peças estão marcadas. Use “Vendi tudo” para manter a confirmação existente.</p>}
    </div>
