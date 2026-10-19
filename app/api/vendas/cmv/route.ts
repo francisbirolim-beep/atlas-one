@@ -1,3 +1,4 @@
+import {unidadeCmvValida,quantidadeCmvValida} from '@/lib/vendaCmvUnidades'
 // Custo previsto e realizado por obra.
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
@@ -132,6 +133,7 @@ export async function POST(req:NextRequest){
   const fornecedor=txt(form.get('fornecedor'),150)
   const valor=numerico(form.get('valor'))
   const quantidade=numerico(form.get('quantidade'))
+  const unidade=txt(form.get('unidade'),30).toUpperCase()
   const data_lancamento=txt(form.get('data'),10)
   if(!categorias.includes(categoria))return erro('Categoria inválida.')
   if(!origens.includes(origem))return erro('Origem de custo inválida.')
@@ -143,8 +145,8 @@ export async function POST(req:NextRequest){
   if(quantidade!==null&&(quantidade<=0||quantidade>999999999))return erro('Quantidade inválida.')
   // Somente novas compras passam a exigir peso real e unidade KG.
   // Registros históricos e edições continuam inalterados.
-  if(origem==='compra'&&(quantidade===null||txt(form.get('unidade'),30).toUpperCase()!=='KG'))
-   return erro(etapa_cmv==='recebido'?'Informe o peso recebido em quilos (KG obrigatório).':'Informe o peso comprado em quilos (KG obrigatório) para novas compras.')
+  if(origem==='compra'&&(!unidadeCmvValida(unidade)||!quantidadeCmvValida(quantidade,unidade)))
+   return erro('Informe quantidade válida e unidade (KG, UN, PC ou PCT).')
   if(!data_lancamento)return erro('Informe a data do custo.')
   if(!/^\d{4}-\d{2}-\d{2}$/.test(data_lancamento)||Number.isNaN(Date.parse(data_lancamento)))return erro('Data inválida.')
   // O banco mantém descrição NOT NULL para histórico antigo; se o usuário
@@ -166,7 +168,7 @@ export async function POST(req:NextRequest){
     ...(etapa_cmv==='recebido'?{etapa_cmv}:{}),
     empresa_id:usuario.empresa_id,venda_obra_id:vendaId,orcamento_id:venda.orcamento_id,
     categoria,origem,descricao,valor:Math.round(valor*100)/100,
-    quantidade,unidade:txt(form.get('unidade'),30)||null,data_lancamento,
+    quantidade,unidade:unidade||null,data_lancamento,
     fornecedor,documento:txt(form.get('documento'),100)||null,
     observacoes:txt(form.get('observacoes'),1000)||null,
     anexo_nome:anexoNome,anexo_mime:anexoMime,anexo_path:anexoPath,
@@ -213,6 +215,7 @@ export async function PATCH(req:NextRequest){
   const etapa_cmv=txt(form.get('etapa_cmv'),30)||'comprado'
   const valor=numerico(form.get('valor'))
   const quantidade=numerico(form.get('quantidade'))
+  const unidade=txt(form.get('unidade'),30).toUpperCase()
   const data_lancamento=txt(form.get('data'),10)
   const fornecedor=txt(form.get('fornecedor'),150)
   if(!categorias.includes(categoria))return erro('Categoria inválida.')
@@ -225,14 +228,14 @@ export async function PATCH(req:NextRequest){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(data_lancamento)||Number.isNaN(Date.parse(data_lancamento)))return erro('Data inválida.')
   if(!fornecedor)return erro('Informe o fornecedor.')
   if(quantidade!==null&&(quantidade<=0||quantidade>999999999))return erro('Quantidade inválida.')
-  if(etapa_cmv==='recebido'&&(quantidade===null||txt(form.get('unidade'),30).toUpperCase()!=='KG'))
-   return erro('Informe o peso recebido em quilos (KG obrigatório).')
+  if(etapa_cmv==='recebido'&&(!unidadeCmvValida(unidade)||!quantidadeCmvValida(quantidade,unidade)))
+   return erro('Informe quantidade válida e unidade de recebimento (KG, UN, PC ou PCT).')
   const descricao=txt(form.get('descricao'),500)||[categoria.replace(/_/g,' '),origem.replace(/_/g,' ')].join(' · ')
   const anexo=form.get('arquivo')
   const patch:Record<string,unknown>={
    ...(etapa_cmv==='recebido'||antigo.etapa_cmv==='recebido'?{etapa_cmv}:{}),
    categoria,origem,descricao,valor:Math.round(valor*100)/100,quantidade,
-   unidade:txt(form.get('unidade'),30)||null,data_lancamento,fornecedor,
+   unidade:unidade||null,data_lancamento,fornecedor,
    documento:txt(form.get('documento'),100)||null,observacoes:txt(form.get('observacoes'),1000)||null,
    atualizado_em:new Date().toISOString(),atualizado_por_id:usuario.id,atualizado_por_nome:usuario.nome,
    versao:versao+1,
