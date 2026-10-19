@@ -42,6 +42,9 @@ alter table public.producao_kanban_historico_inicial enable row level security;
 revoke all on public.producao_kanban_fluxo_inicial from public, anon, authenticated;
 revoke all on public.producao_kanban_etapas_iniciais from public, anon, authenticated;
 revoke all on public.producao_kanban_historico_inicial from public, anon, authenticated;
+grant select,insert,update,delete on public.producao_kanban_fluxo_inicial to service_role;
+grant select,insert,update,delete on public.producao_kanban_etapas_iniciais to service_role;
+grant select,insert on public.producao_kanban_historico_inicial to service_role;
 
 create or replace function public.fn_producao_kanban_mover_inicial_v1(
   p_empresa uuid, p_venda uuid, p_ref text, p_destino text, p_usuario uuid,
