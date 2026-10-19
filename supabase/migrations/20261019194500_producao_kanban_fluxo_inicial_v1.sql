@@ -114,7 +114,7 @@ declare
   v_motivo text := trim(coalesce(p_motivo,''));
   v_resolucao text := trim(coalesce(p_resolucao,''));
   v_categoria text;
-  v_config_geral record;
+  v_habilitado_geral boolean;
   v_estado record;
 begin
   if p_empresa is null or p_venda is null or p_usuario is null or
@@ -130,9 +130,9 @@ begin
   end if;
   -- Bloqueio geral prevalece sobre qualquer autorizacao individual.
   -- Sem registro, o modo inicial esta habilitado para todas as obras.
-  select * into v_config_geral from public.producao_kanban_config_geral
+  select habilitado into v_habilitado_geral from public.producao_kanban_config_geral
     where empresa_id=p_empresa for share;
-  if not coalesce(v_config_geral.habilitado,true) then
+  if not coalesce(v_habilitado_geral,true) then
     raise exception 'A movimentacao inicial esta bloqueada pelo Master para toda a empresa.';
   end if;
   -- Verificacao no banco impede contornar a permissao enviando requisicao diretamente.
