@@ -18,10 +18,16 @@ export async function GET(req:NextRequest){
  try{
   const limite=limiteSeguro(req.nextUrl.searchParams.get('limit'),300,1000)
   const status=req.nextUrl.searchParams.get('status')
-  let q=supabaseAdmin.from('financeiro_contas_pagar').select('id,nf_id,fornecedor_id,fornecedor_nome,documento,parcela,descricao,data_emissao,vencimento,valor,status,data_pagamento,valor_pago,forma_pagamento,forma_pagamento_prevista,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(limite)
+  let q=supabaseAdmin.from('financeiro_contas_pagar').select('id,nf_id,fornecedor_id,fornecedor_nome,documento,parcela,descricao,data_emissao,vencimento,valor,status,data_pagamento,valor_pago,forma_pagamento,forma_pagamento_prevista,origem,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(limite)
   if(status)q=q.eq('status',status)
   const {data,error}=await q;if(error)throw error
-  return NextResponse.json({ok:true,contas:data||[]})
+  const ids=(data||[]).map(c=>c.id)
+  const [categorias,alocacoes]=await Promise.all([
+   supabaseAdmin.from('financeiro_plano_contas').select('id,codigo,nome,grupo').eq('empresa_id',u.empresa_id).eq('ativo',true).order('codigo'),
+   ids.length?supabaseAdmin.from('financeiro_conta_classificacoes').select('conta_pagar_id,plano_conta_id').eq('empresa_id',u.empresa_id).in('conta_pagar_id',ids):Promise.resolve({data:[],error:null})
+  ])
+  if(categorias.error||alocacoes.error)throw categorias.error||alocacoes.error
+  return NextResponse.json({ok:true,contas:data||[],categorias:categorias.data||[],classificacoes:alocacoes.data||[]})
  }catch(e){console.error(e);return NextResponse.json({error:'Não foi possível carregar Contas a Pagar.'},{status:500})}
 }
 
