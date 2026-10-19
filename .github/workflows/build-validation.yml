@@ -95,6 +95,9 @@ jobs:
       - name: W.Vetro per-item supervised validation
         run: npm run test:wvetro-validacao-item
 
+      - name: W.Vetro sales price correction and import preservation
+        run: npm run test:wvetro-valor-venda
+
       - name: IA and reports authorization regression
         run: npm run test:ia-relatorios
 
