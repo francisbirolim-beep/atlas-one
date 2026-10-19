@@ -271,7 +271,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   async function alterarModoInicial(){
     if(configurandoModo||!podeConfigurar)return
     const proximo=!modoInicial
-    if(!proximo&&!window.confirm('Desativar acompanhamento inicial? Os avanços continuam no histórico, mas o Kanban voltará a mostrar apenas os status oficiais das ordens.'))return
+    if(!proximo&&!window.confirm('Desativar o acompanhamento inicial desta venda para o Master? A autorização permanente dos funcionários não será alterada. Os avanços continuarão no histórico.'))return
     setConfigurandoModo(true);setAviso('')
     try{
       const token=await tokenAtual()
@@ -284,7 +284,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       if(!resp.ok)throw Error(dados.error||'Não foi possível alterar o modo inicial.')
       setModoInicial(proximo)
       setVersaoEstado(v=>v+1)
-      setAviso(proximo?'Acompanhamento inicial ativado nesta venda. O arraste será salvo sem gerar liberação técnica.':'Acompanhamento inicial desativado. As regras técnicas oficiais voltaram a controlar o Kanban.')
+      setAviso(proximo?'Acompanhamento inicial ativado nesta venda. O arraste será salvo sem gerar liberação técnica. Autorizações permanentes dos funcionários seguem válidas em todas as vendas.':'Acompanhamento inicial desativado nesta venda para o Master. As permissões permanentes dos funcionários não foram revogadas; para retirar o acesso use Permissões da Produção.')
     }catch(e){setAviso(e instanceof Error?e.message:'Erro na configuração do modo inicial.')}
     finally{setConfigurandoModo(false)}
   }
@@ -355,14 +355,14 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
       <div><b>Movimentação inicial da obra: {!modoInicialDisponivel?'aguardando atualização do banco':modoInicial?'ativada':'desativada'}.</b><p className="mt-1">Quando ativada, as etapas do Kanban são um acompanhamento administrativo. A Medição Final, as ordens e a liberação técnica permanecem pendentes até serem regularizadas.</p>{!modoInicialDisponivel&&<p className="mt-1 font-semibold text-amber-800">A função inicial ainda precisa da migração no banco. A movimentação técnica anterior continua disponível.</p>}</div>
       <div className="flex flex-wrap gap-2">
-        {podeConfigurar&&<button type="button" disabled={configurandoModo||!pendenciasCarregadas||!modoInicialDisponivel} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" onClick={()=>void alterarModoInicial()}>{configurandoModo?'Salvando...':modoInicial?'Voltar às regras técnicas':'Autorizar movimentação inicial'}</button>}
+        {podeConfigurar&&<button type="button" disabled={configurandoModo||!pendenciasCarregadas||!modoInicialDisponivel} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" onClick={()=>void alterarModoInicial()}>{configurandoModo?'Salvando...':modoInicial?'Desativar acompanhamento desta venda':'Ativar acompanhamento nesta venda'}</button>}
         {podeConfigurar&&<button type="button" disabled={!modoInicialDisponivel} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" aria-expanded={mostrarPermissoes} onClick={()=>setMostrarPermissoes(prev=>!prev)}>{mostrarPermissoes?'Fechar permissões':'Permissões da Produção'}</button>}
         {modoInicial&&!podeMovimentarInicial&&<span className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-bold text-amber-800">Você pode consultar, mas não movimentar cards.</span>}
       </div>
     </div>
     {mostrarPermissoes&&podeConfigurar&&<div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
       <h4 className="text-sm font-bold text-slate-900">Permissões da Produção — funcionários</h4>
-      <p className="mt-1 text-xs text-slate-600">Libere ou revogue a movimentação inicial individualmente. A permissão vale para o Kanban inicial das vendas desta empresa, sem liberar financeiramente a obra, sem autorizar a produção técnica e sem conceder acesso a outros setores. Somente o Master altera essas permissões.</p>
+      <p className="mt-1 text-xs text-slate-600">Libere ou revogue a movimentação inicial individualmente. Depois de liberado, o funcionário pode movimentar os cards de todas as vendas às quais já tem acesso, inclusive novas vendas, sem pedir autorização novamente em cada obra. A permissão só termina quando o Master a revogar. Isso não libera financeiramente a obra, não autoriza a produção técnica e não concede acesso a outros setores. Somente o Master altera essas permissões.</p>
       <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
         {usuariosPermissoes.map(u=><div key={u.id} className="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2">
           <div className="min-w-0"><b className="block truncate text-xs text-slate-800">{u.nome}</b><span className="text-[11px] text-slate-500">{u.role} · {permissoesEquipe[u.id]?'Pode movimentar':'Somente consulta (se autorizada)'}</span></div>
