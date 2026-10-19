@@ -3,7 +3,7 @@
 ## Origem e objetivo
 - Construído **sobre o HTML exato da prévia premium v5 aprovada em 18/10/2026**, preservando a composição, tipografia, cores, fotografias e estrutura principal.
 - Esta pasta é **um site estático independente** do app Next.js do Atlas One. Não importar os arquivos no roteamento `app/` nem na navegação privada do ERP.
-- `index.html`: homepage institucional com oito imagens incorporadas, seções de soluções, portfólio, apresentação e botões de orçamento funcionais.
+- `index.html`: homepage institucional leve, com oito imagens WebP independentes em `assets/`, seções de soluções, portfólio, apresentação e botões de orçamento funcionais.
 - `politica-de-privacidade.html`: orientações sobre o uso dos canais de contato.
 - `vercel.json`: cabeçalhos de segurança; `robots.txt` e meta robots em ambas as páginas **bloqueiam indexação enquanto estiver em homologação**.
 
@@ -29,3 +29,9 @@ Executar `node site-esquadrifacio/validar-site.mjs` na raiz do repositório. O t
 - Não há formulário, banco, CRM, integração com Marketing Inteligente, automação IA nem publicações em redes sociais.
 - Os originais incorporam mídia no HTML para preservar exatamente a prévia visual. Em etapa posterior, exportar imagens autorizadas para arquivos otimizados, mantendo a mesma aparência.
 - **Não publicar esta versão na internet ou indexá-la sem aprovação expressa.**
+
+## Otimização e acessibilidade (18/10/2026)
+- Foram extraídas as mesmas oito imagens WebP da prévia aprovada para arquivos estáticos com nomes descritivos, **sem recorte, alteração, substituição nem perda de qualidade**. A página caiu de ~1,27 MB de HTML para menos de 20 KB; os oito arquivos somam ~940 KB e passam a carregar conforme demanda.
+- Foto de destaque é priorizada; demais imagens têm carregamento sob demanda e tamanhos intrínsecos. Favicon usa a marca ®.
+- Há atalho acessível para ir ao conteúdo e botão discreto de orçamento no celular (o link do WhatsApp permanece **provisório e pendente de confirmação**). Respeita movimento reduzido e área segura de celulares.
+- Sem alteração do projeto Atlas, domínio, banco, APIs ou SEO de produção. A versão continua com `noindex,nofollow`.

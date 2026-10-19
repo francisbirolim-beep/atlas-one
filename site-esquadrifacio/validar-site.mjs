@@ -1,6 +1,6 @@
 // Verificações sem rede da homepage institucional em homologação.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -18,7 +18,22 @@ function check(nome, condicao) {
 
 check('identidade Esquadrifácio®', home.includes('ESQUADRI</strong>FÁCIO') && home.includes('Esquadrifácio®'))
 check('estrutura original preservada', ['id="inicio"', 'id="solucoes"', 'id="projetos"', 'id="sobre"', 'id="contato"'].every(x => home.includes(x)))
-check('todas as oito fotografias preservadas', (home.match(/src="data:image\//g) || []).length === 8)
+const fotos = ['porta-correr-integrada', 'painel-ripado-amadeirado', 'porta-entrada-amadeirada',
+ 'fachada-esquadrias-vidro', 'ambiente-acabamento-amadeirado', 'obra-painel-ripado',
+ 'obra-fachada-residencial', 'obra-porta-especial']
+check('oito fotografias WebP independentes, sem imagens embutidas', (home.match(/src="assets\/[^"]+\.webp"/g) || []).length === 8 && !home.includes('data:image/'))
+for (const foto of fotos) {
+ const imagem = readFileSync(join(root, 'assets', foto + '.webp'))
+ check('WebP real: ' + foto, imagem.subarray(0, 4).toString() === 'RIFF' && imagem.subarray(8, 12).toString() === 'WEBP' && imagem.length > 1000)
+}
+check('HTML compacto para carregamento otimizado', statSync(join(root, 'index.html')).size < 80000)
+check('imagem principal priorizada, demais sob demanda', home.includes('fetchpriority="high"') && (home.match(/loading="lazy"/g) || []).length >= 7)
+check('tamanhos e decodificacao de imagens declarados', (home.match(/width="\d+" height="\d+"/g) || []).length === 8 && (home.match(/decoding="async"/g) || []).length === 8)
+check('navegacao celular com orcamento', home.includes('class="mobile-quote"') && home.includes('safe-area-inset-bottom'))
+check('acessibilidade e movimento reduzido', home.includes('class="skip-link"') && home.includes('prefers-reduced-motion'))
+check('favicon com marca registrada', readFileSync(join(root,'favicon.svg'),'utf8').includes('®'))
+check('sem bibliotecas externas para imagens ou rastreamento', !home.includes('<script src="https://'))
+
 check('SEO institucional e geolocalização', home.includes('Esquadrias de alumínio sob medida em José Bonifácio') && home.includes('name="geo.region"'))
 check('prévia bloqueada para buscadores', home.includes('name="robots" content="noindex,nofollow"') && robots.includes('Disallow: /'))
 check('CTA principal conectado ao WhatsApp', (home.match(/https:\/\/wa\.me\/5517996361318/g) || []).length >= 3)
@@ -29,6 +44,10 @@ check('seções e chamadas comerciais presentes', home.includes('Nossas obras') 
 check('página de privacidade local vinculada', home.includes('href="/politica-de-privacidade.html"') && privacidade.includes('Lei Geral de Proteção de Dados'))
 check('sem formulários ou rastreadores embutidos', !/<form\b/i.test(home) && !/googletagmanager|google-analytics|facebook\.net\/en_US\/fbevents/i.test(home))
 check('política clara de cabeçalhos', vercel.headers?.[0]?.headers?.some(h => h.key === 'X-Content-Type-Options' && h.value === 'nosniff'))
+check('conteudo protegido por CSP sem scripts', vercel.headers?.[0]?.headers?.some(h => h.key === 'Content-Security-Policy' && h.value.includes("script-src 'none'")))
+check('robots tambem como cabecalho de homologacao', vercel.headers?.[0]?.headers?.some(h => h.key === 'X-Robots-Tag' && h.value.includes('noindex')))
+check('cache de fotos configurado', vercel.headers?.some(x => x.source.includes('assets') && x.headers?.some(h => h.key === 'Cache-Control')))
+
 
 const ids = new Set([...home.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]))
 for (const [, destino] of home.matchAll(/href="#([^"]+)"/g)) {
