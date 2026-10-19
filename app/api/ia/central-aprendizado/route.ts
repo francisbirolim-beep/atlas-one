@@ -2,6 +2,10 @@ import {textoCatalogoGeometrico} from '@/lib/ai/catalogoPdfTexto'
 import {pesoDecimalCatalogo} from '@/lib/ai/catalogoPeso'
 import {podeAtualizarCandidatoCatalogo,dadosReanaliseCatalogo} from '@/lib/ai/catalogoReanalise'
 import {extrairLinhasCatalogo, VERSAO_REGRAS_CATALOGO} from '@/lib/ai/catalogoLinhas'
+import {extrairCartoesGeometricos,codigoColadoDeOutrasColunas} from '@/lib/ai/catalogoCartoesGeometria'
+import {indexarPaginasSeguras} from '@/lib/ai/catalogoPaginasSeguras'
+import {avaliarCatalogoLote} from '@/lib/ai/catalogoLoteSeguro'
+import {compararGeometria, codigoPerfil} from '@/lib/ai/equivalenciaPerfilTecnico'
 import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
@@ -145,6 +149,9 @@ function limparLinhaCatalogo(v: unknown){
 }
 function ehCodigoCatalogo(v: unknown){
   const x=limparLinhaCatalogo(v).toUpperCase().replace(/\s+/g,'')
+  // Produtos em duas colunas viravam F42-012F42-014. Nunca tratar
+  // dois códigos completos como um único código cadastral.
+  if(codigoColadoDeOutrasColunas(x))return ''
   if(!x||x.length>24||!/\d/.test(x)||/^(LINHA|PERFIL)\d/.test(x))return ''
   const prefixo=x.split(/[-_/]/)[0]||''
   if(['VISTA','PERFIL','LINHA','BARRA','ACABAMENTO','SUPERIOR','INFERIOR','LATERAL','TRAVESSA','MONTANTE'].includes(prefixo))return ''
@@ -224,8 +231,15 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,p
     linhaPorIndice[i]=linhaAtual
   }
 
+  const cartoes=extrairCartoesGeometricos(paginas)
   const paginaPorCodigo=new Map<string,number>()
   for(const pg of paginas){
+    // Cada token do PDF é um código individual; não usar a linha textual
+    // agregada que mistura duas colunas com tabulação.
+    for(const token of pg.items||[]){
+      const codigo=ehCodigoCatalogo(token?.str)
+      if(codigo&&!paginaPorCodigo.has(codigo))paginaPorCodigo.set(codigo,pg.pagina)
+    }
     for(const l of String(pg.texto||'').split(/\r?\n/)){
       const codigo=ehCodigoCatalogo(l)
       if(codigo&&!paginaPorCodigo.has(codigo))paginaPorCodigo.set(codigo,pg.pagina)
@@ -233,6 +247,18 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,p
   }
 
   const itens:any[]=extrairLinhasCatalogo(paginas.length?paginas:[{pagina:1,texto}])
+  // Cartões do PDF têm o peso abaixo do código, e a descrição acima
+  // NA MESMA posição X. Preferir esta evidência ao texto plano.
+  const existentes=new Map(itens.map((i:any)=>[i.codigo,i]))
+  for(const card of cartoes){
+    const anterior=existentes.get(card.codigo)
+    if(anterior){
+      const idx=itens.findIndex((i:any)=>i.codigo===card.codigo)
+      if(idx>=0)itens[idx]={...anterior,...card}
+    }else{
+      itens.push(card)
+    }
+  }
   const vistos=new Set<string>(itens.map(i=>i.codigo))
   for(let i=0;i<linhas.length;i++){
     const codigo=ehCodigoCatalogo(linhas[i])
@@ -303,25 +329,31 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
   const fornecedorNome=nomeFornecedorCatalogo(lido.texto)
   const extraidos=extrairProdutosCatalogoLocal(lido.texto,fornecedorNome,lido.paginas)
   const porCodigo=new Map(extraidos.map((i:any)=>[cod(i.codigo),i]))
-  const paginaPorCodigo=new Map<string,number>()
-  for(const pg of lido.paginas){
-    for(const linha of String(pg.texto||'').split(/\\r?\\n/)){
-      const codigo=ehCodigoCatalogo(linha)
-      if(codigo&&!paginaPorCodigo.has(cod(codigo)))paginaPorCodigo.set(cod(codigo),pg.pagina)
-    }
-  }
+  // Só identifica uma página quando todas as evidências do PDF apontam
+  // para a mesma posição. Referências repetidas continuam para revisão.
+  const indice=indexarPaginasSeguras(lido.paginas,extraidos)
   const {data:candidatos,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
-    .select('id,dados').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').eq('status','pendente').limit(2000)
+    .select('id,dados,status,validado_em,updated_at').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').eq('status','pendente').limit(2000)
   if(ce)throw ce
-  let mapeados=0
+  let mapeados=0,ambiguos=0,jaIdentificados=0,naoLocalizados=0
   const lista=candidatos||[]
   for(let i=0;i<lista.length;i+=20){
     const lote=lista.slice(i,i+20)
     await Promise.all(lote.map(async(c:any)=>{
+      // Releitura da página não pode substituir revisão feita pelo usuário.
+      if(!podeAtualizarCandidatoCatalogo(c))return
       const codigo=cod(c?.dados?.codigo)
       const item=porCodigo.get(codigo) as any
-      const pagina=paginaPorCodigo.get(codigo)||num(item?.pagina_catalogo)
-      if(!pagina&&!item)return
+      if(indice.ambiguas.has(codigo)){ambiguos++;return}
+      const pagina=indice.unicas.get(codigo)
+      if(!pagina){naoLocalizados++;return}
+      const paginaAnterior=Number(c.dados?.pagina_catalogo||0)
+      // Não trocar página já definida em uma revisão anterior.
+      if(paginaAnterior>0){
+        if(paginaAnterior===pagina)jaIdentificados++
+        else ambiguos++
+        return
+      }
       const linhaNova=txt(item?.linha,120)||null
       const linhaAtual=txt(c?.dados?.linha,120)||null
       const linhaAtualValida=linhaAtual&&!ruidoCatalogo(linhaAtual,fornecedorNome)?linhaAtual:null
@@ -330,18 +362,20 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
         pagina_catalogo:pagina,
         linha:linhaNova||linhaAtualValida,
       }
-      if(pagina)mapeados++
-      const {error:ue}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
-        .eq('empresa_id',usuario.empresa_id).eq('id',c.id)
+      const {data:gravado,error:ue}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
+        .eq('empresa_id',usuario.empresa_id).eq('id',c.id).eq('status','pendente')
+        .eq('updated_at',c.updated_at).select('id').maybeSingle()
       if(ue)throw ue
+      if(gravado&&pagina)mapeados++
     }))
   }
   await supabaseAdmin.from('ai_aprendizado_entradas').update({
     metadados:{...(entrada.metadados||{}),paginas_mapeadas_em:new Date().toISOString(),itens_com_pagina:mapeados},
     updated_at:new Date().toISOString()
   }).eq('empresa_id',usuario.empresa_id).eq('id',entrada.id)
-  await log(usuario,'catalogo_paginas_mapeadas',entrada.id,null,{mapeados,total:lista.length})
-  return {mapeados,total:lista.length}
+  await log(usuario,'catalogo_paginas_mapeadas',entrada.id,null,
+    {mapeados,total:lista.length,ambiguos,jaIdentificados,naoLocalizados})
+  return {mapeados,total:lista.length,ambiguos,jaIdentificados,naoLocalizados}
 }
 
 async function analisar(token:string,tipo:string,descricao:string,nome:string|null,texto:string,imagens:OpenCodeAnexo[],paginas:Array<{pagina:number;texto:string;items?:any[]}>=[]){
@@ -603,7 +637,11 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornec
         }else produtoId=data.id
       }
     }
-    if(produtoId){
+    // Uma equivalência de outro fabricante nunca deve preencher peso, desenho
+    // ou medidas técnicas do produto principal, mesmo se estiverem vazios.
+    if(d.equivalencia_confirmada_com&&produtoId!==d.equivalencia_confirmada_com)
+      throw new Error('Equivalência aponta para um produto diferente do confirmado.')
+    if(produtoId&&!d.equivalencia_confirmada_com){
       const {data:atual,error:le}=await supabaseAdmin.from('produtos').select('id,peso_kg_m,foto_url,dados_origem,updated_at').eq('empresa_id',usuario.empresa_id).eq('id',produtoId).single()
       if(le)throw le
       const patch:any={}
@@ -628,7 +666,45 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornec
       const docId=contexto?.documentoId!==undefined?contexto.documentoId:await copiarFonte(usuario,entrada,fornecedorId)
       const codigo=txt(d.codigo,120)
       if(!codigo)throw new Error('Informe o código do fornecedor antes de aprovar este item.')
-      const {data:v,error}=await supabaseAdmin.from('produto_fornecedores').upsert({empresa_id:usuario.empresa_id,produto_id:produtoId,fornecedor_id:fornecedorId,codigo_fornecedor:codigo,descricao_fornecedor:txt(d.descricao,400)||c.titulo,unidade_compra:txt(d.unidade,30)||null,preco_atual:num(d.preco_fornecedor),documento_origem_id:docId,preco_atualizado_em:num(d.preco_fornecedor)!==null?new Date().toISOString():null,preferencial:false,ativo:true,criado_por_id:usuario.id,criado_por_nome:usuario.nome,updated_at:new Date().toISOString()},{onConflict:'fornecedor_id,codigo_fornecedor'}).select('id').single();if(error)throw new Error(error.message)
+      const vinculo={
+        empresa_id:usuario.empresa_id,produto_id:produtoId,fornecedor_id:fornecedorId,
+        codigo_fornecedor:codigo,descricao_fornecedor:txt(d.descricao,400)||c.titulo,
+        unidade_compra:txt(d.unidade,30)||null,preco_atual:num(d.preco_fornecedor),
+        documento_origem_id:docId,
+        preco_atualizado_em:num(d.preco_fornecedor)!==null?new Date().toISOString():null,
+        preferencial:false,ativo:true,criado_por_id:usuario.id,criado_por_nome:usuario.nome,
+        updated_at:new Date().toISOString()
+      }
+      let v:{id:string}|null=null
+      if(d.equivalencia_confirmada_com){
+        // Não usar upsert aqui: um conflito no mesmo código do fornecedor
+        // poderia transferir silenciosamente o vínculo para outro produto.
+        const {data:anteriores,error:ae}=await supabaseAdmin.from('produto_fornecedores')
+          .select('id,produto_id').eq('empresa_id',usuario.empresa_id)
+          .eq('fornecedor_id',fornecedorId).ilike('codigo_fornecedor',codigo).limit(2)
+        if(ae)throw ae
+        if((anteriores||[]).length>1||(anteriores||[]).some(x=>x.produto_id!==produtoId))
+          throw new Error('Código do fornecedor já vinculado a outro produto. Revisão manual necessária.')
+        if(anteriores?.length){
+          const {data:atualizado,error:ue}=await supabaseAdmin.from('produto_fornecedores')
+            .update({descricao_fornecedor:vinculo.descricao_fornecedor,unidade_compra:vinculo.unidade_compra,
+              documento_origem_id:docId,ativo:true,updated_at:vinculo.updated_at})
+            .eq('empresa_id',usuario.empresa_id).eq('id',anteriores[0].id)
+            .eq('produto_id',produtoId).select('id').maybeSingle()
+          if(ue||!atualizado)throw new Error('Vínculo alterado por outro usuário; confira antes de continuar.')
+          v=atualizado
+        }else{
+          const {data:criado,error:ie}=await supabaseAdmin.from('produto_fornecedores')
+            .insert(vinculo).select('id').single()
+          if(ie)throw new Error('Não foi possível registrar o vínculo sem sobrescrever referência existente: '+ie.message)
+          v=criado
+        }
+      }else{
+        const {data:gravado,error:ge}=await supabaseAdmin.from('produto_fornecedores')
+          .upsert(vinculo,{onConflict:'fornecedor_id,codigo_fornecedor'}).select('id').single()
+        if(ge)throw new Error(ge.message)
+        v=gravado
+      }
       const preco=num(d.preco_fornecedor)
       if(preco!==null&&v?.id)await supabaseAdmin.from('produto_fornecedor_precos_historico').insert({empresa_id:usuario.empresa_id,produto_fornecedor_id:v.id,fornecedor_id:fornecedorId,produto_id:produtoId,preco,unidade_compra:txt(d.unidade,30)||null,documento_origem_id:docId,criado_por_id:usuario.id,criado_por_nome:usuario.nome})
     }
@@ -780,11 +856,183 @@ async function concluir(empresaId:string,entradaId:string){
   if(!(data||[]).some((c:any)=>['pendente','corrigido','aprovado'].includes(c.status)))await supabaseAdmin.from('ai_aprendizado_entradas').update({status:'concluido',updated_at:new Date().toISOString()}).eq('empresa_id',empresaId).eq('id',entradaId)
 }
 
+// Homologação em lote é sempre restrita ao catálogo, ao tenant e ao usuário.
+// O plano não escreve; o executor reavalia a fonte e todas as permissões.
+async function planoValidacaoCatalogoLote(
+  u:UsuarioTenant, entradaId:string,
+  autorizacao:Awaited<ReturnType<typeof carregarPermissoesIA>>,
+){
+  if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(entradaId))
+    throw new Error('Selecione um catálogo válido para a conferência.')
+  let q=supabaseAdmin.from('ai_aprendizado_entradas').select('*')
+    .eq('empresa_id',u.empresa_id).eq('id',entradaId)
+  if(u.role!=='master')q=q.eq('criado_por_id',u.id)
+  const {data:entrada,error:e}=await q.maybeSingle()
+  if(e)throw e
+  if(!entrada||!['catalogo','tabela_preco'].includes(String(entrada.tipo))||
+      entrada.mime_type!=='application/pdf'||!entrada.storage_path)
+    throw new Error('Catálogo PDF original não encontrado ou não autorizado.')
+  if(entrada.metadados?.arquivado_em||entrada.status==='analisando')
+    throw new Error('Este catálogo está arquivado ou em análise.')
+  const {data:candidatos,error:cErro}=await lerTodas(
+    supabaseAdmin.from('ai_aprendizado_candidatos').select('*').eq('empresa_id',u.empresa_id)
+      .eq('entrada_id',entrada.id).eq('tipo','produto').eq('status','pendente')
+      .order('created_at',{ascending:true}).order('id'))
+  if(cErro)throw cErro
+  if(candidatos.length>750)throw new Error('Catálogo grande demais para uma única conferência em lote. Divida em etapas.')
+  const {data:pdf,error:pdfErro}=await supabaseAdmin.storage.from('atlas-aprendizado').download(entrada.storage_path)
+  if(pdfErro||!pdf)throw new Error('O PDF original não está disponível; nenhuma validação será realizada.')
+  const lido=await lerPdfCatalogo(Buffer.from(await pdf.arrayBuffer()))
+  const fontePorCodigo=new Map<string,any>()
+  for(const item of extrairProdutosCatalogoLocal(lido.texto,nomeFornecedorCatalogo(lido.texto),lido.paginas)){
+    const codigo=cod(item.codigo)
+    if(codigo)fontePorCodigo.set(codigo,item)
+  }
+  const fornecedorId=await resolverFornecedor(u,entrada,null)
+  const semFornecedor=!fornecedorId
+  const repetidos=new Map<string,number>()
+  for(const c of candidatos){
+    const codigo=cod(c.dados?.codigo)
+    if(codigo)repetidos.set(codigo,(repetidos.get(codigo)||0)+1)
+  }
+  // Também confere o cadastro geral para não misturar categorias que
+  // compartilham o mesmo código técnico ou código cadastrado em duplicidade.
+  const existentesPorCodigo=new Map<string,Array<{id:string;codigo:string;categoria:string}>>()
+  const codigosBanco=[...new Set(candidatos.map(c=>txt(c.dados?.codigo,120).toUpperCase()).filter(Boolean))]
+  for(let i=0;i<codigosBanco.length;i+=100){
+    const {data:existentes,error:exErro}=await supabaseAdmin.from('produtos')
+      .select('id,codigo,categoria').eq('empresa_id',u.empresa_id)
+      .in('codigo',codigosBanco.slice(i,i+100)).limit(300)
+    if(exErro)throw exErro
+    for(const p of existentes||[]){
+      const chave=cod(p.codigo)
+      existentesPorCodigo.set(chave,[...(existentesPorCodigo.get(chave)||[]),p])
+    }
+  }
+  const aptos:Array<{id:string;codigo:string;descricao:string;entrada_id:string;imagem_url:string;dados:Record<string,any>;updated_at:string}>=[]
+  const bloqueados:Array<{id:string;codigo:string;motivo:string;imagem_url:string|null}>=[]
+  for(const candidato of candidatos){
+    const codigo=txt(candidato.dados?.codigo,120)
+    let motivo:string|null=null
+    const permitido=await podeValidar(u,candidato,autorizacao)
+    if(!permitido)motivo='Sem permissão para homologar este produto.'
+    else if(!ehCodigoCatalogo(codigo))motivo='Código técnico inválido.'
+    else if((repetidos.get(cod(codigo))||0)>1)motivo='Código repetido neste catálogo.'
+    else if(semFornecedor)motivo='Fornecedor do catálogo ainda não validado.'
+    const resultado=avaliarCatalogoLote(candidato,fontePorCodigo.get(cod(codigo))||null)
+    const existentes=existentesPorCodigo.get(cod(codigo))||[]
+    if(!motivo)motivo=resultado.motivo
+    if(!motivo&&existentes.length>1)motivo='Código duplicado no cadastro de produtos Atlas.'
+    if(!motivo&&existentes.some(p=>String(p.categoria||'').toLowerCase()!==String(resultado.dados?.categoria||'').toLowerCase()))
+      motivo='Este código já existe com categoria diferente no Atlas.'
+    if(motivo||!resultado.dados){
+      bloqueados.push({id:candidato.id,codigo,motivo:motivo||'Conferência individual necessária.',
+        imagem_url:candidato.dados?.imagem_confirmada===true
+          ?txt(candidato.dados?.imagem_item_url,2000)||null:null})
+      continue
+    }
+    aptos.push({id:candidato.id,codigo,descricao:String(resultado.dados.descricao||''),
+      entrada_id:entrada.id,imagem_url:txt(candidato.dados?.imagem_item_url,2000),
+      dados:resultado.dados,updated_at:candidato.updated_at})
+  }
+  return {entrada,aptos,bloqueados,total:candidatos.length,fonte_total:fontePorCodigo.size,fornecedorId}
+}
+
 export async function GET(req:NextRequest){
   try{
     const u=await autenticarTenant(req);if(!u)return NextResponse.json({error:'Sessão inválida.'},{status:401})
     const autorizacao=await carregarPermissoesIA(u)
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
+    // Sugestões para conferência visual. Nunca mescla, reclassifica ou aprova produtos.
+    const candidatoComparar=txt(req.nextUrl.searchParams.get('compararPerfil'),80)
+    if(candidatoComparar){
+      const {data:c,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
+        .select('id,entrada_id,tipo,status,dados,empresa_id')
+        .eq('empresa_id',u.empresa_id).eq('id',candidatoComparar).maybeSingle()
+      if(ce)throw ce
+      if(!c||c.tipo!=='produto')return NextResponse.json({error:'Produto não encontrado.'},{status:404})
+      const {data:entrada,error:ee}=await supabaseAdmin.from('ai_aprendizado_entradas')
+        .select('id,criado_por_id,fornecedor_nome_sugerido')
+        .eq('empresa_id',u.empresa_id).eq('id',c.entrada_id).maybeSingle()
+      if(ee)throw ee
+      if(!entrada||(u.role!=='master'&&entrada.criado_por_id!==u.id))
+        return NextResponse.json({error:'Catálogo não autorizado.'},{status:403})
+      if(!['perfil','acessorio'].includes(String(c.dados?.categoria)))
+        return NextResponse.json({sugestoes:[],motivo:'Selecione um perfil ou acessório técnico.'})
+      const foto=String(c.dados?.imagem_item_url||'')
+      // Mesmo sem recorte do novo catálogo, mostra os perfis já cadastrados
+      // para pesquisa visual. Sem imagem confirmada NÃO permite vinculação.
+      const {data:base,error:be}=await supabaseAdmin.from('produtos')
+        .select('id,codigo,nome,categoria,peso_kg_m,foto_url,dados_origem,unidade')
+        .eq('empresa_id',u.empresa_id).eq('categoria',c.dados.categoria)
+        .not('foto_url','is',null).limit(2000)
+      if(be)throw be
+      const origem={codigo:c.dados.codigo,categoria:c.dados.categoria,
+        medidas_mm:c.dados.medidas_mm,peso_kg_m:c.dados.peso_kg_m}
+      const lista=(base||[]).filter(p=>p.foto_url)
+        .map(p=>{
+          const comp=compararGeometria(origem,{codigo:p.codigo,categoria:p.categoria,
+            medidas_mm:p.dados_origem?.medidas_mm,peso_kg_m:p.peso_kg_m})
+          const mesmoCodigo=codigoPerfil(c.dados.codigo)===codigoPerfil(p.codigo)
+          return {id:p.id,codigo:p.codigo,nome:p.nome,categoria:p.categoria,
+            peso_kg_m:p.peso_kg_m,medidas_mm:p.dados_origem?.medidas_mm||{},
+            foto_url:p.foto_url,unidade:p.unidade,
+            funcao:p.dados_origem?.aplicacao||null,
+            mesmoCodigo,geometria:comp,
+            prioridade:comp.medidasCompativeis?3:mesmoCodigo?2:comp.medidasComuns?1:0}
+        })
+        .sort((a,b)=>b.prioridade-a.prioridade||b.geometria.medidasComuns-a.geometria.medidasComuns)
+        .slice(0,60)
+      const ids=lista.map(p=>p.id)
+      const {data:vinculos,error:ve}=ids.length
+        ?await supabaseAdmin.from('produto_fornecedores')
+          .select('produto_id,codigo_fornecedor,fornecedor_id,preco_atual')
+          .eq('empresa_id',u.empresa_id).in('produto_id',ids).eq('ativo',true).limit(500)
+        :{data:[],error:null}
+      if(ve)throw ve
+      const fids=[...new Set((vinculos||[]).map(v=>v.fornecedor_id).filter(Boolean))]
+      const {data:fornecedores,error:fe}=fids.length
+        ?await supabaseAdmin.from('fornecedores').select('id,nome')
+          .eq('empresa_id',u.empresa_id).in('id',fids)
+        :{data:[],error:null}
+      if(fe)throw fe
+      const nomes=new Map((fornecedores||[]).map(f=>[f.id,f.nome]))
+      const {data:variantes,error:verro}=ids.length
+        ?await supabaseAdmin.from('fornecedor_catalogo_itens')
+          .select('produto_id,fornecedor_id,codigo_fornecedor,dados_extraidos')
+          .eq('empresa_id',u.empresa_id).in('produto_id',ids).limit(500)
+        :{data:[],error:null}
+      if(verro)throw verro
+      return NextResponse.json({
+        candidato_id:c.id,codigo_origem:c.dados.codigo,
+        desenho_origem:foto,comparacao_visual:'orientativa',
+        sugestoes:lista.map(p=>({...p,fornecedores:(vinculos||[])
+          .filter(v=>v.produto_id===p.id)
+          .map(v=>{
+            const variante=(variantes||[]).find(d=>d.fornecedor_id===v.fornecedor_id
+              &&codigoPerfil(d.codigo_fornecedor)===codigoPerfil(v.codigo_fornecedor)
+              &&d.produto_id===p.id)
+            return {nome:nomes.get(v.fornecedor_id)||'Fornecedor',
+              codigo:v.codigo_fornecedor,preco:v.preco_atual,
+              peso_kg_m:variante?.dados_extraidos?.peso_kg_m??null,
+              desenho_url:variante?.dados_extraidos?.desenho_url||null}
+          })})),
+        aviso:!foto?'Este catálogo ainda não tem desenho individual salvo. Você pode pesquisar produtos existentes, mas precisa confirmar o desenho antes de vincular.'
+          :base?.length===2000?'Pesquisa limitada aos primeiros 2000 produtos com foto. Use o cadastro completo para outras referências.':null,
+      },{headers:{'Cache-Control':'private, no-store'}})
+    }
+    // Simulação completa, sem gravações. Revalidação acontece novamente a cada lote.
+    const preverLote=txt(req.nextUrl.searchParams.get('preverLote'),5)==='1'
+    if(preverLote){
+      const id=txt(req.nextUrl.searchParams.get('entradaId'),80)
+      const plano=await planoValidacaoCatalogoLote(u,id,autorizacao)
+      return NextResponse.json({
+        entrada_id:plano.entrada.id,entrada_nome:plano.entrada.titulo,
+        total:plano.total,aptos:plano.aptos.map(({id,codigo,descricao,entrada_id,imagem_url})=>({id,codigo,descricao,entrada_id,imagem_url})),
+        bloqueados:plano.bloqueados,fonte_total:plano.fonte_total,
+        somenteLeitura:process.env.VERCEL_ENV==='preview',
+      },{headers:{'Cache-Control':'private, no-store'}})
+    }
     // Consulta explicita da tabela original; nenhuma escrita nos candidatos ou produtos.
     const conferirTabelaId=txt(req.nextUrl.searchParams.get('conferirTabela'),80)
     if(conferirTabelaId){
@@ -798,7 +1046,7 @@ export async function GET(req:NextRequest){
       const {data:pdf,error:erroPdf}=await supabaseAdmin.storage.from('atlas-aprendizado').download(entrada.storage_path)
       if(erroPdf||!pdf)return NextResponse.json({error:'PDF original indisponível.'},{status:404})
       const lido=await lerPdfCatalogo(Buffer.from(await pdf.arrayBuffer()))
-      const itens=extrairLinhasCatalogo(lido.paginas).map(item=>({
+      const itens=extrairProdutosCatalogoLocal(lido.texto,nomeFornecedorCatalogo(lido.texto),lido.paginas).map(item=>({
         codigo:item.codigo,descricao:item.descricao,categoria:item.categoria,unidade:item.unidade,
         peso_kg_m:item.peso_kg_m,medidas_mm:item.medidas_mm,medidas_polegadas:item.medidas_polegadas,
         linha:item.linha,pagina_catalogo:item.pagina_catalogo,imagem_tipo:item.imagem_tipo,
@@ -913,6 +1161,58 @@ export async function PATCH(req:NextRequest){
     if(!autorizacao.geral)return NextResponse.json({error:'Sem acesso à IA.'},{status:403})
     if(process.env.VERCEL_ENV==='preview')return NextResponse.json({error:'Prévia de homologação em modo somente leitura. Nenhum cadastro real pode ser modificado aqui.'},{status:409})
     const b=await req.json(),acao=txt(b?.acao,40)
+    if(acao==='validar_lote_catalogo'){
+      const entradaId=txt(b?.entrada_id,80)
+      const ids=Array.isArray(b?.ids)?b.ids:[]
+      if(!ids.length||ids.length>5||ids.some((id:any)=>typeof id!=='string'||!/^[-0-9a-f]{36}$/i.test(id))||
+         new Set(ids).size!==ids.length)
+        return NextResponse.json({error:'Selecione de 1 a 5 produtos por etapa, sem duplicidade.'},{status:422})
+      const plano=await planoValidacaoCatalogoLote(u,entradaId,autorizacao)
+      const selecionados=new Map(plano.aptos.map(c=>[c.id,c]))
+      const resultados:Array<{id:string;status:'aplicado'|'ignorado'|'erro';motivo?:string}>=[]
+      for(const id of ids){
+        const item=selecionados.get(id)
+        if(!item){
+          resultados.push({id,status:'ignorado',motivo:plano.bloqueados.find(x=>x.id===id)?.motivo||'Produto não está mais apto.'})
+          continue
+        }
+        // Refaz o lock otimista; nunca aplicar se outro usuário alterou o item.
+        const dados:Record<string,any>={...item.dados,imagem_preview_local:false}
+        delete dados.conferencia_tabela_visualizada
+        delete dados.divergencias_tabela
+        const {data:marcado,error:me}=await supabaseAdmin.from('ai_aprendizado_candidatos')
+          .update({status:'aprovado',dados,validado_por_id:u.id,validado_por_nome:u.nome,
+            validado_em:new Date().toISOString(),observacao_validacao:'Homologação em lote: código, desenho individual e tabela PDF conferidos.',
+            updated_at:new Date().toISOString()})
+          .eq('empresa_id',u.empresa_id).eq('entrada_id',entradaId).eq('id',id)
+          .eq('status','pendente').eq('updated_at',item.updated_at).select('*').maybeSingle()
+        if(me||!marcado){
+          resultados.push({id,status:'ignorado',motivo:'Produto modificado por outro usuário. Atualize a conferência.'})
+          continue
+        }
+        try{
+          const destino=await aplicar(u,{...marcado,dados},plano.entrada,{fornecedorId:plano.fornecedorId})
+          const {data:concluido,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
+            .update({status:'aplicado',destino_id:destino,updated_at:new Date().toISOString()})
+            .eq('empresa_id',u.empresa_id).eq('entrada_id',entradaId).eq('id',id).eq('status','aprovado')
+            .select('id').maybeSingle()
+          if(ce||!concluido)throw new Error('Cadastro aplicado, mas o status final não foi confirmado. Confira este item.')
+          // O produto não deve voltar como erro se só a gravação do evento de
+          // auditoria falhar depois de a homologação já estar concluída.
+          try{
+            await log(u,'catalogo_validado_em_lote',entradaId,id,{codigo:item.codigo,destino_id:destino})
+          }catch(e){console.error('Falha no log do catálogo em lote já aplicado',e)}
+          resultados.push({id,status:'aplicado'})
+        }catch(e:any){
+          // Conserva o status aprovado para revisão e eventual recuperação individual.
+          // Não repete uma aplicação parcial cegamente.
+          resultados.push({id,status:'erro',motivo:String(e?.message||'Falha ao aplicar.').slice(0,300)})
+        }
+      }
+      await concluir(u.empresa_id,entradaId)
+      return NextResponse.json({entrada_id:entradaId,resultados,aplicados:resultados.filter(r=>r.status==='aplicado').length,
+        restantes:resultados.filter(r=>r.status!=='aplicado').length})
+    }
     if(acao==='arquivar_entrada'||acao==='restaurar_entrada'){
       const entradaId=txt(b?.entrada_id,80)
       const {data:entrada,error:le}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',entradaId).maybeSingle()
@@ -939,7 +1239,7 @@ export async function PATCH(req:NextRequest){
       if(u.role!=='master'&&entrada.criado_por_id!==u.id)return NextResponse.json({error:'Material não encontrado.'},{status:404})
       if(!['catalogo','tabela_preco'].includes(String(entrada.tipo)))return NextResponse.json({error:'Somente catálogo ou tabela pode ter imagens preparadas.'},{status:400})
       const mapa=await remapearCatalogoExistente(u,entrada)
-      return NextResponse.json({mensagem:'Catálogo preparado: '+mapa.mapeados+' de '+mapa.total+' item(ns) foram ligados à página correta para gerar o recorte visual.',...mapa})
+      return NextResponse.json({mensagem:'Catálogo conferido: '+mapa.mapeados+' nova(s) página(s) identificada(s), '+mapa.jaIdentificados+' já identificada(s), '+mapa.ambiguos+' referência(s) para revisão e '+mapa.naoLocalizados+' ainda sem página. Nenhuma foto foi validada automaticamente.',...mapa})
     }
     if(acao==='reprocessar_entrada'){
       if(!await podeValidar(u,{tipo:'produto',modulo:'engenharia'})||!await podeValidar(u,{tipo:'fornecedor',modulo:'compras'}))return NextResponse.json({error:'Sem permissão para alterar este catálogo.'},{status:403})
@@ -983,6 +1283,115 @@ export async function PATCH(req:NextRequest){
     const {data:entrada}=await supabaseAdmin.from('ai_aprendizado_entradas').select('*').eq('empresa_id',u.empresa_id).eq('id',c.entrada_id).maybeSingle();if(!entrada)return NextResponse.json({error:'Entrada não encontrada.'},{status:404})
       if(u.role!=='master'&&entrada.criado_por_id!==u.id)return NextResponse.json({error:'Material não encontrado.'},{status:404})
     if(entrada.metadados?.arquivado_em)return NextResponse.json({error:'Restaure o material para editar ou validar.'},{status:409})
+    if(acao==='vincular_equivalente_perfil'){
+      if(c.tipo!=='produto'||!['pendente','corrigido'].includes(String(c.status)))
+        return NextResponse.json({error:'Esta referência já está aplicada ou não está aguardando validação.'},{status:409})
+      if(b?.confirmar_equivalencia!==true)
+        return NextResponse.json({error:'A equivalência técnica precisa ser confirmada pelo responsável.'},{status:422})
+      const destinoId=txt(b?.produto_id,80)
+      if(!/^[0-9a-f-]{36}$/i.test(destinoId))
+        return NextResponse.json({error:'Selecione um produto cadastrado válido.'},{status:422})
+      const d=c.dados||{}, codigo=txt(d.codigo,120)
+      if(!ehCodigoCatalogo(codigo)||!['perfil','acessorio'].includes(String(d.categoria)))
+        return NextResponse.json({error:'Código ou categoria técnica não verificados.'},{status:422})
+      const caminho='/catalogo-itens/'+u.empresa_id+'/'+entrada.id+'/'+c.id+'/'
+      if(d.imagem_confirmada!==true||cod(d.imagem_codigo_validado)!==cod(codigo)||
+         !String(d.imagem_item_url||'').includes(caminho))
+        return NextResponse.json({error:'Confirme primeiro o desenho individual do novo fornecedor.'},{status:422})
+      const {data:p,error:pe}=await supabaseAdmin.from('produtos')
+        .select('id,codigo,nome,categoria,unidade,peso_kg_m,foto_url,dados_origem')
+        .eq('empresa_id',u.empresa_id).eq('id',destinoId).maybeSingle()
+      if(pe)throw pe
+      if(!p||!p.foto_url||p.categoria!==d.categoria)
+        return NextResponse.json({error:'O produto existente precisa ter desenho e categoria correspondentes.'},{status:422})
+      const medidas=compararGeometria(
+        {categoria:d.categoria,medidas_mm:d.medidas_mm},
+        {categoria:p.categoria,medidas_mm:p.dados_origem?.medidas_mm})
+      if(!medidas.medidasCompativeis)
+        return NextResponse.json({error:'Não é seguro vincular: confirme pelo menos duas medidas compatíveis em ambos os desenhos.'},{status:422})
+      const fornecedorId=await resolverFornecedor(u,entrada,null)
+      if(!fornecedorId)
+        return NextResponse.json({error:'Confirme o fornecedor deste catálogo antes de vincular um produto.'},{status:422})
+      const {data:ja,error:je}=await supabaseAdmin.from('produto_fornecedores')
+        .select('id,produto_id,codigo_fornecedor')
+        .eq('empresa_id',u.empresa_id).eq('fornecedor_id',fornecedorId)
+        .ilike('codigo_fornecedor',codigo).limit(2)
+      if(je)throw je
+      if((ja||[]).some(v=>v.produto_id!==destinoId))
+        return NextResponse.json({error:'Este código já está vinculado a outro produto do fornecedor. Confirme antes de alterar.'},{status:409})
+      if((ja||[]).length>1)
+        return NextResponse.json({error:'Há vínculos duplicados para este código. Solicite revisão manual.'},{status:409})
+      const docId=await copiarFonte(u,entrada,fornecedorId)
+      if(!docId)return NextResponse.json({error:'Não foi possível preservar o catálogo original do fornecedor.'},{status:409})
+      const {data:registro,error:re}=await supabaseAdmin.from('fornecedor_catalogo_itens')
+        .select('id,produto_id,dados_extraidos').eq('empresa_id',u.empresa_id)
+        .eq('documento_id',docId).eq('codigo_fornecedor',codigo).limit(2)
+      if(re)throw re
+      if((registro||[]).some(v=>v.produto_id&&v.produto_id!==destinoId))
+        return NextResponse.json({error:'O catálogo já está vinculado a outro produto. Não alterei o cadastro.'},{status:409})
+      if((registro||[]).length>1)
+        return NextResponse.json({error:'Itens duplicados no catálogo; vinculação requer revisão.'},{status:409})
+      const pesoAnterior=pesoDecimalCatalogo(registro?.[0]?.dados_extraidos?.peso_kg_m)
+      const pesoNovo=pesoDecimalCatalogo(d.peso_kg_m)
+      if(pesoAnterior!=null&&pesoNovo!=null
+        &&Math.abs(pesoNovo-pesoAnterior)>Math.max(.01,pesoAnterior*.03))
+        return NextResponse.json({error:'O mesmo fornecedor já tem outro peso registrado para este código. Confira antes de substituir.'},{status:409})
+      // Lock do candidato antes de criar vínculos; se concorrência, recusar.
+      const dados={...d,equivalencia_confirmada_com:destinoId,
+        equivalencia_confirmada_por:u.id,equivalencia_confirmada_em:new Date().toISOString(),
+        peso_kg_m:pesoDecimalCatalogo(d.peso_kg_m),imagem_preview_local:false}
+      const {data:travado,error:te}=await supabaseAdmin.from('ai_aprendizado_candidatos')
+        .update({status:'aprovado',destino_id:destinoId,acao_sugerida:'vincular_existente',
+          dados,validado_por_id:u.id,validado_por_nome:u.nome,validado_em:new Date().toISOString(),
+          observacao_validacao:'Correspondência por desenhos e medidas conferida manualmente.',
+          updated_at:new Date().toISOString()})
+        .eq('empresa_id',u.empresa_id).eq('id',c.id).eq('status',c.status)
+        .eq('updated_at',c.updated_at).select('*').maybeSingle()
+      if(te)throw te
+      if(!travado)return NextResponse.json({error:'O item foi alterado por outro usuário. Atualize a tela.'},{status:409})
+      // Produto principal permanece único e conserva foto/peso técnicos homologados.
+      const destino=await aplicar(u,{...travado,dados,destino_id:destinoId},entrada,{fornecedorId,documentoId:docId})
+      if(destino!==destinoId)throw Error('A aplicação não corresponde ao produto selecionado.')
+      const dadosFornecedor={
+        codigo,codigo_fornecedor:codigo,peso_kg_m:pesoDecimalCatalogo(d.peso_kg_m),
+        medidas_mm:d.medidas_mm||{},medidas_polegadas:d.medidas_polegadas||{},
+        desenho_url:d.imagem_item_url,pagina_catalogo:d.pagina_catalogo||null,
+        linha:d.linha||null,aplicacao:d.aplicacao||null,
+        produto_atlas_id:destinoId,referencia_atlas_codigo:p.codigo,
+        equivalencia_confirmada_por:u.id,equivalencia_confirmada_em:new Date().toISOString(),
+      }
+      // Dados técnicos do fabricante nunca substituem silenciosamente os de outro.
+      if((registro||[]).length===1){
+        const anterior=registro![0]
+        const {error:ue}=await supabaseAdmin.from('fornecedor_catalogo_itens').update({
+          produto_id:destinoId,status:'vinculado',
+          dados_extraidos:{...(anterior.dados_extraidos||{}),...dadosFornecedor},
+          updated_at:new Date().toISOString(),
+        }).eq('empresa_id',u.empresa_id).eq('id',anterior.id)
+        if(ue)throw new Error('Não foi possível preservar a ficha técnica deste fornecedor: '+ue.message)
+      }else{
+        const {error:ie}=await supabaseAdmin.from('fornecedor_catalogo_itens').insert({
+          empresa_id:u.empresa_id,documento_id:docId,fornecedor_id:fornecedorId,
+          produto_id:destinoId,codigo_fornecedor:codigo,
+          descricao:txt(d.descricao,400)||c.titulo,categoria_sugerida:d.categoria,
+          unidade:txt(d.unidade,30)||'KG',
+          preco:num(d.preco_fornecedor),status:'vinculado',dados_extraidos:dadosFornecedor,
+          criado_por_id:u.id,criado_por_nome:u.nome,
+        })
+        if(ie)throw new Error('Vínculo comercial criado, mas o registro técnico do fornecedor precisa ser revisado: '+ie.message)
+      }
+      const {data:concluido,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
+        .update({status:'aplicado',destino_id:destinoId,updated_at:new Date().toISOString()})
+        .eq('empresa_id',u.empresa_id).eq('id',c.id).eq('status','aprovado').select('id').maybeSingle()
+      if(ce||!concluido)throw Error('O vínculo foi aplicado, mas o status final requer revisão. Não repita automaticamente.')
+      await concluir(u.empresa_id,entrada.id)
+      try{await log(u,'perfil_equivalente_vinculado',entrada.id,c.id,
+        {produto_id:destinoId,codigo_origem:codigo,codigo_atlas:p.codigo})}
+      catch(e){console.error('Falha no log de equivalência já aplicada',e)}
+      return NextResponse.json({mensagem:'Perfil '+codigo+' vinculado ao produto '+p.codigo+
+        ' sem duplicar cadastro. Peso, desenho e medidas do novo fornecedor preservados no histórico técnico.',
+        destino_id:destinoId})
+    }
     if(acao==='salvar_imagem_catalogo'){
       if(c.tipo!=='produto')return NextResponse.json({error:'Imagem só pode ser vinculada a produto.'},{status:400})
       const dataUrl=String(b?.imagem||'')

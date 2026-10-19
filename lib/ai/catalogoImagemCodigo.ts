@@ -11,7 +11,7 @@ export function localizarCodigoCatalogo(
   // Caracteres em códigos reais podem vir quebrados entre itens do PDF:
   // SU 01 + 1 -> SU011; TUBO D 055 -> D055.
   const padrao=new RegExp('^(?:TUBO\\s+)?'+prefixo+'[\\s_/-]*'+
-    [...numeros].join('\\s*')+'\\s*'+sufixo+'(?![A-Z0-9])','i')
+    [...numeros].join('[\\s_/-]*')+'[\\s_/-]*'+sufixo+'(?![A-Z0-9])','i')
   const encontrados:TokenImagemCatalogo[]=[]
   for(const item of itens){
     const mesmaLinha=itens.filter(t=>Math.abs(t.y-item.y)<2*escala

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ValidacaoLoteCatalogo from './ValidacaoLoteCatalogo'
+import CompararPerfilCatalogo from './CompararPerfilCatalogo'
 import Link from 'next/link'
 import {
   ArrowLeft, BookOpenCheck, CheckCircle2, ChevronDown, ChevronUp, FileText,
@@ -10,6 +12,9 @@ import {
 import { tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
+import { limitesRecorteCartao } from '@/lib/ai/catalogoRecorteCartao'
+import { codigoColadoDeOutrasColunas } from '@/lib/ai/catalogoCartoesGeometria'
+import { mesmaReferenciaCatalogo } from '@/lib/ai/catalogoImagemReferencia'
 import { conferirDadosCatalogo } from '@/lib/ai/catalogoConferencia'
 import { lerImagemCatalogoPreview, salvarImagemCatalogoPreview } from '@/lib/ai/catalogoImagemPreview'
 import { conferidoSomenteNaPrevia } from '@/lib/ai/catalogoFilaValidacao'
@@ -122,6 +127,7 @@ export default function CentralAprendizadoPage(){
   const [arquivando,setArquivando]=useState<string|null>(null)
   const [reprocessando,setReprocessando]=useState<string|null>(null)
   const [conferindoTabela,setConferindoTabela]=useState<string|null>(null)
+  const [consultaPdfDiagnostico,setConsultaPdfDiagnostico]=useState<Record<string,Array<Record<string,any>>>>({})
   const [salvando,setSalvando]=useState<string|null>(null)
   const [entradaValidacaoFiltro,setEntradaValidacaoFiltro]=useState<string|null>(null)
   const [mostrarConferidosPreview,setMostrarConferidosPreview]=useState(false)
@@ -256,6 +262,11 @@ export default function CentralAprendizadoPage(){
   }
   async function arquivarEntrada(e:Entrada){
     if(arquivando)return
+    if(dados.somenteLeitura){
+      setMensagem('Prévia de testes: nenhum catálogo será arquivado. No Atlas oficial, arquivar retira as pendências sem excluir cadastros e históricos já aplicados.')
+      return
+    }
+    if(!e.metadados?.arquivado_em&&!window.confirm('Cancelar a revisão do catálogo "'+e.titulo+'"? O material sairá da fila, mas os produtos já aplicados e o histórico continuarão preservados. Você poderá restaurá-lo depois.'))return
     setArquivando(e.id);setErro('')
     try{
       const j=await api('/api/ia/central-aprendizado',{method:'PATCH',body:JSON.stringify({acao:e.metadados?.arquivado_em?'restaurar_entrada':'arquivar_entrada',entrada_id:e.id})})
@@ -282,8 +293,10 @@ export default function CentralAprendizadoPage(){
     if(!automatica){setErro('');setMensagem('')}
     try{
       const resultado=await api('/api/ia/central-aprendizado?conferirTabela='+encodeURIComponent(e.id))
+      const itensLidos:Array<Record<string,any>>=Array.isArray(resultado.itens)?resultado.itens:[]
+      setConsultaPdfDiagnostico(prev=>({...prev,[e.id]:itensLidos}))
       const porCodigo=new Map<string,Record<string,any>>()
-      for(const item of Array.isArray(resultado.itens)?resultado.itens:[]){
+      for(const item of itensLidos){
         const codigo=String(item.codigo||'').toUpperCase().replace(/[^A-Z0-9]/g,'')
         if(codigo&&!porCodigo.has(codigo))porCodigo.set(codigo,item)
       }
@@ -518,7 +531,7 @@ export default function CentralAprendizadoPage(){
                 {e.resumo_ia&&<p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{e.resumo_ia}</p>}
                 {e.fornecedor_nome_sugerido&&<div className="mt-2 flex items-center gap-1 text-xs font-semibold text-slate-600"><Building2 size={13}/>{e.fornecedor_nome_sugerido}</div>}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button disabled={Boolean(arquivando)||e.status==='analisando'||Boolean(reprocessando)} onClick={()=>void arquivarEntrada(e)} className="rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-40">{arquivando===e.id?'Salvando...':e.metadados?.arquivado_em?'Restaurar material':'Arquivar material'}</button>
+                  <button disabled={Boolean(arquivando)||e.status==='analisando'||Boolean(reprocessando)} onClick={()=>void arquivarEntrada(e)} className="rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-40">{arquivando===e.id?'Salvando...':e.metadados?.arquivado_em?'Restaurar material':'Cancelar revisão / Arquivar material'}</button>
                   {e.metadados?.arquivado_em&&<span className="rounded-lg bg-slate-100 px-2 py-1 text-xs">Arquivado — preservado no histórico</span>}
                   {e.fonte_url&&<a href={e.fonte_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={12}/>Abrir fonte</a>}
                   {pendentes.some(c=>c.entrada_id===e.id)&&!e.metadados?.arquivado_em&&<button onClick={()=>abrirValidacaoEntrada(e.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700"><ShieldCheck size={13}/>Revisar agora ({pendentes.filter(c=>c.entrada_id===e.id).length})</button>}
@@ -531,7 +544,25 @@ export default function CentralAprendizadoPage(){
               <div className="shrink-0 text-right text-[11px] text-slate-400"><div>{e.criado_por_nome||'Usuário'}</div><div>{dataBr(e.created_at)}</div></div>
             </div>
             {catalogoAberto===e.id&&conferindoTabela===e.id&&<p className="mt-3 text-xs font-semibold text-blue-700"><Loader2 className="mr-1 inline animate-spin" size={13}/>Carregando automaticamente os dados das tabelas do PDF original, sem alterar cadastros...</p>}
-            {catalogoAberto===e.id&&<CatalogoDetalhes
+            {catalogoAberto===e.id&&consultaPdfDiagnostico[e.id]&&<div className="my-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+              <b className="text-xs text-blue-900">Leitura corrigida do PDF original: {consultaPdfDiagnostico[e.id].length} códigos identificados</b>
+              <p className="mt-1 text-xs text-blue-700">Verificação somente leitura, sem alterar os cadastros aprovados. Pesquise o código abaixo para comparar com o que foi importado anteriormente.</p>
+              <p className="mt-2 text-xs font-semibold text-blue-900">Digite o código completo na busca do catálogo para abrir o desenho individual encontrado no PDF.</p>
+              {buscaCatalogo.trim()&&consultaPdfDiagnostico[e.id]
+                .filter(i=>String(i.codigo||'').toUpperCase()===buscaCatalogo.trim().toUpperCase())
+                .slice(0,1).map(i=><div key={i.codigo} className="mt-2 rounded-xl border bg-white p-3">
+                  <div className="mb-2 text-xs"><b>{i.codigo}</b> — {i.descricao}
+                    <p>Peso: {i.peso_kg_m??'não informado'} kg/m · Página: {i.pagina_catalogo||'a conferir'}</p>
+                  </div>
+                  {e.fonte_url&&i.pagina_catalogo
+                    ?<ImagemPerfilCatalogo fonteUrl={e.fonte_url} pagina={Number(i.pagina_catalogo)}
+                      codigo={String(i.codigo)} descricao={String(i.descricao||'')}
+                      somenteLeitura={true} apenasVisualizacao={true} onSalvar={async()=>null}/>
+                    :<p className="text-xs text-amber-700">Desenho não localizado com segurança. Consulte o PDF original.</p>}
+                </div>)}
+
+            </div>}
+            {catalogoAberto===e.id&&<CatalogoDetalhes key={e.id}
               entrada={e}
               candidatos={dados.candidatos.filter(c=>c.entrada_id===e.id)}
               busca={buscaCatalogo}
@@ -542,6 +573,8 @@ export default function CentralAprendizadoPage(){
               onSalvarItem={salvarItemCatalogo}
               onMapearCatalogo={mapearCatalogo}
               onSalvarImagem={salvarImagemCatalogo}
+              onConsultarEquivalencia={api}
+              onVinculado={async msg=>{setMensagem(msg);await carregar()}}
               somenteLeitura={Boolean(dados.somenteLeitura)}
               salvandoId={salvando}
               mapeando={reprocessando===e.id}
@@ -559,6 +592,14 @@ export default function CentralAprendizadoPage(){
           </button>
           <p className="w-full text-xs text-slate-500">A conferência local não é homologação oficial. Os itens só são aprovados no Atlas após validação e gravação no sistema principal.</p>
         </div>}
+        <ValidacaoLoteCatalogo
+          entradas={dados.entradas}
+          candidatos={dados.candidatos}
+          entradaAtivaId={entradaValidacaoFiltro}
+          somenteLeitura={Boolean(dados.somenteLeitura)}
+          api={api}
+          onFinalizar={async resumo=>{setMensagem(resumo);setAberto(null);await carregar()}}
+        />
         {entradaFiltrada&&<div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
           <div><p className="text-xs font-bold uppercase tracking-wide text-blue-600">Revisando este material</p><p className="mt-1 font-semibold text-slate-800">{entradaFiltrada.titulo}</p><p className="mt-1 text-xs text-slate-500">{pendentesVisiveis.length} item(ns) {mostrarConferidosPreview?'conferido(s) somente nesta prévia':'aguardando sua decisão'}.</p></div>
           <button onClick={()=>{setEntradaValidacaoFiltro(null);setAberto(null)}} className="rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Ver todas as validações</button>
@@ -673,7 +714,7 @@ export default function CentralAprendizadoPage(){
 }
 
 
-function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,somenteLeitura,salvandoId,mapeando}:{
+function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,onConsultarEquivalencia,onVinculado,somenteLeitura,salvandoId,mapeando}:{
   entrada:Entrada
   candidatos:Candidato[]
   busca:string
@@ -684,17 +725,25 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   onSalvarItem:(c:Candidato,dados:Record<string,any>)=>Promise<void>
   onMapearCatalogo:(e:Entrada)=>Promise<any>
   onSalvarImagem:(c:Candidato,imagem:string)=>Promise<any>
+  onConsultarEquivalencia:(url:string,init?:RequestInit)=>Promise<any>
+  onVinculado:(msg:string)=>Promise<void>
   somenteLeitura:boolean
   salvandoId:string|null
   mapeando:boolean
 }){
-  const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'>('todos')
+  const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'|'sem_imagem'>('todos')
+  const [filtroPaginaImagem,setFiltroPaginaImagem]=useState<'todas'|'identificadas'|'pendentes'>('todas')
   const [edicoesItem,setEdicoesItem]=useState<Record<string,Record<string,any>>>({})
   const produtos=candidatos.filter(c=>c.tipo==='produto')
   const semPagina=produtos.filter(c=>!Number(c.dados?.pagina_catalogo||0)).length
   const aplicados=produtos.filter(c=>c.status==='aplicado')
   const pendentes=produtos.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
   const semPreco=produtos.filter(c=>c.dados?.preco_fornecedor==null||Number(c.dados?.preco_fornecedor)===0)
+  // Imagem do produto só conta quando está associada à referência individual.
+  const semImagem=produtos.filter(c=>!imagemProdutoCandidato(c))
+  const comPagina=semImagem.filter(c=>Number(c.dados?.pagina_catalogo||0)>0)
+  const paginaPendente=semImagem.filter(c=>!(Number(c.dados?.pagina_catalogo||0)>0))
+  const idsSemImagem=new Set(semImagem.map(c=>c.id))
   const idsAplicados=new Set(aplicados.map(c=>c.id))
   const idsPendentes=new Set(pendentes.map(c=>c.id))
   const idsSemPreco=new Set(semPreco.map(c=>c.id))
@@ -705,6 +754,12 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
     if(filtro==='aplicados')return idsAplicados.has(c.id)
     if(filtro==='validacao')return idsPendentes.has(c.id)
     if(filtro==='sem_preco')return idsSemPreco.has(c.id)
+    if(filtro==='sem_imagem'){
+      if(!idsSemImagem.has(c.id))return false
+      if(filtroPaginaImagem==='identificadas')return Number(c.dados?.pagina_catalogo||0)>0
+      if(filtroPaginaImagem==='pendentes')return !(Number(c.dados?.pagina_catalogo||0)>0)
+      return true
+    }
     return true
   })
 
@@ -730,11 +785,12 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
 
   const card=(ativo:boolean)=>'rounded-xl p-3 text-left transition hover:shadow-sm '+(ativo?'ring-2 ring-offset-1':'')
   return <div className="mt-4 border-t pt-4">
-    <div className="grid gap-2 sm:grid-cols-4">
+    <div className="grid gap-2 sm:grid-cols-5">
       <button type="button" onClick={()=>setFiltro('todos')} className={card(filtro==='todos')+' bg-slate-50 ring-slate-400'}><div className="text-lg font-bold">{produtos.length}</div><div className="text-[11px] text-slate-500">Itens lidos</div></button>
       <button type="button" onClick={()=>setFiltro('aplicados')} className={card(filtro==='aplicados')+' bg-emerald-50 ring-emerald-400'}><div className="text-lg font-bold text-emerald-700">{aplicados.length}</div><div className="text-[11px] text-emerald-700">Aplicados/vinculados</div></button>
       <button type="button" onClick={()=>setFiltro('validacao')} className={card(filtro==='validacao')+' bg-amber-50 ring-amber-400'}><div className="text-lg font-bold text-amber-700">{pendentes.length}</div><div className="text-[11px] text-amber-700">Em validação</div></button>
       <button type="button" onClick={()=>setFiltro('sem_preco')} className={card(filtro==='sem_preco')+' bg-blue-50 ring-blue-400'}><div className="text-lg font-bold text-blue-700">{semPreco.length}</div><div className="text-[11px] text-blue-700">Sem preço</div></button>
+      <button type="button" onClick={()=>setFiltro('sem_imagem')} className={card(filtro==='sem_imagem')+' bg-amber-50 ring-amber-400'}><div className="text-lg font-bold text-amber-800">{semImagem.length}</div><div className="text-[11px] text-amber-800">Sem imagem individual</div></button>
     </div>
 
     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -744,6 +800,18 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
       </label>
       {semPreco.length>0&&<button onClick={baixarSemPreco} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-800">Baixar lista sem preço ({semPreco.length})</button>}
     </div>
+    {semImagem.length>0&&<p className="mt-2 text-[11px] text-amber-700">
+      Existem {semImagem.length} produto(s) sem imagem individual. Destes, {comPagina.length} têm uma página do PDF indicada e {paginaPendente.length} ainda precisam de localização.
+      A página indicada não substitui a conferência do desenho técnico.
+    </p>}
+    {filtro==='sem_imagem'&&<div className="mt-3 flex flex-wrap gap-2 text-xs">
+      {([['todas','Todas sem imagem',semImagem.length],['identificadas','Com página identificada',comPagina.length],['pendentes','Sem página identificada',paginaPendente.length]] as const).map(([valor,rotulo,total])=>
+        <button key={valor} type="button" onClick={()=>setFiltroPaginaImagem(valor)}
+          aria-pressed={filtroPaginaImagem===valor}
+          className={'rounded-lg border px-3 py-2 font-semibold '+(filtroPaginaImagem===valor?'border-blue-300 bg-blue-50 text-blue-800':'bg-white text-slate-600')}>
+          {rotulo} ({total})
+        </button>)}
+    </div>}
     {semPreco.length>0&&<p className="mt-2 text-[11px] text-slate-500">A lista pode ser enviada ao fornecedor. Depois, a tabela preenchida pode voltar pela Central como “Tabela de preço”; o Atlas reconcilia pelos códigos.</p>}
     {semPagina>0&&<div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800"><span>{mapeando?'Preparando as páginas do PDF para gerar os desenhos dos perfis...':semPagina+' item(ns) ainda precisam ter a página identificada para gerar a imagem.'}</span><button disabled={mapeando} onClick={()=>void onMapearCatalogo(entrada)} className="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white disabled:opacity-50">{mapeando?'Preparando...':'Preparar imagens'}</button></div>}
 
@@ -752,7 +820,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
         const aberto=itemAberto===c.id
         const pagina=Number(c.dados?.pagina_catalogo||0)
         const fontePagina=entrada.fonte_url?(entrada.fonte_url+(pagina?'#page='+pagina+'&zoom=page-width':'')):null
-        const imagemItem=String(c.foto_cadastro||c.dados?.imagem_item_url||c.dados?.imagem_url||'').trim()
+        const imagemItem=imagemProdutoCandidato(c)
         const precisaValidar=['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor'
         const edit=edicoesItem[c.id]||c.dados||{}
         const podeEditar=Boolean(c.pode_validar)
@@ -769,6 +837,9 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
                 <span className="text-[10px] text-slate-400">confiança {pct(c.confianca)}</span>
               </div>
               <div className="mt-1 font-semibold">{c.dados?.codigo||'Sem código'} <span className="font-normal text-slate-500">— {c.dados?.descricao||c.titulo}</span></div>
+              {codigoColadoDeOutrasColunas(c.dados?.codigo)&&<p className="mt-1 rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">
+                Atenção: códigos de produtos diferentes ficaram unidos nesta importação. Não valide este item. Consulte o PDF original e reanalise o catálogo com o leitor de colunas corrigido; os produtos já aplicados serão preservados.
+              </p>}
               <div className="mt-1 text-xs text-slate-400">{c.deduplicacao?.produto_existente?'Vinculado ao produto já existente no Atlas':labelAcao(c.acao_sugerida)}{c.dados?.preco_fornecedor!=null?' · preço '+String(c.dados.preco_fornecedor):' · sem preço'}</div>
               {c.dados?.conferencia_tabela_visualizada&&<div className="mt-1 text-xs text-blue-700">Tabela consultada no PDF (sem salvar). Peso: {c.dados.peso_kg_m??'—'} kg/m · {Object.entries(c.dados.medidas_mm||{}).map(([k,v])=>k+' '+v+' mm').join(' · ')||'sem cotas'}</div>}
               {c.dados?.imagem_preview_local&&<div className="mt-1 text-xs font-semibold text-blue-700">Imagem preservada neste navegador de teste, sem gravar o cadastro.</div>}
@@ -818,6 +889,10 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
               :pagina>0&&entrada.fonte_url?<ImagemPerfilCatalogo fonteUrl={entrada.fonte_url} pagina={pagina} codigo={String(c.dados?.codigo||'')} descricao={String(c.dados?.descricao||c.titulo)} somenteLeitura={somenteLeitura} onSalvar={imagem=>onSalvarImagem(c,imagem)}/>
               :<div className="grid min-h-56 place-items-center rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-400"><div>{mapeando?<Loader2 className="mx-auto mb-2 animate-spin" size={22}/>:<Eye className="mx-auto mb-2" size={22}/>}<b className="text-slate-500">{mapeando?'Preparando o catálogo...':'Localizando este perfil no PDF...'}</b><p className="mt-1 text-xs">Assim que a página for identificada, o Atlas gera o recorte do desenho e salva como imagem do produto.</p></div></div>}
             </div>
+            {['perfil','acessorio'].includes(String(c.dados?.categoria||''))&&<div className="lg:col-span-2">
+              <CompararPerfilCatalogo key={c.id} candidato={c} api={onConsultarEquivalencia}
+                somenteLeitura={somenteLeitura} onVinculado={onVinculado}/>
+            </div>}
           </div>}
         </div>
       })}
@@ -832,9 +907,10 @@ function imagemProdutoCandidato(c:Candidato){
   if(direto)return direto
   const existente=c.deduplicacao?.produto_existente||{}
   const doExistente=String(existente.imagem_item_url||existente.imagem_url||existente.foto_url||'').trim()
-  if(doExistente)return doExistente
-  const codigo=String(c.dados?.codigo||existente.codigo||'').trim().toUpperCase()
-  // Não inferir imagem por convenção de nome do arquivo: somente registros comprovados.
+  // Evita herdar o desenho de um perfil parecido ou de outra referência:
+  // o catálogo precisa ter código idêntico ao do produto que fornece a imagem.
+  if(doExistente&&mesmaReferenciaCatalogo(c.dados?.codigo,existente.codigo))return doExistente
+  // Se o código for diferente ou desconhecido, exigir recorte do PDF original.
   return ''
 }
 
@@ -896,7 +972,7 @@ function ProdutoImagemValidacao({candidato,entrada,somenteLeitura,onSalvar}:{can
   </div>
 }
 
-function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,onSalvar}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;somenteLeitura:boolean;onSalvar:(imagem:string)=>Promise<any>}){
+function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,onSalvar,apenasVisualizacao=false}:{fonteUrl:string;pagina:number;codigo:string;descricao:string;somenteLeitura:boolean;onSalvar:(imagem:string)=>Promise<any>;apenasVisualizacao?:boolean}){
   const [imagem,setImagem]=useState('')
   const [erroImagem,setErroImagem]=useState('')
   const [erroSalvarImagem,setErroSalvarImagem]=useState('')
@@ -950,13 +1026,21 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,o
             sw=Math.min(canvas.width-sx,Math.max(100*scale,target.x-sx-12*scale))
             sh=Math.min(canvas.height-sy,(proximo?proximo.y-proximo.h-12*scale:canvas.height-30*scale)-sy)
           }else{
-            const colunas=codigos.filter((i:any)=>Math.abs(i.y-target.y)<24*scale).sort((a:any,b:any)=>a.x-b.x)
-            const proximo=colunas.find((i:any)=>i.x>target.x+30*scale)
-            const abaixo=codigos.filter((i:any)=>i.y>target.y+30*scale&&Math.abs(i.x-target.x)<80*scale).sort((a:any,b:any)=>a.y-b.y)[0]
-            sx=Math.max(0,Math.floor(target.x-18*scale))
-            sy=Math.max(0,Math.floor(target.y-target.h-12*scale))
-            sw=Math.min(canvas.width-sx,(proximo?proximo.x-18*scale:canvas.width-25*scale)-sx)
-            sh=Math.min(canvas.height-sy,(abaixo?abaixo.y-abaixo.h-12*scale:canvas.height-25*scale)-sy)
+            // PDF de cartões: peso imediatamente abaixo do código, desenho e
+            // cotas logo em seguida. Evita engolir toda a parte inferior da página.
+            // Para perfis sem esse layout, conserva o recorte já homologado.
+            const cartao=limitesRecorteCartao(itens,target,scale,canvas.width,canvas.height)
+            if(cartao){
+              ;({sx,sy,sw,sh}=cartao)
+            }else{
+              const colunas=codigos.filter((i:any)=>Math.abs(i.y-target.y)<24*scale).sort((a:any,b:any)=>a.x-b.x)
+              const proximo=colunas.find((i:any)=>i.x>target.x+30*scale)
+              const abaixo=codigos.filter((i:any)=>i.y>target.y+30*scale&&Math.abs(i.x-target.x)<80*scale).sort((a:any,b:any)=>a.y-b.y)[0]
+              sx=Math.max(0,Math.floor(target.x-18*scale))
+              sy=Math.max(0,Math.floor(target.y-target.h-12*scale))
+              sw=Math.min(canvas.width-sx,(proximo?proximo.x-18*scale:canvas.width-25*scale)-sx)
+              sh=Math.min(canvas.height-sy,(abaixo?abaixo.y-abaixo.h-12*scale:canvas.height-25*scale)-sy)
+            }
           }
         }else{
           throw new Error('O código não foi localizado de forma única nesta página. Abra a fonte e anexe o desenho correto.')
@@ -989,7 +1073,9 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,o
   if(erroImagem)return <div className="grid min-h-56 place-items-center rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800"><div><Eye className="mx-auto mb-2" size={22}/><b>Não consegui recortar automaticamente.</b><p className="mt-1 text-xs">{erroImagem}</p><a href={fonteUrl+'#page='+pagina} target="_blank" rel="noreferrer" className="mt-3 inline-block font-semibold text-blue-700">Abrir página {pagina}</a></div></div>
   return <div className="space-y-2">
     <img src={imagem} alt={'Prévia do catálogo para '+(codigo||descricao)} className="max-h-[420px] w-full rounded-xl border bg-white object-contain"/>
-    {!codigoEncontrado
+    {apenasVisualizacao
+      ?<p className="rounded-lg bg-blue-50 p-2 text-xs text-blue-800">Visualização do PDF original. Para confirmar e salvar este desenho, abra a validação individual do produto.</p>
+      :!codigoEncontrado
       ?<p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Código não localizado de forma única no texto do PDF. O recorte não será vinculado automaticamente.</p>
       :imagemConfirmada
         ?<p className={'rounded-lg p-2 text-xs font-semibold '+(somenteLeitura?'border border-blue-200 bg-blue-50 text-blue-800':'bg-emerald-50 text-emerald-800')}>{somenteLeitura?'Desenho do código '+codigo+' guardado somente neste navegador de testes.':'Imagem do código '+codigo+' confirmada e vinculada.'}</p>
@@ -1001,7 +1087,7 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,o
         }} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">
           {salvandoImagem?'Confirmando...':somenteLeitura?'Confirmar desenho (teste local)':'Confirmar: este desenho corresponde ao código '+codigo}
         </button>}
-    {somenteLeitura&&<p className="text-xs text-blue-700">Prévia segura: a confirmação fica somente neste navegador, não no banco do Atlas.</p>}
+    {somenteLeitura&&!apenasVisualizacao&&<p className="text-xs text-blue-700">Prévia segura: a confirmação fica somente neste navegador, não no banco do Atlas.</p>}
     {erroSalvarImagem&&<p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Não foi possível salvar a confirmação: {erroSalvarImagem}. O desenho foi mantido na tela.</p>}
   </div>
 }
