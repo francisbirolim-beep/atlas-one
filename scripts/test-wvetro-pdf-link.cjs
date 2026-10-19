@@ -69,13 +69,19 @@ function reiniciar() {
   assert.deepEqual(linha.itens,[{id:'esquadria1',linha_nome:'Suprema',configuracao_validada:true}])
   assert.equal(linha.wvetro_fluxo.validacao_status,'validado')
   assert.equal(linha.anexos[0].nome,'foto.jpg')
+  payload = 'indisponivel'
   resultado = await completarPdfOriginalWVetro('e1', linha, '1213')
   assert.equal(linha.anexos.length, 2, 'Não duplica PDF na segunda sincronização')
+  assert.match(resultado.mensagem, /já consta nos anexos/, 'PDF existente dispensa nova consulta ao W.Vetro')
   reiniciar()
-  payload = { Pedido:{Nro:1213, ImagemUrl:'https://docs.exemplo/foto.png'} }
+  payload = { Pedido:{Nro:1213, ImagemUrl:'https://pdfs.exemplo/foto.jpg'} }
   resultado = await completarPdfOriginalWVetro('e1', linha, '1213')
   assert.equal(linha.anexos.length, 1, 'Não inventa PDF se fonte não fornecer link')
   assert.match(resultado.mensagem, /não forneceu um link/)
+  reiniciar()
+  payload = { Pedido:{Nro:1213, PdfUrl:'https://docs.exemplo/baixar?id=1213'} }
+  resultado = await completarPdfOriginalWVetro('e1', linha, '1213')
+  assert.equal(linha.anexos[1].url, 'https://docs.exemplo/baixar?id=1213', 'Aceita PDF identificado pelo campo de origem')
   reiniciar()
   payload = 'indisponivel'
   resultado = await completarPdfOriginalWVetro('e1', linha, '1213')
