@@ -637,7 +637,11 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornec
         }else produtoId=data.id
       }
     }
-    if(produtoId){
+    // Uma equivalência de outro fabricante nunca deve preencher peso, desenho
+    // ou medidas técnicas do produto principal, mesmo se estiverem vazios.
+    if(d.equivalencia_confirmada_com&&produtoId!==d.equivalencia_confirmada_com)
+      throw new Error('Equivalência aponta para um produto diferente do confirmado.')
+    if(produtoId&&!d.equivalencia_confirmada_com){
       const {data:atual,error:le}=await supabaseAdmin.from('produtos').select('id,peso_kg_m,foto_url,dados_origem,updated_at').eq('empresa_id',usuario.empresa_id).eq('id',produtoId).single()
       if(le)throw le
       const patch:any={}
@@ -662,7 +666,45 @@ async function aplicar(usuario:UsuarioTenant,c:any,entrada:any,contexto?:{fornec
       const docId=contexto?.documentoId!==undefined?contexto.documentoId:await copiarFonte(usuario,entrada,fornecedorId)
       const codigo=txt(d.codigo,120)
       if(!codigo)throw new Error('Informe o código do fornecedor antes de aprovar este item.')
-      const {data:v,error}=await supabaseAdmin.from('produto_fornecedores').upsert({empresa_id:usuario.empresa_id,produto_id:produtoId,fornecedor_id:fornecedorId,codigo_fornecedor:codigo,descricao_fornecedor:txt(d.descricao,400)||c.titulo,unidade_compra:txt(d.unidade,30)||null,preco_atual:num(d.preco_fornecedor),documento_origem_id:docId,preco_atualizado_em:num(d.preco_fornecedor)!==null?new Date().toISOString():null,preferencial:false,ativo:true,criado_por_id:usuario.id,criado_por_nome:usuario.nome,updated_at:new Date().toISOString()},{onConflict:'fornecedor_id,codigo_fornecedor'}).select('id').single();if(error)throw new Error(error.message)
+      const vinculo={
+        empresa_id:usuario.empresa_id,produto_id:produtoId,fornecedor_id:fornecedorId,
+        codigo_fornecedor:codigo,descricao_fornecedor:txt(d.descricao,400)||c.titulo,
+        unidade_compra:txt(d.unidade,30)||null,preco_atual:num(d.preco_fornecedor),
+        documento_origem_id:docId,
+        preco_atualizado_em:num(d.preco_fornecedor)!==null?new Date().toISOString():null,
+        preferencial:false,ativo:true,criado_por_id:usuario.id,criado_por_nome:usuario.nome,
+        updated_at:new Date().toISOString()
+      }
+      let v:{id:string}|null=null
+      if(d.equivalencia_confirmada_com){
+        // Não usar upsert aqui: um conflito no mesmo código do fornecedor
+        // poderia transferir silenciosamente o vínculo para outro produto.
+        const {data:anteriores,error:ae}=await supabaseAdmin.from('produto_fornecedores')
+          .select('id,produto_id').eq('empresa_id',usuario.empresa_id)
+          .eq('fornecedor_id',fornecedorId).ilike('codigo_fornecedor',codigo).limit(2)
+        if(ae)throw ae
+        if((anteriores||[]).length>1||(anteriores||[]).some(x=>x.produto_id!==produtoId))
+          throw new Error('Código do fornecedor já vinculado a outro produto. Revisão manual necessária.')
+        if(anteriores?.length){
+          const {data:atualizado,error:ue}=await supabaseAdmin.from('produto_fornecedores')
+            .update({descricao_fornecedor:vinculo.descricao_fornecedor,unidade_compra:vinculo.unidade_compra,
+              documento_origem_id:docId,ativo:true,updated_at:vinculo.updated_at})
+            .eq('empresa_id',usuario.empresa_id).eq('id',anteriores[0].id)
+            .eq('produto_id',produtoId).select('id').maybeSingle()
+          if(ue||!atualizado)throw new Error('Vínculo alterado por outro usuário; confira antes de continuar.')
+          v=atualizado
+        }else{
+          const {data:criado,error:ie}=await supabaseAdmin.from('produto_fornecedores')
+            .insert(vinculo).select('id').single()
+          if(ie)throw new Error('Não foi possível registrar o vínculo sem sobrescrever referência existente: '+ie.message)
+          v=criado
+        }
+      }else{
+        const {data:gravado,error:ge}=await supabaseAdmin.from('produto_fornecedores')
+          .upsert(vinculo,{onConflict:'fornecedor_id,codigo_fornecedor'}).select('id').single()
+        if(ge)throw new Error(ge.message)
+        v=gravado
+      }
       const preco=num(d.preco_fornecedor)
       if(preco!==null&&v?.id)await supabaseAdmin.from('produto_fornecedor_precos_historico').insert({empresa_id:usuario.empresa_id,produto_fornecedor_id:v.id,fornecedor_id:fornecedorId,produto_id:produtoId,preco,unidade_compra:txt(d.unidade,30)||null,documento_origem_id:docId,criado_por_id:usuario.id,criado_por_nome:usuario.nome})
     }
