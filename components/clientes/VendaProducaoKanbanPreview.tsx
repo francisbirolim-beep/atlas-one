@@ -94,6 +94,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   const [fasesSim,setFasesSim]=useState<Record<string,Fase>>({})
   const [modoInicial,setModoInicial]=useState(false)
   const [podeConfigurar,setPodeConfigurar]=useState(false)
+  const [modoInicialDisponivel,setModoInicialDisponivel]=useState(true)
   const [configurandoModo,setConfigurandoModo]=useState(false)
   const [versaoEstado,setVersaoEstado]=useState(0)
   const [etapasIniciais,setEtapasIniciais]=useState<Record<string,{etapa:Etapa;motivo_pendencia?:string|null;categoria_pendencia?:string|null}>>({})
@@ -141,6 +142,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
           setDiagnostico(dados.diagnostico||null)
           setModoInicial(Boolean(dados.modoInicial))
           setPodeConfigurar(Boolean(dados.podeConfigurar))
+          setModoInicialDisponivel(dados.modoInicialDisponivel!==false)
           setEtapasIniciais(Object.fromEntries((dados.etapasIniciais||[]).map((x:{item_ref:string;etapa:Etapa;motivo_pendencia?:string|null;categoria_pendencia?:string|null})=>[x.item_ref,x])))
           setPendenciasCarregadas(true)
         }
@@ -324,7 +326,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       </div>
     </div>
     <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-      <div><b>Movimentação inicial da obra: {modoInicial?'ativada':'desativada'}.</b><p className="mt-1">Quando ativada, as etapas do Kanban são um acompanhamento administrativo. A Medição Final, as ordens e a liberação técnica permanecem pendentes até serem regularizadas.</p></div>
+      <div><b>Movimentação inicial da obra: {!modoInicialDisponivel?'aguardando atualização do banco':modoInicial?'ativada':'desativada'}.</b><p className="mt-1">Quando ativada, as etapas do Kanban são um acompanhamento administrativo. A Medição Final, as ordens e a liberação técnica permanecem pendentes até serem regularizadas.</p>{!modoInicialDisponivel&&<p className="mt-1 font-semibold text-amber-800">A função inicial ainda precisa da migração no banco. A movimentação técnica anterior continua disponível.</p>}</div>
       {podeConfigurar&&<button type="button" disabled={configurandoModo||!pendenciasCarregadas} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" onClick={()=>void alterarModoInicial()}>{configurandoModo?'Salvando...':modoInicial?'Voltar às regras técnicas':'Permitir movimentação inicial'}</button>}
     </div>
     {aviso&&<p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">{aviso}</p>}
