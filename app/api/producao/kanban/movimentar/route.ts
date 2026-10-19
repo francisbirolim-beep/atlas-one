@@ -13,13 +13,20 @@ export async function GET(req:NextRequest){
   if(!user)return erro('Sessão expirada.',401)
   const vendaId=String(req.nextUrl.searchParams.get('vendaId')||'')
   if(!uuid.test(vendaId))return erro('Venda inválida.')
-  const {data:venda}=await supabaseAdmin.from('vendas_obras').select('id').eq('id',vendaId).eq('empresa_id',user.empresa_id).maybeSingle()
+  const {data:venda}=await supabaseAdmin.from('vendas_obras').select('id,orcamento_id').eq('id',vendaId).eq('empresa_id',user.empresa_id).maybeSingle()
   if(!venda)return erro('Venda não localizada.',404)
   const {data,error}=await supabaseAdmin.from('producao_kanban_pendencias')
     .select('ordem_id,item_ref,motivo,categoria,aberta_em,status_anterior')
     .eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId).is('resolvida_em',null)
   if(error)return erro('Não foi possível consultar pendências. Verifique a migração.',503)
-  return NextResponse.json({ok:true,pendencias:data||[]})
+  const {data:medicoes,error:erroMedicoes}=await supabaseAdmin.from('medicoes_finais')
+    .select('id,status_operacional')
+    .eq('empresa_id',user.empresa_id).eq('orcamento_id',venda.orcamento_id).eq('tipo_medicao','tipologia')
+  if(erroMedicoes)return erro('Não foi possível conferir a Medição Final.',503)
+  return NextResponse.json({ok:true,pendencias:data||[],diagnostico:{
+    medicoesTotal:medicoes?.length||0,
+    medicoesAprovadas:(medicoes||[]).filter(m=>m.status_operacional==='aprovado').length,
+  }})
 }
 
 export async function POST(req:NextRequest){

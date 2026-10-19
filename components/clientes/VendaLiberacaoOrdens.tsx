@@ -66,7 +66,7 @@ export default function VendaLiberacaoOrdens({vendaId,onAtualizar}:{
     finally{setLiberando(false)}
   }
 
-  return <section className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+  return <section id="atlas-conferencia-liberacao-venda" className="mb-5 scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50 p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex items-start gap-2">
         <ShieldCheck size={20} className="mt-0.5 text-blue-700"/>

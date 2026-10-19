@@ -1121,7 +1121,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={()=>setModalRecebimento(true)} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy px-4 py-2 text-sm font-bold text-white"><Wallet size={15}/>Registrar recebimento</button>
-            <button disabled={preparandoFluxo} onClick={()=>void prepararFluxoCompleto()} className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 disabled:opacity-50">{preparandoFluxo?<Loader2 size={15} className="animate-spin"/>:<RefreshCw size={15}/>}Preparar fluxo da obra</button>
+            <button id="atlas-preparar-fluxo-obra" disabled={preparandoFluxo} onClick={()=>void prepararFluxoCompleto()} className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800 disabled:opacity-50">{preparandoFluxo?<Loader2 size={15} className="animate-spin"/>:<RefreshCw size={15}/>}Preparar fluxo da obra</button>
             <Link href={`/orcamento/${venda.orcamento_id}/composicao`} className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold text-slate-700"><FileText size={15}/>Abrir orçamento</Link>
           </div>
         </div>
