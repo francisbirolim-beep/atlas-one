@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from 'next/server'
 import {autenticarTenant} from '@/lib/tenantServer'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
 import {disponibilidadePeca,validarRegistroInstalacao} from '@/lib/vendaInstalacaoProducao'
+import {validarFinalizacaoInstalacao} from '@/lib/instalacaoKanban'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -47,12 +48,17 @@ export async function POST(req:NextRequest){
    status=body.status as Estado
    if(status==='instalado'){
     quantidade=prevista
-    const chk={nivelamento:false,vedacao:false,acabamento:false,limpeza:false,...(item.checklist||{})}
-    if(String(item.pendencia||'').trim())return erro('Há pendência de acabamento/instalação. Resolva a pendência antes de finalizar.',409)
-    if(!checks.every(c=>chk[c]===true))return erro('Confirme nivelamento, vedação, acabamento e limpeza antes de finalizar.',409)
-    if(!vr.data.obra_id)return erro('Vincule a obra antes de finalizar definitivamente a instalação.',409)
+    // A instalação física pode ser confirmada sem ordem de produção/vínculo administrativo.
+    // Não gera nem altera ordens, estoque ou o encerramento geral da obra.
+    const falha=validarFinalizacaoInstalacao({
+     quantidadePrevista:prevista,confirmadoInstalado:body?.confirmadoInstalado===true,
+     pendencia:item.pendencia,resolverPendencia:body?.resolverPendencia===true
+    })
+    if(falha)return erro(falha,409)
+    if(String(item.pendencia||'').trim())patch.pendencia=null
     patch.instalado_em=new Date().toISOString()
    }else if(status==='pendente')quantidade=0
+   else if(status==='em_instalacao'&&existente>=prevista)quantidade=0
    patch.status=status
    patch.quantidade_instalada=quantidade
    if(status!=='instalado')patch.instalado_em=null
@@ -75,7 +81,7 @@ export async function POST(req:NextRequest){
 
   // As fotos, pendências e checklist podem ser preparados antes da fabricação,
   // mas registrar peças instaladas exige produção física concluída.
-  if(acao==='status'||acao==='quantidade'){
+  if((acao==='status'||acao==='quantidade')&&!(acao==='status'&&status==='instalado')){
    const ordens=await supabaseAdmin.from('ordens_producao')
     .select('id,item_ref,tipo_producao,status,bloqueada,quantidade,quantidade_produzida')
     .eq('empresa_id',usuario.empresa_id).eq('venda_obra_id',vendaId).eq('item_ref',item.item_ref)
