@@ -317,7 +317,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       supabase.from('clientes').select('id,nome,cidade').eq('id',v.cliente_id).maybeSingle(),
       supabase.from('orcamentos').select('id,numero,valor_estimado,custo_estimado,status,itens,wvetro_fluxo').eq('id',v.orcamento_id).maybeSingle(),
       supabase.from('financeiro_contas_receber').select('id,venda_obra_id,valor,valor_pago,valor_desconto,status,vencimento,documento,parcela,total_parcelas').eq('venda_obra_id',v.id).order('vencimento',{ascending:true}),
-      supabase.from('ordens_producao').select('id,numero,titulo,item_ref,quantidade,status,created_at,tipo_producao,item_snapshot,largura_mm,altura_mm,bloqueada,bloqueio_motivo').eq('venda_obra_id',v.id).order('created_at',{ascending:true}),
+      supabase.from('ordens_producao').select('id,numero,titulo,item_ref,quantidade,quantidade_produzida,status,created_at,tipo_producao,item_snapshot,largura_mm,altura_mm,bloqueada,bloqueio_motivo').eq('venda_obra_id',v.id).order('created_at',{ascending:true}),
       supabase.from('setor_kanban_itens').select('id,coluna_id,titulo,atualizado_em').eq('orcamento_id',v.orcamento_id),
       supabase.from('venda_instalacao_itens').select('id,item_ref,status,quantidade,quantidade_instalada,pendencia,checklist').eq('venda_obra_id',v.id),
     ])
@@ -1599,7 +1599,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         {aba==='producao'&&<Box titulo="Produção desta venda">
           <VendaProducaoKanbanPreview
             ordens={ordens} itens={itens} materiais={materiaisTecnicos} produtosMateriais={produtosMateriais}
-            pacoteId={pacoteTecnicoId} orcamentoId={venda.orcamento_id}
+            pacoteId={pacoteTecnicoId} orcamentoId={venda.orcamento_id} vendaId={venda.id} onAtualizar={carregar}
             onEditarCortes={()=>setEditorCortesAberto(true)}/>
         {editorCortesAberto&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null

@@ -5,6 +5,7 @@ import { CheckCircle2, ChevronDown, ChevronUp, Clock3, FileDown, ImageOff, Layer
 import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import { supabase } from '@/lib/supabase'
+import { tokenAtual } from '@/lib/auth'
 
 type Ordem = {
   id:string; item_ref?:string|null; titulo?:string|null; status?:string|null
@@ -76,13 +77,20 @@ function duracao(ms:number){
   const horas=Math.floor(minutos/60)
   return horas<24?horas+' h '+(minutos%60)+' min':Math.floor(horas/24)+' d '+(horas%24)+' h'
 }
-export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produtosMateriais,pacoteId,orcamentoId,onEditarCortes}:{
+export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produtosMateriais,pacoteId,orcamentoId,vendaId,onAtualizar,onEditarCortes}:{
   ordens:Ordem[];itens:any[];materiais:Material[];produtosMateriais:Record<string,Produto>;
-  pacoteId?:string|null;orcamentoId:string;onEditarCortes:()=>void
+  pacoteId?:string|null;orcamentoId:string;vendaId:string;onAtualizar:()=>Promise<void>|void;onEditarCortes:()=>void
 }){
-  const [etapasSim,setEtapasSim]=useState<Record<string,Etapa>>({})
+
+  const [pendencias,setPendencias]=useState<Array<{ordem_id:string;item_ref:string;motivo:string;categoria:string}>>([])
+  const [modalMovimento,setModalMovimento]=useState<{ref:string;destino:Etapa}|null>(null)
+  const [categoriaPendencia,setCategoriaPendencia]=useState('perfil')
+  const [justificativa,setJustificativa]=useState('')
+  const [salvandoMovimento,setSalvandoMovimento]=useState(false)
+  const [qtdConferencia,setQtdConferencia]=useState(1)
+  const [pendenciasCarregadas,setPendenciasCarregadas]=useState(false)
   const [fasesSim,setFasesSim]=useState<Record<string,Fase>>({})
-  const [qtdSim,setQtdSim]=useState<Record<string,number>>({})
+
   const [entradaSim,setEntradaSim]=useState<Record<string,number>>({})
   const [aberto,setAberto]=useState<string|null>(null)
   const [selecionados,setSelecionados]=useState<string[]>([])
@@ -112,6 +120,20 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     return()=>{ativo=false}
   },[idsTipologias])
   useEffect(()=>{const timer=window.setInterval(()=>setAgora(Date.now()),60000);return()=>window.clearInterval(timer)},[])
+  useEffect(()=>{
+    let ativo=true
+    void (async()=>{
+      try{
+        const token=await tokenAtual()
+        if(!token)throw Error('Sessão expirada.')
+        const resp=await fetch('/api/producao/kanban/movimentar?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
+        const dados=await resp.json()
+        if(!resp.ok)throw Error(dados.error||'Não foi possível carregar as pendências.')
+        if(ativo){setPendencias(dados.pendencias||[]);setPendenciasCarregadas(true)}
+      }catch(e){if(ativo){setPendenciasCarregadas(false);setAviso(e instanceof Error?e.message:'Falha ao carregar pendências.')}}
+    })()
+    return()=>{ativo=false}
+  },[vendaId,ordens])
   const cards=useMemo(()=>{
     const mapa=new Map<string,{ref:string;item:Record<string,unknown>;ordens:Ordem[];indice:number}>()
     ;(Array.isArray(itens)?itens:[]).forEach((item,indice)=>{
@@ -127,9 +149,9 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       const i=c.item, ordem=c.ordens[0]
       const qtdPrevista=Math.max(1,Math.round(valor(i.quantidade)||c.ordens.reduce((n,o)=>n+valor(o.quantidade),0)||1))
       const produzidasReais=c.ordens.reduce((n,o)=>n+Math.max(0,Math.min(valor(o.quantidade),o.quantidade_produzida==null?(finalizada(o)?valor(o.quantidade):0):valor(o.quantidade_produzida))),0)
-      const produzidas=Math.min(qtdPrevista,Math.max(0,qtdSim[c.ref]??produzidasReais))
-      const etapa=etapasSim[c.ref]||etapaDaOrdem(c.ordens)
-      const fase=fasesSim[c.ref]||(c.ordens.some(o=>o.status==='conferencia')?'conferencia':'corte')
+      const produzidas=Math.min(qtdPrevista,Math.max(0,produzidasReais))
+      const etapa=pendencias.some(p=>c.ordens.some(o=>o.id===p.ordem_id))?'pendente':etapaDaOrdem(c.ordens)
+      const fase=c.ordens.some(o=>o.status==='conferencia')?'conferencia':fasesSim[c.ref]||'corte'
       const pronta=c.ordens.length>0&&c.ordens.every(habilitada)
       return {...c,
         nome:texto(i.tipo_outro_texto)||texto(i.descricao)||texto(i.tipo_esquadria)||texto(i.tipologia_nome)||texto(i.configuracao_nome)||texto(ordem?.titulo)||'Tipologia '+(c.indice+1),
@@ -139,21 +161,48 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         foto:fotoCadastrada[texto(i.tipologia_id)||texto(ordem?.item_snapshot?.tipologia_id)]||imagemTipologia(i)||imagemTipologia(ordem?.item_snapshot||{}),
         qtd:qtdPrevista,produzidas,etapa,fase,pronta,progresso:Math.round((produzidas/qtdPrevista)*100),
         bloqueio:c.ordens.map(o=>texto(o.bloqueio_motivo)).filter(Boolean).join(' · '),
+        pendencia:pendencias.find(p=>c.ordens.some(o=>o.id===p.ordem_id)),
       }
     })
-  },[itens,ordens,etapasSim,fasesSim,qtdSim,fotoCadastrada])
+  },[itens,ordens,fasesSim,fotoCadastrada,pendencias])
   const materialDoCard=(ref:string)=>materiais.filter(m=>String(m.item_ref||'')===ref)
   function mover(ref:string,destino:Etapa){
     const card=cards.find(c=>c.ref===ref)
-    if(!card)return
-    if(destino!=='aguardando'&&!card.pronta){setAviso('A tipologia ainda não possui liberação técnica confirmada. Esta prévia não ignora a Medição Final nem os bloqueios.');return}
-    if(destino==='concluida'&&(card.produzidas<card.qtd||card.etapa!=='em_producao'||card.fase!=='conferencia')){
-      setAviso('Para concluir, todas as unidades devem estar produzidas e a etapa interna Conferência de qualidade deve estar concluída.');return
+    if(!card||destino===card.etapa)return
+    if(!card.ordens.length){setAviso('A tipologia ainda não tem ordem real vinculada. Conclua a liberação técnica.');return}
+    if(destino!=='aguardando'&&!card.pronta&&card.etapa!=='pendente'){
+      setAviso('Aguardando liberação técnica. Use a conferência de liberação das ordens, abaixo do Kanban.');return
     }
-    setEtapasSim(prev=>({...prev,[ref]:destino}))
-    setEntradaSim(prev=>({...prev,[ref]:Date.now()}))
-    setAviso(destino==='concluida'?'Simulação: tipologia concluída. O envio automático para “A instalar” será habilitado somente após validação do fluxo real, sem duplicar cards.':'Movimento demonstrativo: nenhuma ordem real foi modificada.')
-    if(destino==='liberada')setPerguntarImpressao(ref)
+    if(destino==='aguardando'){setAviso('Reversão para aguardando exige revisão técnica.');return}
+    if(destino==='concluida'&&!(card.etapa==='em_producao'&&card.fase==='conferencia')){setAviso('Conclua primeiro a conferência de qualidade.');return}
+    setJustificativa('');setCategoriaPendencia('perfil');setQtdConferencia(Math.max(1,card.qtd-card.produzidas));setModalMovimento({ref,destino:destino});setAviso('')
+  }
+  async function confirmarMovimento(){
+    if(!modalMovimento||salvandoMovimento)return
+    const card=cards.find(c=>c.ref===modalMovimento.ref)
+    if(!card)return
+    if(modalMovimento.destino==='concluida'&&(!Number.isInteger(qtdConferencia)||qtdConferencia<1||qtdConferencia>card.qtd-card.produzidas)){setAviso('Informe uma quantidade válida de unidades conferidas.');return}
+    if((modalMovimento.destino==='pendente'||card.etapa==='pendente')&&justificativa.trim().length<5){
+      setAviso('A justificativa precisa ter pelo menos 5 caracteres.');return
+    }
+    setSalvandoMovimento(true);setAviso('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw Error('Sessão expirada.')
+      const resp=await fetch('/api/producao/kanban/movimentar',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({vendaId,itemRef:card.ref,destino:modalMovimento.destino,
+          categoria:categoriaPendencia,motivo:modalMovimento.destino==='pendente'?justificativa.trim():'',
+          resolucao:card.etapa==='pendente'?justificativa.trim():'',
+          quantidade:modalMovimento.destino==='concluida'?qtdConferencia:undefined})
+      })
+      const dados=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw Error(dados.error||'Falha ao gravar movimentação.')
+      setModalMovimento(null)
+      await onAtualizar()
+      setAviso(dados.aviso||'Movimentação registrada. O Kanban foi atualizado.')
+    }catch(e){setAviso(e instanceof Error?e.message:'Não foi possível movimentar o card.')}
+    finally{setSalvandoMovimento(false)}
   }
   async function prepararImpressao(refs:string[]){
     if(!refs.length){setAviso('Selecione ao menos uma tipologia para imprimir.');return}
@@ -194,8 +243,8 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
 
   return <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="flex items-center gap-2 font-bold text-slate-900"><Layers3 size={19} className="text-blue-700"/>Kanban de tipologias · prévia para aprovação</h3>
-        <p className="mt-1 text-xs text-slate-600">Uma tipologia por card, com cinco colunas. Corte, Montagem e Conferência de qualidade ficam dentro de Em produção. Esta prévia não altera ordens, materiais ou Instalação.</p></div>
+      <div><h3 className="flex items-center gap-2 font-bold text-slate-900"><Layers3 size={19} className="text-blue-700"/>Kanban de tipologias · movimentação controlada</h3>
+        <p className="mt-1 text-xs text-slate-600">Uma tipologia por card, com cinco colunas. Corte, Montagem e Conferência de qualidade ficam dentro de Em produção. Movimentações reais exigem confirmação e liberação técnica. Pendências têm justificativa obrigatória.</p></div>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="rounded-lg border px-3 py-2 text-xs font-bold" onClick={()=>setSelecionados(selecionadosValidos.length===cards.length?[]:cards.map(c=>c.ref))}>{selecionadosValidos.length===cards.length?'Desmarcar todas':'Selecionar todas'}</button>
         <button type="button" className="inline-flex items-center gap-1 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white" onClick={()=>prepararImpressao(selecionadosValidos)}><FileDown size={14}/>Imprimir selecionadas ({selecionadosValidos.length})</button>
@@ -220,7 +269,13 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
               <div className="mt-1 flex justify-between text-[11px]"><span>{c.produzidas}/{c.qtd} produzidas</span><b>{c.progresso}%</b></div>
               <p className={'mt-1 flex items-center gap-1 text-[10px] '+atraso}><Clock3 size={11}/>{dur==null?'Tempo na etapa: a registrar':'Nesta etapa: '+duracao(dur)}</p>
               {c.etapa==='em_producao'&&<p className="mt-2 rounded-md bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-800">Etapa interna: {nomeFase(c.fase)}</p>}
+              {c.pendencia&&<p className="mt-1 text-[11px] font-semibold text-amber-800">Pendência: {c.pendencia.categoria} — {c.pendencia.motivo}</p>}
               {c.bloqueio&&<p className="mt-1 text-[10px] text-amber-700">{c.bloqueio}</p>}
+              <label className="mt-2 block text-[11px] font-semibold text-slate-700">Mover para
+                <select aria-label={'Mover '+c.nome} disabled={!pendenciasCarregadas||salvandoMovimento} value={c.etapa} onChange={e=>mover(c.ref,e.target.value as Etapa)} className="mt-1 w-full rounded border bg-white px-1.5 py-1.5 text-xs">
+                  {ETAPAS.map(op=><option key={op.id} value={op.id}>{op.nome}</option>)}
+                </select>
+              </label>
               <button type="button" className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold" onClick={()=>setAberto(aberto===c.ref?null:c.ref)}>{aberto===c.ref?<ChevronUp size={13}/>:<ChevronDown size={13}/>} {aberto===c.ref?'Fechar tipologia':'Abrir tipologia'}</button>
             </div>
           })}</div>
@@ -242,11 +297,11 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       {abertoCard.etapa==='em_producao'&&<div className="mb-4 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
         <p className="mb-2 text-xs font-bold text-violet-900">Etapas internas de Em produção</p>
         <div className="flex flex-wrap gap-2">{FASES.map(f=><button key={f.id} type="button" aria-pressed={abertoCard.fase===f.id}
-          onClick={()=>{setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' selecionada somente nesta simulação. Nenhuma ordem real foi alterada.')}}
+          onClick={()=>{if(f.id==='conferencia'){setJustificativa('');setModalMovimento({ref:abertoCard.ref,destino:'conferencia' as Etapa})}else{setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' é um controle visual; confirme a conferência para gravar o avanço real.')}}}
           className={'rounded-lg border px-3 py-2 text-xs font-semibold '+(abertoCard.fase===f.id?'border-violet-700 bg-violet-700 text-white':'border-violet-200 bg-white text-violet-800')}>
           {f.nome}
         </button>)}</div>
-        <p className="mt-2 text-[11px] text-violet-700">Conclua corte, montagem e conferência de qualidade antes de mover a tipologia para Produção concluída.</p>
+        <p className="mt-2 text-[11px] text-violet-700">Após conferir, mova para Produção concluída e informe as unidades aprovadas. A conclusão usa o registro operacional existente.</p>
       </div>}
       <VendaListaCorteWVetro
         materiais={materialDoCard(abertoCard.ref).map(m=>({...m,unidade:m.unidade||'UN'}))}
@@ -254,10 +309,26 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         imagensPorProduto={Object.fromEntries(Object.entries(produtosMateriais).filter(([,p])=>Boolean(p.foto_url)).map(([id,p])=>[id,String(p.foto_url)]))}
         imagensPorCodigo={Object.fromEntries(Object.values(produtosMateriais).filter(p=>Boolean(p.codigo&&p.foto_url)).map(p=>[String(p.codigo).trim().toUpperCase(),String(p.foto_url)]))}/>
       <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 p-3 text-xs">
-        <label>Produzidas nesta simulação: <input aria-label="Quantidade produzida na prévia" type="number" min={0} max={abertoCard.qtd} className="ml-1 w-16 rounded border px-2 py-1" value={abertoCard.produzidas} onChange={e=>setQtdSim(prev=>({...prev,[abertoCard.ref]:Math.max(0,Math.min(abertoCard.qtd,Math.floor(valor(e.target.value))))}))}/></label>
-        <label>Testar etapa: <select aria-label="Etapa simulada" className="rounded border px-2 py-1" value={abertoCard.etapa} onChange={e=>mover(abertoCard.ref,e.target.value as Etapa)}>{ETAPAS.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}</select></label>
-        <span className="text-slate-500">Esses testes não são gravados.</span>
+        <span>Unidades produzidas: {abertoCard.produzidas}/{abertoCard.qtd}. Confirme a conclusão para registrar as unidades após a conferência.</span>
+        <label>Mover etapa: <select aria-label="Etapa da produção" className="rounded border px-2 py-1" value={abertoCard.etapa} onChange={e=>mover(abertoCard.ref,e.target.value as Etapa)}>{ETAPAS.map(e=><option key={e.id} value={e.id}>{e.nome}</option>)}</select></label>
+        <span className="text-slate-500">A confirmação grava a movimentação.</span>
       </div>
+    </div>}
+    {modalMovimento&&<div role="dialog" aria-modal="true" aria-label="Confirmar movimentação da produção" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <h4 className="text-sm font-bold">Confirmar movimentação: {ETAPAS.find(e=>e.id===modalMovimento.destino)?.nome}</h4>
+      <p className="mt-1 text-xs text-slate-600">{cards.find(c=>c.ref===modalMovimento.ref)?.nome}. A atualização será gravada na ordem real.</p>
+      {modalMovimento.destino==='concluida'&&<label className="mt-3 block text-xs font-semibold">Unidades conferidas nesta movimentação
+        <input type="number" min={1} max={Math.max(1,(cards.find(c=>c.ref===modalMovimento.ref)?.qtd||1)-(cards.find(c=>c.ref===modalMovimento.ref)?.produzidas||0))} step={1} value={qtdConferencia} onChange={e=>setQtdConferencia(Math.floor(Number(e.target.value)||0))} className="mt-1 block w-28 rounded border bg-white p-2"/>
+        <span className="mt-1 block font-normal text-slate-600">As unidades serão registradas pela conferência operacional. Somente a última unidade conclui o card e libera o fluxo existente para Instalação.</span>
+      </label>}
+      {modalMovimento.destino==='pendente'&&<label className="mt-3 block text-xs font-semibold">Motivo da pendência
+        <select value={categoriaPendencia} onChange={e=>setCategoriaPendencia(e.target.value)} className="mt-1 block w-full rounded border bg-white p-2">
+          <option value="perfil">Falta de perfil</option><option value="acessorio">Falta de acessório</option><option value="vidro">Falta de vidro</option><option value="fabricacao">Problema de fabricação</option><option value="outros">Outros</option>
+        </select></label>}
+      {(modalMovimento.destino==='pendente'||cards.find(c=>c.ref===modalMovimento.ref)?.etapa==='pendente')&&<label className="mt-3 block text-xs font-semibold">{modalMovimento.destino==='pendente'?'Justificativa obrigatória':'Como foi resolvida a pendência?'}
+        <textarea rows={3} maxLength={1000} value={justificativa} onChange={e=>setJustificativa(e.target.value)} className="mt-1 block w-full rounded border bg-white p-2" placeholder="Explique o que está faltando ou como foi resolvido"/>
+      </label>}
+      <div className="mt-3 flex gap-2"><button disabled={salvandoMovimento} onClick={()=>void confirmarMovimento()} className="rounded bg-blue-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{salvandoMovimento?'Salvando...':'Confirmar e salvar'}</button><button disabled={salvandoMovimento} onClick={()=>setModalMovimento(null)} className="rounded border bg-white px-4 py-2 text-xs">Cancelar</button></div>
     </div>}
     {perguntarImpressao&&<div role="dialog" aria-label="Imprimir lista de corte" className="mt-4 rounded-xl border border-blue-300 bg-blue-50 p-4"><p className="text-sm font-bold">Deseja imprimir agora a lista completa desta tipologia?</p><p className="mt-1 text-xs text-slate-600">Você também poderá imprimir individualmente ou em lote depois.</p><div className="mt-3 flex gap-2"><button type="button" onClick={()=>prepararImpressao([perguntarImpressao])} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Imprimir / Salvar PDF</button><button type="button" onClick={()=>setPerguntarImpressao(null)} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">Depois</button></div></div>}
     <div className="atlas-producao-print hidden">
