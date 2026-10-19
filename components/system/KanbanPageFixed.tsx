@@ -785,7 +785,7 @@ const resp = await fetch('/api/integracoes/wvetro/orcamentos/kanban',{
 method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
 body:JSON.stringify({
 acao:'conferir_valor_venda_importacao',cardId:cardSelecionado.id,modo,
-atualizadoEm:cardSelecionado.updated_at??null,valorAnterior:atual,
+atualizadoEm:(cardSelecionado as any).updated_at??null,valorAnterior:atual,
 ...(modo==='corrigir'?{valorCorrigido,justificativa:motivoValorVendaWVetro.trim()}:{}),
 }),
 })
@@ -798,8 +798,8 @@ throw new Error('A gravação do valor não foi confirmada no banco.')
 setCardSelecionado(atualizado)
 setCards(prev=>prev.map(o=>o.id===atualizado.id?atualizado:o))
 setEditando(prev=>prev?{
-...prev,valor_estimado:atualizado.valor_estimado,updated_at:atualizado.updated_at,
-wvetro_fluxo:atualizado.wvetro_fluxo,
+...prev,valor_estimado:atualizado.valor_estimado,updated_at:(atualizado as any).updated_at,
+wvetro_fluxo:fluxoWVetro(atualizado),
 }:prev)
 setValorVendaWVetroDraft(atualizado.valor_estimado==null?'':formatarMoedaBRL(atualizado.valor_estimado))
 setMotivoValorVendaWVetro('')
@@ -1351,8 +1351,8 @@ coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.c
 })
 .eq('id', cardSelecionado.id)
 if (ehOrcamentoWVetro(cardSelecionado)) {
-  gravacao = cardSelecionado.updated_at
-    ? gravacao.eq('updated_at',cardSelecionado.updated_at)
+  gravacao = (cardSelecionado as any).updated_at
+    ? gravacao.eq('updated_at',(cardSelecionado as any).updated_at)
     : gravacao.is('updated_at',null)
 }
 const { data: salvo, error } = await gravacao.select('id').maybeSingle()
