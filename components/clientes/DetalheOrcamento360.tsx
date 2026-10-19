@@ -24,7 +24,7 @@ export type OrcamentoDetalhado360 = {
   medidas_trena?: unknown
   anexo_url?: string | null
   anexo_nome?: string | null
-  anexos?: Array<{url?:string|null; nome?:string|null; titulo?:string|null}> | null
+  anexos?: Array<{url?:string|null; nome?:string|null; titulo?:string|null;excluido_em?:string|null}> | null
   itens?: Array<Record<string, unknown>> | null
 }
 
@@ -70,12 +70,13 @@ const medida=(v:unknown)=>{const n=numero(v);return n===null||n<=0?'—':n.toLoc
 
 export default function DetalheOrcamento360({orcamento,onFechar}:{orcamento:OrcamentoDetalhado360;onFechar:()=>void}) {
   const itens=Array.isArray(orcamento.itens)?orcamento.itens:[]
-  const fotos=[...new Set([...(orcamento.fotos_urls||[]).map(urlSegura).filter((v):v is string=>!!v),
-    ...imagensEm(orcamento.medidas_trena),...itens.flatMap(i=>imagensEm(i))])]
   const arquivos=[...new Map([
-    ...(Array.isArray(orcamento.anexos)?orcamento.anexos:[]),
+    ...(Array.isArray(orcamento.anexos)?orcamento.anexos:[]).filter(a=>!a.excluido_em),
     ...(orcamento.anexo_url?[{url:orcamento.anexo_url,nome:orcamento.anexo_nome||'Arquivo do orçamento'}]:[]),
   ].filter(a=>urlSegura(a.url)).map(a=>[a.url!,a])).values()]
+  const fotos=[...new Set([...(orcamento.fotos_urls||[]).map(urlSegura).filter((v):v is string=>!!v),
+    ...imagensEm(orcamento.medidas_trena),...itens.flatMap(i=>imagensEm(i)),...arquivos.flatMap(a=>imagensEm(a))])]
+  const temRegistroTrena=Array.isArray(orcamento.medidas_trena)?orcamento.medidas_trena.length>0:!!orcamento.medidas_trena
   const endereco=[orcamento.obra_endereco,orcamento.obra_numero,orcamento.obra_bairro,orcamento.obra_cidade,orcamento.obra_uf].filter(Boolean).join(', ')
   return <div role="dialog" aria-modal="true" aria-label="Detalhes do orçamento" className="fixed inset-0 z-[80] overflow-y-auto bg-slate-950/65 px-3 py-5 sm:p-8" onClick={onFechar}>
     <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={e=>e.stopPropagation()}>
@@ -123,7 +124,7 @@ export default function DetalheOrcamento360({orcamento,onFechar}:{orcamento:Orca
           </div>)}</div>
           {!itens.length&&<p className="mt-3 text-xs text-amber-700">Este orçamento não tem itens estruturados. Consulte o PDF original, quando anexado.</p>}
         </section>
-        {orcamento.medidas_trena!==null&&orcamento.medidas_trena!==undefined&&<section className="rounded-xl border p-4"><h3 className="flex items-center gap-2 text-sm font-bold"><Ruler size={16}/> Medições e registros da trena</h3>
+        {temRegistroTrena&&<section className="rounded-xl border p-4"><h3 className="flex items-center gap-2 text-sm font-bold"><Ruler size={16}/> Medições e registros da trena</h3>
           <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-xs text-slate-700">{JSON.stringify(orcamento.medidas_trena,null,2)}</pre>
         </section>}
         <section className="rounded-xl border p-4"><h3 className="flex items-center gap-2 text-sm font-bold"><ImageIcon size={16}/> Fotos do local e da trena ({fotos.length})</h3>
