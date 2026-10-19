@@ -77,8 +77,8 @@ function duracao(ms:number){
   const horas=Math.floor(minutos/60)
   return horas<24?horas+' h '+(minutos%60)+' min':Math.floor(horas/24)+' d '+(horas%24)+' h'
 }
-export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produtosMateriais,pacoteId,orcamentoId,vendaId,onAtualizar,onEditarCortes}:{
-  ordens:Ordem[];itens:any[];materiais:Material[];produtosMateriais:Record<string,Produto>;
+export default function VendaProducaoKanbanPreview({ordens,itens,quantidadeOrcamento,quantidadeSnapshot,materiais,produtosMateriais,pacoteId,orcamentoId,vendaId,onAtualizar,onEditarCortes}:{
+  ordens:Ordem[];itens:any[];quantidadeOrcamento?:number;quantidadeSnapshot?:number;materiais:Material[];produtosMateriais:Record<string,Produto>;
   pacoteId?:string|null;orcamentoId:string;vendaId:string;onAtualizar:()=>Promise<void>|void;onEditarCortes:()=>void
 }){
 
@@ -374,6 +374,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       </div>
     </div>}
     {aviso&&<p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">{aviso}</p>}
+    {quantidadeSnapshot!==undefined&&quantidadeOrcamento!==undefined&&quantidadeSnapshot!==quantidadeOrcamento&&<p role="status" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">Atenção à importação WVetro: o orçamento tem {quantidadeOrcamento} tipologia(s) e o registro da venda tem {quantidadeSnapshot}. O Kanban está exibindo a fonte com mais itens, sem inventar tipologias. Confira a sincronização antes de fabricar.</p>}
     {!modoInicial&&cards.some(c=>!c.ordens.length)&&<div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" role="status">
       <div><b>{cards.filter(c=>!c.ordens.length).length} tipologia(s) sem ordem de produção.</b>{' '}Esses cards não podem avançar até a geração das ordens e a liberação técnica.
       {diagnostico?.medicoesTotal===0&&<p className="mt-1">Não há Medição Final de tipologia cadastrada nesta venda.</p>}
