@@ -108,7 +108,7 @@ export default function DetalheOrcamento360({orcamento,onFechar}:{orcamento:Orca
           <div className="mt-3 grid gap-3 md:grid-cols-2">{itens.map((item,index)=><div key={String(item.id||index)} className="rounded-xl border border-slate-200 p-3">
             <p className="text-[11px] text-slate-400">Item {index+1}</p>
             <p className="mt-1 text-sm font-bold">{texto(item.ambiente)||texto(item.descricao)||texto(item.tipo_outro_texto)||'Sem descrição'}</p>
-            {item.descricao&&item.ambiente&&<p className="mt-1 text-xs text-slate-600">{texto(item.descricao)}</p>}
+            {!!texto(item.descricao)&&!!texto(item.ambiente)&&<p className="mt-1 text-xs text-slate-600">{texto(item.descricao)}</p>}
             <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
               <div><b>Tipologia</b><p>{texto(item.tipo_esquadria)||texto(item.configuracao_nome)||'—'}</p></div>
               <div><b>Quantidade</b><p>{texto(item.quantidade)||'1'}</p></div>
