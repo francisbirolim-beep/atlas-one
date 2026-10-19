@@ -43,7 +43,8 @@ export async function GET(req:NextRequest){
     &&!usuarios.error&&!permissoesEquipe.error
   if(!modoInicialDisponivel)console.warn('[Produção] Acompanhamento inicial indisponível; fluxo técnico preservado.',configuracao.error?.code||etapasIniciais.error?.code)
   return NextResponse.json({ok:true,pendencias:data||[],
-    modoInicial:modoInicialDisponivel&&Boolean(configuracao.data?.habilitado),
+    // Autorização permanente do usuário vale em todas as vendas, mesmo sem ativação venda a venda.
+    modoInicial:modoInicialDisponivel&&(Boolean(configuracao.data?.habilitado)||Boolean(permissaoPropria.data?.pode_movimentar)),
     modoInicialDisponivel,
     podeConfigurar:user.role==='master',
     podeMovimentarInicial:modoInicialDisponivel&&(user.role==='master'||Boolean(permissaoPropria.data?.pode_movimentar)),
@@ -112,14 +113,20 @@ export async function POST(req:NextRequest){
     .select('habilitado').eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId).maybeSingle()
   // Uma migração nova não pode paralisar a movimentação técnica que já funcionava.
   if(erroConfig&&!['42P01','PGRST205'].includes(erroConfig.code||''))return erro('Não foi possível conferir o modo inicial.',503)
-  if(configuracao?.habilitado){
-    if(user.role!=='master'){
-      const {data:permissao,error:erroPermissao}=await supabaseAdmin
-        .from('producao_kanban_permissoes_iniciais').select('pode_movimentar')
-        .eq('empresa_id',user.empresa_id).eq('usuario_id',user.id).maybeSingle()
-      if(erroPermissao)return erro('Não foi possível conferir a autorização.',503)
-      if(!permissao?.pode_movimentar)return erro('O Master ainda não liberou sua permissão de movimentação neste Kanban.',403)
-    }
+  // A liberação concedida pelo Master é global e permanente até revogação.
+  // Ela não depende de habilitar o modo inicial para cada nova venda.
+  let permissaoGlobal=false
+  if(user.role!=='master'){
+    const {data:permissao,error:erroPermissao}=await supabaseAdmin
+      .from('producao_kanban_permissoes_iniciais').select('pode_movimentar')
+      .eq('empresa_id',user.empresa_id).eq('usuario_id',user.id).maybeSingle()
+    if(erroPermissao){
+      if(!['42P01','PGRST205'].includes(erroPermissao.code||''))return erro('Não foi possível conferir a autorização.',503)
+    }else permissaoGlobal=Boolean(permissao?.pode_movimentar)
+  }
+  if(configuracao?.habilitado||permissaoGlobal){
+    if(user.role!=='master'&&!permissaoGlobal)
+      return erro('O Master ainda não liberou sua permissão de movimentação neste Kanban.',403)
     if(destino==='conferencia')return erro('No modo inicial, a conferência é registrada no processo técnico oficial.')
     const {data,error}=await supabaseAdmin.rpc('fn_producao_kanban_mover_inicial_v1',{
       p_empresa:user.empresa_id,p_venda:vendaId,p_ref:ref,p_destino:destino,p_usuario:user.id,
