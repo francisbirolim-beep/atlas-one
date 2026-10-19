@@ -36,6 +36,11 @@ check('sem bibliotecas externas para imagens ou rastreamento', !home.includes('<
 
 check('SEO institucional e geolocalização', home.includes('Esquadrias de alumínio sob medida em José Bonifácio') && home.includes('name="geo.region"'))
 check('prévia bloqueada para buscadores', home.includes('name="robots" content="noindex,nofollow"') && robots.includes('Disallow: /'))
+check('Instagram oficial no rodapé', home.includes('href="https://www.instagram.com/esquadrifacio/"') && home.includes('Instagram @esquadrifacio'))
+check('endereço oficial no rodapé', home.includes('Av. Leonel Guilherme Pereira, 775') && home.includes('Residencial Veneza') && home.includes('CEP 15202-420'))
+check('link da localização fornecida no Google Maps', home.includes('href="https://maps.app.goo.gl/SnZxkUvSYJLgceed6"'))
+check('rota GPS da Esquadrifácio no Google Maps', home.includes('href="https://www.google.com/maps/dir/?api=1&amp;destination=-21.050927%2C-49.667694"') && home.includes('Como chegar ↗'))
+check('destaque acessível para Instagram e GPS', (home.match(/class="footer-highlight"/g) || []).length === 2 && home.includes('aria-label="Como chegar à Esquadrifácio pelo Google Maps"'))
 check('CTA principal conectado ao WhatsApp', (home.match(/https:\/\/wa\.me\/5517996361318/g) || []).length >= 3)
 check('links externos protegidos', !/<a(?=[^>]*href="https:\/\/)(?![^>]*rel="noopener noreferrer")[^>]*>/i.test(home))
 check('não sobrou modal de demonstração', !home.includes('id="demo-modal"') && !home.includes('data-contact'))
