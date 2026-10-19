@@ -562,7 +562,7 @@ export default function CentralAprendizadoPage(){
                 </div>)}
 
             </div>}
-            {catalogoAberto===e.id&&<CatalogoDetalhes
+            {catalogoAberto===e.id&&<CatalogoDetalhes key={e.id}
               entrada={e}
               candidatos={dados.candidatos.filter(c=>c.entrada_id===e.id)}
               busca={buscaCatalogo}
@@ -732,6 +732,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   mapeando:boolean
 }){
   const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'|'sem_imagem'>('todos')
+  const [filtroPaginaImagem,setFiltroPaginaImagem]=useState<'todas'|'identificadas'|'pendentes'>('todas')
   const [edicoesItem,setEdicoesItem]=useState<Record<string,Record<string,any>>>({})
   const produtos=candidatos.filter(c=>c.tipo==='produto')
   const semPagina=produtos.filter(c=>!Number(c.dados?.pagina_catalogo||0)).length
@@ -740,6 +741,8 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   const semPreco=produtos.filter(c=>c.dados?.preco_fornecedor==null||Number(c.dados?.preco_fornecedor)===0)
   // Imagem do produto só conta quando está associada à referência individual.
   const semImagem=produtos.filter(c=>!imagemProdutoCandidato(c))
+  const comPagina=semImagem.filter(c=>Number(c.dados?.pagina_catalogo||0)>0)
+  const paginaPendente=semImagem.filter(c=>!(Number(c.dados?.pagina_catalogo||0)>0))
   const idsSemImagem=new Set(semImagem.map(c=>c.id))
   const idsAplicados=new Set(aplicados.map(c=>c.id))
   const idsPendentes=new Set(pendentes.map(c=>c.id))
@@ -751,7 +754,12 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
     if(filtro==='aplicados')return idsAplicados.has(c.id)
     if(filtro==='validacao')return idsPendentes.has(c.id)
     if(filtro==='sem_preco')return idsSemPreco.has(c.id)
-    if(filtro==='sem_imagem')return idsSemImagem.has(c.id)
+    if(filtro==='sem_imagem'){
+      if(!idsSemImagem.has(c.id))return false
+      if(filtroPaginaImagem==='identificadas')return Number(c.dados?.pagina_catalogo||0)>0
+      if(filtroPaginaImagem==='pendentes')return !(Number(c.dados?.pagina_catalogo||0)>0)
+      return true
+    }
     return true
   })
 
@@ -792,7 +800,18 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
       </label>
       {semPreco.length>0&&<button onClick={baixarSemPreco} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-800">Baixar lista sem preço ({semPreco.length})</button>}
     </div>
-    {semImagem.length>0&&<p className="mt-2 text-[11px] text-amber-700">Existem {semImagem.length} produto(s) sem imagem individual confirmada ou já vinculada ao código. Selecione “Sem imagem individual” para localizar os desenhos faltantes antes de homologar.</p>}
+    {semImagem.length>0&&<p className="mt-2 text-[11px] text-amber-700">
+      Existem {semImagem.length} produto(s) sem imagem individual. Destes, {comPagina.length} têm uma página do PDF indicada e {paginaPendente.length} ainda precisam de localização.
+      A página indicada não substitui a conferência do desenho técnico.
+    </p>}
+    {filtro==='sem_imagem'&&<div className="mt-3 flex flex-wrap gap-2 text-xs">
+      {([['todas','Todas sem imagem',semImagem.length],['identificadas','Com página identificada',comPagina.length],['pendentes','Sem página identificada',paginaPendente.length]] as const).map(([valor,rotulo,total])=>
+        <button key={valor} type="button" onClick={()=>setFiltroPaginaImagem(valor)}
+          aria-pressed={filtroPaginaImagem===valor}
+          className={'rounded-lg border px-3 py-2 font-semibold '+(filtroPaginaImagem===valor?'border-blue-300 bg-blue-50 text-blue-800':'bg-white text-slate-600')}>
+          {rotulo} ({total})
+        </button>)}
+    </div>}
     {semPreco.length>0&&<p className="mt-2 text-[11px] text-slate-500">A lista pode ser enviada ao fornecedor. Depois, a tabela preenchida pode voltar pela Central como “Tabela de preço”; o Atlas reconcilia pelos códigos.</p>}
     {semPagina>0&&<div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800"><span>{mapeando?'Preparando as páginas do PDF para gerar os desenhos dos perfis...':semPagina+' item(ns) ainda precisam ter a página identificada para gerar a imagem.'}</span><button disabled={mapeando} onClick={()=>void onMapearCatalogo(entrada)} className="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white disabled:opacity-50">{mapeando?'Preparando...':'Preparar imagens'}</button></div>}
 
