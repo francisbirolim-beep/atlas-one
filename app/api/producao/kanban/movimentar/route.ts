@@ -25,7 +25,7 @@ export async function GET(req:NextRequest){
     .eq('empresa_id',user.empresa_id).eq('orcamento_id',venda.orcamento_id).eq('tipo_medicao','tipologia')
   if(erroMedicoes)return erro('Não foi possível conferir a Medição Final.',503)
   const [configuracao,etapasIniciais,permissaoPropria,usuarios,permissoesEquipe]=await Promise.all([
-    supabaseAdmin.from('producao_kanban_fluxo_inicial').select('habilitado').eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId).maybeSingle(),
+    supabaseAdmin.from('producao_kanban_config_geral').select('habilitado').eq('empresa_id',user.empresa_id).maybeSingle(),
     supabaseAdmin.from('producao_kanban_etapas_iniciais').select('item_ref,etapa,motivo_pendencia,categoria_pendencia,atualizado_em')
       .eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId),
     supabaseAdmin.from('producao_kanban_permissoes_iniciais').select('pode_movimentar')
@@ -44,7 +44,7 @@ export async function GET(req:NextRequest){
   if(!modoInicialDisponivel)console.warn('[Produção] Acompanhamento inicial indisponível; fluxo técnico preservado.',configuracao.error?.code||etapasIniciais.error?.code)
   return NextResponse.json({ok:true,pendencias:data||[],
     // Autorização permanente do usuário vale em todas as vendas, mesmo sem ativação venda a venda.
-    modoInicial:modoInicialDisponivel&&(Boolean(configuracao.data?.habilitado)||Boolean(permissaoPropria.data?.pode_movimentar)),
+    modoInicial:modoInicialDisponivel&&configuracao.data?.habilitado!==false,
     modoInicialDisponivel,
     podeConfigurar:user.role==='master',
     podeMovimentarInicial:modoInicialDisponivel&&(user.role==='master'||Boolean(permissaoPropria.data?.pode_movimentar)),
@@ -83,13 +83,13 @@ export async function POST(req:NextRequest){
   }
 
   if(body.acao==='configurar_modo_inicial'){
-    if(user.role!=='master')return erro('Somente o Master pode ativar ou desativar o modo inicial.',403)
+    if(user.role!=='master')return erro('Somente o Master pode bloquear ou liberar o acompanhamento geral.',403)
     if(typeof body.habilitado!=='boolean')return erro('Configuração inválida.')
-    const {error}=await supabaseAdmin.from('producao_kanban_fluxo_inicial').upsert({
-      empresa_id:user.empresa_id,venda_obra_id:vendaId,habilitado:body.habilitado,
+    const {error}=await supabaseAdmin.from('producao_kanban_config_geral').upsert({
+      empresa_id:user.empresa_id,habilitado:body.habilitado,
       atualizado_por:user.id,atualizado_em:new Date().toISOString(),
-    },{onConflict:'empresa_id,venda_obra_id'})
-    if(error)return erro('Não foi possível salvar a configuração do fluxo inicial.',503)
+    },{onConflict:'empresa_id'})
+    if(error)return erro('Não foi possível salvar a configuração geral do Kanban.',503)
     return NextResponse.json({ok:true,modoInicial:body.habilitado})
   }
 
@@ -109,12 +109,13 @@ export async function POST(req:NextRequest){
       .eq('venda_obra_id',vendaId).eq('item_ref',ref).neq('status','cancelada').limit(1).maybeSingle()
     if(!ordem)return erro('Tipologia não pertence a esta venda.',404)
   }
-  const {data:configuracao,error:erroConfig}=await supabaseAdmin.from('producao_kanban_fluxo_inicial')
-    .select('habilitado').eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId).maybeSingle()
+  const {data:configuracao,error:erroConfig}=await supabaseAdmin.from('producao_kanban_config_geral')
+    .select('habilitado').eq('empresa_id',user.empresa_id).maybeSingle()
   // Uma migração nova não pode paralisar a movimentação técnica que já funcionava.
   if(erroConfig&&!['42P01','PGRST205'].includes(erroConfig.code||''))return erro('Não foi possível conferir o modo inicial.',503)
   // A liberação concedida pelo Master é global e permanente até revogação.
-  // Ela não depende de habilitar o modo inicial para cada nova venda.
+  // O modo inicial está habilitado para todas as vendas, inclusive as futuras,
+  // enquanto a configuração geral da empresa não for explicitamente desligada.
   let permissaoGlobal=false
   if(user.role!=='master'){
     const {data:permissao,error:erroPermissao}=await supabaseAdmin
@@ -124,7 +125,7 @@ export async function POST(req:NextRequest){
       if(!['42P01','PGRST205'].includes(erroPermissao.code||''))return erro('Não foi possível conferir a autorização.',503)
     }else permissaoGlobal=Boolean(permissao?.pode_movimentar)
   }
-  if(configuracao?.habilitado||permissaoGlobal){
+  if(!erroConfig&&configuracao?.habilitado!==false){
     if(user.role!=='master'&&!permissaoGlobal)
       return erro('O Master ainda não liberou sua permissão de movimentação neste Kanban.',403)
     if(destino==='conferencia')return erro('No modo inicial, a conferência é registrada no processo técnico oficial.')
@@ -135,6 +136,7 @@ export async function POST(req:NextRequest){
     if(error){console.error('[Produção][ModoInicial]',error.code,error.message);return erro(error.message||'Falha ao salvar avanço inicial.',409)}
     return NextResponse.json(data)
   }
+  // Com bloqueio geral ativo, a movimentação técnica continua com seus gates.
   if(!['master','admin','producao'].includes(user.role))return erro('Sem autorização para movimentar a produção oficial.',403)
   const {data,error}=await supabaseAdmin.rpc('fn_producao_kanban_movimentar_v1',{
     p_empresa:user.empresa_id,p_venda:vendaId,p_ref:ref,p_destino:destino,p_usuario:user.id,
