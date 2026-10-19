@@ -77,8 +77,8 @@ function duracao(ms:number){
   const horas=Math.floor(minutos/60)
   return horas<24?horas+' h '+(minutos%60)+' min':Math.floor(horas/24)+' d '+(horas%24)+' h'
 }
-export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produtosMateriais,pacoteId,orcamentoId,vendaId,onAtualizar,onEditarCortes}:{
-  ordens:Ordem[];itens:any[];materiais:Material[];produtosMateriais:Record<string,Produto>;
+export default function VendaProducaoKanbanPreview({ordens,itens,quantidadeOrcamento,quantidadeSnapshot,materiais,produtosMateriais,pacoteId,orcamentoId,vendaId,onAtualizar,onEditarCortes}:{
+  ordens:Ordem[];itens:any[];quantidadeOrcamento?:number;quantidadeSnapshot?:number;materiais:Material[];produtosMateriais:Record<string,Produto>;
   pacoteId?:string|null;orcamentoId:string;vendaId:string;onAtualizar:()=>Promise<void>|void;onEditarCortes:()=>void
 }){
 
@@ -92,6 +92,17 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   const [diagnostico,setDiagnostico]=useState<{medicoesTotal:number;medicoesAprovadas:number}|null>(null)
   const [movimentoRecusado,setMovimentoRecusado]=useState<{ref:string;destino:Etapa;motivo:string}|null>(null)
   const [fasesSim,setFasesSim]=useState<Record<string,Fase>>({})
+  const [modoInicial,setModoInicial]=useState(false)
+  const [podeConfigurar,setPodeConfigurar]=useState(false)
+  const [modoInicialDisponivel,setModoInicialDisponivel]=useState(true)
+  const [podeMovimentarInicial,setPodeMovimentarInicial]=useState(false)
+  const [mostrarPermissoes,setMostrarPermissoes]=useState(false)
+  const [usuariosPermissoes,setUsuariosPermissoes]=useState<Array<{id:string;nome:string;role:string}>>([])
+  const [permissoesEquipe,setPermissoesEquipe]=useState<Record<string,boolean>>({})
+  const [salvandoPermissao,setSalvandoPermissao]=useState<string|null>(null)
+  const [configurandoModo,setConfigurandoModo]=useState(false)
+  const [versaoEstado,setVersaoEstado]=useState(0)
+  const [etapasIniciais,setEtapasIniciais]=useState<Record<string,{etapa:Etapa;motivo_pendencia?:string|null;categoria_pendencia?:string|null;atualizado_em?:string|null}>>({})
 
   const [entradaSim,setEntradaSim]=useState<Record<string,number>>({})
   const [aberto,setAberto]=useState<string|null>(null)
@@ -131,11 +142,22 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         const resp=await fetch('/api/producao/kanban/movimentar?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
         const dados=await resp.json()
         if(!resp.ok)throw Error(dados.error||'Não foi possível carregar as pendências.')
-        if(ativo){setPendencias(dados.pendencias||[]);setDiagnostico(dados.diagnostico||null);setPendenciasCarregadas(true)}
+        if(ativo){
+          setPendencias(dados.pendencias||[])
+          setDiagnostico(dados.diagnostico||null)
+          setModoInicial(Boolean(dados.modoInicial))
+          setPodeConfigurar(Boolean(dados.podeConfigurar))
+          setModoInicialDisponivel(dados.modoInicialDisponivel!==false)
+          setPodeMovimentarInicial(Boolean(dados.podeMovimentarInicial))
+          setUsuariosPermissoes(dados.usuariosPermissoes||[])
+          setPermissoesEquipe(Object.fromEntries((dados.permissoesEquipe||[]).map((p:{usuario_id:string;pode_movimentar:boolean})=>[p.usuario_id,p.pode_movimentar])))
+          setEtapasIniciais(Object.fromEntries((dados.etapasIniciais||[]).map((x:{item_ref:string;etapa:Etapa;motivo_pendencia?:string|null;categoria_pendencia?:string|null;atualizado_em?:string|null})=>[x.item_ref,x])))
+          setPendenciasCarregadas(true)
+        }
       }catch(e){if(ativo){setPendenciasCarregadas(false);setDiagnostico(null);setAviso(e instanceof Error?e.message:'Falha ao carregar pendências.')}}
     })()
     return()=>{ativo=false}
-  },[vendaId,ordens])
+  },[vendaId,ordens,versaoEstado])
   const cards=useMemo(()=>{
     const mapa=new Map<string,{ref:string;item:Record<string,unknown>;ordens:Ordem[];indice:number}>()
     ;(Array.isArray(itens)?itens:[]).forEach((item,indice)=>{
@@ -152,10 +174,12 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       const qtdPrevista=Math.max(1,Math.round(valor(i.quantidade)||c.ordens.reduce((n,o)=>n+valor(o.quantidade),0)||1))
       const produzidasReais=c.ordens.reduce((n,o)=>n+Math.max(0,Math.min(valor(o.quantidade),o.quantidade_produzida==null?(finalizada(o)?valor(o.quantidade):0):valor(o.quantidade_produzida))),0)
       const produzidas=Math.min(qtdPrevista,Math.max(0,produzidasReais))
-      const etapa=pendencias.some(p=>c.ordens.some(o=>o.id===p.ordem_id))?'pendente':etapaDaOrdem(c.ordens)
+      const etapaReal=pendencias.some(p=>c.ordens.some(o=>o.id===p.ordem_id))?'pendente':etapaDaOrdem(c.ordens)
+      const etapa=modoInicial?(etapasIniciais[c.ref]?.etapa||etapaReal):etapaReal
+      const provisorio=modoInicial&&Boolean(etapasIniciais[c.ref])
       const fase=c.ordens.some(o=>o.status==='conferencia')?'conferencia':fasesSim[c.ref]||'corte'
       const pronta=c.ordens.length>0&&c.ordens.every(habilitada)
-      return {...c,
+      return {...c,provisorio,
         nome:texto(i.tipo_outro_texto)||texto(i.descricao)||texto(i.tipo_esquadria)||texto(i.tipologia_nome)||texto(i.configuracao_nome)||texto(ordem?.titulo)||'Tipologia '+(c.indice+1),
         ambiente:texto(i.ambiente)||texto(i.local)||'Ambiente não informado',
         largura:valor(i.largura_mm||ordem?.item_snapshot?.largura_mm),
@@ -163,10 +187,12 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         foto:fotoCadastrada[texto(i.tipologia_id)||texto(ordem?.item_snapshot?.tipologia_id)]||imagemTipologia(i)||imagemTipologia(ordem?.item_snapshot||{}),
         qtd:qtdPrevista,produzidas,etapa,fase,pronta,progresso:Math.round((produzidas/qtdPrevista)*100),
         bloqueio:c.ordens.map(o=>texto(o.bloqueio_motivo)).filter(Boolean).join(' · '),
-        pendencia:pendencias.find(p=>c.ordens.some(o=>o.id===p.ordem_id)),
+        pendencia:provisorio
+          ?(etapa==='pendente'?{categoria:etapasIniciais[c.ref].categoria_pendencia||'outros',motivo:etapasIniciais[c.ref].motivo_pendencia||'Pendência inicial'}:undefined)
+          :pendencias.find(p=>c.ordens.some(o=>o.id===p.ordem_id)),
       }
     })
-  },[itens,ordens,fasesSim,fotoCadastrada,pendencias])
+  },[itens,ordens,fasesSim,fotoCadastrada,pendencias,modoInicial,etapasIniciais])
   const materialDoCard=(ref:string)=>materiais.filter(m=>String(m.item_ref||'')===ref)
   const prepararFluxo=()=>{
     setMovimentoRecusado(null)
@@ -186,6 +212,13 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       setAviso('Movimentação não realizada: '+motivo)
     }
     if(!pendenciasCarregadas){recusar('Aguarde a verificação da produção e tente novamente.');return}
+    if(modoInicial){
+      if(!podeMovimentarInicial){recusar('Seu usuário tem somente acesso de consulta. Peça ao Master para liberar a movimentação em Permissões da Produção.');return}
+      setJustificativa('');setCategoriaPendencia('perfil')
+      setQtdConferencia(Math.max(1,card.qtd-card.produzidas))
+      setModalMovimento({ref,destino});setAviso('')
+      return
+    }
     if(!card.ordens.length){
       const medicao=diagnostico?.medicoesTotal===0
         ? ' Também não há Medição Final de tipologia registrada.'
@@ -211,7 +244,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     if(!modalMovimento||salvandoMovimento)return
     const card=cards.find(c=>c.ref===modalMovimento.ref)
     if(!card)return
-    if(modalMovimento.destino==='concluida'&&(!Number.isInteger(qtdConferencia)||qtdConferencia<1||qtdConferencia>card.qtd-card.produzidas)){setAviso('Informe uma quantidade válida de unidades conferidas.');return}
+    if(!modoInicial&&modalMovimento.destino==='concluida'&&(!Number.isInteger(qtdConferencia)||qtdConferencia<1||qtdConferencia>card.qtd-card.produzidas)){setAviso('Informe uma quantidade válida de unidades conferidas.');return}
     if((modalMovimento.destino==='pendente'||card.etapa==='pendente')&&justificativa.trim().length<5){
       setAviso('A justificativa precisa ter pelo menos 5 caracteres.');return
     }
@@ -229,10 +262,49 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       const dados=await resp.json().catch(()=>({}))
       if(!resp.ok)throw Error(dados.error||'Falha ao gravar movimentação.')
       setModalMovimento(null)
-      await onAtualizar()
+      setVersaoEstado(v=>v+1)
+      if(!modoInicial)await onAtualizar()
       setAviso(dados.aviso||'Movimentação registrada. O Kanban foi atualizado.')
     }catch(e){setAviso(e instanceof Error?e.message:'Não foi possível movimentar o card.')}
     finally{setSalvandoMovimento(false)}
+  }
+  async function alterarModoInicial(){
+    if(configurandoModo||!podeConfigurar)return
+    const proximo=!modoInicial
+    if(!proximo&&!window.confirm('Bloquear a movimentação inicial em TODAS as obras desta empresa? Os funcionários deixarão de poder avançar os cards até você liberar novamente. As permissões e o histórico serão preservados.'))return
+    setConfigurandoModo(true);setAviso('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw Error('Sessão expirada.')
+      const resp=await fetch('/api/producao/kanban/movimentar',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({acao:'configurar_modo_inicial',vendaId,habilitado:proximo}),
+      })
+      const dados=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw Error(dados.error||'Não foi possível alterar o modo inicial.')
+      setModoInicial(proximo)
+      setVersaoEstado(v=>v+1)
+      setAviso(proximo?'Movimentação inicial liberada em TODAS as obras, inclusive as futuras. As permissões individuais continuam valendo.':'Movimentação inicial BLOQUEADA em todas as obras. As permissões individuais e o histórico foram preservados para quando você liberar novamente.')
+    }catch(e){setAviso(e instanceof Error?e.message:'Erro na configuração do modo inicial.')}
+    finally{setConfigurandoModo(false)}
+  }
+  async function alterarPermissaoEquipe(usuarioId:string){
+    if(!podeConfigurar||salvandoPermissao)return
+    setSalvandoPermissao(usuarioId);setAviso('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw Error('Sessão expirada.')
+      const permitir=!Boolean(permissoesEquipe[usuarioId])
+      const resp=await fetch('/api/producao/kanban/movimentar',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({acao:'autorizar_usuario_modo_inicial',vendaId,usuarioId,permitir}),
+      })
+      const dados=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw Error(dados.error||'Não foi possível atualizar a permissão.')
+      setPermissoesEquipe(prev=>({...prev,[usuarioId]:Boolean(dados.podeMovimentar)}))
+      setAviso(permitir?'Usuário liberado para movimentar o Kanban inicial.':'Permissão de movimentação revogada. O usuário continua podendo consultar conforme seus acessos existentes.')
+    }catch(e){setAviso(e instanceof Error?e.message:'Não foi possível atualizar a permissão.')}
+    finally{setSalvandoPermissao(null)}
   }
   async function prepararImpressao(refs:string[]){
     if(!refs.length){setAviso('Selecione ao menos uma tipologia para imprimir.');return}
@@ -273,15 +345,37 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
 
   return <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="flex items-center gap-2 font-bold text-slate-900"><Layers3 size={19} className="text-blue-700"/>Kanban de tipologias · movimentação controlada</h3>
-        <p className="mt-1 text-xs text-slate-600">Uma tipologia por card, com cinco colunas. Corte, Montagem e Conferência de qualidade ficam dentro de Em produção. Movimentações reais exigem confirmação e liberação técnica. Pendências têm justificativa obrigatória.</p></div>
+      <div><h3 className="flex items-center gap-2 font-bold text-slate-900"><Layers3 size={19} className="text-blue-700"/>Kanban de tipologias · {modoInicial?'acompanhamento inicial':'movimentação controlada'}</h3>
+        <p className="mt-1 text-xs text-slate-600">{cards.length} tipologia(s) encontrada(s) nesta venda · cinco colunas. {modoInicial?'Modo inicial: cards avançam e são salvos sem exigir a Medição Final ou ordem. Isso não libera tecnicamente a fabricação nem altera estoque, contagem de peças ou Instalação.':'Movimentações reais exigem confirmação e liberação técnica.'} Pendências têm justificativa obrigatória.</p></div>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="rounded-lg border px-3 py-2 text-xs font-bold" onClick={()=>setSelecionados(selecionadosValidos.length===cards.length?[]:cards.map(c=>c.ref))}>{selecionadosValidos.length===cards.length?'Desmarcar todas':'Selecionar todas'}</button>
         <button type="button" className="inline-flex items-center gap-1 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white" onClick={()=>prepararImpressao(selecionadosValidos)}><FileDown size={14}/>Imprimir selecionadas ({selecionadosValidos.length})</button>
       </div>
     </div>
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+      <div><b>Movimentação inicial em TODAS as obras: {!modoInicialDisponivel?'aguardando atualização do banco':modoInicial?'LIBERADA':'BLOQUEADA'}.</b><p className="mt-1">O acompanhamento inicial fica liberado por padrão para todas as obras, inclusive as novas, até o Master bloquear. Funcionários autorizados podem movimentar cards independentemente de Medição Final e ordens. A fabricação técnica e a Instalação continuam protegidas.</p>{!modoInicialDisponivel&&<p className="mt-1 font-semibold text-amber-800">A função inicial ainda precisa da migração no banco. A movimentação técnica anterior continua disponível.</p>}</div>
+      <div className="flex flex-wrap gap-2">
+        {podeConfigurar&&<button type="button" disabled={configurandoModo||!pendenciasCarregadas||!modoInicialDisponivel} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" onClick={()=>void alterarModoInicial()}>{configurandoModo?'Salvando...':modoInicial?'Bloquear movimentação em todas as obras':'Liberar movimentação em todas as obras'}</button>}
+        {podeConfigurar&&<button type="button" disabled={!modoInicialDisponivel} className="rounded-lg border border-blue-400 bg-white px-3 py-2 font-bold disabled:opacity-50" aria-expanded={mostrarPermissoes} onClick={()=>setMostrarPermissoes(prev=>!prev)}>{mostrarPermissoes?'Fechar permissões':'Permissões da Produção'}</button>}
+        {modoInicial&&!podeMovimentarInicial&&<span className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-bold text-amber-800">Você pode consultar, mas não movimentar cards.</span>}
+      </div>
+    </div>
+    {mostrarPermissoes&&podeConfigurar&&<div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <h4 className="text-sm font-bold text-slate-900">Permissões da Produção — funcionários</h4>
+      <p className="mt-1 text-xs text-slate-600">Libere ou revogue a movimentação inicial individualmente. Depois de liberado, o funcionário pode movimentar os cards de todas as vendas às quais já tem acesso, inclusive novas vendas. A permissão só termina quando o Master a revogar. O bloqueio geral prevalece sobre todas as permissões; isso não libera fabricação, financeiro nem outros setores. Somente o Master altera essas permissões.</p>
+      <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+        {usuariosPermissoes.map(u=><div key={u.id} className="flex items-center justify-between gap-3 rounded-lg border bg-white px-3 py-2">
+          <div className="min-w-0"><b className="block truncate text-xs text-slate-800">{u.nome}</b><span className="text-[11px] text-slate-500">{u.role} · {permissoesEquipe[u.id]?'Pode movimentar':'Somente consulta (se autorizada)'}</span></div>
+          <button type="button" disabled={Boolean(salvandoPermissao)} onClick={()=>void alterarPermissaoEquipe(u.id)} className={'shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold disabled:opacity-50 '+(permissoesEquipe[u.id]?'border-amber-400 bg-amber-50 text-amber-800':'border-blue-500 bg-blue-700 text-white')}>
+            {salvandoPermissao===u.id?'Salvando...':permissoesEquipe[u.id]?'Revogar movimentação':'Liberar movimentação'}
+          </button>
+        </div>)}
+        {!usuariosPermissoes.length&&<p className="py-3 text-xs text-slate-500">Nenhum outro usuário cadastrado nesta empresa.</p>}
+      </div>
+    </div>}
     {aviso&&<p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">{aviso}</p>}
-    {cards.some(c=>!c.ordens.length)&&<div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" role="status">
+    {quantidadeSnapshot!==undefined&&quantidadeOrcamento!==undefined&&quantidadeSnapshot!==quantidadeOrcamento&&<p role="status" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">Atenção à importação WVetro: o orçamento tem {quantidadeOrcamento} tipologia(s) e o registro da venda tem {quantidadeSnapshot}. O Kanban está exibindo a fonte com mais itens, sem inventar tipologias. Confira a sincronização antes de fabricar.</p>}
+    {!modoInicial&&cards.some(c=>!c.ordens.length)&&<div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" role="status">
       <div><b>{cards.filter(c=>!c.ordens.length).length} tipologia(s) sem ordem de produção.</b>{' '}Esses cards não podem avançar até a geração das ordens e a liberação técnica.
       {diagnostico?.medicoesTotal===0&&<p className="mt-1">Não há Medição Final de tipologia cadastrada nesta venda.</p>}
       {diagnostico&&diagnostico.medicoesTotal>0&&diagnostico.medicoesAprovadas===0&&<p className="mt-1">As Medições Finais desta venda ainda não foram aprovadas.</p>}
@@ -294,14 +388,16 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         return <div key={etapa.id} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const ref=e.dataTransfer.getData('text/plain');mover(ref,etapa.id)}} className={'w-[235px] min-w-[235px] rounded-xl border p-2 '+cores[idx]}>
           <div className="mb-2 flex items-center justify-between px-1"><b className="text-xs text-slate-800">{etapa.nome}</b><span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold">{lista.length}</span></div>
           <div className="space-y-2 min-h-20">{lista.map(c=>{
-            const dur=entradaSim[c.ref]?agora-entradaSim[c.ref]:null
+            const entrada=entradaSim[c.ref]||(c.provisorio&&etapasIniciais[c.ref]?.atualizado_em?Date.parse(etapasIniciais[c.ref].atualizado_em!):0)
+            const dur=entrada?agora-entrada:null
             const atraso=dur!=null&&dur>24*3600000?'text-red-700':dur!=null&&dur>8*3600000?'text-amber-700':'text-slate-500'
-            return <div key={c.ref} draggable onDragStart={e=>e.dataTransfer.setData('text/plain',c.ref)} title={!c.pronta?'A movimentação depende da liberação técnica':'Arraste para movimentar'} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            return <div key={c.ref} draggable onDragStart={e=>e.dataTransfer.setData('text/plain',c.ref)} title={modoInicial?'Arraste para avançar no acompanhamento inicial':!c.pronta?'A movimentação depende da liberação técnica':'Arraste para movimentar'} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex items-start gap-2"><input type="checkbox" aria-label={'Selecionar '+c.nome} checked={selecionadosValidos.includes(c.ref)} onChange={e=>setSelecionados(prev=>e.target.checked?[...new Set([...prev,c.ref])]:prev.filter(r=>r!==c.ref))}/>
                 {c.foto?<img src={c.foto} alt={'Desenho da '+c.nome} className="h-14 w-14 shrink-0 rounded border object-contain"/>:<div role="status" className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded border border-amber-300 bg-amber-50 text-center text-[9px] font-semibold text-amber-800"><ImageOff size={16}/>Desenho pendente</div>}
                 <div className="min-w-0 flex-1"><b className="block text-xs text-slate-900">{c.nome}</b><p className="text-[11px] text-slate-500">{c.ambiente}</p><p className="text-[11px] text-slate-500">{c.largura&&c.altura?c.largura+' × '+c.altura+' mm · ':''}{c.qtd} un.</p></div>
               </div>
               <p className={'mt-2 flex items-center gap-1 text-[11px] font-semibold '+(c.pronta?'text-emerald-700':'text-amber-700')}>{c.pronta?<CheckCircle2 size={13}/>:<LockKeyhole size={13}/>} {c.pronta?'Liberada tecnicamente':'Aguardando liberação técnica'}</p>
+              {c.provisorio&&<p className="mt-1 rounded bg-blue-50 px-1 py-0.5 text-[10px] font-bold text-blue-800">Etapa salva no acompanhamento inicial</p>}
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full bg-blue-600" style={{width:c.progresso+'%'}}/></div>
               <div className="mt-1 flex justify-between text-[11px]"><span>{c.produzidas}/{c.qtd} produzidas</span><b>{c.progresso}%</b></div>
               <p className={'mt-1 flex items-center gap-1 text-[10px] '+atraso}><Clock3 size={11}/>{dur==null?'Tempo na etapa: a registrar':'Nesta etapa: '+duracao(dur)}</p>
@@ -335,11 +431,11 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       {abertoCard.etapa==='em_producao'&&<div className="mb-4 rounded-xl border border-violet-200 bg-violet-50/40 p-3">
         <p className="mb-2 text-xs font-bold text-violet-900">Etapas internas de Em produção</p>
         <div className="flex flex-wrap gap-2">{FASES.map(f=><button key={f.id} type="button" aria-pressed={abertoCard.fase===f.id}
-          onClick={()=>{if(f.id==='conferencia'){setJustificativa('');setModalMovimento({ref:abertoCard.ref,destino:'conferencia' as Etapa})}else{setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' é um controle visual; confirme a conferência para gravar o avanço real.')}}}
+          onClick={()=>{if(modoInicial){setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' no acompanhamento inicial é apenas visual. A conferência operacional continua exigindo liberação técnica.')}else if(f.id==='conferencia'){setJustificativa('');setModalMovimento({ref:abertoCard.ref,destino:'conferencia' as Etapa})}else{setFasesSim(prev=>({...prev,[abertoCard.ref]:f.id}));setAviso('Etapa interna '+f.nome+' é um controle visual; confirme a conferência para gravar o avanço real.')}}}
           className={'rounded-lg border px-3 py-2 text-xs font-semibold '+(abertoCard.fase===f.id?'border-violet-700 bg-violet-700 text-white':'border-violet-200 bg-white text-violet-800')}>
           {f.nome}
         </button>)}</div>
-        <p className="mt-2 text-[11px] text-violet-700">Após conferir, mova para Produção concluída e informe as unidades aprovadas. A conclusão usa o registro operacional existente.</p>
+        <p className="mt-2 text-[11px] text-violet-700">{modoInicial?'As fases internas ainda são visuais; mover para Produção concluída neste modo não registra unidades nem libera a Instalação.':'Após conferir, mova para Produção concluída e informe as unidades aprovadas. A conclusão usa o registro operacional existente.'}</p>
       </div>}
       <VendaListaCorteWVetro
         materiais={materialDoCard(abertoCard.ref).map(m=>({...m,unidade:m.unidade||'UN'}))}
@@ -359,8 +455,8 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     </div>}
     {modalMovimento&&<div role="dialog" aria-modal="true" aria-label="Confirmar movimentação da produção" className="fixed left-4 right-4 top-1/2 z-[80] mx-auto max-h-[85vh] max-w-lg -translate-y-1/2 overflow-y-auto rounded-xl border border-amber-300 bg-white p-5 shadow-2xl">
       <h4 className="text-sm font-bold">Confirmar movimentação: {ETAPAS.find(e=>e.id===modalMovimento.destino)?.nome}</h4>
-      <p className="mt-1 text-xs text-slate-600">{cards.find(c=>c.ref===modalMovimento.ref)?.nome}. A atualização será gravada na ordem real.</p>
-      {modalMovimento.destino==='concluida'&&<label className="mt-3 block text-xs font-semibold">Unidades conferidas nesta movimentação
+      <p className="mt-1 text-xs text-slate-600">{cards.find(c=>c.ref===modalMovimento.ref)?.nome}. {modoInicial?'A etapa ficará salva no acompanhamento inicial, sem alterar a ordem real ou a quantidade produzida.':'A atualização será gravada na ordem real.'}</p>
+      {modalMovimento.destino==='concluida'&&!modoInicial&&<label className="mt-3 block text-xs font-semibold">Unidades conferidas nesta movimentação
         <input type="number" min={1} max={Math.max(1,(cards.find(c=>c.ref===modalMovimento.ref)?.qtd||1)-(cards.find(c=>c.ref===modalMovimento.ref)?.produzidas||0))} step={1} value={qtdConferencia} onChange={e=>setQtdConferencia(Math.floor(Number(e.target.value)||0))} className="mt-1 block w-28 rounded border bg-white p-2"/>
         <span className="mt-1 block font-normal text-slate-600">As unidades serão registradas pela conferência operacional. Somente a última unidade conclui o card e libera o fluxo existente para Instalação.</span>
       </label>}

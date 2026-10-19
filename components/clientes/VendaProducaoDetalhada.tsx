@@ -78,13 +78,16 @@ export default function VendaProducaoDetalhada({
   const produzidas=linhas.reduce((s,x)=>s+x.produzida,0)
   const faltantes=Math.max(0,total-produzidas)
   const ambientes=[...new Set(linhas.map(x=>x.ambiente))]
+  // A quantidade de tipologias VENDIDAS não depende da existência de ordens técnicas.
+  const tipologiasVendidas=Array.isArray(itens)?itens.length:0
+  const tipologiasComOrdem=new Set(ordens.map(o=>o.item_ref).filter(Boolean)).size
 
   return <div className="space-y-4">
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div className="rounded-xl border bg-slate-50 p-4"><p className="text-[11px] font-bold uppercase text-slate-400">Ordens</p><p className="mt-1 text-2xl font-bold text-slate-900">{ordens.length}</p><p className="text-xs text-slate-500">{statusGeral||'Status geral não informado'}</p></div>
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="text-[11px] font-bold uppercase text-emerald-600">Peças produzidas</p><p className="mt-1 text-2xl font-bold text-emerald-700">{produzidas}</p><p className="text-xs text-emerald-700">de {total} prevista(s)</p></div>
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-[11px] font-bold uppercase text-amber-600">Peças faltantes</p><p className="mt-1 text-2xl font-bold text-amber-700">{faltantes}</p><p className="text-xs text-amber-700">{total?Math.round((faltantes/total)*100):0}% pendente</p></div>
-      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-[11px] font-bold uppercase text-blue-600">Ambientes / tipologias</p><p className="mt-1 text-2xl font-bold text-blue-700">{ambientes.length}</p><p className="text-xs text-blue-700">com ordem de produção</p></div>
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-[11px] font-bold uppercase text-blue-600">Tipologias da venda</p><p className="mt-1 text-2xl font-bold text-blue-700">{tipologiasVendidas}</p><p className="text-xs text-blue-700">{tipologiasComOrdem} com ordem de produção</p></div>
     </div>
 
     {ambientes.map(ambiente=>{
