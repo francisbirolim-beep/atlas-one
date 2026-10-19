@@ -340,13 +340,15 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
     }
   }
   const {data:candidatos,error:ce}=await supabaseAdmin.from('ai_aprendizado_candidatos')
-    .select('id,dados').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').eq('status','pendente').limit(2000)
+    .select('id,dados,status,validado_em,updated_at').eq('empresa_id',usuario.empresa_id).eq('entrada_id',entrada.id).eq('tipo','produto').eq('status','pendente').limit(2000)
   if(ce)throw ce
   let mapeados=0
   const lista=candidatos||[]
   for(let i=0;i<lista.length;i+=20){
     const lote=lista.slice(i,i+20)
     await Promise.all(lote.map(async(c:any)=>{
+      // Releitura da página não pode substituir revisão feita pelo usuário.
+      if(!podeAtualizarCandidatoCatalogo(c))return
       const codigo=cod(c?.dados?.codigo)
       const item=porCodigo.get(codigo) as any
       const pagina=paginaPorCodigo.get(codigo)||num(item?.pagina_catalogo)
@@ -359,10 +361,11 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
         pagina_catalogo:pagina,
         linha:linhaNova||linhaAtualValida,
       }
-      if(pagina)mapeados++
-      const {error:ue}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
-        .eq('empresa_id',usuario.empresa_id).eq('id',c.id)
+      const {data:gravado,error:ue}=await supabaseAdmin.from('ai_aprendizado_candidatos').update({dados,updated_at:new Date().toISOString()})
+        .eq('empresa_id',usuario.empresa_id).eq('id',c.id).eq('status','pendente')
+        .eq('updated_at',c.updated_at).select('id').maybeSingle()
       if(ue)throw ue
+      if(gravado&&pagina)mapeados++
     }))
   }
   await supabaseAdmin.from('ai_aprendizado_entradas').update({
