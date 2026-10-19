@@ -7,6 +7,9 @@ import { supabase } from '@/lib/supabase'
 import type { ContaReceberCliente360 } from '@/lib/cliente360'
 import { saldoParcela } from '@/lib/cliente360Recebimentos'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
+import {BarraRelatorio,useRelatorioTitulos} from '@/components/financeiro/BarraRelatorio'
+import {NovoLancamento} from '@/components/financeiro/NovoLancamento'
+import {imprimirReciboRecebimento} from '@/components/financeiro/Recibos'
 
 type RecebimentoGeral = { id:string; cliente_id?:string|null; cliente_nome?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
 
@@ -28,12 +31,14 @@ function dataHoraBR(valor?: string | null) {
 }
 
 export default function ContasReceberPage() {
+  const [novoAberto,setNovoAberto]=useState(false)
   const [contas, setContas] = useState<ContaReceberCliente360[]>([])
   const [recebimentos, setRecebimentos] = useState<RecebimentoGeral[]>([])
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState<'aberto' | 'vencido' | 'pago' | 'todos'>('aberto')
+  const [filtro, setFiltro] = useState<'aberto' | 'vencido' | 'pago' | 'todos'>('todos')
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [obras, setObras] = useState<Record<string,string>>({})
 
   async function carregar() {
     setCarregando(true)
@@ -107,6 +112,8 @@ export default function ContasReceberPage() {
     return bateFiltro && correspondeBuscaAtlas(busca, conta.cliente_nome, conta.documento, conta.forma, conta.observacoes, conta.status)
   }), [busca, contas, filtro, hoje])
 
+  useEffect(()=>{const ids=Array.from(new Set(contas.map(c=>c.obra_id).filter((id):id is string=>!!id)));if(!ids.length)return;void supabase.from('obras').select('id,nome').in('id',ids).then(({data})=>{if(data)setObras(Object.fromEntries(data.map(o=>[o.id,o.nome])))})},[contas])
+  const filtroRel=useRelatorioTitulos(filtradas,c=>({id:c.id,pessoa:c.cliente_nome||'Sem cliente',documento:c.documento||'',parcela:String(c.parcela)+'/'+String(c.total_parcelas),vencimento:c.vencimento||'',pagamento:c.data_pagamento||'',valor:Number(c.valor||0),saldo:c.status==='cancelado'?0:saldoParcela(c),status:c.status,forma:c.forma||'',obra:c.obra_id?(obras[c.obra_id]||'Obra vinculada'):''}))
   const recebimentosFiltrados = useMemo(() => recebimentos.filter(r =>
     correspondeBuscaAtlas(busca, r.cliente_nome, r.forma, r.referencia, r.observacoes, r.criado_por_nome, r.status)
   ), [busca, recebimentos])
@@ -120,7 +127,7 @@ export default function ContasReceberPage() {
             <h1 className="mt-1 text-2xl font-bold text-slate-900">Contas a Receber</h1>
             <p className="mt-1 text-sm text-slate-600">Parcelas de clientes, obras e vendas registradas no Atlas.</p>
           </div>
-          <button onClick={() => void carregar()} className="rounded-xl border bg-white p-2.5 text-slate-600" title="Atualizar"><RefreshCw size={18}/></button>
+          <div className="flex gap-2"><button onClick={()=>setNovoAberto(true)} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white">+ Lançar conta manual</button><button onClick={() => void carregar()} className="rounded-xl border bg-white p-2.5 text-slate-600" title="Atualizar"><RefreshCw size={18}/></button></div>
         </header>
 
         {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
@@ -131,6 +138,7 @@ export default function ContasReceberPage() {
           <Card titulo="Já recebido" valor={moeda(resumo.recebido)} />
         </section>
 
+        <BarraRelatorio titulo="Contas a Receber" f={filtroRel}/>
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative min-w-0 flex-1">
@@ -155,7 +163,7 @@ export default function ContasReceberPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtradas.map(conta => {
+                  {filtroRel.filtradas.map(conta => {
                     const saldo = saldoParcela(conta)
                     const vencida = conta.status !== 'pago' && conta.status !== 'cancelado' && !!conta.vencimento && conta.vencimento < hoje
                     return (
@@ -181,7 +189,7 @@ export default function ContasReceberPage() {
                   })}
                 </tbody>
               </table>
-              {!filtradas.length && <div className="py-10 text-center text-sm text-slate-400"><WalletCards className="mx-auto mb-2"/>Nenhuma conta encontrada neste filtro.</div>}
+              {!filtroRel.filtradas.length && <div className="py-10 text-center text-sm text-slate-400"><WalletCards className="mx-auto mb-2"/>Nenhuma conta encontrada neste filtro.</div>}
             </div>
           )}
         </section>
@@ -196,7 +204,7 @@ export default function ContasReceberPage() {
             <table className="w-full min-w-[1100px] text-sm">
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs text-slate-500">
-                  <th className="p-3">Data recebimento</th><th className="p-3">Cliente</th><th className="p-3">Forma</th><th className="p-3 text-right">Recebido</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Total baixado</th><th className="p-3">Referência</th><th className="p-3">Registrado no Atlas</th><th className="p-3">Responsável</th>
+                  <th className="p-3">Data recebimento</th><th className="p-3">Cliente</th><th className="p-3">Forma</th><th className="p-3 text-right">Recebido</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Total baixado</th><th className="p-3">Referência</th><th className="p-3">Registrado no Atlas</th><th className="p-3">Responsável</th><th className="p-3">Recibo</th>
                 </tr>
               </thead>
               <tbody>
@@ -211,7 +219,7 @@ export default function ContasReceberPage() {
                     <td className="p-3 text-right font-bold text-slate-900">{moeda(Number(r.valor||0)+desconto)}</td>
                     <td className="p-3 text-slate-600">{r.referencia||'—'}</td>
                     <td className="p-3 text-slate-500">{dataHoraBR(r.created_at)}</td>
-                    <td className="p-3 text-slate-600">{r.criado_por_nome||'—'}</td>
+                    <td className="p-3 text-slate-600">{r.criado_por_nome||'—'}</td><td className="p-3"><button className="rounded-lg border px-2 py-1 text-xs font-semibold" onClick={()=>void imprimirReciboRecebimento(r.id)}>Imprimir recibo</button></td>
                   </tr>
                 })}
               </tbody>
@@ -219,6 +227,7 @@ export default function ContasReceberPage() {
             {!recebimentosFiltrados.length && <div className="py-10 text-center text-sm text-slate-400"><WalletCards className="mx-auto mb-2"/>Nenhum recebimento encontrado.</div>}
           </div>
         </section>
+        {novoAberto&&<NovoLancamento tipo="receber" fechar={()=>setNovoAberto(false)} salvo={()=>{setNovoAberto(false);void carregar()}}/>}
       </div>
     </main>
   )
