@@ -37,13 +37,14 @@ export default function CompararPerfilCatalogo({candidato,api,somenteLeitura,onV
     try{
       const resultado:Resultado=await api('/api/ia/central-aprendizado?compararPerfil='+encodeURIComponent(candidato.id))
       setDados(resultado)
-      if(resultado.sugestoes?.length && resultado.desenho_origem){
+      const imagemLocal=fonte||resultado.desenho_origem
+      if(resultado.sugestoes?.length && imagemLocal){
         setAnalisando(true)
         const scores:Record<string,number|null>={}
         // Limita concorrência para manter o navegador responsivo.
         for(let i=0;i<resultado.sugestoes.length;i+=4){
           await Promise.all(resultado.sugestoes.slice(i,i+4).map(async p=>{
-            scores[p.id]=await compararDesenhos(resultado.desenho_origem,p.foto_url)
+            scores[p.id]=await compararDesenhos(imagemLocal,p.foto_url)
           }))
           setAnalises({...scores})
         }
@@ -101,7 +102,9 @@ export default function CompararPerfilCatalogo({candidato,api,somenteLeitura,onV
         const diferente=geom.divergentes.length>0
         const escolhida=selecionado===p.id
         const podeVincular=geom.medidasCompativeis && candidato.pode_validar
-          && candidato.status!=='aplicado' && !!candidato.dados?.imagem_confirmada
+          && candidato.status!=='aplicado' && (
+            !!candidato.dados?.imagem_confirmada ||
+            (somenteLeitura&&candidato.dados?.imagem_preview_local===true))
         return <div key={p.id} className={'rounded-lg border p-3 '+(escolhida?'border-indigo-400 bg-indigo-50':'bg-white')}>
           <div className="flex flex-wrap gap-3">
             <img loading="lazy" src={p.foto_url} alt={'Desenho cadastrado '+p.codigo} className="h-28 w-28 rounded-lg border bg-white object-contain"/>

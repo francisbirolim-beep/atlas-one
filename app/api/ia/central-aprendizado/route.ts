@@ -886,7 +886,8 @@ export async function GET(req:NextRequest){
       if(!['perfil','acessorio'].includes(String(c.dados?.categoria)))
         return NextResponse.json({sugestoes:[],motivo:'Selecione um perfil ou acessório técnico.'})
       const foto=String(c.dados?.imagem_item_url||'')
-      if(!foto)return NextResponse.json({sugestoes:[],motivo:'Confirme primeiro o desenho deste item.'})
+      // Mesmo sem recorte do novo catálogo, mostra os perfis já cadastrados
+      // para pesquisa visual. Sem imagem confirmada NÃO permite vinculação.
       const {data:base,error:be}=await supabaseAdmin.from('produtos')
         .select('id,codigo,nome,categoria,peso_kg_m,foto_url,dados_origem,unidade')
         .eq('empresa_id',u.empresa_id).eq('categoria',c.dados.categoria)
@@ -942,7 +943,8 @@ export async function GET(req:NextRequest){
               peso_kg_m:variante?.dados_extraidos?.peso_kg_m??null,
               desenho_url:variante?.dados_extraidos?.desenho_url||null}
           })})),
-        aviso:base?.length===2000?'Pesquisa limitada aos primeiros 2000 produtos com foto. Use o cadastro completo para outras referências.':null,
+        aviso:!foto?'Este catálogo ainda não tem desenho individual salvo. Você pode pesquisar produtos existentes, mas precisa confirmar o desenho antes de vincular.'
+          :base?.length===2000?'Pesquisa limitada aos primeiros 2000 produtos com foto. Use o cadastro completo para outras referências.':null,
       },{headers:{'Cache-Control':'private, no-store'}})
     }
     // Simulação completa, sem gravações. Revalidação acontece novamente a cada lote.
