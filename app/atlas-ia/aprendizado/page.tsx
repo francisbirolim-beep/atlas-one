@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ValidacaoLoteCatalogo from './ValidacaoLoteCatalogo'
+import CompararPerfilCatalogo from './CompararPerfilCatalogo'
 import Link from 'next/link'
 import {
   ArrowLeft, BookOpenCheck, CheckCircle2, ChevronDown, ChevronUp, FileText,
@@ -543,6 +544,8 @@ export default function CentralAprendizadoPage(){
               onSalvarItem={salvarItemCatalogo}
               onMapearCatalogo={mapearCatalogo}
               onSalvarImagem={salvarImagemCatalogo}
+              onConsultarEquivalencia={api}
+              onVinculado={async msg=>{setMensagem(msg);await carregar()}}
               somenteLeitura={Boolean(dados.somenteLeitura)}
               salvandoId={salvando}
               mapeando={reprocessando===e.id}
@@ -682,7 +685,7 @@ export default function CentralAprendizadoPage(){
 }
 
 
-function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,somenteLeitura,salvandoId,mapeando}:{
+function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAberto,onAbrirValidacao,onSalvarItem,onMapearCatalogo,onSalvarImagem,onConsultarEquivalencia,onVinculado,somenteLeitura,salvandoId,mapeando}:{
   entrada:Entrada
   candidatos:Candidato[]
   busca:string
@@ -693,6 +696,8 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   onSalvarItem:(c:Candidato,dados:Record<string,any>)=>Promise<void>
   onMapearCatalogo:(e:Entrada)=>Promise<any>
   onSalvarImagem:(c:Candidato,imagem:string)=>Promise<any>
+  onConsultarEquivalencia:(url:string,init?:RequestInit)=>Promise<any>
+  onVinculado:(msg:string)=>Promise<void>
   somenteLeitura:boolean
   salvandoId:string|null
   mapeando:boolean
@@ -827,6 +832,10 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
               :pagina>0&&entrada.fonte_url?<ImagemPerfilCatalogo fonteUrl={entrada.fonte_url} pagina={pagina} codigo={String(c.dados?.codigo||'')} descricao={String(c.dados?.descricao||c.titulo)} somenteLeitura={somenteLeitura} onSalvar={imagem=>onSalvarImagem(c,imagem)}/>
               :<div className="grid min-h-56 place-items-center rounded-xl border border-dashed bg-white p-6 text-center text-sm text-slate-400"><div>{mapeando?<Loader2 className="mx-auto mb-2 animate-spin" size={22}/>:<Eye className="mx-auto mb-2" size={22}/>}<b className="text-slate-500">{mapeando?'Preparando o catálogo...':'Localizando este perfil no PDF...'}</b><p className="mt-1 text-xs">Assim que a página for identificada, o Atlas gera o recorte do desenho e salva como imagem do produto.</p></div></div>}
             </div>
+            {['perfil','acessorio'].includes(String(c.dados?.categoria||''))&&<div className="lg:col-span-2">
+              <CompararPerfilCatalogo key={c.id} candidato={c} api={onConsultarEquivalencia}
+                somenteLeitura={somenteLeitura} onVinculado={onVinculado}/>
+            </div>}
           </div>}
         </div>
       })}
