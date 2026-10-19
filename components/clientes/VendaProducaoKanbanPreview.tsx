@@ -89,6 +89,8 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
   const [salvandoMovimento,setSalvandoMovimento]=useState(false)
   const [qtdConferencia,setQtdConferencia]=useState(1)
   const [pendenciasCarregadas,setPendenciasCarregadas]=useState(false)
+  const [diagnostico,setDiagnostico]=useState<{medicoesTotal:number;medicoesAprovadas:number}|null>(null)
+  const [movimentoRecusado,setMovimentoRecusado]=useState<{ref:string;destino:Etapa;motivo:string}|null>(null)
   const [fasesSim,setFasesSim]=useState<Record<string,Fase>>({})
 
   const [entradaSim,setEntradaSim]=useState<Record<string,number>>({})
@@ -129,8 +131,8 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         const resp=await fetch('/api/producao/kanban/movimentar?vendaId='+encodeURIComponent(vendaId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
         const dados=await resp.json()
         if(!resp.ok)throw Error(dados.error||'Não foi possível carregar as pendências.')
-        if(ativo){setPendencias(dados.pendencias||[]);setPendenciasCarregadas(true)}
-      }catch(e){if(ativo){setPendenciasCarregadas(false);setAviso(e instanceof Error?e.message:'Falha ao carregar pendências.')}}
+        if(ativo){setPendencias(dados.pendencias||[]);setDiagnostico(dados.diagnostico||null);setPendenciasCarregadas(true)}
+      }catch(e){if(ativo){setPendenciasCarregadas(false);setDiagnostico(null);setAviso(e instanceof Error?e.message:'Falha ao carregar pendências.')}}
     })()
     return()=>{ativo=false}
   },[vendaId,ordens])
@@ -166,16 +168,44 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
     })
   },[itens,ordens,fasesSim,fotoCadastrada,pendencias])
   const materialDoCard=(ref:string)=>materiais.filter(m=>String(m.item_ref||'')===ref)
+  const prepararFluxo=()=>{
+    setMovimentoRecusado(null)
+    document.getElementById('atlas-preparar-fluxo-obra')?.scrollIntoView({behavior:'smooth',block:'center'})
+  }
+  const conferirLiberacao=()=>{
+    setMovimentoRecusado(null)
+    document.getElementById('atlas-conferencia-liberacao-venda')?.scrollIntoView({behavior:'smooth',block:'start'})
+  }
   function mover(ref:string,destino:Etapa){
     const card=cards.find(c=>c.ref===ref)
     if(!card||destino===card.etapa)return
-    if(!card.ordens.length){setAviso('A tipologia ainda não tem ordem real vinculada. Conclua a liberação técnica.');return}
-    if(destino!=='aguardando'&&!card.pronta&&card.etapa!=='pendente'){
-      setAviso('Aguardando liberação técnica. Use a conferência de liberação das ordens, abaixo do Kanban.');return
+    setMovimentoRecusado(null)
+    const recusar=(motivo:string)=>{
+      setModalMovimento(null)
+      setMovimentoRecusado({ref,destino,motivo})
+      setAviso('Movimentação não realizada: '+motivo)
     }
-    if(destino==='aguardando'){setAviso('Reversão para aguardando exige revisão técnica.');return}
-    if(destino==='concluida'&&!(card.etapa==='em_producao'&&card.fase==='conferencia')){setAviso('Conclua primeiro a conferência de qualidade.');return}
-    setJustificativa('');setCategoriaPendencia('perfil');setQtdConferencia(Math.max(1,card.qtd-card.produzidas));setModalMovimento({ref,destino:destino});setAviso('')
+    if(!pendenciasCarregadas){recusar('Aguarde a verificação da produção e tente novamente.');return}
+    if(!card.ordens.length){
+      const medicao=diagnostico?.medicoesTotal===0
+        ? ' Também não há Medição Final de tipologia registrada.'
+        :diagnostico&&diagnostico.medicoesAprovadas===0
+          ? ' A Medição Final de tipologia ainda não está aprovada.' : ''
+      recusar('Esta tipologia tem um card visual, mas não possui ordem de produção vinculada.'+medicao+' Prepare o fluxo da obra, confira a Medição Final e os materiais, depois libere a ordem.');return
+    }
+    if(destino!=='aguardando'&&!card.pronta&&card.etapa!=='pendente'){
+      recusar('A ordem ainda está bloqueada pela liberação técnica. Confira a Medição Final, os materiais e use a seção Conferência para liberar as ordens.');return
+    }
+    if(destino==='aguardando'){recusar('O retorno a Aguardando liberação exige uma revisão técnica.');return}
+    if(destino==='liberada'&&card.etapa==='aguardando'){
+      recusar('A liberação inicial não é um arraste comum: é feita pela conferência técnica e pelo botão de liberar ordens, depois de cumprir os requisitos.');return
+    }
+    if(destino==='concluida'&&!(card.etapa==='em_producao'&&card.fase==='conferencia')){
+      recusar('Antes de concluir, realize a conferência de qualidade das unidades.');return
+    }
+    setJustificativa('');setCategoriaPendencia('perfil')
+    setQtdConferencia(Math.max(1,card.qtd-card.produzidas))
+    setModalMovimento({ref,destino});setAviso('')
   }
   async function confirmarMovimento(){
     if(!modalMovimento||salvandoMovimento)return
@@ -251,6 +281,13 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
       </div>
     </div>
     {aviso&&<p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">{aviso}</p>}
+    {cards.some(c=>!c.ordens.length)&&<div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900" role="status">
+      <div><b>{cards.filter(c=>!c.ordens.length).length} tipologia(s) sem ordem de produção.</b>{' '}Esses cards não podem avançar até a geração das ordens e a liberação técnica.
+      {diagnostico?.medicoesTotal===0&&<p className="mt-1">Não há Medição Final de tipologia cadastrada nesta venda.</p>}
+      {diagnostico&&diagnostico.medicoesTotal>0&&diagnostico.medicoesAprovadas===0&&<p className="mt-1">As Medições Finais desta venda ainda não foram aprovadas.</p>}
+      </div>
+      <div className="flex flex-wrap gap-2"><button type="button" className="rounded-lg border border-amber-300 bg-white px-3 py-2 font-semibold" onClick={prepararFluxo}>Preparar fluxo da obra</button><button type="button" className="rounded-lg border border-amber-300 bg-white px-3 py-2 font-semibold" onClick={conferirLiberacao}>Conferir requisitos</button></div>
+    </div>}
     <div className="mt-4 flex gap-3 overflow-x-auto pb-3">
       {ETAPAS.map((etapa,idx)=>{
         const lista=cards.filter(c=>c.etapa===etapa.id)
@@ -259,7 +296,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
           <div className="space-y-2 min-h-20">{lista.map(c=>{
             const dur=entradaSim[c.ref]?agora-entradaSim[c.ref]:null
             const atraso=dur!=null&&dur>24*3600000?'text-red-700':dur!=null&&dur>8*3600000?'text-amber-700':'text-slate-500'
-            return <div key={c.ref} draggable onDragStart={e=>e.dataTransfer.setData('text/plain',c.ref)} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            return <div key={c.ref} draggable onDragStart={e=>e.dataTransfer.setData('text/plain',c.ref)} title={!c.pronta?'A movimentação depende da liberação técnica':'Arraste para movimentar'} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex items-start gap-2"><input type="checkbox" aria-label={'Selecionar '+c.nome} checked={selecionadosValidos.includes(c.ref)} onChange={e=>setSelecionados(prev=>e.target.checked?[...new Set([...prev,c.ref])]:prev.filter(r=>r!==c.ref))}/>
                 {c.foto?<img src={c.foto} alt={'Desenho da '+c.nome} className="h-14 w-14 shrink-0 rounded border object-contain"/>:<div role="status" className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded border border-amber-300 bg-amber-50 text-center text-[9px] font-semibold text-amber-800"><ImageOff size={16}/>Desenho pendente</div>}
                 <div className="min-w-0 flex-1"><b className="block text-xs text-slate-900">{c.nome}</b><p className="text-[11px] text-slate-500">{c.ambiente}</p><p className="text-[11px] text-slate-500">{c.largura&&c.altura?c.largura+' × '+c.altura+' mm · ':''}{c.qtd} un.</p></div>
@@ -271,6 +308,7 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
               {c.etapa==='em_producao'&&<p className="mt-2 rounded-md bg-violet-100 px-2 py-1 text-[11px] font-bold text-violet-800">Etapa interna: {nomeFase(c.fase)}</p>}
               {c.pendencia&&<p className="mt-1 text-[11px] font-semibold text-amber-800">Pendência: {c.pendencia.categoria} — {c.pendencia.motivo}</p>}
               {c.bloqueio&&<p className="mt-1 text-[10px] text-amber-700">{c.bloqueio}</p>}
+              {!c.ordens.length&&<p className="mt-1 text-[10px] font-bold text-amber-800">Ordem de produção ainda não gerada</p>}
               <label className="mt-2 block text-[11px] font-semibold text-slate-700">Mover para
                 <select aria-label={'Mover '+c.nome} disabled={!pendenciasCarregadas||salvandoMovimento} value={c.etapa} onChange={e=>mover(c.ref,e.target.value as Etapa)} className="mt-1 w-full rounded border bg-white px-1.5 py-1.5 text-xs">
                   {ETAPAS.map(op=><option key={op.id} value={op.id}>{op.nome}</option>)}
@@ -314,7 +352,12 @@ export default function VendaProducaoKanbanPreview({ordens,itens,materiais,produ
         <span className="text-slate-500">A confirmação grava a movimentação.</span>
       </div>
     </div>}
-    {modalMovimento&&<div role="dialog" aria-modal="true" aria-label="Confirmar movimentação da produção" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+    {movimentoRecusado&&<div role="alertdialog" aria-modal="true" aria-label="Movimentação bloqueada" className="fixed left-4 right-4 top-1/2 z-[80] mx-auto max-w-lg -translate-y-1/2 rounded-xl border border-amber-400 bg-white p-5 shadow-2xl">
+      <h4 className="text-sm font-bold text-amber-900">O card não foi movimentado</h4>
+      <p className="mt-2 text-sm text-slate-700">{movimentoRecusado.motivo}</p>
+      <div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={prepararFluxo} className="rounded-lg border border-blue-300 px-3 py-2 text-xs font-bold text-blue-700">Preparar fluxo</button><button type="button" onClick={conferirLiberacao} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Ver liberação técnica</button><button type="button" onClick={()=>setMovimentoRecusado(null)} className="rounded-lg border px-3 py-2 text-xs font-bold">Fechar</button></div>
+    </div>}
+    {modalMovimento&&<div role="dialog" aria-modal="true" aria-label="Confirmar movimentação da produção" className="fixed left-4 right-4 top-1/2 z-[80] mx-auto max-h-[85vh] max-w-lg -translate-y-1/2 overflow-y-auto rounded-xl border border-amber-300 bg-white p-5 shadow-2xl">
       <h4 className="text-sm font-bold">Confirmar movimentação: {ETAPAS.find(e=>e.id===modalMovimento.destino)?.nome}</h4>
       <p className="mt-1 text-xs text-slate-600">{cards.find(c=>c.ref===modalMovimento.ref)?.nome}. A atualização será gravada na ordem real.</p>
       {modalMovimento.destino==='concluida'&&<label className="mt-3 block text-xs font-semibold">Unidades conferidas nesta movimentação
