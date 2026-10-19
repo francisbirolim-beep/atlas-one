@@ -12,6 +12,7 @@ import {
   camposFaltantesCadastroVenda,
   carregarConfirmacaoVenda,
   iniciarProcessoVenda,
+  iniciarProcessoVendaParcial,
   salvarCadastroVenda,
 } from '@/lib/vendas'
 import { criarMedicaoDoOrcamento, verificarFluxoVendaOrcamento, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
@@ -33,6 +34,12 @@ function tipoInput(campo: CampoConfiguravel) {
   if (campo.tipo === 'numero' || campo.tipo === 'moeda') return 'number'
   if (campo.tipo === 'telefone') return 'tel'
   return 'text'
+}
+
+function precoItemOrcado(item: any) {
+  const bruto = item?.preco_total ?? item?.wvetro_item?.ValorTotalAlterado ?? item?.wvetro_item?.ValorTotal ?? item?.wvetro_item?.Total ?? 0
+  const valor = typeof bruto === 'string' ? Number(bruto.replace(',', '.')) : Number(bruto)
+  return Number.isFinite(valor) && valor > 0 ? valor : 0
 }
 
 function itemEstruturadoValido(item: any) {
@@ -64,6 +71,9 @@ export default function ConfirmarVendaPage() {
   const [importandoItens, setImportandoItens] = useState(false)
   const [salvandoItensPreview, setSalvandoItensPreview] = useState(false)
   const [itensPreview, setItensPreview] = useState<any[] | null>(null)
+  const [modoVenda, setModoVenda] = useState<'total' | 'parcial'>('total')
+  const [indicesParciais, setIndicesParciais] = useState<number[]>([])
+  const [valoresParciais, setValoresParciais] = useState<Record<number, string>>({})
   const [cadastroSalvo, setCadastroSalvo] = useState(false)
   const [erro, setErro] = useState('')
   const [mensagem, setMensagem] = useState('')
@@ -135,6 +145,24 @@ export default function ConfirmarVendaPage() {
   const prontoCadastro = !!cadastro && faltantes.length === 0 && cadastroSalvo
   // Itens legados não bloqueiam a confirmação comercial da venda.
   const prontoItens = itens.length > 0
+  const vendaParcial = modoVenda === 'parcial' && !(origemFluxo === 'medicao-final' && wvetroMedicaoDireta)
+  const itensParciais = indicesParciais
+    .filter(indice => indice >= 0 && indice < itens.length)
+    .map(indice => {
+      const digitado = valoresParciais[indice]
+      const valor = digitado === undefined ? precoItemOrcado(itens[indice]) : Number(digitado.replace(',', '.'))
+      return { indice, valor }
+    })
+  const valorParcial = itensParciais.reduce((total, item) => total + (Number.isFinite(item.valor) ? item.valor : 0), 0)
+  const prontoParcial = !vendaParcial || (
+    itensParciais.length > 0 && itensParciais.length < itens.length &&
+    itensParciais.every(item => Number.isFinite(item.valor) && item.valor >= 0) && valorParcial > 0
+  )
+
+  function alternarItemVenda(indice: number) {
+    setIndicesParciais(anteriores => anteriores.includes(indice)
+      ? anteriores.filter(i => i !== indice) : [...anteriores, indice].sort((a, b) => a - b))
+  }
 
   function atualizarCampo(chave: string, valor: string) {
     setCadastro(prev => prev ? { ...prev, [chave]: valor } : prev)
@@ -145,6 +173,9 @@ export default function ConfirmarVendaPage() {
     setSelecionadoId(o.id)
     setCadastroSalvo(false)
     setItensPreview(null)
+    setModoVenda('total')
+    setIndicesParciais([])
+    setValoresParciais({})
     setErro('')
     setMensagem('')
     setObraId((o as any).obra_id || '')
@@ -213,11 +244,18 @@ export default function ConfirmarVendaPage() {
       return
     }
 
+    if (!prontoParcial) {
+      setErro('Na venda parcial, escolha pelo menos uma tipologia (mas não todas) e informe o valor vendido.')
+      return
+    }
+
     const { error: erroObra } = await supabase.from('orcamentos').update({ obra_id: obraId || null }).eq('id', selecionado.id)
     if (erroObra) { setErro('Não foi possível vincular a obra: ' + erroObra.message); return }
 
     setIniciando(true)
-    const resultado = await iniciarProcessoVenda(selecionado.id, usuario, camposConfigurados)
+    const resultado = vendaParcial
+      ? await iniciarProcessoVendaParcial(selecionado.id, itensParciais, usuario, camposConfigurados)
+      : await iniciarProcessoVenda(selecionado.id, usuario, camposConfigurados)
     setIniciando(false)
     if (!resultado.success) {
       setErro(resultado.error || 'Não foi possível iniciar o processo da venda.')
@@ -342,6 +380,9 @@ export default function ConfirmarVendaPage() {
       const itensSalvos = Array.isArray(json?.itens) ? json.itens : []
       setOrcamentos(prev => prev.map(o => o.id === selecionado.id ? { ...o, itens: itensSalvos } : o))
       setItensPreview(null)
+      setModoVenda('total')
+      setIndicesParciais([])
+      setValoresParciais({})
       setMensagem(`${itensSalvos.length} item(ns) conferidos e salvos no orçamento.`)
     } catch {
       setErro('Erro ao salvar os itens conferidos. Tente novamente.')
@@ -444,8 +485,8 @@ export default function ConfirmarVendaPage() {
         <section className="bg-white border border-slate-200 rounded-2xl p-5">
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div>
-              <h2 className="font-semibold text-slate-800">4. Conferência do orçamento vendido</h2>
-              <p className="text-xs text-slate-500">O PDF é lido primeiro. Nada é gravado até você revisar e confirmar os itens.</p>
+              <h2 className="font-semibold text-slate-800">4. O que o cliente comprou?</h2>
+              <p className="text-xs text-slate-500">Marque venda total ou escolha as tipologias vendidas. O orçamento original permanece completo.</p>
             </div>
             <div className={`text-xs font-medium px-3 py-1 rounded-full ${prontoItens ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
               {itensPreview
@@ -458,6 +499,28 @@ export default function ConfirmarVendaPage() {
 
           {selecionado && (
             <div className="space-y-4">
+              {!(origemFluxo === 'medicao-final' && wvetroMedicaoDireta) && itens.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="mb-2 text-xs font-semibold text-slate-700">Modalidade da venda</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => { setModoVenda('total'); setIndicesParciais([]) }}
+                      className={`rounded-lg border px-4 py-2 text-sm font-semibold ${!vendaParcial ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-300 bg-white text-slate-700'}`}>
+                      Vendeu tudo
+                    </button>
+                    <button type="button" onClick={() => { setModoVenda('parcial'); setIndicesParciais([]) }}
+                      className={`rounded-lg border px-4 py-2 text-sm font-semibold ${vendaParcial ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-300 bg-white text-slate-700'}`}>
+                      Venda parcial
+                    </button>
+                  </div>
+                  {vendaParcial && (
+                    <div className="mt-3 text-xs text-slate-700">
+                      <p>Selecione abaixo somente as tipologias compradas e confira o preço de cada uma.</p>
+                      <p className="mt-1 font-semibold">Selecionadas: {itensParciais.length} de {itens.length} · Valor vendido: R$ {valorParcial.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="mt-1 text-slate-500">As não selecionadas permanecem no pedido original para uma futura negociação. Fotos, medidas e anexos não serão apagados.</p>
+                    </div>
+                  )}
+                </div>
+              )}
               {anexos.length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-slate-600 mb-2 flex items-center gap-1"><Paperclip size={13} /> Anexos</p>
@@ -578,7 +641,11 @@ export default function ConfirmarVendaPage() {
                 <div className="space-y-3">
                   <div className="grid md:grid-cols-2 gap-3">
                     {itens.map((item: any, idx) => (
-                      <div key={item.id || idx} className="rounded-xl border border-slate-200 p-3">
+                      <div key={item.id || idx} className={`rounded-xl border p-3 ${vendaParcial && indicesParciais.includes(idx) ? 'border-emerald-500 bg-emerald-50/60' : 'border-slate-200'}`}>
+                        {vendaParcial && <label className="mb-2 flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-800">
+                          <input type="checkbox" checked={indicesParciais.includes(idx)} onChange={() => alternarItemVenda(idx)} />
+                          {indicesParciais.includes(idx) ? 'Vendido' : 'Não vendido'}
+                        </label>}
                         <p className="text-xs text-slate-400">Item {idx + 1}</p>
                         <p className="font-medium text-sm text-slate-800 mt-0.5">{item.ambiente || item.descricao || item.tipo_esquadria}</p>
                         <p className="text-xs text-slate-500 mt-1">{item.tipo_esquadria} · qtd {item.quantidade || 1}</p>
@@ -586,6 +653,14 @@ export default function ConfirmarVendaPage() {
                         {item.linha_origem && <p className="text-xs text-slate-500">Linha: {item.linha_origem}</p>}
                         {item.vidro_origem && <p className="text-xs text-slate-500">Vidro: {item.vidro_origem}</p>}
                         {item.descricao && item.ambiente && <p className="text-xs text-slate-500 mt-1">{item.descricao}</p>}
+                        {vendaParcial && indicesParciais.includes(idx) && <label className="mt-3 block">
+                          <span className="mb-1 block text-xs font-semibold text-slate-700">Valor da tipologia vendida (R$)</span>
+                          <input type="number" min="0" step="0.01"
+                            value={valoresParciais[idx] ?? String(precoItemOrcado(item))}
+                            onChange={e => setValoresParciais(prev => ({ ...prev, [idx]: e.target.value }))}
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                            aria-label={`Valor vendido do item ${idx + 1}`} />
+                        </label>}
                       </div>
                     ))}
                   </div>
@@ -606,12 +681,14 @@ export default function ConfirmarVendaPage() {
               <CheckCircle2 size={18} />
               {origemFluxo === 'medicao-final' && wvetroMedicaoDireta
                 ? '5. Iniciar Medida Final'
-                : '5. Confirmar venda e iniciar Engenharia'}
+                : vendaParcial ? '5. Confirmar venda parcial' : '5. Confirmar venda e iniciar Engenharia'}
             </div>
             <p className="text-xs text-white/70 mt-1">
               {origemFluxo === 'medicao-final' && wvetroMedicaoDireta
                 ? 'Este orçamento W.Vetro já está vendido e validado para este cliente. A Medida Final será criada sem duplicar Financeiro ou o fluxo comercial.'
-                : 'Agora nascem o Financeiro e o card Conferir Projeto. A obra selecionada acompanha todos os próximos setores.'}
+                : vendaParcial
+                  ? 'Apenas os itens marcados entram na venda, no Financeiro e no fluxo de Engenharia. Os demais ficam no orçamento original.'
+                  : 'Agora nascem o Financeiro e o card Conferir Projeto. A obra selecionada acompanha todos os próximos setores.'}
             </p>
           </div>
           <button
@@ -619,14 +696,15 @@ export default function ConfirmarVendaPage() {
             disabled={
               origemFluxo === 'medicao-final' && wvetroMedicaoDireta
                 ? !prontoItens || iniciando || !!itensPreview
-                : !prontoCadastro || !prontoItens || iniciando || !!itensPreview
+                : !prontoCadastro || !prontoItens || !prontoParcial || iniciando || !!itensPreview
             }
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40"
           >
             <Play size={16} />
             {iniciando
               ? origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciando...' : 'Confirmando...'
-              : origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciar Medida Final' : 'Confirmar venda'}
+              : origemFluxo === 'medicao-final' && wvetroMedicaoDireta
+                ? 'Iniciar Medida Final' : vendaParcial ? 'Confirmar venda parcial' : 'Confirmar venda'}
           </button>
         </section>
 
