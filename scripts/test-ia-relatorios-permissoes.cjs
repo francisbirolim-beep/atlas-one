@@ -253,6 +253,18 @@ async function testarAprendizado(){
   '@/lib/ai/permissoesServer':ia,'@/lib/supabaseAdmin':{supabaseAdmin:db},
   '@/lib/tenantServer':{autenticarTenant:async()=>user},
   '@/lib/ai/opencode':{},'@/lib/ai/specialists':registry,
+  // O catálogo ganhou extratores puros em 17/10. Este teste verifica controle
+  // de acesso e não analisa PDFs; manter extratores sem efeitos na sandbox VM.
+  '@/lib/ai/catalogoPdfTexto':{textoCatalogoGeometrico:()=>''},
+  '@/lib/ai/catalogoPeso':{pesoDecimalCatalogo:()=>null},
+  '@/lib/ai/catalogoReanalise':{podeAtualizarCandidatoCatalogo:()=>false,dadosReanaliseCatalogo:(a)=>a||{}},
+  '@/lib/ai/catalogoLinhas':{extrairLinhasCatalogo:()=>[],VERSAO_REGRAS_CATALOGO:'teste'},
+  // Novos módulos somente de geometria/lote da publicação do catálogo. O teste
+  // verifica permissões, por isso não interpreta imagens ou páginas reais.
+  '@/lib/ai/catalogoCartoesGeometria':{extrairCartoesGeometricos:()=>[],codigoColadoDeOutrasColunas:()=>false},
+  '@/lib/ai/catalogoPaginasSeguras':{indexarPaginasSeguras:()=>[]},
+  '@/lib/ai/catalogoLoteSeguro':{avaliarCatalogoLote:()=>({})},
+  '@/lib/ai/equivalenciaPerfilTecnico':{compararGeometria:()=>null,codigoPerfil:()=>null},
  },'\nexport {podeValidar,aplicar,processarCatalogoAutomatico}')
  check(await source.podeValidar(user,{tipo:'produto',modulo:'engenharia'}),'Edição autorizada aplica produto')
  config.acoes['admin.cadastros.produtos']='consulta'
