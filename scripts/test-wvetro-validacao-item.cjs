@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript')
 function load(path,imports={}){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:n=>{if(n in imports)return imports[n];throw Error(n)},console});return m.exports}
 const p=load('lib/wvetroValidacaoItem.ts')
+const rascunho=load('lib/wvetroRascunhoOrcamento.ts',{'./wvetroValidacaoItem':p})
 const clone=x=>JSON.parse(JSON.stringify(x))
 const item={id:'i1',ambiente:'Sala',tipo_esquadria:'fixo',largura_mm:1000,altura_mm:1200,quantidade:1,wvetro_item:{Modelo:'Fixo',Linha:'Suprema'},foto_urls:['foto-original'],variaveis:{vidro:'incolor'}}
 const outro={...clone(item),id:'i2',ambiente:'Quarto'}
@@ -113,5 +114,39 @@ const request=(acao,correcao={},itemId='i1',original)=>server.validarItemImporta
  assert.equal(row.wvetro_fluxo.validacao_status,'validado');assert.equal(Object.keys(row.wvetro_fluxo.validacoes_itens).length,18)
  assert.equal(packageCalls,1,'pacote técnico apenas quando concluir 18 itens')
  reset();scope='proprio';r=await request('sugerir_item_importacao');assert.equal(r.status,200);assert.ok(filters.some(([t,c,v])=>t==='ai_orcamento_feedback'&&c==='usuario_id'&&v==='u1'))
+
+ // Salvar não exige preencher todas as variáveis ou validar todas as esquadrias.
+ reset()
+ row.wvetro_fluxo.validacao_por_item=true
+ row.wvetro_fluxo.validacoes_itens={i1:{resultado:'correto',snapshot:p.snapshotItemWVetro(item)}}
+ const semVariaveis=clone(row.itens)
+ semVariaveis[1].variaveis={}
+ let draft=rascunho.prepararRascunhoWVetro(row.itens,semVariaveis,row.wvetro_fluxo)
+ assert.equal(draft.fluxo.validacao_status,'aguardando')
+ assert.equal(draft.itens[1].configuracao_status,'pendente')
+ assert.equal(draft.itens[1].configuracao_validada,false)
+ assert.equal(p.statusItemWVetro(draft.itens[0],draft.fluxo),'validado','Item aprovado não sofre regressão')
+ assert.equal(p.statusItemWVetro(draft.itens[1],draft.fluxo),'pendente','Variáveis podem ficar incompletas sem falsa aprovação')
+ assert.deepEqual(row.itens[1].variaveis,{vidro:'incolor'},'Importação original não é alterada na preparação')
+ assert.deepEqual(draft.fluxo.validacoes_itens,row.wvetro_fluxo.validacoes_itens,'Histórico de conferências preservado')
+ const soDescricao=clone(row.itens)
+ soDescricao[1].descricao='Completar depois'
+ draft=rascunho.prepararRascunhoWVetro(row.itens,soDescricao,row.wvetro_fluxo)
+ assert.equal(draft.itens[1].configuracao_status,undefined,'Descrição sem troca técnica não deshomologa receita')
+ const alterouLinha=clone(row.itens)
+ alterouLinha[0].linha_nome='Linha nova'
+ draft=rascunho.prepararRascunhoWVetro(row.itens,alterouLinha,row.wvetro_fluxo)
+ assert.equal(p.statusItemWVetro(draft.itens[0],draft.fluxo),'pendente','Edição de item aprovado exige nova conferência')
+ assert.equal(draft.itens[0].linha_id,null)
+ // Garantir que não reintroduzam o bloqueio de salvar pendências no Kanban.
+ const kanban=fs.readFileSync('components/system/KanbanPageFixed.tsx','utf8')
+ const salvar=kanban.split('async function salvarCard() {')[1].split('if (carregando) {')[0]
+ assert.ok(salvar.includes('prepararRascunhoWVetro('))
+ assert.ok(!salvar.includes('Esquadrias ainda pendentes'))
+ const anexo=kanban.split('async function adicionarAnexo(')[1].split('async function excluirAnexo(')[0]
+ assert.ok(anexo.includes(".select('anexos,updated_at')"),'Anexo consulta a versão atual')
+ assert.ok(anexo.includes(".select('anexos').maybeSingle()"),'Anexo só confirma depois da gravação')
+ assert.ok(!anexo.includes('if (finalizado &&'), 'Anexo em andamento também persiste')
+ console.log('PASS: rascunho incompleto, histórico de aprovação e anexos sem bloqueio de validação.')
  console.log('PASS: conferência individual, correções só por campo, texto livre, catálogo, JSONB, preservação, escopo, erros, concorrência e aprendizado.')
 })().catch(e=>{console.error(e);process.exitCode=1})
