@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const ts = require('typescript')
 const vm = require('node:vm')
 
-const sincronizar = fs.readFileSync('app/api/integracoes/wvetro/orcamentos/sincronizar/route.ts', 'utf8')
+const pdfHelper = fs.readFileSync('lib/wvetroPdfAnexo.ts', 'utf8')
 const kanban = fs.readFileSync('app/api/integracoes/wvetro/orcamentos/kanban/route.ts', 'utf8')
 function extrair(texto, inicio, fim) {
   const i = texto.indexOf(inicio)
@@ -12,7 +12,7 @@ function extrair(texto, inicio, fim) {
   return texto.slice(i, j)
 }
 const codigo = [
-  extrair(sincronizar, 'function acharPdfWVetro(', 'type RefTipologia').replace('export function anexosComPdfWVetro', 'function anexosComPdfWVetro'),
+  pdfHelper.replace('export function anexosComPdfWVetro', 'function anexosComPdfWVetro'),
   extrair(kanban, 'async function completarPdfOriginalWVetro(', 'async function mesclarFonteNoCard('),
 ].join('\n')
 let linha
