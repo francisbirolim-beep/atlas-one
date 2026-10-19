@@ -731,13 +731,16 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
   salvandoId:string|null
   mapeando:boolean
 }){
-  const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'>('todos')
+  const [filtro,setFiltro]=useState<'todos'|'aplicados'|'validacao'|'sem_preco'|'sem_imagem'>('todos')
   const [edicoesItem,setEdicoesItem]=useState<Record<string,Record<string,any>>>({})
   const produtos=candidatos.filter(c=>c.tipo==='produto')
   const semPagina=produtos.filter(c=>!Number(c.dados?.pagina_catalogo||0)).length
   const aplicados=produtos.filter(c=>c.status==='aplicado')
   const pendentes=produtos.filter(c=>['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor')
   const semPreco=produtos.filter(c=>c.dados?.preco_fornecedor==null||Number(c.dados?.preco_fornecedor)===0)
+  // Imagem do produto só conta quando está associada à referência individual.
+  const semImagem=produtos.filter(c=>!imagemProdutoCandidato(c))
+  const idsSemImagem=new Set(semImagem.map(c=>c.id))
   const idsAplicados=new Set(aplicados.map(c=>c.id))
   const idsPendentes=new Set(pendentes.map(c=>c.id))
   const idsSemPreco=new Set(semPreco.map(c=>c.id))
@@ -748,6 +751,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
     if(filtro==='aplicados')return idsAplicados.has(c.id)
     if(filtro==='validacao')return idsPendentes.has(c.id)
     if(filtro==='sem_preco')return idsSemPreco.has(c.id)
+    if(filtro==='sem_imagem')return idsSemImagem.has(c.id)
     return true
   })
 
@@ -773,11 +777,12 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
 
   const card=(ativo:boolean)=>'rounded-xl p-3 text-left transition hover:shadow-sm '+(ativo?'ring-2 ring-offset-1':'')
   return <div className="mt-4 border-t pt-4">
-    <div className="grid gap-2 sm:grid-cols-4">
+    <div className="grid gap-2 sm:grid-cols-5">
       <button type="button" onClick={()=>setFiltro('todos')} className={card(filtro==='todos')+' bg-slate-50 ring-slate-400'}><div className="text-lg font-bold">{produtos.length}</div><div className="text-[11px] text-slate-500">Itens lidos</div></button>
       <button type="button" onClick={()=>setFiltro('aplicados')} className={card(filtro==='aplicados')+' bg-emerald-50 ring-emerald-400'}><div className="text-lg font-bold text-emerald-700">{aplicados.length}</div><div className="text-[11px] text-emerald-700">Aplicados/vinculados</div></button>
       <button type="button" onClick={()=>setFiltro('validacao')} className={card(filtro==='validacao')+' bg-amber-50 ring-amber-400'}><div className="text-lg font-bold text-amber-700">{pendentes.length}</div><div className="text-[11px] text-amber-700">Em validação</div></button>
       <button type="button" onClick={()=>setFiltro('sem_preco')} className={card(filtro==='sem_preco')+' bg-blue-50 ring-blue-400'}><div className="text-lg font-bold text-blue-700">{semPreco.length}</div><div className="text-[11px] text-blue-700">Sem preço</div></button>
+      <button type="button" onClick={()=>setFiltro('sem_imagem')} className={card(filtro==='sem_imagem')+' bg-amber-50 ring-amber-400'}><div className="text-lg font-bold text-amber-800">{semImagem.length}</div><div className="text-[11px] text-amber-800">Sem imagem individual</div></button>
     </div>
 
     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -787,6 +792,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
       </label>
       {semPreco.length>0&&<button onClick={baixarSemPreco} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-800">Baixar lista sem preço ({semPreco.length})</button>}
     </div>
+    {semImagem.length>0&&<p className="mt-2 text-[11px] text-amber-700">Existem {semImagem.length} produto(s) sem imagem individual confirmada ou já vinculada ao código. Selecione “Sem imagem individual” para localizar os desenhos faltantes antes de homologar.</p>}
     {semPreco.length>0&&<p className="mt-2 text-[11px] text-slate-500">A lista pode ser enviada ao fornecedor. Depois, a tabela preenchida pode voltar pela Central como “Tabela de preço”; o Atlas reconcilia pelos códigos.</p>}
     {semPagina>0&&<div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800"><span>{mapeando?'Preparando as páginas do PDF para gerar os desenhos dos perfis...':semPagina+' item(ns) ainda precisam ter a página identificada para gerar a imagem.'}</span><button disabled={mapeando} onClick={()=>void onMapearCatalogo(entrada)} className="shrink-0 rounded-lg bg-blue-700 px-3 py-1.5 font-semibold text-white disabled:opacity-50">{mapeando?'Preparando...':'Preparar imagens'}</button></div>}
 
@@ -795,7 +801,7 @@ function CatalogoDetalhes({entrada,candidatos,busca,onBusca,itemAberto,onItemAbe
         const aberto=itemAberto===c.id
         const pagina=Number(c.dados?.pagina_catalogo||0)
         const fontePagina=entrada.fonte_url?(entrada.fonte_url+(pagina?'#page='+pagina+'&zoom=page-width':'')):null
-        const imagemItem=String(c.foto_cadastro||c.dados?.imagem_item_url||c.dados?.imagem_url||'').trim()
+        const imagemItem=imagemProdutoCandidato(c)
         const precisaValidar=['pendente','corrigido','aprovado'].includes(c.status)&&c.acao_sugerida!=='aguardar_fornecedor'
         const edit=edicoesItem[c.id]||c.dados||{}
         const podeEditar=Boolean(c.pode_validar)
