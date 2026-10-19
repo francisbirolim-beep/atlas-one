@@ -5,6 +5,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plu
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, revisaoPerfilSobrepoePerda, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 import { compararPesosCmv } from '@/lib/vendaCmvPesos'
+import {UNIDADES_CMV,unidadePadraoCmv,rotuloUnidadeCmv,mostrarQuantidadeCmv} from '@/lib/vendaCmvUnidades'
 import { separarEtapasCmv } from '@/lib/vendaCmvEtapas'
 import VendaCmvRecebimentos, { type RecebimentoCmv, type HistoricoRecebimento } from '@/components/clientes/VendaCmvRecebimentos'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
@@ -34,6 +35,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
  const [valorCompra,setValorCompra]=useState('')
  const [pesoCompra,setPesoCompra]=useState('')
  const [unidadeNova,setUnidadeNova]=useState('KG')
+ const [categoriaNova,setCategoriaNova]=useState<Categoria>('perfil')
  const [carregando,setCarregando]=useState(true)
  const [erro,setErro]=useState('')
  const [aberto,setAberto]=useState<Categoria|null>('perfil')
@@ -90,8 +92,9 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
  const recebimentosConsolidados=useMemo(()=>[
   ...recebimentos,
   ...recebimentosManuais.map(l=>({
-   id:l.id,categoria:l.categoria,peso_kg:Number(l.quantidade||0),
-   preco_kg:Number(l.quantidade)>0?Number(l.valor)/Number(l.quantidade):0,
+   id:l.id,categoria:l.categoria,peso_kg:l.unidade==='KG'?Number(l.quantidade||0):null,
+   preco_kg:l.unidade==='KG'&&Number(l.quantidade)>0?Number(l.valor)/Number(l.quantidade):null,
+   quantidade:l.quantidade,unidade:l.unidade,
    valor_total:Number(l.valor),fornecedor:l.fornecedor||'',nota_numero:l.documento,
    data_recebimento:l.data_lancamento,versao:l.versao||1
   }))
@@ -100,18 +103,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
  const porCategoria=useMemo(()=>Object.fromEntries(categories.map(c=>[c,Number(comprasExistentes[c]||0)+comprasManuais.filter(l=>l.categoria===c).reduce((s,l)=>s+Number(l.valor||0),0)])) as Record<Categoria,number>,[comprasManuais,comprasExistentes])
  const comparativos=useMemo(()=>Object.fromEntries(categories.map(c=>[c,compararPesosCmv(c,comprasManuais,recebimentosConsolidados,porCategoria[c],Number(comprasExistentes[c]||0))])) as Record<Categoria,ReturnType<typeof compararPesosCmv>>,[comprasManuais,recebimentosConsolidados,porCategoria,comprasExistentes])
  const totalRecebido=useMemo(()=>recebimentosConsolidados.reduce((s,r)=>s+Number(r.valor_total||0),0),[recebimentosConsolidados])
- // O resumo superior usa somente pesos conhecidos; não atribui kg a compras antigas sem pesagem.
- const resumoPesos=useMemo(()=>{
-  const materiais:Categoria[]=['perfil','acessorio','vidro','outros']
-  const pesoComprado=materiais.reduce((s,c)=>s+comparativos[c].pesoComprado,0)
-  const pesoRecebido=materiais.reduce((s,c)=>s+comparativos[c].pesoRecebido,0)
-  const pendenteKg=materiais.some(c=>comparativos[c].faltaPesoComprado)
-  const temRecebimento=materiais.some(c=>comparativos[c].temRecebimento)
-  const podeComparar=temRecebimento&&pesoComprado>0&&!pendenteKg
-  const diferencaKg=podeComparar?pesoRecebido-pesoComprado:null
-  const percentual=podeComparar?100*(pesoRecebido-pesoComprado)/pesoComprado:null
-  return {pesoComprado,pesoRecebido,pendenteKg,temRecebimento,diferencaKg,percentual}
- },[comparativos])
+ // O resumo geral soma apenas custos em reais, nunca unidades físicas incompatíveis.
  const existeRecebimento=recebimentosConsolidados.length>0
  async function enviar(e:FormEvent<HTMLFormElement>){
   e.preventDefault();if(enviandoRef.current)return
@@ -299,11 +291,12 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
   {dados&&<div className="space-y-4">
    {realizado<=0&&<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Ainda não há custo efetivamente registrado nesta venda. O custo previsto W.Vetro é referência; não representa o realizado. Registre compras e custos antes de avaliar margem real.</p>}
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-    <Card titulo="Custo previsto com sobra" valor={previstoFmt(totalRevisado)} nota={`Original W.Vetro com sobra: ${previstoFmt(totalBruto)} · ${dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}`}/>
-    <Card titulo="Custo comprado registrado" valor={moedas(realizado)} detalhe={'Peso comprado: '+(resumoPesos.pesoComprado>0?quilos(resumoPesos.pesoComprado):'A preencher')} nota={resumoPesos.pendenteKg?'Peso parcial: há compras ainda sem quilos conciliados':'Valor de compras e lançamentos existentes, sem duplicar pelo recebimento'}/>
-    <Card titulo="Custo recebido" valor={existeRecebimento?moedas(totalRecebido):'Aguardando recebimento'} detalhe={'Peso recebido: '+(resumoPesos.temRecebimento?quilos(resumoPesos.pesoRecebido):'Aguardando')} nota="Entregas conforme nota ou romaneio; não somar novamente ao comprado"/>
-    <Card titulo="Diferença até agora" valor={totalRevisado==null?'—':moedas(totalRevisado-(existeRecebimento?totalRecebido:realizado))} detalhe={'Diferença de peso: '+(resumoPesos.diferencaKg===null?'A conferir':(resumoPesos.diferencaKg>0?'+':'')+quilos(resumoPesos.diferencaKg)+' ('+variacaoPeso(resumoPesos.percentual??0)+')')} nota={existeRecebimento?'Previsto menos recebido em R$ · peso recebido menos comprado · parcial':'Previsto menos comprado em R$ · aguarda recebimento para diferença em kg'}/>
+    <Card titulo="Custo previsto total da obra" valor={previstoFmt(totalRevisado)} nota={`Original W.Vetro com sobra: ${previstoFmt(totalBruto)} · ${dados.numeroWvetro?'Orçamento #'+dados.numeroWvetro:'Fonte: W.Vetro'}`}/>
+    <Card titulo="Custo comprado total da obra" valor={moedas(realizado)} nota="Compras e custos da obra, sem duplicar recebimentos"/>
+    <Card titulo="Custo recebido total da obra" valor={existeRecebimento?moedas(totalRecebido):'Aguardando recebimento'} nota="Valores recebidos conforme notas e romaneios; entregas parciais incluídas"/>
+    <Card titulo="Diferença até agora" valor={totalRevisado==null?'—':moedas(totalRevisado-(existeRecebimento?totalRecebido:realizado))} detalhe={existeRecebimento?'Comprado − recebido: '+moedas(realizado-totalRecebido):'Aguardando recebimentos'} nota={existeRecebimento?'Previsto − recebido (parcial)':'Previsto − comprado; ainda sem recebimentos'}/>
     <Card titulo="Lançamentos" valor={String(dados.lancamentos.length)} nota="Registros de custos desta venda"/>
+
    </div>
    <section aria-label="Conferência do valor de venda" className="rounded-xl border border-blue-200 bg-blue-50/40 p-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
