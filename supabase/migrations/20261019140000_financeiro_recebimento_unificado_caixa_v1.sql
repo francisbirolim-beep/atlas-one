@@ -143,4 +143,4 @@ begin
 end;
 $$;
 revoke all on function public.registrar_recebimento_cliente_servidor_v1(uuid,text,date,text,text,text,jsonb,uuid,text) from public,anon,authenticated;
-grant execute on function public.registrar_recebimento_cliente_servidor_v1(uuid,text,date,text,text,jsonb,uuid,text) to service_role;
+grant execute on function public.registrar_recebimento_cliente_servidor_v1(uuid,text,date,text,text,text,jsonb,uuid,text) to service_role;
