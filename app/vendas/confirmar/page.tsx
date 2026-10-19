@@ -613,7 +613,7 @@ export default function ConfirmarVendaPage() {
           {selecionado && itens.length > 0 && !(origemFluxo === 'medicao-final' && wvetroMedicaoDireta) && (
             <div className="mt-5">
               <SelecaoItensVenda
-                itens={itens as ItemOrcamentoVenda[]}
+                itens={itens as unknown as ItemOrcamentoVenda[]}
                 modo={modoVenda}
                 onModo={v=>{setModoVenda(v);setSelecaoVenda([]);setErro('')}}
                 selecao={selecaoVenda}
