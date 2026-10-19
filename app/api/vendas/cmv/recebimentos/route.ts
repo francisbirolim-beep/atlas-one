@@ -75,7 +75,7 @@ export async function GET(req:NextRequest){
   if(ausente(error))return NextResponse.json({ok:true,disponivel:false,recebimentos:[],historico:[]})
   if(error)throw error
   // Sem migração: leitura dos antigos preservada e gravação de novos recebimentos desabilitada.
-  const {error:erroUnidades}=await supabaseAdmin.from(TABELA).select('quantidade,unidade,preco_unitario').limit(1)
+  const {error:erroUnidades}=await supabaseAdmin.from(TABELA).select('quantidade,unidade,preco_unitario,conferido_em').limit(1)
   const unidadesDisponiveis=!erroUnidades
   const linhas=await Promise.all((data||[]).map(async r=>{
    let anexo_url:string|null=null
@@ -144,6 +144,7 @@ export async function PATCH(req:NextRequest){
   const arquivo=await arquivoUpload(form,user.empresa_id,vendaId)
   path=arquivo?.anexo_path||null
   const {data,error}=await supabaseAdmin.from(TABELA).update({...dados,...arquivo,
+   conferido_em:null,conferido_por_id:null,conferido_por_nome:null,
    versao:versao+1,atualizado_em:new Date().toISOString(),atualizado_por_id:user.id,atualizado_por_nome:user.nome})
    .eq('id',id).eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId)
    .eq('orcamento_id',venda.orcamento_id).eq('versao',versao).is('cancelado_em',null).select('id').maybeSingle()
@@ -183,4 +184,37 @@ export async function DELETE(req:NextRequest){
   if(!data)return erro('Recebimento alterado em outra sessão.',409)
   return NextResponse.json({ok:true,id:data.id})
  }catch(e){console.error('Falha no recebimento CMV (DELETE):',e);return erro('Falha ao cancelar recebimento.',500)}
+}
+
+/** Confirma recebimentos já lançados sem tocar na compra nem gerar custo duplicado. */
+export async function PUT(req:NextRequest){
+ const user=await autenticarTenant(req)
+ if(!user)return erro('Sessão inválida.',401)
+ try{
+  const body=await req.json().catch(()=>null)
+  const vendaId=txt(body?.vendaId,80)
+  const ids:unknown[]=Array.isArray(body?.ids)?body.ids:[]
+  const unicos=[...new Set(ids)]
+  if(unicos.length<1||unicos.length>100||unicos.some(id=>typeof id!=='string'||!uuid(id)))
+   return erro('Selecione entre 1 e 100 recebimentos válidos.')
+  const venda=await vendaTenant(user.empresa_id,vendaId)
+  if(!venda)return erro('Venda não localizada.',404)
+  const {data:linhas,error:buscaErro}=await supabaseAdmin.from(TABELA)
+   .select('id,criado_por_id,conferido_em')
+   .eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id)
+   .is('cancelado_em',null).in('id',unicos)
+  if(buscaErro)throw buscaErro
+  if((linhas||[]).length!==unicos.length)return erro('Algum recebimento não foi localizado.',404)
+  if(user.role!=='master'&&(linhas||[]).some(l=>l.criado_por_id!==user.id))
+   return erro('Somente o autor ou Master pode conferir estes recebimentos.',403)
+  const {data:validados,error}=await supabaseAdmin.rpc('fn_venda_cmv_validar_recebimentos_v2',{
+   p_empresa:user.empresa_id,p_venda:vendaId,p_orcamento:venda.orcamento_id,
+   p_ids:unicos,p_usuario_id:user.id,p_usuario_nome:user.nome
+  })
+  if(error)throw error
+  return NextResponse.json({ok:true,validados:Number(validados||0)})
+ }catch(e){
+  console.error('Falha ao conferir lote CMV:',e)
+  return erro('Não foi possível confirmar os recebimentos. Confira se a atualização do banco foi habilitada.',500)
+ }
 }
