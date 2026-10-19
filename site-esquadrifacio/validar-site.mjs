@@ -41,6 +41,11 @@ check('endereço oficial no rodapé', home.includes('Av. Leonel Guilherme Pereir
 check('link da localização fornecida no Google Maps', home.includes('href="https://maps.app.goo.gl/SnZxkUvSYJLgceed6"'))
 check('rota GPS da Esquadrifácio no Google Maps', home.includes('href="https://www.google.com/maps/dir/?api=1&amp;destination=-21.050927%2C-49.667694"') && home.includes('Como chegar ↗'))
 check('destaque acessível para Instagram e GPS', (home.match(/class="footer-highlight"/g) || []).length === 2 && home.includes('aria-label="Como chegar à Esquadrifácio pelo Google Maps"'))
+check('GPS rápido no menu mobile com acessibilidade', home.includes('class="mobile-location"') && home.includes('aria-label="Como chegar à Esquadrifácio: abrir rota no Google Maps"') && home.includes('flex:0 0 48px'))
+check('rodapé com referência direta de localização', home.includes('class="footer-info" id="localizacao"'))
+check('privacidade visualmente integrada à marca', privacidade.includes('background:#FAFBF8;color:#2B403F') && privacidade.includes('border-left:3px solid #649E94'))
+check('privacidade com canais e endereço completos', privacidade.includes('CEP 15202-420') && privacidade.includes('maps.app.goo.gl/SnZxkUvSYJLgceed6') && privacidade.includes('instagram.com/esquadrifacio/'))
+
 check('CTA principal conectado ao WhatsApp', (home.match(/https:\/\/wa\.me\/5517996361318/g) || []).length >= 3)
 check('links externos protegidos', !/<a(?=[^>]*href="https:\/\/)(?![^>]*rel="noopener noreferrer")[^>]*>/i.test(home))
 check('não sobrou modal de demonstração', !home.includes('id="demo-modal"') && !home.includes('data-contact'))
