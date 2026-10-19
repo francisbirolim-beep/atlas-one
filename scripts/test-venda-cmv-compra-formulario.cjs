@@ -22,7 +22,7 @@ for (const tag of [
 ]) assert.match(ui,tag)
 for (const tag of [
  /<input name="descricao" maxLength=\{500\}/,
- /<input name="quantidade"/, /<input name="unidade"/,
+ /<input name="quantidade"/, /<select name="unidade"/,
  /<input name="documento"/, /<input name="arquivo" type="file"/,
  /<input name="observacoes"/,
 ]) assert.match(ui,tag)
