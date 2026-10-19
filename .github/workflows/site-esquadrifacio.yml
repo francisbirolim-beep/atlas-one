@@ -21,3 +21,5 @@ jobs:
           node-version: "22"
       - name: Verificar site estático sem serviços externos
         run: node site-esquadrifacio/validar-site.mjs
+      - name: Testar preparação segura da publicação
+        run: node site-esquadrifacio/testar-lancamento.mjs

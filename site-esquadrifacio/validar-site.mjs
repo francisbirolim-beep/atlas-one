@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 const root = dirname(fileURLToPath(import.meta.url))
 const home = readFileSync(join(root, 'index.html'), 'utf8')
 const privacidade = readFileSync(join(root, 'politica-de-privacidade.html'), 'utf8')
+const solucoes = readFileSync(join(root, 'solucoes.html'), 'utf8')
 const robots = readFileSync(join(root, 'robots.txt'), 'utf8')
 const vercel = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8'))
 const checagens = []
@@ -35,6 +36,14 @@ check('favicon com marca registrada', readFileSync(join(root,'favicon.svg'),'utf
 check('sem bibliotecas externas para imagens ou rastreamento', !home.includes('<script src="https://'))
 
 check('SEO institucional e geolocalização', home.includes('Esquadrias de alumínio sob medida em José Bonifácio') && home.includes('name="geo.region"'))
+check('link para catálogo completo sem mudar hero', home.includes('href="/solucoes.html"') && home.includes('Conheça todas as soluções'))
+check('soluções com SEO local próprio', solucoes.includes('<title>Nossas soluções') && solucoes.includes('José Bonifácio') && solucoes.includes('name="description"'))
+check('nove soluções efetivas cadastradas em página separada', (solucoes.match(/<article>/g) || []).length === 9)
+check('soluções preservam canais oficiais', solucoes.includes('wa.me/5517996361318') && solucoes.includes('instagram.com/esquadrifacio/') && solucoes.includes('maps.app.goo.gl/SnZxkUvSYJLgceed6'))
+check('soluções têm navegação e conteúdo sem JS externo', solucoes.includes('href="#conteudo"') && solucoes.includes('<details>') && !solucoes.includes('<script'))
+check('soluções protegidas da indexação na homologação', solucoes.includes('name="robots" content="noindex,nofollow"'))
+check('controles de publicação começam todos fechados', Object.values(JSON.parse(readFileSync(join(root, 'controle-lancamento.json'), 'utf8'))).every(x=>x===false))
+
 check('prévia bloqueada para buscadores', home.includes('name="robots" content="noindex,nofollow"') && robots.includes('Disallow: /'))
 check('Instagram oficial no rodapé', home.includes('href="https://www.instagram.com/esquadrifacio/"') && home.includes('Instagram @esquadrifacio'))
 check('endereço oficial no rodapé', home.includes('Av. Leonel Guilherme Pereira, 775') && home.includes('Residencial Veneza') && home.includes('CEP 15202-420'))
@@ -59,6 +68,8 @@ check('não sobrou aviso público de protótipo', !home.includes('PRÉVIA NÃO P
 check('seções e chamadas comerciais presentes', home.includes('Nossas obras') && home.includes('Solicitar orçamento'))
 check('página de privacidade local vinculada', home.includes('href="/politica-de-privacidade.html"') && privacidade.includes('Lei Geral de Proteção de Dados'))
 check('sem formulários ou rastreadores embutidos', !/<form\b/i.test(home) && !/googletagmanager|google-analytics|facebook\.net\/en_US\/fbevents/i.test(home))
+check('página de soluções sem formulários ou rastreadores', !/<form\b/i.test(solucoes) && !/googletagmanager|google-analytics|facebook\.net\/en_US\/fbevents/i.test(solucoes))
+
 check('política clara de cabeçalhos', vercel.headers?.[0]?.headers?.some(h => h.key === 'X-Content-Type-Options' && h.value === 'nosniff'))
 check('conteudo protegido por CSP sem scripts', vercel.headers?.[0]?.headers?.some(h => h.key === 'Content-Security-Policy' && h.value.includes("script-src 'none'")))
 check('robots tambem como cabecalho de homologacao', vercel.headers?.[0]?.headers?.some(h => h.key === 'X-Robots-Tag' && h.value.includes('noindex')))
