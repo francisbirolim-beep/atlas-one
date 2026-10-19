@@ -12,7 +12,12 @@ export async function GET(req:NextRequest){
  const tipo=req.nextUrl.searchParams.get('tipo'),id=req.nextUrl.searchParams.get('id')||''
  if(!['pagar','receber'].includes(tipo||'')||!uuid.test(id))return bad('Recibo inválido.')
  const acao=tipo==='pagar'?'financeiro.contas_pagar.consultar':'financeiro.contas_receber.recibo'
- if(!(await usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'financeiro',acaoId:acao})))return bad('Sem permissão para consultar recibos.',403)
+ const [permissaoCaixa,permissaoFinanceiro,permissaoVendas]=await Promise.all([
+  usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'caixa-balcao',acaoId:acao}),
+  usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'financeiro',acaoId:acao}),
+  tipo==='receber'?usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'recebimento-vendas',acaoId:'financeiro.recebimento_vendas.registrar'}):Promise.resolve(false)
+ ])
+ if(!permissaoCaixa&&!permissaoFinanceiro&&!permissaoVendas)return bad('Sem permissão para consultar recibos.',403)
  try{
   if(tipo==='pagar'){
    const {data:t,error}=await supabaseAdmin.from('financeiro_contas_pagar').select('id,fornecedor_id,fornecedor_nome,valor,valor_pago,vencimento,data_pagamento,descricao,documento,forma_pagamento,status').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle()
