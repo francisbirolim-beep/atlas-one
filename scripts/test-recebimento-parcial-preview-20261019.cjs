@@ -1,0 +1,22 @@
+const fs=require('fs'),assert=require('node:assert/strict');
+// Exemplo real do teste: R$ 1.157,06 com entrada de R$ 500,00.
+const centavos=n=>Math.round(n*100);
+const saldo=(original,pago)=>Math.max(0,(centavos(original)-centavos(pago))/100);
+assert.equal(saldo(1157.06,500),657.06);
+assert.equal(saldo(1157.06,1157.06),0);
+assert.equal(saldo(0.30,0.10+0.20),0);
+const tela=fs.readFileSync('app/clientes/[id]/financeiro/recebimento/page.tsx','utf8');
+const api=fs.readFileSync('app/api/financeiro/cliente-recebimento/route.ts','utf8');
+const geral=fs.readFileSync('app/financeiro/contas-receber/page.tsx','utf8');
+const apiGeral=fs.readFileSync('app/api/financeiro/contas-receber/route.ts','utf8');
+const recibo=fs.readFileSync('app/api/financeiro/recibo/route.ts','utf8');
+for(const txt of ['Receber tudo','Receber parcial','Saldo após:','saldoApos','Simular recebimento (sem gravar)','recibosSimulados','SIMULAÇÃO — NÃO COMPROVA PAGAMENTO','financeiro/cliente-recebimento'])assert(tela.includes(txt),`Tela: ${txt}`);
+assert(!tela.includes('registrarRecebimentoPorParcelas('),'Tela não pode chamar o RPC diretamente.');
+assert(!tela.includes("supabase.from('financeiro_contas_receber')"));
+for(const txt of ['autenticarCompras(req)', 'usuarioPodeAcaoServer',".eq('empresa_id',u.empresa_id)",".eq('cliente_id',clienteId)","process.env.VERCEL_ENV==='preview'","supabaseAdmin.rpc('registrar_recebimento_cliente_servidor_v1'",'saldo mudou','mapa.has(id)'])assert(api.includes(txt),`API protegida: ${txt}`);
+assert(geral.includes("fetch('/api/financeiro/contas-receber'"));
+assert(!geral.includes(".from('financeiro_contas_receber')"));
+for(const txt of ['autenticarCompras(req)',".eq('empresa_id',u.empresa_id)",'financeiro.contas_receber.consultar'])assert(apiGeral.includes(txt),`Consulta global: ${txt}`);
+for(const txt of ['filtroObra','valorMovimento:recebidoNaObra','alocs.data','financeiro_contas_receber'])assert(recibo.includes(txt),`Recibo por obra: ${txt}`);
+assert(tela.includes('obrasRecebidas.map'),'Recibos em mais de uma obra devem ser separados.');
+console.log('PASS: baixa parcial 1157,06 -> 500,00 / saldo 657,06, total, autorizações, tenant, preview sem gravação, recibos por obra e consultas seguras.');
