@@ -12,7 +12,7 @@ function extrair(texto, inicio, fim) {
   return texto.slice(i, j)
 }
 const codigo = [
-  extrair(sincronizar, 'function acharPdfWVetro(', 'type RefTipologia'),
+  extrair(sincronizar, 'function acharPdfWVetro(', 'type RefTipologia').replace('export function anexosComPdfWVetro', 'function anexosComPdfWVetro'),
   extrair(kanban, 'async function completarPdfOriginalWVetro(', 'async function mesclarFonteNoCard('),
 ].join('\n')
 let linha
