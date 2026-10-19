@@ -2,8 +2,9 @@
 import {FormEvent,useState} from 'react'
 import {FileText,Pencil,Plus,Trash2} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
+import {UNIDADES_CMV,unidadePadraoCmv,rotuloUnidadeCmv,mostrarQuantidadeCmv} from '@/lib/vendaCmvUnidades'
 export type RecebimentoCmv={
- id:string;categoria:string;peso_kg:number;preco_kg:number;valor_total:number;fornecedor:string;
+ id:string;categoria:string;peso_kg:number|null;preco_kg:number|null;quantidade?:number|null;unidade?:string|null;preco_unitario?:number|null;valor_total:number;fornecedor:string;
  nota_numero?:string|null;romaneio_numero?:string|null;data_recebimento:string;
  anexo_nome?:string|null;anexo_url?:string|null;observacoes?:string|null;
  criado_por_nome?:string|null;versao:number;cancelado_em?:string|null;motivo_cancelamento?:string|null
@@ -23,6 +24,7 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
  const [motivo,setMotivo]=useState('')
  const [peso,setPeso]=useState('')
  const [preco,setPreco]=useState('')
+ const [unidade,setUnidade]=useState(unidadePadraoCmv(categoria))
  const [salvando,setSalvando]=useState(false)
  const [erro,setErro]=useState('')
  const [sucesso,setSucesso]=useState('')
@@ -32,7 +34,9 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
  const onChangePreco=(v:string)=>setPreco(v)
  function abrirForm(registro?:RecebimentoCmv){
   setErro('');setSucesso('');setExcluir(null);setMotivo('')
-  setEditar(registro?.id||null);setPeso(registro?String(registro.peso_kg).replace('.',','):'');setPreco(registro?String(registro.preco_kg).replace('.',','):'')
+  setEditar(registro?.id||null);setUnidade((registro?.unidade||unidadePadraoCmv(categoria)) as typeof unidade)
+  setPeso(registro?String(registro.quantidade??(categoria==='perfil'?registro.peso_kg??'':'' )).replace('.',','):'')
+  setPreco(registro?String(registro.preco_unitario??registro.preco_kg??'').replace('.',','):'')
   setAbrir(true)
  }
  async function enviar(e:FormEvent<HTMLFormElement>){
@@ -77,7 +81,7 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
  return <section className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-3">
   <div className="flex flex-wrap items-center justify-between gap-2">
    <div><b className="text-sm text-slate-800">Recebimento de material</b>
-    <p className="text-[11px] text-slate-500">Peso real da nota/romaneio, preço por kg e valor recebido. Sem alterar Compras ou o orçamento.</p>
+    <p className="text-[11px] text-slate-500">Quantidade recebida na unidade selecionada (kg, unidade, peça ou pacote) e valor recebido. Sem alterar Compras ou o orçamento.</p>
    </div>
    <button type="button" disabled={bloqueado||salvando} onClick={()=>abrir?setAbrir(false):abrirForm()}
     className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-40">
@@ -90,9 +94,10 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
   {abrir&&!bloqueado&&<form key={editar||'novo'} onSubmit={enviar} className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
    <p className="mb-3 text-xs font-bold">{editar?'Corrigir recebimento existente':'Cadastrar o que chegou (nota/romaneio)'}</p>
    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-    <label className="text-xs font-semibold">Peso recebido (kg) *<input name="peso_kg" required inputMode="decimal" value={peso} onChange={e=>onChangePeso(e.target.value)}
+    <label className="text-xs font-semibold">Quantidade recebida ({rotuloUnidadeCmv(unidade)}) *<input name="quantidade" required inputMode="decimal" value={peso} onChange={e=>onChangePeso(e.target.value)}
      placeholder="Ex.: 110" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
-    <label className="text-xs font-semibold">Preço por kg (R$) *<input name="preco_kg" required inputMode="decimal" value={preco} onChange={e=>onChangePreco(e.target.value)}
+    <label className="text-xs font-semibold">Unidade *<select name="unidade" required value={unidade} onChange={e=>setUnidade(e.target.value as typeof unidade)} className="mt-1 w-full rounded-lg border bg-white p-2.5">{UNIDADES_CMV.map(u=><option key={u} value={u}>{u==='KG'?'Quilo (KG)':u==='UN'?'Unidade (UN)':u==='PC'?'Peça (PC)':'Pacote (PCT)'}</option>)}</select></label>
+    <label className="text-xs font-semibold">Preço por {rotuloUnidadeCmv(unidade)} (R$) *<input name="preco_unitario" required inputMode="decimal" value={preco} onChange={e=>onChangePreco(e.target.value)}
      placeholder="Ex.: 8,32" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <div className="rounded-lg border bg-white p-2.5"><div className="text-[11px] font-semibold text-slate-500">Custo recebido calculado</div><b className="text-lg">{moedas(Math.round(num(peso)*num(preco)*100)/100)}</b></div>
     <label className="text-xs font-semibold">Fornecedor *<input required maxLength={150} name="fornecedor"
@@ -115,7 +120,8 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
   </form>}
   {registrosCategoria.length>0?<div className="space-y-2">{registrosCategoria.map(r=><div key={r.id} className="rounded-lg border p-3 text-xs">
    <div className="flex flex-wrap items-start justify-between gap-2">
-    <div><b>{kg(Number(r.peso_kg))} × {moedas(Number(r.preco_kg))}/kg</b>
+    <div><b>{r.unidade?mostrarQuantidadeCmv(Number(r.quantidade||0),r.unidade):kg(Number(r.peso_kg||0))} × {moedas(Number(r.preco_unitario??r.preco_kg??0))}/{rotuloUnidadeCmv(r.unidade||'KG')}</b>
+     {!r.unidade&&categoria!=='perfil'&&<p className="font-semibold text-amber-800">Registro antigo em kg: conferir a unidade antes de comparar quantidades.</p>}
      <p className="mt-1 text-slate-500">{r.fornecedor} · {r.data_recebimento}
       {r.nota_numero?' · NF '+r.nota_numero:''}{r.romaneio_numero?' · Romaneio '+r.romaneio_numero:''}</p>
      {r.anexo_url&&<a href={r.anexo_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-blue-700 underline"><FileText size={12}/>{r.anexo_nome||'Anexo'}</a>}
