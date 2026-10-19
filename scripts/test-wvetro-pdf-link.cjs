@@ -79,6 +79,14 @@ function reiniciar() {
   assert.equal(linha.anexos.length, 1, 'Não inventa PDF se fonte não fornecer link')
   assert.match(resultado.mensagem, /não forneceu um link/)
   reiniciar()
+  payload = { Pedido:{Nro:1213, PdfUrl:'https://docs.exemplo/miniatura.jpg'} }
+  resultado = await completarPdfOriginalWVetro('e1', linha, '1213')
+  assert.equal(linha.anexos.length, 1, 'URL de imagem no campo PdfUrl não pode ser tratada como PDF')
+  reiniciar()
+  payload = { Pedido:{Nro:1213, PdfThumbnailUrl:'https://docs.exemplo/preview.pdf', PdfOriginalUrl:'https://docs.exemplo/original-1213.pdf'} }
+  resultado = await completarPdfOriginalWVetro('e1', linha, '1213')
+  assert.equal(linha.anexos[1].url, 'https://docs.exemplo/original-1213.pdf', 'Prioriza PDF original sobre miniatura')
+  reiniciar()
   payload = { Pedido:{Nro:1213, PdfUrl:'https://docs.exemplo/baixar?id=1213'} }
   resultado = await completarPdfOriginalWVetro('e1', linha, '1213')
   assert.equal(linha.anexos[1].url, 'https://docs.exemplo/baixar?id=1213', 'Aceita PDF identificado pelo campo de origem')
