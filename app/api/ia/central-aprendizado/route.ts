@@ -2,6 +2,7 @@ import {textoCatalogoGeometrico} from '@/lib/ai/catalogoPdfTexto'
 import {pesoDecimalCatalogo} from '@/lib/ai/catalogoPeso'
 import {podeAtualizarCandidatoCatalogo,dadosReanaliseCatalogo} from '@/lib/ai/catalogoReanalise'
 import {extrairLinhasCatalogo, VERSAO_REGRAS_CATALOGO} from '@/lib/ai/catalogoLinhas'
+import {extrairCartoesGeometricos,codigoColadoDeOutrasColunas} from '@/lib/ai/catalogoCartoesGeometria'
 import {avaliarCatalogoLote} from '@/lib/ai/catalogoLoteSeguro'
 import {compararGeometria, codigoPerfil} from '@/lib/ai/equivalenciaPerfilTecnico'
 import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
@@ -147,6 +148,9 @@ function limparLinhaCatalogo(v: unknown){
 }
 function ehCodigoCatalogo(v: unknown){
   const x=limparLinhaCatalogo(v).toUpperCase().replace(/\s+/g,'')
+  // Produtos em duas colunas viravam F42-012F42-014. Nunca tratar
+  // dois códigos completos como um único código cadastral.
+  if(codigoColadoDeOutrasColunas(x))return ''
   if(!x||x.length>24||!/\d/.test(x)||/^(LINHA|PERFIL)\d/.test(x))return ''
   const prefixo=x.split(/[-_/]/)[0]||''
   if(['VISTA','PERFIL','LINHA','BARRA','ACABAMENTO','SUPERIOR','INFERIOR','LATERAL','TRAVESSA','MONTANTE'].includes(prefixo))return ''
@@ -226,8 +230,15 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,p
     linhaPorIndice[i]=linhaAtual
   }
 
+  const cartoes=extrairCartoesGeometricos(paginas)
   const paginaPorCodigo=new Map<string,number>()
   for(const pg of paginas){
+    // Cada token do PDF é um código individual; não usar a linha textual
+    // agregada que mistura duas colunas com tabulação.
+    for(const token of pg.items||[]){
+      const codigo=ehCodigoCatalogo(token?.str)
+      if(codigo&&!paginaPorCodigo.has(codigo))paginaPorCodigo.set(codigo,pg.pagina)
+    }
     for(const l of String(pg.texto||'').split(/\r?\n/)){
       const codigo=ehCodigoCatalogo(l)
       if(codigo&&!paginaPorCodigo.has(codigo))paginaPorCodigo.set(codigo,pg.pagina)
@@ -235,6 +246,18 @@ function extrairProdutosCatalogoLocal(texto:string,fornecedorNome?:string|null,p
   }
 
   const itens:any[]=extrairLinhasCatalogo(paginas.length?paginas:[{pagina:1,texto}])
+  // Cartões do PDF têm o peso abaixo do código, e a descrição acima
+  // NA MESMA posição X. Preferir esta evidência ao texto plano.
+  const existentes=new Map(itens.map((i:any)=>[i.codigo,i]))
+  for(const card of cartoes){
+    const anterior=existentes.get(card.codigo)
+    if(anterior){
+      const idx=itens.findIndex((i:any)=>i.codigo===card.codigo)
+      if(idx>=0)itens[idx]={...anterior,...card}
+    }else{
+      itens.push(card)
+    }
+  }
   const vistos=new Set<string>(itens.map(i=>i.codigo))
   for(let i=0;i<linhas.length;i++){
     const codigo=ehCodigoCatalogo(linhas[i])
@@ -307,6 +330,10 @@ async function remapearCatalogoExistente(usuario:UsuarioTenant,entrada:any){
   const porCodigo=new Map(extraidos.map((i:any)=>[cod(i.codigo),i]))
   const paginaPorCodigo=new Map<string,number>()
   for(const pg of lido.paginas){
+    for(const token of pg.items||[]){
+      const codigo=ehCodigoCatalogo(token?.str)
+      if(codigo&&!paginaPorCodigo.has(cod(codigo)))paginaPorCodigo.set(cod(codigo),pg.pagina)
+    }
     for(const linha of String(pg.texto||'').split(/\\r?\\n/)){
       const codigo=ehCodigoCatalogo(linha)
       if(codigo&&!paginaPorCodigo.has(cod(codigo)))paginaPorCodigo.set(cod(codigo),pg.pagina)
@@ -810,7 +837,7 @@ async function planoValidacaoCatalogoLote(
   if(pdfErro||!pdf)throw new Error('O PDF original não está disponível; nenhuma validação será realizada.')
   const lido=await lerPdfCatalogo(Buffer.from(await pdf.arrayBuffer()))
   const fontePorCodigo=new Map<string,any>()
-  for(const item of extrairLinhasCatalogo(lido.paginas)){
+  for(const item of extrairProdutosCatalogoLocal(lido.texto,nomeFornecedorCatalogo(lido.texto),lido.paginas)){
     const codigo=cod(item.codigo)
     if(codigo)fontePorCodigo.set(codigo,item)
   }
@@ -972,7 +999,7 @@ export async function GET(req:NextRequest){
       const {data:pdf,error:erroPdf}=await supabaseAdmin.storage.from('atlas-aprendizado').download(entrada.storage_path)
       if(erroPdf||!pdf)return NextResponse.json({error:'PDF original indisponível.'},{status:404})
       const lido=await lerPdfCatalogo(Buffer.from(await pdf.arrayBuffer()))
-      const itens=extrairLinhasCatalogo(lido.paginas).map(item=>({
+      const itens=extrairProdutosCatalogoLocal(lido.texto,nomeFornecedorCatalogo(lido.texto),lido.paginas).map(item=>({
         codigo:item.codigo,descricao:item.descricao,categoria:item.categoria,unidade:item.unidade,
         peso_kg_m:item.peso_kg_m,medidas_mm:item.medidas_mm,medidas_polegadas:item.medidas_polegadas,
         linha:item.linha,pagina_catalogo:item.pagina_catalogo,imagem_tipo:item.imagem_tipo,
