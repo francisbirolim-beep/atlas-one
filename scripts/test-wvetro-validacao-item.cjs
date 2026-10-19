@@ -150,3 +150,6 @@ const request=(acao,correcao={},itemId='i1',original)=>server.validarItemImporta
  console.log('PASS: rascunho incompleto, histórico de aprovação e anexos sem bloqueio de validação.')
  console.log('PASS: conferência individual, correções só por campo, texto livre, catálogo, JSONB, preservação, escopo, erros, concorrência e aprendizado.')
 })().catch(e=>{console.error(e);process.exitCode=1})
+
+// PDF externo e anexos tambem precisam passar no teste de regressao W.Vetro.
+require('./test-wvetro-pdf-link.cjs')
