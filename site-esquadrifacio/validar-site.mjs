@@ -50,6 +50,9 @@ check('identidade suave no navegador e na política de privacidade', home.includ
 
 
 check('CTA principal conectado ao WhatsApp', (home.match(/https:\/\/wa\.me\/5517996361318/g) || []).length >= 3)
+check('WhatsApp comercial único confirmado em todas as chamadas', (home.match(/https:\/\/wa\.me\/5517996361318/g) || []).length === 4 && !/https:\/\/wa\.me\/(?!5517996361318)/.test(home))
+check('WhatsApp igual na política de privacidade', privacidade.includes('https://wa.me/5517996361318') && privacidade.includes('WhatsApp (17) 99636-1318'))
+
 check('links externos protegidos', !/<a(?=[^>]*href="https:\/\/)(?![^>]*rel="noopener noreferrer")[^>]*>/i.test(home))
 check('não sobrou modal de demonstração', !home.includes('id="demo-modal"') && !home.includes('data-contact'))
 check('não sobrou aviso público de protótipo', !home.includes('PRÉVIA NÃO PUBLICADA') && !home.includes('Prévia conceitual'))
