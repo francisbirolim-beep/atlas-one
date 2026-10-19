@@ -623,6 +623,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   const colunaInstalacao=setorPorNome.instalacao
   const itens=(Array.isArray(orcamento?.itens)?orcamento?.itens:Array.isArray(venda?.itens_snapshot)?venda?.itens_snapshot:[])||[]
+  // A Produção usa a coleção mais completa; em empate, o snapshot vendido prevalece.
+  // As fontes dos módulos já aprovados continuam inalteradas.
+  const itensVendidos=Array.isArray(venda?.itens_snapshot)?venda.itens_snapshot:[]
+  const itensKanban=itensVendidos.length>=itens.length?itensVendidos:itens
   // Instalação deve seguir a fotografia do orçamento efetivamente VENDIDO.
   const itensInstalacao=(Array.isArray(venda?.itens_snapshot)&&venda.itens_snapshot.length?venda.itens_snapshot:itens)||[]
   const fluxoVenda=avaliarFluxoVenda({
@@ -1598,7 +1602,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
           <VendaProducaoKanbanPreview
-            ordens={ordens} itens={itens} materiais={materiaisTecnicos} produtosMateriais={produtosMateriais}
+            ordens={ordens} itens={itensKanban} quantidadeOrcamento={itens.length} quantidadeSnapshot={itensVendidos.length} materiais={materiaisTecnicos} produtosMateriais={produtosMateriais}
             pacoteId={pacoteTecnicoId} orcamentoId={venda.orcamento_id} vendaId={venda.id} onAtualizar={carregar}
             onEditarCortes={()=>setEditorCortesAberto(true)}/>
         {editorCortesAberto&&(()=>{
