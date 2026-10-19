@@ -1,0 +1,33 @@
+name: Venda parcial e Cliente 360 - Preview
+on:
+  pull_request:
+    paths:
+      - 'app/vendas/confirmar/page.tsx'
+      - 'app/api/clientes/[id]/painel/route.ts'
+      - 'components/vendas/**'
+      - 'components/clientes/DetalheOrcamento360.tsx'
+      - 'components/clientes/Cliente360DashboardV2.tsx'
+      - 'lib/vendaSelecaoItens.ts'
+      - 'scripts/test-venda-parcial-e-orcamento360-20261019.mjs'
+      - '.github/workflows/venda-parcial-preview-validation.yml'
+jobs:
+  valida-preview:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: build-validation-placeholder
+      SUPABASE_SECRET_KEY: build-validation-placeholder
+      ANTHROPIC_API_KEY: build-validation-placeholder
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Dependencies
+        run: npm install --no-audit --no-fund
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Venda parcial e Cliente 360
+        run: node --experimental-strip-types scripts/test-venda-parcial-e-orcamento360-20261019.mjs
