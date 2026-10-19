@@ -816,9 +816,19 @@ setBuscandoWVetro(false)
 }
 
 async function adicionarAnexo(file: File | undefined) {
-if (!file || !novoAnexoTitulo.trim() || !editando || !cardSelecionado || enviandoAnexo) return
+if (!file || !editando || !cardSelecionado || enviandoAnexo) return
 const cardId = cardSelecionado.id
-const titulo = novoAnexoTitulo.trim()
+// O título é opcional. Quando o W.Vetro não disponibiliza PDF na API,
+// permitir que o arquivo original seja escolhido diretamente, sem bloquear o upload.
+const pdfSelecionado = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+const numeroArquivoWVetro = numeroWVetroCard(cardSelecionado)
+const titulo = novoAnexoTitulo.trim() || (
+  pdfSelecionado
+    ? numeroArquivoWVetro
+      ? `PDF W.Vetro #${numeroArquivoWVetro} (anexado manualmente)`
+      : 'PDF anexado ao orçamento'
+    : file.name
+)
 setEnviandoAnexo(true)
 try {
 const url = await uploadArquivo(file)
@@ -2228,15 +2238,16 @@ Usar este
 type="text"
 value={novoAnexoTitulo}
 onChange={e => setNovoAnexoTitulo(e.target.value)}
-placeholder="Título (ex: Orçamento W.Vetro / Revisão 02)"
+placeholder="Título opcional (será preenchido automaticamente)"
+aria-label="Título do anexo (opcional)"
 className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white p-2 text-xs"
 />
-<label className={`flex flex-shrink-0 items-center gap-1 rounded-lg border border-dashed px-2.5 py-2 text-xs ${novoAnexoTitulo.trim() ? 'cursor-pointer border-brand-navy text-brand-navy hover:bg-brand-navyLight' : 'border-slate-200 text-slate-300'}`}>
-<Paperclip size={13} /> Anexar
-<input type="file" className="hidden" disabled={!novoAnexoTitulo.trim() || enviandoAnexo} onChange={e => void adicionarAnexo(e.target.files?.[0])} />
+<label className={`flex flex-shrink-0 items-center gap-1 rounded-lg border border-dashed px-2.5 py-2 text-xs ${enviandoAnexo ? 'border-slate-200 text-slate-300' : 'cursor-pointer border-brand-navy text-brand-navy hover:bg-brand-navyLight'}`}>
+<Paperclip size={13} /> {enviandoAnexo ? 'Enviando...' : 'Escolher arquivo'}
+<input type="file" className="hidden" disabled={enviandoAnexo} onChange={e => { const arquivo = e.target.files?.[0]; e.target.value = ''; void adicionarAnexo(arquivo) }} />
 </label>
 </div>
-<p className="mt-1 text-[11px] text-slate-400">Anexar ou sincronizar não apaga versões anteriores nem outros dados já preenchidos.</p>
+<p className="mt-1 text-[11px] text-slate-500">O título é opcional. Se a API W.Vetro não enviar o PDF, salve o arquivo no W.Vetro e selecione-o aqui. A sincronização e os anexos não apagam as versões anteriores.</p>
 </div>
 </div>
 )}
