@@ -11,7 +11,7 @@ for (const t of [
   'autenticarCompras(req)', "setorId:'caixa-balcao'",
   "setorId:'recebimento-vendas'", "process.env.VERCEL_ENV==='preview'",
   ".eq('empresa_id',u.empresa_id)", ".eq('cliente_id',clienteId)",
-  "registrar_recebimento_cliente_caixa_v1", "registrar_recebimento_cliente_parcelas",
+  "registrar_recebimento_cliente_caixa_v1", "registrar_recebimento_cliente_servidor_v1",
   "originFakeNeverUsed"
 ].filter(x=>x!=='originFakeNeverUsed')) assert(route.includes(t), 'API cliente: '+t)
 
@@ -43,3 +43,7 @@ assert.equal(saldo(1157.06,1157.06),0)
 assert.equal(saldo(1157.06,500,57.06),600)
 
 console.log('PASS: caixa e Cliente usam mesma tela e título, baixa total/parcial, saldo e recibo, autenticação, autorização e transação atômica proposta.')
+
+assert(route.includes('registrar_recebimento_cliente_servidor_v1'),'Cliente deve usar wrapper com contexto de tenant');
+assert(migracao.includes("set_config('request.jwt.claim.sub',p_usuario_id::text,true)"),'Autenticação de tenant transacional obrigatória');
+assert(migracao.includes('private.current_empresa_id() is distinct from v_empresa'),'Validar tenant configurado');

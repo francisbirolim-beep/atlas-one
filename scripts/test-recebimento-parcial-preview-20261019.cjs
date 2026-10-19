@@ -13,7 +13,7 @@ const recibo=fs.readFileSync('app/api/financeiro/recibo/route.ts','utf8');
 for(const txt of ['Receber tudo','Receber parcial','Saldo após:','saldoApos','Simular recebimento (sem gravar)','recibosSimulados','SIMULAÇÃO — NÃO COMPROVA PAGAMENTO','financeiro/cliente-recebimento'])assert(tela.includes(txt),`Tela: ${txt}`);
 assert(!tela.includes('registrarRecebimentoPorParcelas('),'Tela não pode chamar o RPC diretamente.');
 assert(!tela.includes("supabase.from('financeiro_contas_receber')"));
-for(const txt of ['autenticarCompras(req)', 'usuarioPodeAcaoServer',".eq('empresa_id',u.empresa_id)",".eq('cliente_id',clienteId)","process.env.VERCEL_ENV==='preview'","supabaseAdmin.rpc('registrar_recebimento_cliente_parcelas'",'saldo mudou','mapa.has(id)'])assert(api.includes(txt),`API protegida: ${txt}`);
+for(const txt of ['autenticarCompras(req)', 'usuarioPodeAcaoServer',".eq('empresa_id',u.empresa_id)",".eq('cliente_id',clienteId)","process.env.VERCEL_ENV==='preview'","supabaseAdmin.rpc('registrar_recebimento_cliente_servidor_v1'",'saldo mudou','mapa.has(id)'])assert(api.includes(txt),`API protegida: ${txt}`);
 assert(geral.includes("fetch('/api/financeiro/contas-receber'"));
 assert(!geral.includes(".from('financeiro_contas_receber')"));
 for(const txt of ['autenticarCompras(req)',".eq('empresa_id',u.empresa_id)",'financeiro.contas_receber.consultar'])assert(apiGeral.includes(txt),`Consulta global: ${txt}`);

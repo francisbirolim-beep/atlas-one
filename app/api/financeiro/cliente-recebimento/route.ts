@@ -98,7 +98,7 @@ export async function POST(req:NextRequest){
   // Pelo Cliente, mantém a mesma RPC de parcelas que já foi homologada.
   const {data:resultado,error}=origemCaixa
    ?await supabaseAdmin.rpc('registrar_recebimento_cliente_caixa_v1',{...argumentos,p_caixa_id:caixaId})
-   :await supabaseAdmin.rpc('registrar_recebimento_cliente_parcelas',argumentos)
+   :await supabaseAdmin.rpc('registrar_recebimento_cliente_servidor_v1',argumentos)
   if(error){console.error('registrar recebimento servidor',error);return bad('Falha na baixa financeira. Confira o histórico antes de tentar novamente.',500)}
   return NextResponse.json({ok:true,simulado:false,recebimentoId:resultado?.recebimento_id||null,valor:Number(resultado?.valor||total/100),parcelas:Number(resultado?.parcelas||contas.length)})
  }catch(e){console.error('recebimento cliente post',e);return bad('Não foi possível processar o recebimento.',500)}

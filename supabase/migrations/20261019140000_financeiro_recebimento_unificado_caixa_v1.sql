@@ -48,6 +48,15 @@ begin
      or jsonb_array_length(p_alocacoes)=0 or jsonb_array_length(p_alocacoes)>100
     then raise exception 'Informe de 1 a 100 parcelas.'; end if;
 
+  -- Ao usar service_role não há auth.uid() na sessão PostgREST.
+  -- Os triggers/defaults de tenant dependem do usuário do Atlas; definimos
+  -- a identidade autenticada SOMENTE nesta transação e após validar empresa,
+  -- cliente e caixa aberto. Não concede SQL público a usuários anônimos.
+  perform set_config('request.jwt.claim.sub',p_usuario_id::text,true);
+  if private.current_empresa_id() is distinct from v_empresa then
+    raise exception 'Contexto de empresa inconsistente.';
+  end if;
+
   -- A baixa e o movimento do caixa fazem parte da MESMA transação RPC.
   -- Qualquer erro abaixo desfaz tudo, inclusive o recebimento financeiro.
   v_resultado := public.registrar_recebimento_cliente_parcelas(
@@ -99,3 +108,39 @@ end;
 $$;
 revoke all on function public.registrar_recebimento_cliente_caixa_v1(uuid,text,date,text,text,text,jsonb,uuid,text,uuid) from public,anon,authenticated;
 grant execute on function public.registrar_recebimento_cliente_caixa_v1(uuid,text,date,text,text,text,jsonb,uuid,text,uuid) to service_role;
+
+-- Cliente 360 usa a mesma rotina de parcelas, mas sem movimento de caixa;
+-- o Caixa acrescenta esse movimento na função acima, atomicamente.
+create or replace function public.registrar_recebimento_cliente_servidor_v1(
+  p_cliente_id uuid,
+  p_cliente_nome text,
+  p_data_recebimento date,
+  p_forma text,
+  p_referencia text,
+  p_observacoes text,
+  p_alocacoes jsonb,
+  p_usuario_id uuid,
+  p_usuario_nome text
+) returns jsonb
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare v_empresa uuid;
+begin
+  select empresa_id into v_empresa from public.usuarios where id=p_usuario_id;
+  if v_empresa is null or p_cliente_id is null or not exists (
+    select 1 from public.clientes where id=p_cliente_id and empresa_id=v_empresa
+  ) then raise exception 'Cliente ou operador fora do escopo da empresa.'; end if;
+  perform set_config('request.jwt.claim.sub',p_usuario_id::text,true);
+  if private.current_empresa_id() is distinct from v_empresa then
+    raise exception 'Contexto de empresa inconsistente.';
+  end if;
+  return public.registrar_recebimento_cliente_parcelas(
+    p_cliente_id,p_cliente_nome,p_data_recebimento,p_forma,
+    p_referencia,p_observacoes,p_alocacoes,p_usuario_id,p_usuario_nome
+  );
+end;
+$$;
+revoke all on function public.registrar_recebimento_cliente_servidor_v1(uuid,text,date,text,text,text,jsonb,uuid,text) from public,anon,authenticated;
+grant execute on function public.registrar_recebimento_cliente_servidor_v1(uuid,text,date,text,text,jsonb,uuid,text) to service_role;
