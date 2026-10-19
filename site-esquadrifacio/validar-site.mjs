@@ -42,7 +42,14 @@ check('nove soluções efetivas cadastradas em página separada', (solucoes.matc
 check('soluções preservam canais oficiais', solucoes.includes('wa.me/5517996361318') && solucoes.includes('instagram.com/esquadrifacio/') && solucoes.includes('maps.app.goo.gl/SnZxkUvSYJLgceed6'))
 check('soluções têm navegação e conteúdo sem JS externo', solucoes.includes('href="#conteudo"') && solucoes.includes('<details>') && !solucoes.includes('<script'))
 check('soluções protegidas da indexação na homologação', solucoes.includes('name="robots" content="noindex,nofollow"'))
-check('controles de publicação começam todos fechados', Object.values(JSON.parse(readFileSync(join(root, 'controle-lancamento.json'), 'utf8'))).every(x=>x===false))
+const controle = JSON.parse(readFileSync(join(root, 'controle-lancamento.json'), 'utf8'))
+check('fotos aprovadas, demais liberações bloqueadas', controle.fotos_autorizadas === true &&
+  controle.privacidade_revisada === false && controle.dominio_controlado === false &&
+  controle.publicacao_autorizada === false)
+const fotosAprovadas = JSON.parse(readFileSync(join(root, 'autorizacao-fotos.json'), 'utf8'))
+check('autorização específica das oito fotografias', fotosAprovadas.arquivos.length === 8 &&
+  fotosAprovadas.aprovado_em === '2026-10-19')
+
 
 check('prévia bloqueada para buscadores', home.includes('name="robots" content="noindex,nofollow"') && robots.includes('Disallow: /'))
 check('Instagram oficial no rodapé', home.includes('href="https://www.instagram.com/esquadrifacio/"') && home.includes('Instagram @esquadrifacio'))

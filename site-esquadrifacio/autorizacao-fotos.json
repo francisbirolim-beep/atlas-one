@@ -1,0 +1,40 @@
+{
+  "aprovado_em": "2026-10-19",
+  "origem": "Confirmação pelo proprietário na conversa sobre a prévia do site Esquadrifácio® após pergunta sobre a divulgação das oito fotografias.",
+  "escopo": "Uso das oito fotos existentes, inalteradas, no site institucional público da Esquadrifácio®.",
+  "observacao": "A aprovação não abrange substituições, novas fotografias, campanhas publicitárias pagas ou outras licenças e não libera o deploy.",
+  "arquivos": [
+    {
+      "arquivo": "assets/ambiente-acabamento-amadeirado.webp",
+      "sha256": "c5a92d5d551b031f4ceae9715407c8c43239968f1e0949331b4a13e40216b56a"
+    },
+    {
+      "arquivo": "assets/fachada-esquadrias-vidro.webp",
+      "sha256": "aabd2379af78bafd41746e5a1d2bd992c400b651a9e502869a86d0f1b7a9407a"
+    },
+    {
+      "arquivo": "assets/obra-fachada-residencial.webp",
+      "sha256": "d1253882fa3d7609408acc8c4f82eb0e3af1d530d1eb1a916fe0d97a3c7ddaf4"
+    },
+    {
+      "arquivo": "assets/obra-painel-ripado.webp",
+      "sha256": "67dfd749937b818cddd24fc051e702952eb776ac732f288591823f1182c6ff02"
+    },
+    {
+      "arquivo": "assets/obra-porta-especial.webp",
+      "sha256": "5511cf259260843351bc3337f2fb6c5ef28f4c3fa8126c1677eb523fe7a17f27"
+    },
+    {
+      "arquivo": "assets/painel-ripado-amadeirado.webp",
+      "sha256": "eecd3ffa21a1976ed3ce1cc574c9815d8ddf1b7989618e4f480e32c98ae31cc8"
+    },
+    {
+      "arquivo": "assets/porta-correr-integrada.webp",
+      "sha256": "64bb23edef8e1bd1856bd3ebcfc2b7f8842da80806ab82b4d902b59c1496113e"
+    },
+    {
+      "arquivo": "assets/porta-entrada-amadeirada.webp",
+      "sha256": "923ac57aae390cbfa38af063505b92b1efa7b6c06a21dfd17a9db13b7aa2cc9b"
+    }
+  ]
+}

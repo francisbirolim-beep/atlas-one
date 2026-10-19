@@ -18,7 +18,7 @@
 - Verificar endereço informado na política e escolher dado oficial de contato LGPD.
 
 ## Publicação segura, SOMENTE após aprovação explícita do usuário
-1. Conferir com Francis a versão responsiva e as fotografias, autorizações dos titulares/obras e textos. O WhatsApp comercial foi confirmado em 19/10/2026. Não apresentar imagens ilustrativas como obras da empresa sem validação.
+1. Conferir com o proprietário a versão responsiva e os textos. As oito fotos existentes estão autorizadas para o site institucional, com hashes em `autorizacao-fotos.json`; qualquer mudança de arquivo exige nova autorização. O WhatsApp foi confirmado em 19/10/2026.
 2. Validar a página em um projeto Vercel **separado** do Atlas com a raiz deste site como Root Directory; não alterar domínios nem deploy do projeto `atlas-one`. O usuário precisa aprovar o preview antes de apontar domínio.
 3. Verificar redirecionamento WhatsApp real em celular e desktop; abrir Instagram e a política de privacidade; testar imagens e navegação com teclado e leitores de tela.
 4. Resolver situação e DNS do domínio **esquadrifacio.com.br** na conta do proprietário, e só então atualizar canonical/og:url, gerar `sitemap.xml`, permitir indexação em `robots.txt` e retirar `noindex,nofollow`.
@@ -29,7 +29,7 @@
 Executar `node site-esquadrifacio/validar-site.mjs` e `node site-esquadrifacio/testar-lancamento.mjs` na raiz do repositório. Nenhum dos dois testes faz requisições externas nem altera o site publicado.
 
 ## Limites desta etapa
-- O número de WhatsApp comercial foi confirmado em 19/10/2026; faltam homologação visual, autorizações de fotos e textos legais antes do lançamento.
+- O WhatsApp comercial e a divulgação das oito fotografias exatas da prévia foram aprovados em 19/10/2026. **Permanecem pendentes** revisão legal, comprovação da administração do domínio e autorização explícita para a troca do site.
 - Não há formulário, banco, CRM, integração com Marketing Inteligente, automação IA nem publicações em redes sociais.
 - As oito fotografias já estão em arquivos WebP independentes; o HTML e as imagens originais não são substituídos na geração da versão de lançamento.
 - **Não publicar esta versão na internet ou indexá-la sem aprovação expressa.**
@@ -52,7 +52,7 @@ node site-esquadrifacio/preparar-publicacao.mjs --modo=producao --dominio=https:
 # BLOQUEADO por padrão até quatro liberações explícitas.
 ```
 
-Os quatro registros em `controle-lancamento.json` **começam em false**: `fotos_autorizadas`, `privacidade_revisada`, `dominio_controlado` e `publicacao_autorizada`. Não usar valores simulados para publicação real. A confirmação do WhatsApp não aprova fotos, política nem domínio.
+Em `controle-lancamento.json`, **somente `fotos_autorizadas` está como `true`**, com autorização do proprietário em 19/10/2026 registrada em `autorizacao-fotos.json` e hash SHA-256 de cada arquivo. Os outros três controles continuam `false`: `privacidade_revisada`, `dominio_controlado` e `publicacao_autorizada`. Não usar aprovações simuladas na produção. Uma foto alterada ou substituída bloqueia a compilação até nova aprovação. A confirmação de uso das fotos não autoriza publicar nem trocar DNS.
 
 Após confirmar cada etapa e registrar a autorização do proprietário, o gerador de candidato público cria `.gerado/producao/`, contendo canonical HTTPS correto na homepage, soluções e privacidade; metadados de compartilhamento, imagem OG, dados estruturados LocalBusiness, `robots.txt` liberado, `sitemap.xml` e cabeçalho CSP com hash da marcação estruturada. **Não publica nada nem altera DNS**; é necessário um deploy manual do diretório gerado em projeto Vercel próprio e separado do Atlas.
 
@@ -60,4 +60,10 @@ No projeto Vercel exclusivo do site, usar os **arquivos gerados** como raiz est�
 
 **Observação sobre domínio:** em 19/10/2026, `esquadrifacio.com.br` respondia HTTP 200 e apontava para a hospedagem existente. Isso **não comprova a titularidade do domínio nem autoriza sua substituição**. Conferir posse e capacidade de editar DNS no Registro.br/Hostinger com o proprietário.
 
-**Pendente para liberação:** autorização documentada das oito fotos reais; revisão jurídica do texto de privacidade; confirmação da administração do domínio e aceite expresso do lançamento.
+**Pendente para liberação:** revisão jurídica e aprovação do texto de privacidade; confirmação da administração do domínio e autorização expressa do lançamento. **Oito fotos atuais autorizadas e registradas**, sem abranger futuras trocas ou novas mídias.
+
+## Autorização de imagens (19/10/2026)
+
+O proprietário respondeu `pode seguir assim` à pergunta sobre a divulgação pública das oito fotos da prévia. Essa autorização foi interpretada exclusivamente para **as oito imagens existentes e inalteradas** no site institucional, e registrada no manifesto `autorizacao-fotos.json` com data, finalidade e SHA-256 de cada WebP. O preparo do site verifica os oito hashes e falha se algum arquivo for trocado ou modificado. Não se estende a anúncios pagos, novos arquivos nem integrações com redes sociais.
+
+**Esta autorização não significa aprovação do deploy.** Confirmar política, domínio, acesso ao DNS e receber autorização de publicação da versão final antes de abrir o site ao público.

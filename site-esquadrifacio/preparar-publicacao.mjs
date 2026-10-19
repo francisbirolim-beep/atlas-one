@@ -1,6 +1,6 @@
 // Construtor ESTÁTICO e offline. Não configura Vercel, DNS, banco ou integrações do Atlas.
 import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -14,6 +14,32 @@ const modo = opcoes.get('modo') || 'homologacao'
 if (!['homologacao', 'producao'].includes(modo)) throw new Error('Modo inválido')
 const saida = join(pasta, '.gerado', modo)
 const aprovacao = JSON.parse(readFileSync(join(pasta, 'controle-lancamento.json'), 'utf8'))
+
+// A aprovação abrange apenas as oito fotografias existentes neste exato conjunto.
+function conferirIntegridadeFotosAprovadas() {
+  if (aprovacao.fotos_autorizadas !== true) return
+  const manifesto = JSON.parse(readFileSync(join(pasta, 'autorizacao-fotos.json'), 'utf8'))
+  if (!manifesto || !Array.isArray(manifesto.arquivos) || manifesto.arquivos.length !== 8) {
+    throw new Error('MANIFESTO DE FOTOS INVÁLIDO: precisam constar exatamente oito arquivos')
+  }
+  const encontrados = readdirSync(join(pasta, 'assets')).filter(x => x.endsWith('.webp')).sort()
+  const listados = manifesto.arquivos.map(x => x.arquivo).sort()
+  if (encontrados.length !== 8 || listados.length !== 8 ||
+      !encontrados.every((nome, i) => listados[i] === 'assets/' + nome)) {
+    throw new Error('FOTOS DIFERENTES DAS APROVADAS: conferir licença e arquivos')
+  }
+  for (const item of manifesto.arquivos) {
+    if (typeof item.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256)) {
+      throw new Error('Hash inválido no manifesto das imagens aprovadas')
+    }
+    const original = readFileSync(join(pasta, item.arquivo))
+    const hash = createHash('sha256').update(original).digest('hex')
+    if (hash !== item.sha256) {
+      throw new Error('FOTO MODIFICADA DEPOIS DA AUTORIZAÇÃO: ' + item.arquivo)
+    }
+  }
+}
+
 
 function confirmarCondicoes() {
   const entradas = [
@@ -53,6 +79,7 @@ if (modo === 'producao') {
   confirmarCondicoes()
   dominio = dominioPublico(opcoes.get('dominio'))
 }
+conferirIntegridadeFotosAprovadas()
 if (existsSync(saida)) rmSync(saida, { recursive: true, force: true })
 mkdirSync(saida, { recursive: true })
 for (const name of ['index.html', 'solucoes.html', 'politica-de-privacidade.html', 'robots.txt', 'favicon.svg', 'vercel.json']) {
