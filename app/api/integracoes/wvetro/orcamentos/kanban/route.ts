@@ -310,7 +310,7 @@ async function inserirHistorico(orcamentoId: string, usuario: UsuarioTenant, aca
 async function completarPdfOriginalWVetro(empresaId: string, card: any, numeroWvetro: string) {
   const anexosAtuais = Array.isArray(card.anexos) ? card.anexos : []
   const pdfJaAnexado = anexosAtuais.some((anexo: any) =>
-    /pdf original w\\.?vetro/i.test(String(anexo?.titulo || '')) && !anexo?.excluido_em
+    /pdf original w\.?vetro/i.test(String(anexo?.titulo || '')) && !anexo?.excluido_em
   )
   if (pdfJaAnexado) {
     return { orcamento: card, mensagem: 'O PDF original W.Vetro já consta nos anexos.' }
