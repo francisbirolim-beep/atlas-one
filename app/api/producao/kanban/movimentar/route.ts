@@ -45,7 +45,7 @@ export async function GET(req:NextRequest){
   return NextResponse.json({ok:true,pendencias:data||[],
     modoInicial:modoInicialDisponivel&&Boolean(configuracao.data?.habilitado),
     modoInicialDisponivel,
-    podeConfigurar:modoInicialDisponivel&&user.role==='master',
+    podeConfigurar:user.role==='master',
     podeMovimentarInicial:modoInicialDisponivel&&(user.role==='master'||Boolean(permissaoPropria.data?.pode_movimentar)),
     usuariosPermissoes:modoInicialDisponivel&&user.role==='master'?(usuarios.data||[]).filter(u=>u.role!=='master'):[],
     permissoesEquipe:modoInicialDisponivel&&user.role==='master'?permissoesEquipe.data||[]:[],
