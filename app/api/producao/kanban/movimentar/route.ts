@@ -29,9 +29,14 @@ export async function GET(req:NextRequest){
     supabaseAdmin.from('producao_kanban_etapas_iniciais').select('item_ref,etapa,motivo_pendencia,categoria_pendencia,atualizado_em')
       .eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId),
   ])
-  if(configuracao.error||etapasIniciais.error)return erro('O modo inicial necessita da migração de dados para funcionar.',503)
-  return NextResponse.json({ok:true,pendencias:data||[],modoInicial:Boolean(configuracao.data?.habilitado),
-    podeConfigurar:['master','admin'].includes(user.role),etapasIniciais:etapasIniciais.data||[],diagnostico:{
+  // O fluxo técnico deve continuar disponível se a migração do modo inicial ainda não foi aplicada.
+  const modoInicialDisponivel=!configuracao.error&&!etapasIniciais.error
+  if(!modoInicialDisponivel)console.warn('[Produção] Acompanhamento inicial indisponível; fluxo técnico preservado.',configuracao.error?.code||etapasIniciais.error?.code)
+  return NextResponse.json({ok:true,pendencias:data||[],
+    modoInicial:modoInicialDisponivel&&Boolean(configuracao.data?.habilitado),
+    modoInicialDisponivel,
+    podeConfigurar:modoInicialDisponivel&&['master','admin'].includes(user.role),
+    etapasIniciais:modoInicialDisponivel?etapasIniciais.data||[]:[],diagnostico:{
     medicoesTotal:medicoes?.length||0,
     medicoesAprovadas:(medicoes||[]).filter(m=>m.status_operacional==='aprovado').length,
   }})
@@ -77,7 +82,8 @@ export async function POST(req:NextRequest){
   }
   const {data:configuracao,error:erroConfig}=await supabaseAdmin.from('producao_kanban_fluxo_inicial')
     .select('habilitado').eq('empresa_id',user.empresa_id).eq('venda_obra_id',vendaId).maybeSingle()
-  if(erroConfig)return erro('Não foi possível conferir o modo inicial.',503)
+  // Uma migração nova não pode paralisar a movimentação técnica que já funcionava.
+  if(erroConfig&&!['42P01','PGRST205'].includes(erroConfig.code||''))return erro('Não foi possível conferir o modo inicial.',503)
   if(configuracao?.habilitado){
     if(destino==='conferencia')return erro('No modo inicial, a conferência é registrada no processo técnico oficial.')
     const {data,error}=await supabaseAdmin.rpc('fn_producao_kanban_mover_inicial_v1',{
