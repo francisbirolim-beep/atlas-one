@@ -12,6 +12,7 @@ import {
 import { tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
+import { limitesRecorteCartao } from '@/lib/ai/catalogoRecorteCartao'
 import { codigoColadoDeOutrasColunas } from '@/lib/ai/catalogoCartoesGeometria'
 import { conferirDadosCatalogo } from '@/lib/ai/catalogoConferencia'
 import { lerImagemCatalogoPreview, salvarImagemCatalogoPreview } from '@/lib/ai/catalogoImagemPreview'
@@ -998,13 +999,21 @@ function ImagemPerfilCatalogo({fonteUrl,pagina,codigo,descricao,somenteLeitura,o
             sw=Math.min(canvas.width-sx,Math.max(100*scale,target.x-sx-12*scale))
             sh=Math.min(canvas.height-sy,(proximo?proximo.y-proximo.h-12*scale:canvas.height-30*scale)-sy)
           }else{
-            const colunas=codigos.filter((i:any)=>Math.abs(i.y-target.y)<24*scale).sort((a:any,b:any)=>a.x-b.x)
-            const proximo=colunas.find((i:any)=>i.x>target.x+30*scale)
-            const abaixo=codigos.filter((i:any)=>i.y>target.y+30*scale&&Math.abs(i.x-target.x)<80*scale).sort((a:any,b:any)=>a.y-b.y)[0]
-            sx=Math.max(0,Math.floor(target.x-18*scale))
-            sy=Math.max(0,Math.floor(target.y-target.h-12*scale))
-            sw=Math.min(canvas.width-sx,(proximo?proximo.x-18*scale:canvas.width-25*scale)-sx)
-            sh=Math.min(canvas.height-sy,(abaixo?abaixo.y-abaixo.h-12*scale:canvas.height-25*scale)-sy)
+            // PDF de cartões: peso imediatamente abaixo do código, desenho e
+            // cotas logo em seguida. Evita engolir toda a parte inferior da página.
+            // Para perfis sem esse layout, conserva o recorte já homologado.
+            const cartao=limitesRecorteCartao(itens,target,scale,canvas.width,canvas.height)
+            if(cartao){
+              ;({sx,sy,sw,sh}=cartao)
+            }else{
+              const colunas=codigos.filter((i:any)=>Math.abs(i.y-target.y)<24*scale).sort((a:any,b:any)=>a.x-b.x)
+              const proximo=colunas.find((i:any)=>i.x>target.x+30*scale)
+              const abaixo=codigos.filter((i:any)=>i.y>target.y+30*scale&&Math.abs(i.x-target.x)<80*scale).sort((a:any,b:any)=>a.y-b.y)[0]
+              sx=Math.max(0,Math.floor(target.x-18*scale))
+              sy=Math.max(0,Math.floor(target.y-target.h-12*scale))
+              sw=Math.min(canvas.width-sx,(proximo?proximo.x-18*scale:canvas.width-25*scale)-sx)
+              sh=Math.min(canvas.height-sy,(abaixo?abaixo.y-abaixo.h-12*scale:canvas.height-25*scale)-sy)
+            }
           }
         }else{
           throw new Error('O código não foi localizado de forma única nesta página. Abra a fonte e anexe o desenho correto.')
