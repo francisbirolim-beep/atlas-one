@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase'
 import { localizarCodigoCatalogo } from '@/lib/ai/catalogoImagemCodigo'
 import { limitesRecorteCartao } from '@/lib/ai/catalogoRecorteCartao'
 import { codigoColadoDeOutrasColunas } from '@/lib/ai/catalogoCartoesGeometria'
+import { mesmaReferenciaCatalogo } from '@/lib/ai/catalogoImagemReferencia'
 import { conferirDadosCatalogo } from '@/lib/ai/catalogoConferencia'
 import { lerImagemCatalogoPreview, salvarImagemCatalogoPreview } from '@/lib/ai/catalogoImagemPreview'
 import { conferidoSomenteNaPrevia } from '@/lib/ai/catalogoFilaValidacao'
@@ -881,9 +882,10 @@ function imagemProdutoCandidato(c:Candidato){
   if(direto)return direto
   const existente=c.deduplicacao?.produto_existente||{}
   const doExistente=String(existente.imagem_item_url||existente.imagem_url||existente.foto_url||'').trim()
-  if(doExistente)return doExistente
-  const codigo=String(c.dados?.codigo||existente.codigo||'').trim().toUpperCase()
-  // Não inferir imagem por convenção de nome do arquivo: somente registros comprovados.
+  // Evita herdar o desenho de um perfil parecido ou de outra referência:
+  // o catálogo precisa ter código idêntico ao do produto que fornece a imagem.
+  if(doExistente&&mesmaReferenciaCatalogo(c.dados?.codigo,existente.codigo))return doExistente
+  // Se o código for diferente ou desconhecido, exigir recorte do PDF original.
   return ''
 }
 
