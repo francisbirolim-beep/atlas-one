@@ -586,7 +586,10 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           quantidade: primeiroAtualizado.quantidade || 1,
           acabamento: txt(p.Cor, p.Acabamento) || null,
           cidade: cidadeOrcamento || existente.cidade || null,
-          valor_estimado: valor > 0 ? valor : null,
+          // Correção comercial humana tem precedência sobre nova leitura automática.
+          // Não regravar o preço de venda conferido quando o payload é o mesmo.
+          valor_estimado: obj(anterior?.valor_venda_conferencia)?.status === 'corrigido'
+            ? existente.valor_estimado : (valor > 0 ? valor : null),
           updated_at: new Date().toISOString(),
           wvetro_fluxo: fluxoAtualizado,
           anexos: anexosAtualizados,

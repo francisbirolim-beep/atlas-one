@@ -7,7 +7,8 @@ function objeto(valor: unknown): Record<string, any> {
 export function houveConferenciaHumanaWVetro(fluxo: unknown): boolean {
   const dados = objeto(fluxo)
   return Object.keys(objeto(dados.validacoes_itens)).length > 0 ||
-    String(dados.validacao_status || '').toLowerCase() === 'validado'
+    String(dados.validacao_status || '').toLowerCase() === 'validado' ||
+    Boolean(objeto(dados.valor_venda_conferencia).conferido_em)
 }
 
 /**
@@ -47,6 +48,7 @@ export function reconciliarSincronizacaoWVetro(
     fluxo: {
       ...novoFluxo,
       ...(porItem ? { validacoes_itens: validacoes, validacao_por_item: true } : {}),
+      ...(fluxoAntigo.valor_venda_conferencia ? { valor_venda_conferencia: fluxoAntigo.valor_venda_conferencia } : {}),
       validacao_status: todos ? 'validado' : 'aguardando',
       ...(todos ? {
         validado_em: fluxoAntigo.validado_em || null,

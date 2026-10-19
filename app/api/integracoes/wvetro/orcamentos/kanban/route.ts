@@ -1,4 +1,5 @@
 import { validarItemImportadoWVetro } from '@/lib/wvetroValidacaoItemServer'
+import { conferirValorVendaImportadoWVetro } from '@/lib/wvetroValorVendaValidacaoServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -443,6 +444,7 @@ export async function POST(req: NextRequest) {
     const acao = txt(body.acao)
     const cardId = txt(body.cardId)
     if (['validar_item_importacao','corrigir_item_importacao','sugerir_item_importacao'].includes(acao)) return await validarItemImportadoWVetro(req,usuario,body)
+    if (acao === 'conferir_valor_venda_importacao') return await conferirValorVendaImportadoWVetro(usuario, body)
 
     if (!cardId) return NextResponse.json({ error: 'Orçamento do Kanban não informado.' }, { status: 400 })
 

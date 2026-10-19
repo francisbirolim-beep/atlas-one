@@ -22,6 +22,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { jsPDF } from 'jspdf'
 import ConferenciaItemWVetro, { TipoImportadoWVetro, EditorTecnicoWVetro } from './ConferenciaItemWVetro'
 import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wvetroValidacaoItem'
+import {centavosVendaWVetro,valorOrigemVendaWVetro} from '@/lib/wvetroValorVendaValidacao'
 import { prepararRascunhoWVetro } from '@/lib/wvetroRascunhoOrcamento'
 import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
 import { linkRotaObra, localizacaoRegistradaNaObra, enderecoCompletoObra } from '@/lib/enderecoObra'
@@ -307,6 +308,9 @@ const [sincronizandoWVetro, setSincronizandoWVetro] = useState(false)
 const [validandoWVetro, setValidandoWVetro] = useState(false)
 const [candidatosWVetro, setCandidatosWVetro] = useState<WVetroCandidatoKanban[]>([])
 const [mensagemWVetro, setMensagemWVetro] = useState('')
+const [valorVendaWVetroDraft, setValorVendaWVetroDraft] = useState('')
+const [motivoValorVendaWVetro, setMotivoValorVendaWVetro] = useState('')
+const [conferindoValorVendaWVetro, setConferindoValorVendaWVetro] = useState(false)
 
 useEffect(() => {
 carregar()
@@ -588,6 +592,8 @@ setCardSelecionado(cardAberto)
 setBairroSugerido(null)
 setAvisoBairro('')
 setEditando({ ...cardAberto, itens: itensComFoto, anexos: normalizarVersoesLegadas(cardAberto.anexos) })
+setValorVendaWVetroDraft(cardAberto.valor_estimado == null ? '' : formatarMoedaBRL(cardAberto.valor_estimado))
+setMotivoValorVendaWVetro('')
 setNovoAnexoTitulo('')
 setSessaoAtiva(!cardAberto.orcamento_finalizado_em)
 setVendedorInfo(null)
@@ -751,6 +757,57 @@ window.alert('A validação desta esquadria NÃO foi salva. Confira o erro antes
 return false
 }
 finally{setValidandoWVetro(false)}
+}
+
+async function conferirValorVendaWVetro(modo: 'validar'|'corrigir') {
+if (!cardSelecionado || conferindoValorVendaWVetro || validandoWVetro || sincronizandoWVetro) return
+const digitos = valorVendaWVetroDraft.replace(/\D/g, '')
+const valorCorrigido = digitos ? Number(digitos) / 100 : null
+const atual = cardSelecionado.valor_estimado == null ? null : Number(cardSelecionado.valor_estimado)
+if (modo === 'corrigir' && (valorCorrigido === null || centavosVendaWVetro(valorCorrigido) === null)) {
+setMensagemWVetro('Informe um valor de venda válido, maior que zero.')
+return
+}
+if (modo === 'validar' && (centavosVendaWVetro(atual) === null ||
+    centavosVendaWVetro(valorCorrigido) !== centavosVendaWVetro(atual))) {
+setMensagemWVetro('O campo de valor está diferente do Atlas ou não foi preenchido. Use Corrigir valor de venda.')
+return
+}
+if (modo === 'corrigir' && motivoValorVendaWVetro.trim().length < 5) {
+setMensagemWVetro('Explique o motivo da alteração do valor de venda.')
+return
+}
+setConferindoValorVendaWVetro(true);setMensagemWVetro('')
+try {
+const token = await tokenAtual()
+if (!token) throw new Error('Sessão expirada.')
+const resp = await fetch('/api/integracoes/wvetro/orcamentos/kanban',{
+method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+body:JSON.stringify({
+acao:'conferir_valor_venda_importacao',cardId:cardSelecionado.id,modo,
+atualizadoEm:(cardSelecionado as any).updated_at??null,valorAnterior:atual,
+...(modo==='corrigir'?{valorCorrigido,justificativa:motivoValorVendaWVetro.trim()}:{}),
+}),
+})
+const dados = await resp.json().catch(()=>({}))
+if (!resp.ok) throw new Error(dados.error||'Falha ao conferir o valor de venda.')
+const atualizado = dados.orcamento as OrcamentoRapido
+if (!atualizado?.id || !fluxoWVetro(atualizado).valor_venda_conferencia?.conferido_em) {
+throw new Error('A gravação do valor não foi confirmada no banco.')
+}
+setCardSelecionado(atualizado)
+setCards(prev=>prev.map(o=>o.id===atualizado.id?atualizado:o))
+setEditando(prev=>prev?{
+...prev,valor_estimado:atualizado.valor_estimado,updated_at:(atualizado as any).updated_at,
+wvetro_fluxo:fluxoWVetro(atualizado),
+}:prev)
+setValorVendaWVetroDraft(atualizado.valor_estimado==null?'':formatarMoedaBRL(atualizado.valor_estimado))
+setMotivoValorVendaWVetro('')
+setMensagemWVetro(dados.mensagem||'Valor conferido.')
+setHistorico(await listarHistorico(atualizado.id))
+} catch(e) {
+setMensagemWVetro(e instanceof Error?e.message:'Falha ao conferir o preço.')
+} finally {setConferindoValorVendaWVetro(false)}
 }
 
 function restaurarItemWVetro(itemId:string) {
@@ -1267,7 +1324,7 @@ setSalvando(true)
 const colunaAnterior = cardSelecionado.coluna_id
 const mudouColuna = colunaAnterior !== editando.coluna_id
 
-const { data: salvo, error } = await supabase
+let gravacao = supabase
 .from('orcamentos')
 .update({
 ...(ehOrcamentoWVetro(cardSelecionado) ? { updated_at: new Date().toISOString() } : {}),
@@ -1283,7 +1340,8 @@ arquiteto_nome: editando.arquiteto_nome,
 arquiteto_contato: editando.arquiteto_contato,
 itens: rascunhoWVetro?.itens ?? editando.itens,
 ...(rascunhoWVetro?.fluxo.validacao_por_item ? { wvetro_fluxo: rascunhoWVetro.fluxo } : {}),
-valor_estimado: editando.valor_estimado,
+// Orçamento importado: preço é corrigido somente pela conferência auditável.
+...(ehOrcamentoWVetro(cardSelecionado) ? {} : { valor_estimado: editando.valor_estimado }),
 tipo_esquadria: editando.itens?.[0]?.tipo_esquadria || editando.tipo_esquadria,
 largura_mm: editando.itens?.[0]?.largura_mm ?? editando.largura_mm,
 altura_mm: editando.itens?.[0]?.altura_mm ?? editando.altura_mm,
@@ -1292,8 +1350,12 @@ coluna_id: editando.coluna_id,
 coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
 })
 .eq('id', cardSelecionado.id)
-.select('id')
-.maybeSingle()
+if (ehOrcamentoWVetro(cardSelecionado)) {
+  gravacao = (cardSelecionado as any).updated_at
+    ? gravacao.eq('updated_at',(cardSelecionado as any).updated_at)
+    : gravacao.is('updated_at',null)
+}
+const { data: salvo, error } = await gravacao.select('id').maybeSingle()
 
 setSalvando(false)
 if (error || !salvo) {
@@ -1679,6 +1741,41 @@ Card adicionado em {new Date(cardSelecionado.kanban_entrada_em || cardSelecionad
 </div>
 )}
 </div>
+{ehOrcamentoWVetro(cardSelecionado) && (
+<div id="wvetro-valor-venda" className="rounded-xl border border-blue-200 bg-white p-3 space-y-3">
+  <div>
+    <p className="text-sm font-bold text-slate-900">Conferência do valor de venda · W.Vetro #{numeroWVetroCard(cardSelecionado)}</p>
+    <p className="mt-1 text-xs text-slate-600">O valor importado é apenas referência. Confira o preço contratado e corrija o total se necessário, sem alterar preços individuais ou custos das esquadrias.</p>
+  </div>
+  <div className="grid grid-cols-2 gap-2 text-xs">
+    <div className="rounded-lg bg-slate-50 border p-2"><span className="text-slate-500">Origem W.Vetro</span><b className="mt-1 block">{valorOrigemVendaWVetro(fluxoWVetro(cardSelecionado)) == null ? 'Não informado' : formatarMoedaBRL(valorOrigemVendaWVetro(fluxoWVetro(cardSelecionado)))}</b></div>
+    <div className="rounded-lg bg-slate-50 border p-2"><span className="text-slate-500">Atual no Atlas</span><b className="mt-1 block">{cardSelecionado.valor_estimado == null ? 'Não informado' : formatarMoedaBRL(cardSelecionado.valor_estimado)}</b></div>
+  </div>
+  {fluxoWVetro(cardSelecionado).valor_venda_conferencia?.conferido_em&&<p className="text-xs font-medium text-emerald-700">Última conferência: {fluxoWVetro(cardSelecionado).valor_venda_conferencia.status==='corrigido'?'valor corrigido':'valor validado'} por {fluxoWVetro(cardSelecionado).valor_venda_conferencia.conferido_por_nome||'usuário'} em {new Date(fluxoWVetro(cardSelecionado).valor_venda_conferencia.conferido_em).toLocaleString('pt-BR')}</p>}
+  <label className="block text-xs font-medium text-slate-700">Valor total correto da venda
+    <input type="text" inputMode="numeric" value={valorVendaWVetroDraft}
+      disabled={conferindoValorVendaWVetro||validandoWVetro||sincronizandoWVetro}
+      onChange={e=>{const digitos=e.target.value.replace(/\D/g,'').slice(0,11);setValorVendaWVetroDraft(digitos?formatarMoedaBRL(Number(digitos)/100):'')}}
+      placeholder="R$ 0,00" className="mt-1 w-full rounded-lg border border-slate-300 p-2.5 text-sm"/>
+  </label>
+  <label className="block text-xs font-medium text-slate-700">Motivo da correção
+    <textarea rows={2} maxLength={500} value={motivoValorVendaWVetro}
+      disabled={conferindoValorVendaWVetro||validandoWVetro||sincronizandoWVetro}
+      onChange={e=>setMotivoValorVendaWVetro(e.target.value)}
+      placeholder="Ex.: valor conferido no orçamento vendido W.Vetro"
+      className="mt-1 w-full rounded-lg border border-slate-300 p-2 text-sm"/>
+  </label>
+  <div className="flex flex-wrap gap-2">
+    <button type="button" onClick={()=>void conferirValorVendaWVetro('validar')}
+      disabled={conferindoValorVendaWVetro||validandoWVetro||sincronizandoWVetro||centavosVendaWVetro(cardSelecionado.valor_estimado)==null}
+      className="rounded-lg border border-emerald-300 px-3 py-2 text-xs font-bold text-emerald-800 disabled:opacity-50">Validar valor atual</button>
+    <button type="button" onClick={()=>void conferirValorVendaWVetro('corrigir')}
+      disabled={conferindoValorVendaWVetro||validandoWVetro||sincronizandoWVetro}
+      className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{conferindoValorVendaWVetro?'Salvando...':'Corrigir valor de venda'}</button>
+  </div>
+  <p className="text-[11px] text-slate-500">Cada confirmação registra valor anterior, novo valor, responsável e data. Vendas já confirmadas são protegidas: a correção deve ocorrer na aba Venda/CMV.</p>
+</div>
+)}
 {ehOrcamentoWVetro(cardSelecionado) && (
 <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
 <p className="text-xs font-bold text-blue-900">W.Vetro #{numeroWVetroCard(cardSelecionado)} · Conferência por esquadria</p>
@@ -2413,7 +2510,7 @@ onChange={e => adicionarAnexo(e.target.files?.[0])}
 <p className="text-xs text-slate-400 mt-1">Dê um título antes de escolher o arquivo (ex: "Orçamento com contramarco"). O orçamento também é gerado automaticamente em PDF: no celular, abre o menu de compartilhar para anexar o PDF de verdade no WhatsApp; se não for possível, envia o link do PDF na mensagem.</p>
 </div>
 
-<div>
+{!ehOrcamentoWVetro(cardSelecionado) ? <div>
 <label className="block text-xs text-slate-500 mb-1">Valor total do orçamento</label>
 <input
 type="text"
@@ -2426,7 +2523,7 @@ placeholder="R$ 0,00"
 inputMode="numeric"
 className="w-full border border-slate-300 rounded-lg p-2.5 text-sm"
 />
-</div>
+</div> : <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-900">Valor de venda W.Vetro: <b>{editando.valor_estimado==null?'Não informado':formatarMoedaBRL(editando.valor_estimado)}</b>. Para alterar, use a conferência do valor de venda acima, que registra a correção e protege a próxima sincronização.</div>}
 
 <div className="pt-2 border-t border-slate-200 space-y-2">
 <p className="text-xs font-medium text-slate-500">
