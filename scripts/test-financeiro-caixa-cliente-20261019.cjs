@@ -4,7 +4,7 @@ const route = fs.readFileSync('app/api/financeiro/cliente-recebimento/route.ts',
 const pagina = fs.readFileSync('app/clientes/[id]/financeiro/recebimento/page.tsx','utf8')
 const caixa = fs.readFileSync('app/balcao/contas-receber/page.tsx','utf8')
 const apiCaixa = fs.readFileSync('app/api/balcao/contas-receber/route.ts','utf8')
-const migracao = fs.readFileSync('supabase/migrations/20261019140000_financeiro_recebimento_unificado_caixa_v1.sql','utf8')
+const migracao = fs.readFileSync('supabase/migrations/20261019142659_financeiro_recebimento_unificado_caixa_v1.sql','utf8')
 const recibos = fs.readFileSync('app/api/financeiro/recibo/route.ts','utf8')
 
 for (const t of [
