@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { RefreshCw, Search, WalletCards } from 'lucide-react'
+import BarraFiltrosPeriodo from '@/components/financeiro/BarraFiltrosPeriodo'
+import FormLancamentoManual from '@/components/financeiro/FormLancamentoManual'
+import {baixarCSV,csvFinanceiro,isoLocal,noPeriodo,periodoRapido,type PeriodoFinanceiro} from '@/lib/financeiroPeriodo'
 import { supabase } from '@/lib/supabase'
 import type { ContaReceberCliente360 } from '@/lib/cliente360'
 import { saldoParcela } from '@/lib/cliente360Recebimentos'
@@ -30,70 +33,58 @@ function dataHoraBR(valor?: string | null) {
 export default function ContasReceberPage() {
   const [contas, setContas] = useState<ContaReceberCliente360[]>([])
   const [recebimentos, setRecebimentos] = useState<RecebimentoGeral[]>([])
+  const [nomesObras,setNomesObras]=useState<Record<string,string>>({})
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<'aberto' | 'vencido' | 'pago' | 'todos'>('aberto')
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [periodo,setPeriodo]=useState<PeriodoFinanceiro>(()=>periodoRapido('todos'))
+  const [clienteFiltro,setClienteFiltro]=useState('')
+  const [obraFiltro,setObraFiltro]=useState('')
+  const [dataBase,setDataBase]=useState<'vencimento'|'pagamento'>('vencimento')
+  const [agrupar,setAgrupar]=useState(false)
 
   async function carregar() {
     setCarregando(true)
     setErro('')
-    const [contasResp, recebimentosResp] = await Promise.all([
-      supabase
-        .from('financeiro_contas_receber')
-        .select('*')
-        .order('vencimento', { ascending: true, nullsFirst: false })
-        .limit(1500),
-      supabase
-        .from('financeiro_recebimentos')
-        .select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,forma,referencia,observacoes,status,criado_por_nome,created_at')
-        .neq('status','cancelado')
-        .order('data_recebimento', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(1000),
-    ])
-
-    if (contasResp.error) {
-      setErro('Não foi possível carregar as contas a receber.')
+    try {
+      const {data:autenticacao,error:erroAuth}=await supabase.auth.getSession()
+      if(erroAuth||!autenticacao.session?.access_token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
+      const resposta=await fetch('/api/financeiro/contas-receber',{
+        headers:{Authorization:`Bearer ${autenticacao.session.access_token}`},
+        cache:'no-store'
+      })
+      const dados=await resposta.json()
+      if(!resposta.ok)throw new Error(dados.error||'Não foi possível carregar contas a receber.')
+      setContas((dados.contas||[]) as ContaReceberCliente360[])
+      setRecebimentos((dados.recebimentos||[]) as RecebimentoGeral[])
+      const nomes:Record<string,string>={}
+      for(const obra of dados.obras||[])nomes[obra.id]=`${obra.nome}${obra.numero?` #${obra.numero}`:''}`
+      setNomesObras(nomes)
+    }catch(e){
+      setErro(e instanceof Error?e.message:'Não foi possível carregar contas a receber.')
       setContas([])
-    } else {
-      setContas((contasResp.data || []) as ContaReceberCliente360[])
-    }
-
-    if (recebimentosResp.error) {
-      setErro(prev => prev || 'Não foi possível carregar o histórico de recebimentos.')
       setRecebimentos([])
-    } else {
-      const lista = (recebimentosResp.data || []) as RecebimentoGeral[]
-      const ids = lista.map(r => r.id)
-      const descontos:Record<string,number> = {}
-      if (ids.length) {
-        const { data: alocacoes } = await supabase
-          .from('financeiro_recebimento_alocacoes')
-          .select('recebimento_id,tipo,valor')
-          .in('recebimento_id', ids)
-        ;(alocacoes || []).filter((a:any)=>a.tipo==='desconto').forEach((a:any)=>{
-          descontos[a.recebimento_id]=(descontos[a.recebimento_id]||0)+Number(a.valor||0)
-        })
-      }
-      setRecebimentos(lista.map(r=>({...r,desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})))
-    }
-    setCarregando(false)
+      setNomesObras({})
+    }finally{setCarregando(false)}
   }
 
   useEffect(() => { void carregar() }, [])
 
-  const hoje = new Date().toISOString().slice(0, 10)
+  const hoje = isoLocal(new Date())
+  const clientesDisponiveis=[...new Map(contas.filter(c=>c.cliente_id).map(c=>[c.cliente_id!,c.cliente_nome||'Cliente'])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'pt-BR'))
+  const obrasDisponiveis=[...new Set(contas.filter(c=>!clienteFiltro||c.cliente_id===clienteFiltro).map(c=>c.obra_id).filter((v):v is string=>!!v))]
 
   const resumo = useMemo(() => {
-    const abertas = contas.filter(c => c.status !== 'pago' && c.status !== 'cancelado')
-    const recebido = contas.reduce((s, c) => s + Number(c.valor_pago || 0), 0)
+    const base=contas.filter(c=>(!clienteFiltro||c.cliente_id===clienteFiltro)&&(!obraFiltro||c.obra_id===obraFiltro)&&noPeriodo(dataBase==='pagamento'?c.data_pagamento:c.vencimento,periodo.inicio,periodo.fim))
+    const abertas = base.filter(c => c.status !== 'pago' && c.status !== 'cancelado')
+    const recebido = base.reduce((s, c) => s + Number(c.valor_pago || 0), 0)
     const aberto = abertas.reduce((s, c) => s + saldoParcela(c), 0)
     const vencido = abertas
       .filter(c => c.vencimento && c.vencimento < hoje)
       .reduce((s, c) => s + saldoParcela(c), 0)
     return { aberto, vencido, recebido }
-  }, [contas, hoje])
+  }, [contas, hoje,clienteFiltro,obraFiltro,periodo,dataBase])
 
   const filtradas = useMemo(() => contas.filter(conta => {
     const saldo = saldoParcela(conta)
@@ -104,31 +95,52 @@ export default function ContasReceberPage() {
       (filtro === 'vencido' && vencida) ||
       (filtro === 'aberto' && conta.status !== 'pago' && conta.status !== 'cancelado' && saldo > 0.009)
 
-    return bateFiltro && correspondeBuscaAtlas(busca, conta.cliente_nome, conta.documento, conta.forma, conta.observacoes, conta.status)
-  }), [busca, contas, filtro, hoje])
+    return bateFiltro && (!clienteFiltro||conta.cliente_id===clienteFiltro) && (!obraFiltro||conta.obra_id===obraFiltro) && noPeriodo(dataBase==='pagamento'?conta.data_pagamento:conta.vencimento,periodo.inicio,periodo.fim) && correspondeBuscaAtlas(busca, conta.cliente_nome, conta.documento, conta.forma, conta.observacoes, conta.status)
+  }), [busca, contas, filtro, hoje, clienteFiltro,obraFiltro,periodo,dataBase])
 
   const recebimentosFiltrados = useMemo(() => recebimentos.filter(r =>
+    (!clienteFiltro||r.cliente_id===clienteFiltro) && (!obraFiltro||r.obra_id===obraFiltro) && noPeriodo(r.data_recebimento,periodo.inicio,periodo.fim) &&
     correspondeBuscaAtlas(busca, r.cliente_nome, r.forma, r.referencia, r.observacoes, r.criado_por_nome, r.status)
-  ), [busca, recebimentos])
+  ), [busca, recebimentos,clienteFiltro,obraFiltro,periodo])
+  const exibidas=useMemo(()=>agrupar?[...filtradas].sort((a,b)=>(a.cliente_nome||'').localeCompare(b.cliente_nome||'','pt-BR')||(a.vencimento||'').localeCompare(b.vencimento||'')):filtradas,[filtradas,agrupar])
+  const valorFiltrado=filtradas.reduce((s,c)=>s+Number(c.valor||0),0)
+  const saldoFiltrado=filtradas.reduce((s,c)=>s+saldoParcela(c),0)
+  const exportar=()=>baixarCSV('atlas-contas-a-receber.csv',csvFinanceiro([
+    ['Contas a receber','De',periodo.inicio||'Todos','Até',periodo.fim||'Todos'],
+    ['Cliente','Obra ID','Documento','Parcela','Total parcelas','Vencimento','Data pagamento','Forma','Valor','Desconto','Saldo','Status'],
+    ...filtradas.map(c=>[c.cliente_nome,c.obra_id?(nomesObras[c.obra_id]||c.obra_id):'',c.documento,c.parcela,c.total_parcelas,dataBR(c.vencimento),dataBR(c.data_pagamento),c.forma,Number(c.valor||0),Number(c.valor_desconto||0),saldoParcela(c),c.status]),
+    ['TOTAL','','','','','','','',valorFiltrado,'',saldoFiltrado,''],
+    [],['RECEBIMENTOS REGISTRADOS NO PERÍODO'],
+    ['Data recebimento','Cliente','Forma','Valor efetivo','Desconto','Referência'],
+    ...recebimentosFiltrados.map(r=>[dataBR(r.data_recebimento),r.cliente_nome,r.forma,Number(r.valor||0),Number(r.desconto||0),r.referencia]),
+    ['TOTAL RECEBIDO','','',recebimentosFiltrados.reduce((a,r)=>a+Number(r.valor||0),0)]
+  ]))
 
   return (
     <main className="min-h-screen bg-slate-50 p-4 sm:p-6">
       <div className="mx-auto max-w-7xl space-y-5">
+        <style jsx global>{`@media print{@page{size:A4 landscape;margin:10mm}nav,aside,.no-print{display:none!important}main{padding:0!important;background:white!important}table{font-size:10px!important}}`}</style>
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[.14em] text-slate-400">Financeiro</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-900">Contas a Receber</h1>
             <p className="mt-1 text-sm text-slate-600">Parcelas de clientes, obras e vendas registradas no Atlas.</p>
           </div>
-          <button onClick={() => void carregar()} className="rounded-xl border bg-white p-2.5 text-slate-600" title="Atualizar"><RefreshCw size={18}/></button>
+          <div className="no-print flex flex-wrap items-center gap-2"><FormLancamentoManual tipo="receber" onSalvo={()=>void carregar()}/><button onClick={() => void carregar()} className="rounded-xl border bg-white p-2.5 text-slate-600" title="Atualizar"><RefreshCw size={18}/></button></div>
         </header>
 
         {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
 
+        <BarraFiltrosPeriodo periodo={periodo} onPeriodo={setPeriodo} onExportar={exportar} adicional={<>
+          <label className="text-xs font-semibold text-slate-600">Cliente<select className="mt-1 block max-w-[220px] rounded-lg border p-2.5 text-sm" value={clienteFiltro} onChange={e=>{setClienteFiltro(e.target.value);setObraFiltro('')}}><option value="">Todos os clientes</option>{clientesDisponiveis.map(([id,nome])=><option key={id} value={id}>{nome}</option>)}</select></label>
+          <label className="text-xs font-semibold text-slate-600">Obra<select className="mt-1 block max-w-[180px] rounded-lg border p-2.5 text-sm" value={obraFiltro} onChange={e=>setObraFiltro(e.target.value)}><option value="">Todas as obras</option>{obrasDisponiveis.map(id=><option key={id} value={id}>{nomesObras[id]||`Obra ${id.slice(0,8)}`}</option>)}</select></label>
+          <label className="text-xs font-semibold text-slate-600">Data do período<select className="mt-1 block rounded-lg border p-2.5 text-sm" value={dataBase} onChange={e=>setDataBase(e.target.value as 'vencimento'|'pagamento')}><option value="vencimento">Vencimento</option><option value="pagamento">Pagamento efetivo</option></select></label>
+          <label className="flex items-center gap-2 text-xs font-semibold text-slate-600"><input type="checkbox" checked={agrupar} onChange={e=>setAgrupar(e.target.checked)}/>Agrupar por cliente</label>
+        </>}/>
         <section className="grid gap-3 sm:grid-cols-3">
-          <Card titulo="Em aberto" valor={moeda(resumo.aberto)} />
-          <Card titulo="Vencido" valor={moeda(resumo.vencido)} destaque />
-          <Card titulo="Já recebido" valor={moeda(resumo.recebido)} />
+          <Card titulo="Em aberto no período" valor={moeda(resumo.aberto)} />
+          <Card titulo="Vencido no período" valor={moeda(resumo.vencido)} destaque />
+          <Card titulo={dataBase==='pagamento'?'Recebido efetivamente no período':'Recebido nos títulos filtrados'} valor={moeda(dataBase==='pagamento'?recebimentosFiltrados.reduce((s,r)=>s+Number(r.valor||0),0):resumo.recebido)} />
         </section>
 
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -155,12 +167,12 @@ export default function ContasReceberPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtradas.map(conta => {
+                  {exibidas.map((conta,i) => {
                     const saldo = saldoParcela(conta)
                     const vencida = conta.status !== 'pago' && conta.status !== 'cancelado' && !!conta.vencimento && conta.vencimento < hoje
                     return (
                       <tr key={conta.id} className="border-b last:border-0">
-                        <td className="p-3 font-semibold text-slate-800">{conta.cliente_nome || 'Cliente'}</td>
+                        <td className="p-3 font-semibold text-slate-800">{conta.cliente_nome || 'Cliente'}{agrupar&&exibidas.findIndex(c=>c.cliente_id===conta.cliente_id)===i&&<span className="block text-[10px] font-semibold text-blue-700">Subtotal do cliente: {moeda(exibidas.filter(c=>c.cliente_id===conta.cliente_id).reduce((s,c)=>s+Number(c.valor||0),0))}</span>}{conta.obra_id&&<span className="block text-[10px] text-slate-500">{nomesObras[conta.obra_id]||`Obra ${conta.obra_id.slice(0,8)}`}</span>}</td>
                         <td className="p-3 text-slate-600">{conta.documento || '—'}</td>
                         <td className="p-3">{conta.parcela}/{conta.total_parcelas}</td>
                         <td className={`p-3 ${vencida ? 'font-semibold text-red-600' : ''}`}>{dataBR(conta.vencimento)}</td>
@@ -180,7 +192,7 @@ export default function ContasReceberPage() {
                     )
                   })}
                 </tbody>
-              </table>
+              <tfoot><tr className="bg-slate-50 font-bold"><td colSpan={5} className="p-3">TOTAL DO RELATÓRIO</td><td className="p-3 text-right">{moeda(valorFiltrado)}</td><td colSpan={1}/><td className="p-3 text-right">{moeda(saldoFiltrado)}</td><td colSpan={2}/></tr></tfoot></table>
               {!filtradas.length && <div className="py-10 text-center text-sm text-slate-400"><WalletCards className="mx-auto mb-2"/>Nenhuma conta encontrada neste filtro.</div>}
             </div>
           )}
@@ -196,7 +208,7 @@ export default function ContasReceberPage() {
             <table className="w-full min-w-[1100px] text-sm">
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs text-slate-500">
-                  <th className="p-3">Data recebimento</th><th className="p-3">Cliente</th><th className="p-3">Forma</th><th className="p-3 text-right">Recebido</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Total baixado</th><th className="p-3">Referência</th><th className="p-3">Registrado no Atlas</th><th className="p-3">Responsável</th>
+                  <th className="p-3">Data recebimento</th><th className="p-3">Cliente</th><th className="p-3">Forma</th><th className="p-3 text-right">Recebido</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Total baixado</th><th className="p-3">Referência</th><th className="p-3">Registrado no Atlas</th><th className="p-3">Responsável</th><th className="no-print p-3">Recibo</th>
                 </tr>
               </thead>
               <tbody>
@@ -211,7 +223,7 @@ export default function ContasReceberPage() {
                     <td className="p-3 text-right font-bold text-slate-900">{moeda(Number(r.valor||0)+desconto)}</td>
                     <td className="p-3 text-slate-600">{r.referencia||'—'}</td>
                     <td className="p-3 text-slate-500">{dataHoraBR(r.created_at)}</td>
-                    <td className="p-3 text-slate-600">{r.criado_por_nome||'—'}</td>
+                    <td className="p-3 text-slate-600">{r.criado_por_nome||'—'}</td><td className="no-print p-3"><Link target="_blank" href={`/financeiro/recibo/receber/${r.id}`} className="rounded-lg border px-3 py-2 text-xs font-semibold">Imprimir recibo</Link></td>
                   </tr>
                 })}
               </tbody>
