@@ -2,6 +2,7 @@
 import {FormEvent,useState} from 'react'
 import {FileText,Pencil,Plus,Trash2} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
+import {recebimentoConferivelCmv} from '@/lib/vendaCmvConferencia'
 import {UNIDADES_CMV,unidadePadraoCmv,rotuloUnidadeCmv,mostrarQuantidadeCmv} from '@/lib/vendaCmvUnidades'
 export type RecebimentoCmv={
  id:string;categoria:string;peso_kg:number|null;preco_kg:number|null;quantidade?:number|null;unidade?:string|null;preco_unitario?:number|null;valor_total:number;fornecedor:string;
@@ -31,7 +32,7 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
  const [selecionados,setSelecionados]=useState<string[]>([])
  const bloqueado=!disponivel
  const registrosCategoria=registros.filter(r=>r.categoria===categoria&&!r.cancelado_em)
- const pendentesConferencia=registrosCategoria.filter(r=>!r.conferido_em)
+ const pendentesConferencia=registrosCategoria.filter(r=>!r.conferido_em&&recebimentoConferivelCmv(r))
  const todosSelecionados=pendentesConferencia.length>0&&pendentesConferencia.every(r=>selecionados.includes(r.id))
  const onChangePeso=(v:string)=>setPeso(v)
  const onChangePreco=(v:string)=>setPreco(v)
@@ -150,10 +151,11 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
      {r.anexo_url&&<a href={r.anexo_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-blue-700 underline"><FileText size={12}/>{r.anexo_nome||'Anexo'}</a>}
     </div>
     <div className="flex flex-wrap items-center gap-2">
-     {!r.conferido_em&&<label className="inline-flex items-center gap-1 text-slate-600"><input type="checkbox" aria-label="Selecionar recebimento" disabled={salvando} checked={selecionados.includes(r.id)} onChange={e=>setSelecionados(prev=>e.target.checked?[...prev,r.id]:prev.filter(id=>id!==r.id))}/> Selecionar</label>}
+     {!r.conferido_em&&recebimentoConferivelCmv(r)&&<label className="inline-flex items-center gap-1 text-slate-600"><input type="checkbox" aria-label="Selecionar recebimento" disabled={salvando} checked={selecionados.includes(r.id)} onChange={e=>setSelecionados(prev=>e.target.checked?[...prev,r.id]:prev.filter(id=>id!==r.id))}/> Selecionar</label>}
+     {!r.conferido_em&&!recebimentoConferivelCmv(r)&&<span className="rounded-md bg-amber-50 px-2 py-1 font-semibold text-amber-800">Corrija a unidade e a quantidade antes de confirmar</span>}
      {r.conferido_em&&<span className="rounded-md bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">Recebido confirmado{r.conferido_por_nome?' por '+r.conferido_por_nome:''}</span>}
      <b className="text-sm">{moedas(Number(r.valor_total))}</b>
-     {!r.conferido_em&&<button type="button" disabled={salvando||bloqueado} onClick={()=>void validarRecebidos([r.id])} className="rounded-lg border border-emerald-300 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50">Confirmar este</button>}
+     {!r.conferido_em&&recebimentoConferivelCmv(r)&&<button type="button" disabled={salvando||bloqueado} onClick={()=>void validarRecebidos([r.id])} className="rounded-lg border border-emerald-300 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50">Confirmar este</button>}
      <button type="button" disabled={salvando||bloqueado} onClick={()=>abrirForm(r)} className="rounded-lg border px-2 py-1.5 text-blue-700"><Pencil size={13}/></button>
      <button type="button" disabled={salvando||bloqueado} onClick={()=>{setExcluir(excluir===r.id?null:r.id);setMotivo('');setAbrir(false)}} className="rounded-lg border px-2 py-1.5 text-red-700"><Trash2 size={13}/></button>
     </div>
