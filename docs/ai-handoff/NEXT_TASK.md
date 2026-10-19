@@ -1,3 +1,14 @@
+## 2026-10-19 — Financeiro manual + relatórios + recibos (PRÉVIA NÃO publicada)
+
+- Branch isolada `feat/financeiro-manual-preview-20261019`, base da `main` em 19/10 (`d790db6`, sincronizar antes de publicar). Não houve alteração de dados, migrações ou implantação em produção.
+- Mantém os fluxos existentes de compra, recebimento, contas a pagar/receber e DRE; adiciona formulário manual parcelado nas duas telas, com fornecedor/cliente obrigatório, cadastro rápido, vínculo opcional à compra e à obra, categoria gerencial DRE para títulos a pagar.
+- GET /api/financeiro/lancamentos-manuais com escopo de empresa e permissões; POST cadastra novos e títulos, verifica cliente/fornecedor/obra/compra no tenant, distribui centavos por parcela e usa IDs determinísticos por lote; verifica boletos duplicados e compras já tituladas. Registra categorias em `financeiro_plano_contas` e classificações em `financeiro_conta_classificacoes`; títulos automáticos existentes podem ser classificados manualmente.
+- **Segurança de prévia:** `process.env.VERCEL_ENV === 'preview'` bloqueia TODOS os POSTs. Formulário em URL *.vercel.app simula criação, informa que nenhum cadastro ou título foi salvo. Ambiente de produção NÃO alterado e não será publicado sem aprovação explícita.
+- Os filtros usam vencimento inclusivo como padrão, com hoje/semana/mês/próximo mês/período custom, cliente/fornecedor, obra, situação e opção data efetiva; relatórios imprimíveis A4 horizontal (salvar PDF) e CSV para Excel; agrupamento e subtotais.
+- Recibos por pagamento e recebimento consultados com JWT e autorização, apenas pagamento confirmado e recebimento não cancelado. Exibem o valor recebido, saldo atual e aviso quando quitação parcial; recibo de cliente usa obra vinculada, ou dados consolidados apenas do escopo alocado sem misturar obras independentes. Formato imprimível com assinatura.
+- Não foi criada geração/upload de boleto bancário, PIX automático, sincronização bancária ou cálculo de saldo histórico na data da baixa; relatório/recibo apresenta posição **atual** do título. Anexos e fluxo DRE por competência podem ser etapas posteriores.
+- Testar envio e filtro simulados, permissões, múltiplas obras, prévia de recibo e regressões antes de eventual publicação; realizar backup e rollback da versão atual. **Não publicar sem aprovação.**
+
 ## 2026-10-17 — Kanban Comercial: endereço por obra e GPS (prévia isolada, NÃO publicada)
 
 - Branch separada `feat/kanban-localizacao-obra-20261017`, base `5e62cf3` da produção de 17/10/2026. Sem mudanças no banco nem nos módulos de movimentação do Kanban.
