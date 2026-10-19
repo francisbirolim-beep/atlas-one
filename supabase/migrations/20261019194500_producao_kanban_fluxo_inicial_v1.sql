@@ -1,5 +1,17 @@
 -- Modo inicial isolado do Kanban de tipologias.
 -- Nao altera ordens, medicoes, estoque, liberacao tecnica nem a RPC oficial.
+-- Controle geral por empresa: ligado para TODAS as vendas por padrao.
+-- Ausencia de configuracao equivale a ligado, inclusive vendas novas.
+create table if not exists public.producao_kanban_config_geral (
+  empresa_id uuid primary key references public.empresas(id),
+  habilitado boolean not null default true,
+  atualizado_por uuid references auth.users(id),
+  atualizado_em timestamptz not null default now()
+);
+alter table public.producao_kanban_config_geral enable row level security;
+revoke all on public.producao_kanban_config_geral from public,anon,authenticated;
+grant select,insert,update,delete on public.producao_kanban_config_geral to service_role;
+
 create table if not exists public.producao_kanban_fluxo_inicial (
   empresa_id uuid not null,
   venda_obra_id uuid not null references public.vendas_obras(id) on delete cascade,
@@ -102,9 +114,8 @@ declare
   v_motivo text := trim(coalesce(p_motivo,''));
   v_resolucao text := trim(coalesce(p_resolucao,''));
   v_categoria text;
-  v_config record;
+  v_config_geral record;
   v_estado record;
-  v_permissao_global boolean := false;
 begin
   if p_empresa is null or p_venda is null or p_usuario is null or
      nullif(trim(coalesce(p_ref,'')), '') is null or length(p_ref)>250 then
@@ -117,15 +128,12 @@ begin
                 where v.id=p_venda and v.empresa_id=p_empresa) then
     raise exception 'Venda nao localizada nesta empresa.';
   end if;
-  select * into v_config from public.producao_kanban_fluxo_inicial
-    where empresa_id=p_empresa and venda_obra_id=p_venda for update;
-  -- Conceder permissão a um funcionário vale para todas as vendas até revogação.
-  select coalesce((
-    select perm.pode_movimentar from public.producao_kanban_permissoes_iniciais perm
-    where perm.empresa_id=p_empresa and perm.usuario_id=p_usuario
-  ),false) into v_permissao_global;
-  if not coalesce(v_config.habilitado,false) and not v_permissao_global then
-    raise exception 'O modo inicial nao esta habilitado para esta venda nem para o usuario.';
+  -- Bloqueio geral prevalece sobre qualquer autorizacao individual.
+  -- Sem registro, o modo inicial esta habilitado para todas as obras.
+  select * into v_config_geral from public.producao_kanban_config_geral
+    where empresa_id=p_empresa for share;
+  if not coalesce(v_config_geral.habilitado,true) then
+    raise exception 'A movimentacao inicial esta bloqueada pelo Master para toda a empresa.';
   end if;
   -- Verificacao no banco impede contornar a permissao enviando requisicao diretamente.
   if not exists (select 1 from public.usuarios u
