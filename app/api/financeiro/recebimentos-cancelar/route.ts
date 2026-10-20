@@ -29,8 +29,28 @@ export async function GET(req:NextRequest){
  // Compatível com prévia ainda sem a migração: consulta preservada.
  if(error && !['42P01','PGRST205'].includes(error.code||''))
   return bad('Não foi possível carregar o histórico de cancelamentos.',503)
+ const contas=await supabaseAdmin.from('financeiro_contas_receber').select('id')
+  .eq('empresa_id',u.empresa_id).eq('venda_obra_id',vendaId).limit(1000)
+ if(contas.error)return bad('Falha ao consultar parcelas desta venda.',503)
+ const ids=(contas.data||[]).map(c=>c.id)
+ let recibos:Array<{id:string;valor:number;data_recebimento:string;status:string;forma:string|null}>=[]
+ if(ids.length){
+   const aloc=await supabaseAdmin.from('financeiro_recebimento_alocacoes')
+     .select('recebimento_id').eq('empresa_id',u.empresa_id).in('conta_receber_id',ids).limit(2000)
+   if(aloc.error)return bad('Falha ao consultar alocações dos recebimentos.',503)
+   const recebimentoIds=[...new Set((aloc.data||[]).map(a=>a.recebimento_id).filter(Boolean))]
+   if(recebimentoIds.length){
+     const rec=await supabaseAdmin.from('financeiro_recebimentos')
+       .select('id,valor,data_recebimento,status,forma')
+       .eq('empresa_id',u.empresa_id).in('id',recebimentoIds).neq('status','cancelado')
+       .order('data_recebimento',{ascending:false}).limit(300)
+     if(rec.error)return bad('Falha ao consultar recebimentos.',503)
+     recibos=rec.data||[]
+   }
+ }
  return NextResponse.json({ok:true,podeCancelar:u.role==='master',
-   disponivel:!error||process.env.VERCEL_ENV==='preview',cancelamentos:data||[]},{headers:{'Cache-Control':'private, no-store'}})
+   disponivel:!error||process.env.VERCEL_ENV==='preview',
+   cancelamentos:data||[],recebimentos:recibos},{headers:{'Cache-Control':'private, no-store'}})
 }
 
 export async function POST(req:NextRequest){
