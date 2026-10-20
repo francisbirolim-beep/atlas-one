@@ -3,6 +3,7 @@ import {useEffect,useState} from 'react'
 import {tokenAtual} from '@/lib/auth'
 type Rec={id:string;valor:number;data_recebimento:string;status:string;forma:string|null}
 type Audit={id:string;valor_original:number;justificativa:string;autorizado_por_nome:string;cancelado_em:string}
+type Financeiro={valorVenda:number;totalTitulos:number;recebido:number;descontos:number;diferenca:number;qtdTitulos:number;podeConciliar:boolean}
 const moeda=(v:unknown)=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 export default function VendaFinanceiroCorrecao({vendaId}:{vendaId:string}){
  const [aberto,setAberto]=useState(false)
@@ -10,6 +11,9 @@ export default function VendaFinanceiroCorrecao({vendaId}:{vendaId:string}){
  const [disponivel,setDisponivel]=useState(false)
  const [recebimentos,setRecebimentos]=useState<Rec[]>([])
  const [historico,setHistorico]=useState<Audit[]>([])
+ const [financeiro,setFinanceiro]=useState<Financeiro|null>(null)
+ const [modoPrevia,setModoPrevia]=useState(false)
+ const [conciliando,setConciliando]=useState(false)
  const [selecionado,setSelecionado]=useState<Rec|null>(null)
  const [motivo,setMotivo]=useState('')
  const [ocupado,setOcupado]=useState(false)
@@ -31,10 +35,30 @@ export default function VendaFinanceiroCorrecao({vendaId}:{vendaId:string}){
     setDisponivel(Boolean(d.disponivel))
     setRecebimentos(d.recebimentos||[])
     setHistorico(d.cancelamentos||[])
+    setFinanceiro(d.financeiro||null)
+    setModoPrevia(Boolean(d.modoPrevia))
    }catch{if(ativo)setDisponivel(false)}
   })()
   return()=>{ativo=false}
  },[vendaId,versao])
+ async function conciliar(){
+   if(!financeiro||conciliando||!financeiro.podeConciliar)return
+   if(!window.confirm('Conferir títulos financeiros desta venda?\n\nValor da venda: '+moeda(financeiro.valorVenda)+'\nTítulos atuais: '+moeda(financeiro.totalTitulos)+'\nDiferença: '+moeda(financeiro.diferenca)+'\n\nNão será registrado nenhum recebimento.'))return
+   setConciliando(true);setMensagem('')
+   try{
+     const token=await tokenAtual()
+     if(!token)throw Error('Sessão expirada.')
+     const resp=await fetch('/api/financeiro/conciliar-valor-venda',{
+       method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+       body:JSON.stringify({vendaId,valorConfirmado:financeiro.valorVenda})
+     })
+     const d=await resp.json().catch(()=>({}))
+     if(!resp.ok)throw Error(d.error||'A conciliação não pôde ser concluída.')
+     if(d.simulado){setMensagem('SIMULAÇÃO: o valor a receber seria '+moeda(financeiro.valorVenda-financeiro.recebido-financeiro.descontos)+'. Nenhum título foi alterado nesta prévia.')}
+     else{setMensagem('Títulos conciliados com o valor da venda. Atualize a página para conferir o resultado.');setVersao(v=>v+1);window.dispatchEvent(new Event('atlas-financeiro-recebimento-cancelado'))}
+   }catch(e){setMensagem(e instanceof Error?e.message:'Falha ao conciliar o valor da venda.')}
+   finally{setConciliando(false)}
+ }
  async function confirmar(){
   if(!selecionado||motivo.trim().length<10||ocupado)return
   setOcupado(true);setMensagem('')
@@ -62,10 +86,23 @@ export default function VendaFinanceiroCorrecao({vendaId}:{vendaId:string}){
   {aberto&&<div role="dialog" aria-modal="true" aria-label="Ajustes do Financeiro" className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 p-4">
    <div className="max-h-[88vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
     <div className="flex items-center justify-between gap-3">
-     <h3 className="text-base font-bold">Ajustes de recebimentos desta venda</h3>
+     <h3 className="text-base font-bold">Ajustes do Financeiro desta venda</h3>
      <button onClick={()=>{setAberto(false);setSelecionado(null)}} className="rounded border px-3 py-1.5 text-xs">Fechar</button>
     </div>
     <p className="mt-2 text-xs text-slate-700">Somente o Master pode cancelar um recebimento. Para corrigir o valor, cancele o lançamento incorreto com justificativa e registre um novo pelo botão “Registrar recebimento” da venda. O recibo original fica no histórico.</p>
+    {financeiro&&<div className="mt-4 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+      <h4 className="text-sm font-bold text-slate-900">Valor da venda e títulos a receber</h4>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+        <div>Valor da venda <b className="block text-base">{moeda(financeiro.valorVenda)}</b></div>
+        <div>Títulos atuais <b className="block text-base">{moeda(financeiro.totalTitulos)}</b></div>
+        <div>Diferença <b className="block text-base">{moeda(financeiro.diferenca)}</b></div>
+      </div>
+      {Math.abs(financeiro.diferenca)>=0.01&&<p className="mt-2 text-xs text-amber-800">O valor da venda e os títulos financeiros não conferem. Isso não representa recebimento do cliente.</p>}
+      {financeiro.podeConciliar?<button type="button" disabled={conciliando} onClick={()=>void conciliar()} className="mt-3 rounded-lg border border-blue-500 bg-white px-3 py-2 text-xs font-bold text-blue-800 disabled:opacity-50">{conciliando?'Conferindo...':modoPrevia?'Simular atualização do A Receber':'Atualizar títulos para '+moeda(financeiro.valorVenda)}</button>
+       :Math.abs(financeiro.diferenca)>=0.01?<p className="mt-2 text-xs text-amber-800">Ajuste automático indisponível: títulos inexistentes ou pagamentos/descontos registrados. É necessária conferência dos lançamentos.</p>
+       :<p className="mt-2 text-xs text-emerald-700">Títulos financeiros conciliados com o valor da venda.</p>}
+      {modoPrevia&&<p className="mt-2 text-xs font-semibold text-blue-800">Prévia de homologação: nenhum valor será gravado no banco.</p>}
+    </div>}
     {!disponivel&&<p className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs">Cancelamento ainda não disponível. Falta instalar e validar a migração no banco.</p>}
     {mensagem&&<p role="status" className="mt-2 rounded border border-sky-300 bg-sky-50 p-2 text-xs">{mensagem}</p>}
     {disponivel&&recebimentos.map(r=><div key={r.id} className="mt-2 flex flex-wrap justify-between gap-2 rounded-lg border p-3 text-xs">
