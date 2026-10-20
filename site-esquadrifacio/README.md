@@ -26,7 +26,7 @@
 6. Registrar rollback: manter última versão aprovada e DNS anterior para reversão, sem interferir no Atlas One.
 
 ## Critérios de aceite automático
-Executar `node site-esquadrifacio/validar-site.mjs` e `node site-esquadrifacio/testar-lancamento.mjs` na raiz do repositório. Nenhum dos dois testes faz requisições externas nem altera o site publicado.
+Executar `node site-esquadrifacio/validar-site.mjs`, `node site-esquadrifacio/testar-lancamento.mjs` e `node site-esquadrifacio/verificar-links.mjs` na raiz do repositório. Os testes são locais: conferem conteúdo e bloqueios de publicação, simulam a geração segura e verificam links, âncoras e arquivos de imagens. Não fazem requisições externas nem alteram o site publicado.
 
 ## Limites desta etapa
 - O WhatsApp comercial e a divulgação das oito fotografias exatas da prévia foram aprovados em 19/10/2026. **Permanecem pendentes** revisão legal e autorização explícita para a troca do site. A administração do domínio foi identificada em capturas do hPanel em 19/10/2026.
