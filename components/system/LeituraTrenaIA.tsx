@@ -96,7 +96,7 @@ export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
       if (medidas.length !== 3) {
         atualizarEstado(eixo, {
           tipo: 'erro',
-          mensagem: `A IA encontrou ${medidas.length} de 3 medidas de ${eixo}. Nenhum campo foi alterado para evitar troca de posição.`,
+          mensagem: `A IA leu ${medidas.length} de 3 valores de ${eixo}. A foto foi preservada. Confira o visor e preencha manualmente os 3 campos de ${eixo} logo abaixo para poder finalizar. Nenhuma medida foi alterada.`,
         })
         return
       }
