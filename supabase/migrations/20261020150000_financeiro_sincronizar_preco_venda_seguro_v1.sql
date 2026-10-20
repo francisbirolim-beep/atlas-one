@@ -65,13 +65,21 @@ begin
    return jsonb_build_object('ok',false,'codigo','movimentacao_existente',
     'motivo','Há parcelas pagas, descontos ou recebimentos vinculados. Confira os lançamentos antes de ajustar os títulos.');
  end if;
- select c.id,c.valor,c.parcela,c.status into v_ultima
+ select c.id,c.valor,c.parcela,c.status,c.valor_pago,c.valor_desconto into v_ultima
  from public.financeiro_contas_receber c
  where c.venda_obra_id=p_venda and c.empresa_id=p_empresa and c.status in ('aberto','vencido')
  order by c.parcela desc nulls last,c.created_at desc,c.id desc
  limit 1 for update;
  if not found then
    return jsonb_build_object('ok',false,'codigo','sem_parcela_aberta','motivo','Nenhuma parcela pode ser ajustada com segurança.');
+ end if;
+ -- Segunda checagem APÓS o lock: um pagamento pode ter ocorrido durante a leitura inicial.
+ select exists(select 1 from public.financeiro_recebimento_alocacoes a
+   where a.conta_receber_id=v_ultima.id) into v_tem_alocacoes;
+ if coalesce(v_ultima.valor_pago,0)<>0 or coalesce(v_ultima.valor_desconto,0)<>0
+    or v_ultima.status not in ('aberto','vencido') or v_tem_alocacoes then
+   return jsonb_build_object('ok',false,'codigo','parcela_movimentada',
+     'motivo','A parcela recebeu pagamento ou desconto durante a conciliação. Atualize a tela.');
  end if;
  v_valor_novo:=round(v_ultima.valor+v_diferenca,2);
  if v_valor_novo<0 then
