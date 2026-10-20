@@ -23,3 +23,5 @@ jobs:
         run: node site-esquadrifacio/validar-site.mjs
       - name: Testar preparação segura da publicação
         run: node site-esquadrifacio/testar-lancamento.mjs
+      - name: Verificar links internos, fotos e navegação
+        run: node site-esquadrifacio/verificar-links.mjs
