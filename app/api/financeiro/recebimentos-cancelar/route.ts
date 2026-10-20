@@ -54,7 +54,7 @@ export async function GET(req:NextRequest){
      recibos=rec.data||[]
    }
  }
- return NextResponse.json({ok:true,podeCancelar:u.role==='master',
+ return NextResponse.json({ok:true,podeCancelar:u.role==='master',modoPrevia:process.env.VERCEL_ENV==='preview',
    disponivel:!error||process.env.VERCEL_ENV==='preview',
    cancelamentos:data||[],recebimentos:recibos,
    financeiro:{valorVenda,totalTitulos,recebido,descontos,diferenca,qtdTitulos:ativas.length,
