@@ -19,7 +19,7 @@ export async function GET(req:NextRequest){
  })
  if(!permitido)return bad('Sem permissão para consultar histórico financeiro.',403)
  const {data:venda,error:erroVenda}=await supabaseAdmin.from('vendas_obras')
-  .select('id').eq('id',vendaId).eq('empresa_id',u.empresa_id).maybeSingle()
+  .select('id,valor_venda').eq('id',vendaId).eq('empresa_id',u.empresa_id).maybeSingle()
  if(erroVenda)return bad('Falha na consulta da venda.',503)
  if(!venda)return bad('Venda não encontrada.',404)
  const {data,error}=await supabaseAdmin.from('financeiro_recebimentos_cancelamentos')
@@ -29,10 +29,16 @@ export async function GET(req:NextRequest){
  // Compatível com prévia ainda sem a migração: consulta preservada.
  if(error && !['42P01','PGRST205'].includes(error.code||''))
   return bad('Não foi possível carregar o histórico de cancelamentos.',503)
- const contas=await supabaseAdmin.from('financeiro_contas_receber').select('id')
+ const contas=await supabaseAdmin.from('financeiro_contas_receber').select('id,valor,valor_pago,valor_desconto,status')
   .eq('empresa_id',u.empresa_id).eq('venda_obra_id',vendaId).limit(1000)
  if(contas.error)return bad('Falha ao consultar parcelas desta venda.',503)
+ const ativas=(contas.data||[]).filter(c=>c.status!=='cancelado')
  const ids=(contas.data||[]).map(c=>c.id)
+ const valorVenda=Number(venda.valor_venda||0)
+ const totalTitulos=ativas.reduce((n,c)=>n+Number(c.valor||0),0)
+ const recebido=ativas.reduce((n,c)=>n+Number(c.valor_pago||0),0)
+ const descontos=ativas.reduce((n,c)=>n+Number(c.valor_desconto||0),0)
+ const diferenca=Math.round((valorVenda-totalTitulos)*100)/100
  let recibos:Array<{id:string;valor:number;data_recebimento:string;status:string;forma:string|null}>=[]
  if(ids.length){
    const aloc=await supabaseAdmin.from('financeiro_recebimento_alocacoes')
@@ -50,7 +56,9 @@ export async function GET(req:NextRequest){
  }
  return NextResponse.json({ok:true,podeCancelar:u.role==='master',
    disponivel:!error||process.env.VERCEL_ENV==='preview',
-   cancelamentos:data||[],recebimentos:recibos},{headers:{'Cache-Control':'private, no-store'}})
+   cancelamentos:data||[],recebimentos:recibos,
+   financeiro:{valorVenda,totalTitulos,recebido,descontos,diferenca,qtdTitulos:ativas.length,
+     podeConciliar:Math.abs(diferenca)>=0.01&&valorVenda>0&&ativas.length>0&&recebido===0&&descontos===0}},{headers:{'Cache-Control':'private, no-store'}})
 }
 
 export async function POST(req:NextRequest){
