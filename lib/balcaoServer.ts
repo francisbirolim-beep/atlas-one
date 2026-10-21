@@ -31,6 +31,7 @@ export async function autenticarBalcao(
     const { data: permissao } = await supabaseAdmin
       .from('permissoes')
       .select('nivel')
+      .eq('empresa_id', usuario.empresa_id)
       .eq('usuario_id', usuario.id)
       .eq('setor_id', setorId)
       .maybeSingle()
@@ -52,9 +53,18 @@ export async function autenticarBalcao(
 
 export async function nivelBalcaoUsuario(usuarioId: string, role: string, setorId: string): Promise<NivelBalcao> {
   if (role === 'master') return 'edicao'
+
+  const { data: usuario } = await supabaseAdmin
+    .from('usuarios')
+    .select('empresa_id')
+    .eq('id', usuarioId)
+    .maybeSingle()
+  if (!usuario?.empresa_id) return 'oculto'
+
   const { data } = await supabaseAdmin
     .from('permissoes')
     .select('nivel')
+    .eq('empresa_id', usuario.empresa_id)
     .eq('usuario_id', usuarioId)
     .eq('setor_id', setorId)
     .maybeSingle()
