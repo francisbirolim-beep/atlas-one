@@ -115,6 +115,9 @@ export interface ItemEsquadria {
       material_categoria?: 'perfil' | 'acessorio' | 'vidro' | 'outros' | null
       material_unidade?: string | null
       produto_nome?: string | null
+      // Novos orçamentos: milímetros. Manter campos antigos somente para leitura histórica.
+      largura_batente_mm?: number | null
+      largura_guarnicao_mm?: number | null
       largura_batente_cm?: number | null
       largura_guarnicao_cm?: number | null
       contramarco?: Contramarco | null

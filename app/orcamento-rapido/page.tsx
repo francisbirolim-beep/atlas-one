@@ -38,8 +38,11 @@ interface ItemForm {
   largura: string
   altura: string
   quantidade: string
-  larguraBatenteCm: string
-  larguraGuarnicaoCm: string
+  larguraBatenteMm: string
+  larguraGuarnicaoMm: string
+  // Apenas para recuperar rascunhos feitos antes da mudança da unidade.
+  larguraBatenteCm?: string
+  larguraGuarnicaoCm?: string
   descricao: string
   observacaoTempera: string
   observacaoProducao: string
@@ -75,7 +78,7 @@ interface ItemForm {
 
 function novoItem(): ItemForm {
   return {
-    id: uuidv4(), itemTipo: '', materialCategoria: null, materialUnidade: null, produtoNome: null, contramarcoOverride: null, ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '', larguraBatenteCm: '', larguraGuarnicaoCm: '', descricao: '', observacaoTempera: '', observacaoProducao: '', cor: '',
+    id: uuidv4(), itemTipo: '', materialCategoria: null, materialUnidade: null, produtoNome: null, contramarcoOverride: null, ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '', larguraBatenteMm: '', larguraGuarnicaoMm: '', descricao: '', observacaoTempera: '', observacaoProducao: '', cor: '',
     fotos: [], fotosPreviews: [], tipoMedida: 'comum',
     larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
     modoLargura: 'digitar', modoAltura: 'digitar',
@@ -103,13 +106,13 @@ function recuperarMedidasKitAnotadas(item: ItemForm): ItemForm {
     ...item,
     largura: item.largura || dimensao?.[1] || '',
     altura: item.altura || dimensao?.[2] || '',
-    larguraBatenteCm: item.larguraBatenteCm || batente?.[1] || '',
-    larguraGuarnicaoCm: item.larguraGuarnicaoCm || guarnicao?.[1] || '',
+    larguraBatenteMm: item.larguraBatenteMm || item.larguraBatenteCm || batente?.[1] || '',
+    larguraGuarnicaoMm: item.larguraGuarnicaoMm || item.larguraGuarnicaoCm || guarnicao?.[1] || '',
   }
 }
 
 function resumoMedidas(item: ItemForm) {
-  if (item.itemTipo === 'kit_porta_pronta') return `${item.largura || '—'} × ${item.altura || '—'} mm · Batente ${item.larguraBatenteCm || '—'} cm · Guarnição ${item.larguraGuarnicaoCm || '—'} cm`
+  if (item.itemTipo === 'kit_porta_pronta') return `${item.largura || '—'} × ${item.altura || '—'} mm · Batente ${item.larguraBatenteMm || '—'} mm · Guarnição ${item.larguraGuarnicaoMm || '—'} mm`
   if (item.tipoMedida !== 'final') return `${item.largura} × ${item.altura} mm`
   const larguras = item.modoLargura === 'foto' ? 'Larguras por foto' : `L ${item.larguraBaixo} / ${item.larguraMeio} / ${item.larguraCima} mm`
   const alturas = item.modoAltura === 'foto' ? 'Alturas por foto' : `A ${item.alturaDireita} / ${item.alturaMeio} / ${item.alturaEsquerda} mm`
@@ -336,7 +339,7 @@ export default function OrcamentoRapido() {
           const fotos = (item.fotos || []).map((foto: any) => foto instanceof File ? foto : arquivoDoRascunho(foto))
           const fotoLargura = item.fotoLargura ? (item.fotoLargura instanceof File ? item.fotoLargura : arquivoDoRascunho(item.fotoLargura as any)) : undefined
           const fotoAltura = item.fotoAltura ? (item.fotoAltura instanceof File ? item.fotoAltura : arquivoDoRascunho(item.fotoAltura as any)) : undefined
-          return recuperarMedidasKitAnotadas({ ...item, larguraBatenteCm: item.larguraBatenteCm || '', larguraGuarnicaoCm: item.larguraGuarnicaoCm || '', observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined })
+          return recuperarMedidasKitAnotadas({ ...item, larguraBatenteMm: item.larguraBatenteMm || item.larguraBatenteCm || '', larguraGuarnicaoMm: item.larguraGuarnicaoMm || item.larguraGuarnicaoCm || '', observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined })
         }))
         setClienteIdOrigem(d.clienteIdOrigem || null)
         setClienteNome(d.clienteNome || '')
@@ -894,12 +897,12 @@ export default function OrcamentoRapido() {
           </>}
           {item.itemTipo==='kit_porta_pronta' && <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-3">
             <p className="text-xs font-semibold text-blue-900">Medidas do kit porta pronta</p>
-            <p className="text-[11px] text-blue-700">Preencha os campos para facilitar produção e orçamento. Medições antigas registradas em Observação também podem ser enviadas.</p>
+            <p className="text-[11px] text-blue-700">Todas as medidas são em milímetros (mm). Medições antigas registradas em Observação também podem ser enviadas.</p>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-xs text-slate-600">Largura (mm)<input type="number" inputMode="decimal" min="1" value={item.largura} onChange={e=>atualizarItem(item.id,'largura',e.target.value)} placeholder="800" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
               <label className="block text-xs text-slate-600">Altura (mm)<input type="number" inputMode="decimal" min="1" value={item.altura} onChange={e=>atualizarItem(item.id,'altura',e.target.value)} placeholder="2170" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
-              <label className="block text-xs text-slate-600">Largura do batente (cm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraBatenteCm || ''} onChange={e=>atualizarItem(item.id,'larguraBatenteCm',e.target.value)} placeholder="20" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
-              <label className="block text-xs text-slate-600">Largura da guarnição (cm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraGuarnicaoCm || ''} onChange={e=>atualizarItem(item.id,'larguraGuarnicaoCm',e.target.value)} placeholder="6" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
+              <label className="block text-xs text-slate-600">Largura do batente (mm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraBatenteMm || ''} onChange={e=>atualizarItem(item.id,'larguraBatenteMm',e.target.value)} placeholder="200" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
+              <label className="block text-xs text-slate-600">Largura da guarnição (mm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraGuarnicaoMm || ''} onChange={e=>atualizarItem(item.id,'larguraGuarnicaoMm',e.target.value)} placeholder="60" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
             </div>
           </div>}
           {item.itemTipo==='sob_medida' ? <SeletorEsquadriaInteligente value={{ modoOrigem:item.modoOrigem, produtoId:item.produtoId, precoUnit:item.precoUnit, tipo:item.tipo, tipoOutroTexto:item.tipoOutroTexto, folhas:item.folhas, largura:item.largura, altura:item.altura, linhaId:item.linhaId, linhaNome:item.linhaNome, tipologiaId:item.tipologiaId, configuracaoPresetId:item.configuracaoPresetId, configuracaoNome:item.configuracaoNome, configuracaoValidada:item.configuracaoValidada, modoConfiguracao:item.modoConfiguracao, configuracaoStatus:item.configuracaoStatus, variaveis:item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} /> : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
