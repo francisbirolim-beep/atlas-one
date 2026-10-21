@@ -8,6 +8,7 @@ import {
   Save, ShoppingCart, Upload, Wallet, Wrench, X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import DetalheOrcamentoCliente from './DetalheOrcamentoCliente'
 import { Cliente } from '@/lib/tipos'
 import {
   adicionarDocumentoCliente,
@@ -148,6 +149,7 @@ export default function Cliente360Dashboard({ clienteId }: Props) {
   const [cliente, setCliente] = useState<Cliente | null>(null)
   const [obras, setObras] = useState<ObraCliente360[]>([])
   const [orcamentos, setOrcamentos] = useState<OrcamentoResumo[]>([])
+  const [orcamentoDetalhesId, setOrcamentoDetalhesId] = useState<string | null>(null)
   const [balcaoOrcamentos, setBalcaoOrcamentos] = useState<BalcaoOrcamentoResumo[]>([])
   const [vendasBalcao, setVendasBalcao] = useState<VendaBalcaoResumo[]>([])
   const [assistencias, setAssistencias] = useState<AssistenciaResumo[]>([])
@@ -468,10 +470,11 @@ export default function Cliente360Dashboard({ clienteId }: Props) {
         </Secao>}
 
         {aba === 'orcamentos' && <div className="grid gap-5 xl:grid-cols-2">
-          <Secao titulo="Orçamentos sob medida"><div className="space-y-2">{orcamentos.length === 0 ? <p className="text-sm text-slate-400">Nenhum orçamento sob medida.</p> : orcamentos.map(o => <div key={o.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"><div><p className="text-sm font-semibold">Orçamento {o.numero ? `#${o.numero}` : ''}</p><p className="text-xs text-slate-500">{dataBR(o.created_at)} · {statusLabel(o.status)}{o.obra_id && obraPorId[o.obra_id] ? ` · ${obraPorId[o.obra_id].nome}` : ''}</p></div><strong className="text-sm">{moeda(o.valor_estimado)}</strong></div>)}</div></Secao>
+          <Secao titulo="Orçamentos sob medida"><div className="space-y-2">{orcamentos.length === 0 ? <p className="text-sm text-slate-400">Nenhum orçamento sob medida.</p> : orcamentos.map(o => <button type="button" key={o.id} onClick={() => setOrcamentoDetalhesId(o.id)} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-left hover:border-brand-navy hover:bg-blue-50/30"><div><p className="text-sm font-semibold">Orçamento {o.numero ? `#${o.numero}` : ''}</p><p className="text-xs text-slate-500">{dataBR(o.created_at)} · {statusLabel(o.status)}{o.obra_id && obraPorId[o.obra_id] ? ` · ${obraPorId[o.obra_id].nome}` : ''}</p><p className="mt-1 text-[11px] font-semibold text-brand-navy">Ver fotos, medidas e tipologias</p></div><span className="flex items-center gap-2"><strong className="text-sm">{moeda(o.valor_estimado)}</strong><ChevronRight size={15}/></span></button>)}</div></Secao>
           <Secao titulo="Balcão: orçamentos e vendas"><div className="space-y-2">{[...balcaoOrcamentos.map(o => ({ id: `o-${o.id}`, titulo: `Orçamento Balcão #${o.numero || '—'}`, data: o.created_at, obra_id: o.obra_id, valor: o.valor_estimado, status: o.status })), ...vendasBalcao.map(v => ({ id: `v-${v.id}`, titulo: `Venda Balcão #${v.numero}`, data: v.finalizada_em || v.created_at, obra_id: v.obra_id, valor: v.total, status: v.status }))].sort((a,b)=>new Date(b.data).getTime()-new Date(a.data).getTime()).map(x => <div key={x.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"><div><p className="text-sm font-semibold">{x.titulo}</p><p className="text-xs text-slate-500">{dataBR(x.data)} · {statusLabel(x.status)}{x.obra_id && obraPorId[x.obra_id] ? ` · ${obraPorId[x.obra_id].nome}` : ''}</p></div><strong className="text-sm">{moeda(x.valor)}</strong></div>)}</div></Secao>
         </div>}
 
+        {orcamentoDetalhesId && cliente && <DetalheOrcamentoCliente clienteId={cliente.id} orcamentoId={orcamentoDetalhesId} onFechar={() => setOrcamentoDetalhesId(null)}/>}
         {aba === 'financeiro' && <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><CardKpi titulo="Contas geradas" valor={moeda(totalContas)}/><CardKpi titulo="Pago" valor={moeda(totalPagoContas)}/><CardKpi titulo="Saldo parcelas" valor={moeda(totalReceber)}/><CardKpi titulo="Crédito livre" valor={moeda(creditoNaoAlocado)}/><CardKpi titulo="Posição líquida" valor={moeda(dividaLiquida)} destaque/></div>
           <Secao titulo="Conta corrente do cliente" acao={<button onClick={() => setModalRecebimento(true)} className="inline-flex items-center gap-1 rounded-lg bg-brand-navy px-3 py-2 text-xs font-semibold text-white"><Plus size={14}/> Registrar recebimento</button>}>
