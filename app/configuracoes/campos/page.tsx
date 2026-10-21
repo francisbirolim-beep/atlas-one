@@ -41,6 +41,35 @@ function contextoLabel(contexto: ContextoCampoConfiguravel) {
   return CONTEXTOS_CAMPO.find((item) => item.valor === contexto)?.label || contexto
 }
 
+type PropsMarcacao = {
+  titulo: string
+  descricao: string
+  marcado: boolean
+  aoClicar: () => void
+}
+
+// Um botão por flag: o clique de Ativo não pode acionar o controle Obrigatório.
+function ControleMarcacao({ titulo, descricao, marcado, aoClicar }: PropsMarcacao) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-label={descricao}
+      aria-checked={marcado}
+      onClick={aoClicar}
+      className="flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 md:bg-transparent md:px-0"
+    >
+      <span>{titulo}</span>
+      <span
+        aria-hidden="true"
+        className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] border text-[12px] font-bold leading-none ${marcado ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-400 bg-white'}`}
+      >
+        {marcado ? '✓' : null}
+      </span>
+    </button>
+  )
+}
+
 export default function CamposConfiguraveisPage() {
   const [campos, setCampos] = useState<CampoConfiguravel[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -257,20 +286,26 @@ export default function CamposConfiguraveisPage() {
                     )}
                   </div>
 
-                  <label className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 md:bg-transparent md:px-0">
-                    <span>Mostrar</span>
-                    <input type="checkbox" aria-label={`Mostrar ${campo.label} em ${contextoLabel(contexto)}`} className="h-4 w-4 cursor-pointer accent-slate-900" checked={mostrar} onChange={(e) => definirNoContexto(campo.id, 'mostrar', e.target.checked)} />
-                  </label>
+                  <ControleMarcacao
+                    titulo="Mostrar"
+                    descricao={`Mostrar ${campo.label} em ${contextoLabel(contexto)}`}
+                    marcado={mostrar}
+                    aoClicar={() => definirNoContexto(campo.id, 'mostrar', !mostrar)}
+                  />
 
-                  <label className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 md:bg-transparent md:px-0">
-                    <span>Obrigatório</span>
-                    <input type="checkbox" aria-label={`Obrigatório: ${campo.label} em ${contextoLabel(contexto)}`} className="h-4 w-4 cursor-pointer accent-slate-900" checked={obrigatorio} onChange={(e) => definirNoContexto(campo.id, 'obrigatorio', e.target.checked)} />
-                  </label>
+                  <ControleMarcacao
+                    titulo="Obrigatório"
+                    descricao={`Obrigatório: ${campo.label} em ${contextoLabel(contexto)}`}
+                    marcado={obrigatorio}
+                    aoClicar={() => definirNoContexto(campo.id, 'obrigatorio', !obrigatorio)}
+                  />
 
-                  <label className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 md:bg-transparent md:px-0">
-                    <span>Ativo</span>
-                    <input type="checkbox" aria-label={`Ativo: ${campo.label}`} className="h-4 w-4 cursor-pointer accent-slate-900" checked={campo.ativo} onChange={(e) => atualizar(campo.id, { ativo: e.target.checked })} />
-                  </label>
+                  <ControleMarcacao
+                    titulo="Ativo"
+                    descricao={`Ativo: ${campo.label}`}
+                    marcado={campo.ativo}
+                    aoClicar={() => atualizar(campo.id, { ativo: !campo.ativo })}
+                  />
 
                   <div className="flex items-center justify-end gap-1">
                     <button disabled={indice <= 0} onClick={() => mover(campo.id, -1)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 disabled:opacity-20" title="Mover para cima"><ArrowUp size={16} /></button>
