@@ -38,6 +38,8 @@ interface ItemForm {
   largura: string
   altura: string
   quantidade: string
+  larguraBatenteCm: string
+  larguraGuarnicaoCm: string
   descricao: string
   observacaoTempera: string
   observacaoProducao: string
@@ -73,7 +75,7 @@ interface ItemForm {
 
 function novoItem(): ItemForm {
   return {
-    id: uuidv4(), itemTipo: '', materialCategoria: null, materialUnidade: null, produtoNome: null, contramarcoOverride: null, ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '', descricao: '', observacaoTempera: '', observacaoProducao: '', cor: '',
+    id: uuidv4(), itemTipo: '', materialCategoria: null, materialUnidade: null, produtoNome: null, contramarcoOverride: null, ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '', larguraBatenteCm: '', larguraGuarnicaoCm: '', descricao: '', observacaoTempera: '', observacaoProducao: '', cor: '',
     fotos: [], fotosPreviews: [], tipoMedida: 'comum',
     larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
     modoLargura: 'digitar', modoAltura: 'digitar',
@@ -85,12 +87,29 @@ function novoItem(): ItemForm {
 }
 
 function nomeTipologia(item: ItemForm) {
+  if (item.itemTipo === 'kit_porta_pronta') return item.tipoOutroTexto.trim() || item.produtoNome || 'Kit porta pronta'
   if (item.tipo === 'outro' && item.tipoOutroTexto.trim()) return item.tipoOutroTexto.trim()
   const tipo = String(item.tipo || 'Esquadria').replace(/[_-]+/g, ' ').trim()
   return tipo ? tipo.charAt(0).toUpperCase() + tipo.slice(1) : 'Esquadria'
 }
 
+function recuperarMedidasKitAnotadas(item: ItemForm): ItemForm {
+  if (item.itemTipo !== 'kit_porta_pronta' || !item.descricao) return item
+  // Compatibilidade com levantamentos antigos: "800 x 2170 / Batente 20 / Guarnição 6".
+  const dimensao = item.descricao.match(/\b(\d{3,4})\s*[x×]\s*(\d{3,4})\b/i)
+  const batente = item.descricao.match(/\bbatente\s*[:=-]?\s*(\d+(?:[,.]\d+)?)/i)
+  const guarnicao = item.descricao.match(/\bguarni[çc][ãa]o\s*[:=-]?\s*(\d+(?:[,.]\d+)?)/i)
+  return {
+    ...item,
+    largura: item.largura || dimensao?.[1] || '',
+    altura: item.altura || dimensao?.[2] || '',
+    larguraBatenteCm: item.larguraBatenteCm || batente?.[1] || '',
+    larguraGuarnicaoCm: item.larguraGuarnicaoCm || guarnicao?.[1] || '',
+  }
+}
+
 function resumoMedidas(item: ItemForm) {
+  if (item.itemTipo === 'kit_porta_pronta') return `${item.largura || '—'} × ${item.altura || '—'} mm · Batente ${item.larguraBatenteCm || '—'} cm · Guarnição ${item.larguraGuarnicaoCm || '—'} cm`
   if (item.tipoMedida !== 'final') return `${item.largura} × ${item.altura} mm`
   const larguras = item.modoLargura === 'foto' ? 'Larguras por foto' : `L ${item.larguraBaixo} / ${item.larguraMeio} / ${item.larguraCima} mm`
   const alturas = item.modoAltura === 'foto' ? 'Alturas por foto' : `A ${item.alturaDireita} / ${item.alturaMeio} / ${item.alturaEsquerda} mm`
@@ -104,7 +123,7 @@ function nomeNormalizado(valor: string) {
 }
 
 function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partial<ItemForm>)=>void}) {
-  const [busca,setBusca]=useState('')
+  const [busca,setBusca]=useState(item.itemTipo === 'kit_porta_pronta' ? item.tipoOutroTexto || '' : '')
   const [resultados,setResultados]=useState<ProdutoAtlasBusca[]>([])
   const [carregando,setCarregando]=useState(false)
   const [podeCadastrarProdutoPronto,setPodeCadastrarProdutoPronto]=useState(false)
@@ -215,7 +234,8 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
 
   return <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
     {item.itemTipo==='material_avulso'&&<div><label className="mb-1 block text-xs text-slate-500">Categoria</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([['perfil','Perfil'],['acessorio','Acessório'],['vidro','Vidro'],['outros','Outros']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>{setBusca('');setResultados([]);onChange({materialCategoria:v,produtoId:null,produtoNome:null})}} className={`rounded-lg border px-2 py-2 text-xs ${item.materialCategoria===v?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>{l}</button>)}</div></div>}
-    <div><label className="mb-1 block text-xs text-slate-500">{rotulo}</label><input value={busca} onChange={e=>{setBusca(e.target.value);if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
+    {item.itemTipo==='kit_porta_pronta'&&<p className="text-xs text-blue-800">O catálogo é opcional. Você pode digitar o tipo de porta aqui ou descrevê-lo nas observações para liberar o envio.</p>}
+    <div><label className="mb-1 block text-xs text-slate-500">{item.itemTipo==='kit_porta_pronta'?'Tipo de porta / buscar kit cadastrado':rotulo}</label><input value={busca} onChange={e=>{setBusca(e.target.value);if(item.itemTipo==='kit_porta_pronta')onChange({tipoOutroTexto:e.target.value,produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'});else if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
     {!!resultados.length&&<div className="max-h-56 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="block w-full border-b px-3 py-2 text-left last:border-0"><b className="text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b><p className="text-xs text-slate-500">{p.categoria==='porta_janela_padrao'?'Produto pronto':p.categoria==='kit'?'Kit':p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</p></button>)}</div>}
     {podeOferecerCadastro&&(podeCadastrarProdutoPronto?<div className="rounded-xl border border-blue-200 bg-blue-50 p-3"><p className="text-xs font-semibold text-blue-900">Produto pronto “{busca.trim()}” não encontrado.</p><p className="mt-1 text-[11px] text-blue-700">Deseja cadastrá-lo agora? Custo e preço de venda podem ser completados depois no cadastro de produtos.</p><button type="button" onClick={()=>void cadastrarProdutoPronto()} disabled={cadastrandoProdutoPronto} className="mt-2 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{cadastrandoProdutoPronto?'Cadastrando...':'Cadastrar este produto'}</button></div>:<p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Produto pronto não encontrado. Peça ao Master ou ao Júlio para cadastrá-lo.</p>)}
     {erroCadastro&&<p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{erroCadastro}</p>}
@@ -292,6 +312,8 @@ export default function OrcamentoRapido() {
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
   const [rascunhoSalvoEm, setRascunhoSalvoEm] = useState<string | null>(null)
+  const [erroSalvamentoLocal, setErroSalvamentoLocal] = useState('')
+  const [salvandoRascunhoManual, setSalvandoRascunhoManual] = useState(false)
   const [fluxoSobMedida, setFluxoSobMedida] = useState(false)
 
   function arquivoParaRascunho(file: File): ArquivoRascunho {
@@ -314,7 +336,7 @@ export default function OrcamentoRapido() {
           const fotos = (item.fotos || []).map((foto: any) => foto instanceof File ? foto : arquivoDoRascunho(foto))
           const fotoLargura = item.fotoLargura ? (item.fotoLargura instanceof File ? item.fotoLargura : arquivoDoRascunho(item.fotoLargura as any)) : undefined
           const fotoAltura = item.fotoAltura ? (item.fotoAltura instanceof File ? item.fotoAltura : arquivoDoRascunho(item.fotoAltura as any)) : undefined
-          return { ...item, observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined }
+          return recuperarMedidasKitAnotadas({ ...item, larguraBatenteCm: item.larguraBatenteCm || '', larguraGuarnicaoCm: item.larguraGuarnicaoCm || '', observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined })
         }))
         setClienteIdOrigem(d.clienteIdOrigem || null)
         setClienteNome(d.clienteNome || '')
@@ -370,16 +392,35 @@ export default function OrcamentoRapido() {
     })
   }, [rascunhoCarregado])
 
+  function montarRascunhoAtual(): RascunhoOrcamentoRapido {
+    return {
+      itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
+      clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
+      acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
+      arquivos: arquivos.map(arquivoParaRascunho),
+    }
+  }
+
+  async function salvarRascunhoAgora() {
+    if (salvandoRascunhoManual) return
+    setSalvandoRascunhoManual(true)
+    try {
+      await salvarRascunho(RASCUNHO_ID, montarRascunhoAtual())
+      setRascunhoSalvoEm(new Date().toISOString())
+      setErroSalvamentoLocal('')
+    } catch {
+      setErroSalvamentoLocal('Não foi possível salvar a medição neste aparelho. Mantenha a tela aberta e confira o espaço do navegador.')
+    } finally {
+      setSalvandoRascunhoManual(false)
+    }
+  }
+
   useEffect(() => {
     if (!rascunhoCarregado || salvo || salvoOffline) return
     const timer = window.setTimeout(() => {
-      const dados: RascunhoOrcamentoRapido = {
-        itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-        clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
-        acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
-        arquivos: arquivos.map(arquivoParaRascunho),
-      }
-      salvarRascunho(RASCUNHO_ID, dados).then(() => setRascunhoSalvoEm(new Date().toISOString())).catch(() => {})
+      salvarRascunho(RASCUNHO_ID, montarRascunhoAtual())
+        .then(() => { setRascunhoSalvoEm(new Date().toISOString()); setErroSalvamentoLocal('') })
+        .catch(() => setErroSalvamentoLocal('Falha ao salvar localmente. Mantenha esta tela aberta e toque em “Salvar medição agora”.'))
     }, 350)
     return () => window.clearTimeout(timer)
   }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
@@ -674,6 +715,11 @@ export default function OrcamentoRapido() {
     for (let i = 0; i < itens.length; i++) {
       const it = itens[i]
       const referencia = it.ambiente.trim() || `Esquadria ${i + 1}`
+      // Kit pode ser identificado por descrição livre, inclusive em rascunhos antigos.
+      if (it.itemTipo === 'kit_porta_pronta') {
+        if (!it.produtoId && !it.tipoOutroTexto.trim() && !it.descricao.trim()) return falharValidacao(`Informe o tipo de porta ou uma descrição do kit em ${referencia}`)
+        continue
+      }
       if (it.itemTipo !== 'sob_medida' && !it.produtoId) return falharValidacao(`Selecione um produto cadastrado em ${referencia}`)
       if (it.itemTipo === 'material_avulso') { if (!it.materialCategoria) return falharValidacao(`Selecione a categoria de ${referencia}`); continue }
       if (it.itemTipo !== 'sob_medida') continue
@@ -730,7 +776,13 @@ export default function OrcamentoRapido() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200"><div className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-4 flex items-center gap-4`}><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-800">{fluxoSobMedida ? 'Orçamento Sob Medida' : 'Orçamento'}</h1>{fluxoSobMedida && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">FLUXO W.VETRO</span>}</div><p className="text-sm text-slate-500">{fluxoSobMedida ? 'Configure a esquadria tecnicamente e siga até composição, custos e impressão' : 'Registre o pedido e mande pro painel'}</p></div></div></header>
       {fluxoSobMedida && <div className="border-b border-slate-200 bg-white"><div className="mx-auto max-w-7xl overflow-x-auto px-4 py-3"><div className="flex min-w-[980px] items-center gap-2">{[['1','Cliente / Obra'],['2','Medidas'],['3','O que precisa'],['4','Linha / Tipologia'],['5','Variáveis'],['6','Acabamento'],['7','Composição'],['8','Custos'],['9','Impressão']].map(([n,label],i)=><div key={n} className="flex flex-1 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i<2?'bg-blue-600 text-white':'bg-slate-100 text-slate-500'}`}>{n}</span><span className={`whitespace-nowrap text-xs font-semibold ${i<2?'text-slate-800':'text-slate-500'}`}>{label}</span>{i<8&&<span className="h-px flex-1 bg-slate-200"/>}</div>)}</div></div></div>}
-      <main className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-8 space-y-6`}>{rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
+      <main className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-8 space-y-6`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+          <div className="text-xs text-slate-600">{rascunhoSalvoEm ? 'Rascunho salvo neste aparelho às ' + new Date(rascunhoSalvoEm).toLocaleTimeString('pt-BR') : 'A medição é salva automaticamente neste aparelho.'}</div>
+          <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual} className="rounded-lg border border-brand-navy px-3 py-2 text-xs font-semibold text-brand-navy disabled:opacity-60">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
+          {erroSalvamentoLocal && <p role="alert" className="w-full text-xs font-semibold text-red-700">{erroSalvamentoLocal}</p>}
+        </div>
+        {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value) }} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
@@ -840,6 +892,16 @@ export default function OrcamentoRapido() {
             <div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div>
           </div> : <div className="grid grid-cols-3 gap-3"><div><label className="block text-xs text-slate-500 mb-1">Largura (mm)</label><input type="number" value={item.largura} onChange={e => atualizarItem(item.id,'largura',e.target.value)} placeholder="1800" className="w-full border rounded-lg p-2.5 text-sm"/></div><div><label className="block text-xs text-slate-500 mb-1">Altura (mm)</label><input type="number" value={item.altura} onChange={e => atualizarItem(item.id,'altura',e.target.value)} placeholder="2100" className="w-full border rounded-lg p-2.5 text-sm"/></div><div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div></div>}
           </>}
+          {item.itemTipo==='kit_porta_pronta' && <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-3">
+            <p className="text-xs font-semibold text-blue-900">Medidas do kit porta pronta</p>
+            <p className="text-[11px] text-blue-700">Preencha os campos para facilitar produção e orçamento. Medições antigas registradas em Observação também podem ser enviadas.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-xs text-slate-600">Largura (mm)<input type="number" inputMode="decimal" min="1" value={item.largura} onChange={e=>atualizarItem(item.id,'largura',e.target.value)} placeholder="800" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
+              <label className="block text-xs text-slate-600">Altura (mm)<input type="number" inputMode="decimal" min="1" value={item.altura} onChange={e=>atualizarItem(item.id,'altura',e.target.value)} placeholder="2170" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
+              <label className="block text-xs text-slate-600">Largura do batente (cm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraBatenteCm || ''} onChange={e=>atualizarItem(item.id,'larguraBatenteCm',e.target.value)} placeholder="20" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
+              <label className="block text-xs text-slate-600">Largura da guarnição (cm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraGuarnicaoCm || ''} onChange={e=>atualizarItem(item.id,'larguraGuarnicaoCm',e.target.value)} placeholder="6" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
+            </div>
+          </div>}
           {item.itemTipo==='sob_medida' ? <SeletorEsquadriaInteligente value={{ modoOrigem:item.modoOrigem, produtoId:item.produtoId, precoUnit:item.precoUnit, tipo:item.tipo, tipoOutroTexto:item.tipoOutroTexto, folhas:item.folhas, largura:item.largura, altura:item.altura, linhaId:item.linhaId, linhaNome:item.linhaNome, tipologiaId:item.tipologiaId, configuracaoPresetId:item.configuracaoPresetId, configuracaoNome:item.configuracaoNome, configuracaoValidada:item.configuracaoValidada, modoConfiguracao:item.modoConfiguracao, configuracaoStatus:item.configuracaoStatus, variaveis:item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} /> : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
           {item.itemTipo==='sob_medida' && item.tipo && !item.tipologiaId && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input data-preserve-case="true" value={item.folhas} onChange={e => atualizarItem(item.id,'folhas',e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
 
@@ -902,6 +964,7 @@ export default function OrcamentoRapido() {
                       <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${item.tipoMedida === 'final' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{item.tipoMedida === 'final' ? 'Medida final' : 'Medida comum'}</span>
                     </div>
                     <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2"><p><b>Medidas:</b> {resumoMedidas(item)}</p><p><b>Linha:</b> {item.linhaNome || 'Não informada'}</p><p><b>Folhas:</b> {item.folhas || 'Não informado'}</p><p><b>Cor:</b> {item.cor || (acabamento === 'outro' ? acabamentoOutroTexto : acabamento) || 'Não informada'}</p></div>
+                    {item.itemTipo === 'kit_porta_pronta' && <p className="mt-2 text-xs"><b>Kit:</b> {item.tipoOutroTexto || item.produtoNome || 'Descrição nas observações'} · {resumoMedidas(item)}</p>}
                     {item.ambiente && <p className="mt-2 text-xs"><b>Ambiente:</b> {item.ambiente}</p>}
                     {item.descricao && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs"><b>Observação:</b> {item.descricao}</p>}
                   </div>
@@ -920,3 +983,5 @@ export default function OrcamentoRapido() {
     </div>
   )
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
