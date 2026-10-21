@@ -231,20 +231,23 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   const fotosUrls: string[] = []
   for (const foto of fotos) {
     const url = await uploadFoto(foto)
-    if (url) fotosUrls.push(url)
+    if (!url) return { ok: false, error: `FOTO_NAO_ENVIADA: A foto geral "${foto.name}" não foi enviada. Mantenha o levantamento aberto e tente novamente.` }
+    fotosUrls.push(url)
   }
 
   const anexosSalvos: Anexo[] = []
   for (const arquivo of arquivos) {
     const url = await uploadArquivo(arquivo)
-    if (url) anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
+    if (!url) return { ok: false, error: `FOTO_NAO_ENVIADA: O arquivo "${arquivo.name}" não foi enviado. Mantenha o levantamento aberto e tente novamente.` }
+    anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
   }
 
   for (const it of itens) {
     const itemFotoUrls: string[] = []
     for (const f of it.fotos) {
       const url = await uploadFoto(f)
-      if (url) itemFotoUrls.push(url)
+      if (!url) return { ok: false, error: `FOTO_NAO_ENVIADA: A foto "${f.name}" de ${it.ambiente?.trim() || 'um dos itens'} não foi enviada. O pedido não foi finalizado e as fotos permanecem no aparelho.` }
+      itemFotoUrls.push(url)
     }
 
     const produto_id = it.modoOrigem === 'produto' ? (it.produtoId || null) : null
@@ -305,6 +308,8 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
       const usaFotoAltura = it.modoAltura === 'foto'
       const foto_larguras_url = usaFotoLargura && it.fotoLargura ? await uploadFoto(it.fotoLargura) : null
       const foto_alturas_url = usaFotoAltura && it.fotoAltura ? await uploadFoto(it.fotoAltura) : null
+      if (usaFotoLargura && it.fotoLargura && !foto_larguras_url) return { ok: false, error: `FOTO_NAO_ENVIADA: Não foi possível enviar a foto da largura de ${it.ambiente || 'um dos itens'}.` }
+      if (usaFotoAltura && it.fotoAltura && !foto_alturas_url) return { ok: false, error: `FOTO_NAO_ENVIADA: Não foi possível enviar a foto da altura de ${it.ambiente || 'um dos itens'}.` }
 
       const [medidasLidasLargura, medidasLidasAltura] = await Promise.all([
         foto_larguras_url ? lerTrena(foto_larguras_url, 'largura') : Promise.resolve([]),
