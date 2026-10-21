@@ -174,6 +174,9 @@ export default function WhatsAppAtendimentoPage() {
   const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
+  const [areaAtendimento, setAreaAtendimento] = useState<'individuais' | 'grupos' | 'monitoramento' | 'internas'>('individuais')
+  const [atendenteMonitorado, setAtendenteMonitorado] = useState('todos')
+  const [midiaAmpliada, setMidiaAmpliada] = useState<Mensagem | null>(null)
   const [filtro, setFiltro] = useState<'todas' | 'internas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
   const [erro, setErro] = useState('')
@@ -328,6 +331,20 @@ export default function WhatsAppAtendimentoPage() {
       const conversaIdSolicitada = selecionar && typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('conversaId')
         : null
+      if (conversaIdSolicitada) {
+        const solicitada = conversasRecebidas.find(c=>c.id===conversaIdSolicitada)
+        if (solicitada) {
+          const conversaAlheia = solicitada.responsavel_id &&
+            solicitada.responsavel_id!==json.usuario?.id
+          if (conversaAlheia &&
+              (json.usuario?.role==='master' ||
+               (json.acessos||[]).some((a:AcessoCanal)=>a.canal_id===solicitada.whatsapp_canal_id&&(a.supervisionar||a.dono)))) {
+            setAreaAtendimento('monitoramento')
+          } else {
+            setAreaAtendimento(solicitada.whatsapp_chat_tipo==='grupo'?'grupos':'individuais')
+          }
+        }
+      }
       setAtiva(atual => {
         if (atual) {
           return conversasRecebidas.find((c: Conversa) => c.id === atual.id) || null
@@ -371,6 +388,25 @@ export default function WhatsAppAtendimentoPage() {
     setSugestaoIA(null)
     setErro('')
     setAtiva(conversa)
+  }
+
+  function mudarArea(area: 'individuais' | 'grupos' | 'monitoramento' | 'internas') {
+    setAreaAtendimento(area)
+    setFiltro('todas')
+    setBusca('')
+    setAtiva(null)
+    setConversaInternaAtiva(null)
+    setMidiaAmpliada(null)
+  }
+
+  function conversaDaMinhaCaixa(c: Conversa) {
+    if (c.whatsapp_chat_tipo === 'grupo') {
+      if (c.responsavel_id) return c.responsavel_id === eu?.id
+      if (c.grupo_responsavel_efetivo_id) return c.grupo_responsavel_efetivo_id === eu?.id
+      return c.grupo_pode_atender === true
+    }
+    // Supervisão de terceiros só acontece na área Monitoramento.
+    return !c.responsavel_id || c.responsavel_id === eu?.id
   }
 
   function selecionarCanal(canalId: string) {
@@ -984,8 +1020,11 @@ export default function WhatsAppAtendimentoPage() {
   const filtradas = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
     return conversas.filter(c => {
-      if (filtro === 'internas') return false
-      if (!c.ultima_mensagem_em && filtro !== 'grupos') return false
+      if (areaAtendimento === 'monitoramento' || areaAtendimento === 'internas') return false
+      if (areaAtendimento === 'grupos' && c.whatsapp_chat_tipo !== 'grupo') return false
+      if (areaAtendimento === 'individuais' && c.whatsapp_chat_tipo === 'grupo') return false
+      if (!conversaDaMinhaCaixa(c)) return false
+      if (!c.ultima_mensagem_em && areaAtendimento !== 'grupos') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
       if (filtro === 'aguardando') {
         const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || eu?.role === 'master'
@@ -1004,7 +1043,7 @@ export default function WhatsAppAtendimentoPage() {
       return `${c.contato_nome || ''} ${c.grupo_nome || ''} ${c.telefone} ${c.responsavel_nome || ''} ${c.setor || ''}`
         .toLocaleLowerCase('pt-BR').includes(q)
     })
-  }, [conversas, busca, filtro, canalFiltro, eu?.id, eu?.role])
+  }, [conversas, busca, filtro, canalFiltro, areaAtendimento, eu?.id, eu?.role])
 
   const usuariosInternosBusca = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
@@ -1222,13 +1261,26 @@ export default function WhatsAppAtendimentoPage() {
       if (!resposta.ok || !arquivo.url) {
         throw new Error(arquivo.error || 'Não foi possível baixar o anexo.')
       }
+      // O atributo download não força baixar URLs de outro domínio.
+      // Baixar o blob e criar uma URL local preserva o nome e evita abrir
+      // o arquivo no navegador em vez de salvá-lo.
+      let urlLocal: string | null = null
+      try {
+        const respostaArquivo = await fetch(arquivo.url, { cache: 'no-store' })
+        if (!respostaArquivo.ok) throw new Error('Arquivo indisponível.')
+        urlLocal = URL.createObjectURL(await respostaArquivo.blob())
+      } catch {
+        // Preserva o comportamento anterior quando o Storage não permitir
+        // buscar o blob por CORS; o link assinado ainda pode ser aberto.
+      }
       const link = document.createElement('a')
-      link.href = arquivo.url
+      link.href = urlLocal || arquivo.url
       link.download = arquivo.nome || m.arquivo_nome || 'anexo'
       link.rel = 'noopener noreferrer'
       document.body.appendChild(link)
       link.click()
       link.remove()
+      if (urlLocal) window.setTimeout(()=>URL.revokeObjectURL(urlLocal!),60_000)
     } catch (erro) {
       setErro(erro instanceof Error ? erro.message : 'Não foi possível baixar o anexo.')
     }
@@ -1435,7 +1487,9 @@ export default function WhatsAppAtendimentoPage() {
 
   const totais = useMemo(() => {
     const doCanal = conversas.filter(c =>
-      canalFiltro === 'todos' || c.whatsapp_canal_id === canalFiltro
+      (canalFiltro === 'todos' || c.whatsapp_canal_id === canalFiltro) &&
+      (areaAtendimento === 'grupos' ? c.whatsapp_chat_tipo === 'grupo' : c.whatsapp_chat_tipo !== 'grupo') &&
+      conversaDaMinhaCaixa(c)
     )
     const chats = doCanal.filter(c => Boolean(c.ultima_mensagem_em))
     return {
@@ -1455,7 +1509,24 @@ export default function WhatsAppAtendimentoPage() {
       transferidas: chats.filter(c => Boolean(c.transferida_em)).length,
       finalizadas: chats.filter(c => c.status === 'finalizado').length,
     }
-  }, [conversas, conversasInternas.length, eu?.id, canalFiltro])
+  }, [conversas, conversasInternas.length, eu?.id, canalFiltro, areaAtendimento])
+
+  const podeMonitorar = eu?.role === 'master' || acessos.some(a => a.supervisionar || a.dono)
+  const conversasMonitoramento = conversas.filter(c => {
+    const acesso = acessos.find(a => a.canal_id === c.whatsapp_canal_id)
+    if (eu?.role !== 'master' && !acesso?.supervisionar && !acesso?.dono) return false
+    if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
+    return atendenteMonitorado === 'todos' || c.responsavel_id === atendenteMonitorado
+  })
+  const totalMonitoramentoAguardando = conversasMonitoramento.filter(c =>
+    c.status === 'aguardando' || (c.status !== 'finalizado' && Number(c.nao_lidas || 0) > 0)
+  ).length
+  const monitoradosVisiveis = usuarios.filter(u =>
+    conversas.some(c => c.responsavel_id === u.id &&
+      (eu?.role === 'master' || acessos.some(a =>
+        a.canal_id === c.whatsapp_canal_id && (a.supervisionar || a.dono)
+      )))
+  )
 
   const acessoCanalAtivo = ativa?.whatsapp_canal_id
     ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
@@ -1547,7 +1618,30 @@ export default function WhatsAppAtendimentoPage() {
     : '/cadastro/fornecedores'
 
   return (
-    <main className="h-[100dvh] min-h-0 w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white p-0">
+    <main className="h-[100dvh] min-h-0 w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white p-0 lg:pl-[156px]">
+      <nav aria-label="Navegação do WhatsApp Atlas" className="fixed inset-y-0 left-0 z-30 hidden w-[156px] flex-col bg-[#0e1b2b] text-slate-100 lg:flex">
+        <div className="flex flex-col items-center gap-1 border-b border-white/10 px-2 py-7">
+          <span className="text-4xl font-black tracking-tight text-blue-500">A</span>
+          <span className="text-xs font-black tracking-[0.15em]">ATLAS ONE</span>
+        </div>
+        <div className="mt-5 flex flex-col gap-1 px-2 text-xs font-semibold">
+          <button type="button" onClick={()=>mudarArea('individuais')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='individuais'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <MessageCircle size={17}/> Atendimentos
+          </button>
+          <button type="button" onClick={()=>mudarArea('grupos')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='grupos'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <Users size={17}/> Grupos
+          </button>
+          {podeMonitorar && <button type="button" onClick={()=>mudarArea('monitoramento')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='monitoramento'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <Eye size={17}/> Monitoramento
+          </button>}
+          <button type="button" onClick={()=>mudarArea('internas')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='internas'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <Users size={17}/> Equipe interna
+          </button>
+          {eu?.role==='master' && <Link href="/whatsapp/configuracao" className="mt-4 flex items-center gap-2 rounded-lg px-3 py-3 text-slate-300 hover:bg-white/10">
+            <Settings size={17}/> Configurações
+          </Link>}
+        </div>
+      </nav>
       <div className="h-[100dvh] w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white">
         <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white px-5">
           <div className="flex items-center gap-3">
@@ -1609,7 +1703,14 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className="grid h-[calc(100dvh-72px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px]">
+        <div className="flex h-[54px] gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-2 lg:hidden">
+          <button type="button" onClick={()=>mudarArea('individuais')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='individuais'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Individuais</button>
+          <button type="button" onClick={()=>mudarArea('grupos')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='grupos'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Grupos</button>
+          {podeMonitorar && <button type="button" onClick={()=>mudarArea('monitoramento')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='monitoramento'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Monitoramento</button>}
+          <button type="button" onClick={()=>mudarArea('internas')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='internas'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Equipe interna</button>
+        </div>
+
+        <div className={`${areaAtendimento==='monitoramento'?'hidden':'grid'} h-[calc(100dvh-126px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] lg:h-[calc(100dvh-72px)]`}>
           <aside className={`${ativa || conversaInternaAtiva ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
@@ -1636,8 +1737,8 @@ export default function WhatsAppAtendimentoPage() {
               )}
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-extrabold text-slate-900">Conversas</p>
-                  <p className="text-[11px] text-slate-500">WhatsApp + conversas internas da equipe</p>
+                  <p className="text-sm font-extrabold text-slate-900">{areaAtendimento==='grupos'?'Grupos':areaAtendimento==='internas'?'Equipe interna':'Conversas'}</p>
+                  <p className="text-[11px] text-slate-500">{areaAtendimento==='grupos'?'Grupos atribuídos a você':areaAtendimento==='internas'?'Mensagens privadas da equipe':'Atendimentos individuais'}</p>
                 </div>
                 <div className="flex items-center gap-1">
                   {canais.length > 1 && (
@@ -1654,16 +1755,22 @@ export default function WhatsAppAtendimentoPage() {
                   </button>
                 </div>
               </div>
+              <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                <button type="button" onClick={()=>mudarArea('individuais')}
+                  className={`rounded-lg px-2 py-2 text-xs font-bold ${areaAtendimento==='individuais'?'bg-white text-emerald-700 shadow':'text-slate-500 hover:bg-white/70'}`}>Individuais</button>
+                <button type="button" onClick={()=>mudarArea('grupos')}
+                  className={`rounded-lg px-2 py-2 text-xs font-bold ${areaAtendimento==='grupos'?'bg-white text-blue-700 shadow':'text-slate-500 hover:bg-white/70'}`}>Grupos</button>
+              </div>
               <div className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3">
                 <Search size={16} className="text-slate-400"/>
-                <input value={busca} onChange={e=>setBusca(e.target.value)}
-                  placeholder="Buscar conversas..." className="w-full bg-transparent py-2.5 text-sm outline-none"/>
+                <input value={areaAtendimento==='internas'?buscaInterna:busca} onChange={e=>areaAtendimento==='internas'?setBuscaInterna(e.target.value):setBusca(e.target.value)}
+                  placeholder={areaAtendimento==='grupos'?'Buscar grupos...':areaAtendimento==='internas'?'Buscar equipe interna...':'Buscar por nome ou telefone...'} className="w-full bg-transparent py-2.5 text-sm outline-none"/>
               </div>
               <div className="mt-3 flex items-center justify-between px-0.5">
-                <span className="text-xs font-extrabold text-slate-800">Conversas</span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400">{totais.todas} no total</span>
+                <span className="text-xs font-extrabold text-slate-800">{areaAtendimento==='grupos'?'Grupos':areaAtendimento==='internas'?'Conversas internas':'Conversas'}</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400">{areaAtendimento==='internas'?internasFiltradas.length:totais.todas} no total</span>
               </div>
-              <div className="mt-2 min-w-0 max-w-full">
+              <div className={`mt-2 min-w-0 max-w-full ${areaAtendimento==='internas'?'hidden':''}`}>
                 <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
                 <button onClick={()=>setFiltro('todas')}
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
@@ -1697,23 +1804,28 @@ export default function WhatsAppAtendimentoPage() {
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='finalizadas'?'border-slate-400 bg-slate-100 text-slate-700':'bg-white text-slate-600'}`}>
                   Finalizadas {totais.finalizadas}
                 </button>
-                <button onClick={()=>setFiltro('grupos')}
-                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='grupos'?'border-violet-400 bg-violet-50 text-violet-700':'bg-white text-slate-600'}`}>
-                  Grupos {totais.grupos}
-                </button>
+
                 </div>
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
+              ) : (areaAtendimento==='internas'?internasFiltradas.length===0:(filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos)) ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
               ) : (
                 <>
-                  {filtradas.map(c => (
+                  {areaAtendimento==='internas' ? internasFiltradas.map(c=>(
+                    <button key={c.id} type="button" onClick={()=>selecionarConversaInterna(c)}
+                      className={`flex w-full items-center gap-3 border-b px-4 py-3 text-left hover:bg-blue-50 ${conversaInternaAtiva?.id===c.id?'bg-blue-50':''}`}>
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700">{c.tipo==='grupo'?<Users size={18}/>:String(c.nome||'?').slice(0,1).toUpperCase()}</span>
+                      <span className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">{c.nome||'Conversa interna'}</b>
+                        <span className="block truncate text-xs text-slate-500">{c.ultima_mensagem||'Equipe Atlas'}</span></span>
+                      {!!c.nao_lidas && <span className="rounded-full bg-blue-600 px-2 py-1 text-xs font-bold text-white">{c.nao_lidas}</span>}
+                    </button>
+                  )) : filtradas.map(c => (
                 <div key={c.id} role="button" tabIndex={0}
                   onClick={()=>selecionarConversa(c)}
                   onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selecionarConversa(c)}}}
@@ -2264,10 +2376,10 @@ export default function WhatsAppAtendimentoPage() {
                         )}
 
                         {m.tipo === 'imagem' && midia && (
-                          <a href={m.media_url || '#'} target="_blank" rel="noreferrer">
+                          <button type="button" onClick={()=>setMidiaAmpliada(m)} title="Ampliar imagem" className="block max-w-full cursor-zoom-in">
                             <img src={m.media_url || undefined} alt={m.arquivo_nome || 'Imagem do WhatsApp'}
                               className="max-h-80 max-w-full rounded-lg object-contain"/>
-                          </a>
+                          </button>
                         )}
                         {m.tipo === 'imagem' && midia && (
                           <button type="button" onClick={()=>void baixarAnexo(m)}
@@ -2285,6 +2397,12 @@ export default function WhatsAppAtendimentoPage() {
                             className="max-h-80 max-w-full rounded-lg"/>
                         )}
                         {m.tipo === 'video' && midia && (
+                          <button type="button" onClick={()=>setMidiaAmpliada(m)}
+                            className="mt-1 mr-2 inline-flex items-center gap-1.5 rounded-lg border bg-white/80 px-2.5 py-1 text-xs text-blue-700 hover:bg-white">
+                            <Eye size={13}/> Ampliar vídeo
+                          </button>
+                        )}
+                        {m.tipo === 'video' && midia && (
                           <button type="button" onClick={()=>void baixarAnexo(m)}
                             className="mt-1 inline-flex items-center gap-1.5 rounded-lg border bg-white/80 px-2.5 py-1 text-xs text-slate-600 hover:bg-white">
                             <Download size={13}/> Baixar vídeo
@@ -2295,12 +2413,12 @@ export default function WhatsAppAtendimentoPage() {
                         )}
 
                         {m.tipo === 'documento' && midia && (
-                          <a href={m.media_url || '#'} target="_blank" rel="noreferrer"
-                            className="flex items-center gap-2 rounded-lg border bg-white/70 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-white">
+                          <button type="button" onClick={()=>setMidiaAmpliada(m)}
+                            className="flex w-full items-center gap-2 rounded-lg border bg-white/70 px-3 py-2 text-left text-xs font-semibold text-blue-700 hover:bg-white">
                             <Paperclip size={16}/>
                             <span className="min-w-0 truncate">{m.arquivo_nome || texto || 'Abrir documento'}</span>
-                            <ExternalLink size={13} className="ml-auto shrink-0"/>
-                          </a>
+                            <Eye size={14} className="ml-auto shrink-0"/>
+                          </button>
                         )}
                         {m.tipo === 'documento' && midia && (
                           <button type="button" onClick={()=>void baixarAnexo(m)}
@@ -2577,7 +2695,7 @@ export default function WhatsAppAtendimentoPage() {
             </>}
           </section>
 
-          <aside className="hidden min-h-0 min-w-0 flex-col border-l border-slate-200 bg-white xl:flex">
+          <aside className="hidden min-h-0 min-w-0 flex-col border-l border-slate-200 bg-white">
             <div className="border-b border-slate-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -2664,7 +2782,157 @@ export default function WhatsAppAtendimentoPage() {
             </div>
           </aside>
         </div>
+
+        {areaAtendimento==='monitoramento' && podeMonitorar && (
+          <div className="h-[calc(100dvh-126px)] overflow-y-auto bg-slate-50 px-4 py-5 lg:h-[calc(100dvh-72px)] lg:px-8">
+            <div className="mx-auto max-w-[1500px] space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900">Monitoramento de atendimentos</h2>
+                  <p className="text-sm text-slate-500">Acompanhe as conversas da equipe sem misturar com seus atendimentos.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <select value={atendenteMonitorado} onChange={e=>{setAtendenteMonitorado(e.target.value);setAtiva(null)}}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
+                    <option value="todos">Todos os atendentes</option>
+                    {monitoradosVisiveis.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                  {canais.length>1 && <select value={canalFiltro} onChange={e=>selecionarCanal(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
+                    <option value="todos">Todos os números</option>
+                    {canais.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>}
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  {titulo:'Em atendimento',quantidade:conversasMonitoramento.filter(c=>c.status==='em_atendimento').length,destaque:'text-blue-600'},
+                  {titulo:'Aguardando resposta',quantidade:totalMonitoramentoAguardando,destaque:'text-amber-600'},
+                  {titulo:'Conversas não lidas',quantidade:conversasMonitoramento.filter(c=>Number(c.nao_lidas||0)>0).length,destaque:'text-violet-600'},
+                  {titulo:'Finalizadas',quantidade:conversasMonitoramento.filter(c=>c.status==='finalizado').length,destaque:'text-emerald-600'},
+                ].map(item=><div key={item.titulo} className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                  <span className={`text-3xl font-extrabold ${item.destaque}`}>{item.quantidade}</span>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{item.titulo}</p>
+                </div>)}
+              </div>
+              <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)]">
+                <div className="space-y-4">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-5 py-4"><h3 className="font-bold text-slate-900">Equipe</h3></div>
+                    <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3">Atendente</th><th className="px-4 py-3">Conversas</th><th className="px-4 py-3">Aguardando</th><th className="px-4 py-3">Ação</th></tr></thead>
+                      <tbody>{monitoradosVisiveis.map(u=>{
+                        const atribuídas = conversas.filter(c=>c.responsavel_id===u.id &&
+                          (canalFiltro==='todos'||c.whatsapp_canal_id===canalFiltro) &&
+                          (eu?.role==='master'||acessos.some(a=>a.canal_id===c.whatsapp_canal_id&&(a.supervisionar||a.dono))))
+                        const pendentes=atribuídas.filter(c=>c.status==='aguardando'||(c.status!=='finalizado'&&Number(c.nao_lidas||0)>0)).length
+                        return <tr key={u.id} className="border-t border-slate-100"><td className="px-4 py-3 font-bold text-slate-800">{u.nome}</td><td className="px-4 py-3">{atribuídas.length}</td><td className="px-4 py-3">{pendentes}</td><td className="px-4 py-3">
+                          <button type="button" onClick={()=>{setAtendenteMonitorado(u.id);setAtiva(null)}} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 font-semibold text-blue-700">Ver conversas</button>
+                        </td></tr>
+                      })}</tbody>
+                    </table></div>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-5 py-4"><h3 className="font-bold text-slate-900">Conversas para acompanhamento</h3></div>
+                    <div className="max-h-[430px] overflow-y-auto">
+                      {conversasMonitoramento.filter(c=>Boolean(c.ultima_mensagem_em)).map(c=>(
+                        <button key={c.id} type="button" onClick={()=>selecionarConversa(c)}
+                          className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-blue-50 ${ativa?.id===c.id?'bg-blue-50':''}`}>
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-700">{c.whatsapp_chat_tipo==='grupo'?<Users size={17}/>:String(c.contato_nome||c.telefone||'?').slice(0,1).toUpperCase()}</span>
+                          <span className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">{c.grupo_nome||c.contato_nome||telefoneFormatado(c.telefone)}</b>
+                            <span className="block truncate text-xs text-slate-500">{c.responsavel_nome||'Sem responsável'} · {c.ultimo_preview||'Sem mensagens'}</span></span>
+                          {!!c.nao_lidas && <span className="rounded-full bg-red-500 px-2 py-1 text-xs font-bold text-white">{c.nao_lidas}</span>}
+                          <Eye size={16} className="text-blue-600"/>
+                        </button>
+                      ))}
+                      {conversasMonitoramento.length===0 && <p className="p-6 text-center text-sm text-slate-500">Nenhuma conversa para os filtros selecionados.</p>}
+                    </div>
+                  </div>
+                </div>
+                <div className="min-h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  {ativa ? (
+                    <div className="flex h-full min-h-[420px] max-h-[780px] flex-col">
+                      <div className="border-b border-slate-100 px-5 py-4">
+                        <b className="block truncate text-sm text-slate-900">{ativa.grupo_nome||ativa.contato_nome||telefoneFormatado(ativa.telefone)}</b>
+                        <p className="mt-1 text-xs text-blue-700">Visualização de supervisão · sem assumir o atendimento</p>
+                        <span className="text-xs text-slate-500">Responsável: {ativa.responsavel_nome||'Não atribuído'}</span>
+                      </div>
+                      <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
+                        {mensagensVisiveis.map(m=><div key={m.id} className={`flex ${m.direcao==='saida'?'justify-end':'justify-start'}`}>
+                          <div className={`max-w-[90%] rounded-xl px-3 py-2 text-sm shadow-sm ${m.direcao==='saida'?'bg-emerald-100':'bg-white'}`}>
+                            {m.media_url && ['imagem','documento','video'].includes(m.tipo) ? (
+                              <button type="button" onClick={()=>setMidiaAmpliada(m)} className="inline-flex items-center gap-1 text-blue-700 underline">
+                                <Eye size={14}/> {m.arquivo_nome||'Visualizar anexo'}
+                              </button>
+                            ) : m.tipo==='audio' && m.media_url ? (
+                              <audio src={m.media_url} controls className="max-w-full"/>
+                            ) : <p className="whitespace-pre-wrap break-words">{m.texto||`[${m.tipo}]`}</p>}
+                            <span className="mt-1 block text-right text-[10px] text-slate-400">{hora(m.created_at)}</span>
+                          </div>
+                        </div>)}
+                        {!mensagensVisiveis.length && <p className="py-10 text-center text-xs text-slate-400">Sem mensagens para exibir.</p>}
+                      </div>
+                    </div>
+                  ) : <div className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
+                    <Eye size={40} className="text-blue-400"/>
+                    <b className="mt-4 text-sm text-slate-800">Escolha uma conversa</b>
+                    <p className="mt-1 text-xs text-slate-500">O histórico será mostrado aqui sem alterar o responsável.</p>
+                  </div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+        {midiaAmpliada && (
+          <div className="fixed inset-0 z-[180] flex flex-col bg-[#101820]/95 text-white"
+            role="dialog" aria-modal="true" aria-label="Visualização de anexo"
+            onKeyDown={e=>{if(e.key==='Escape')setMidiaAmpliada(null)}}>
+            <div className="flex min-h-[64px] items-center gap-3 border-b border-white/10 px-4">
+              <button type="button" onClick={()=>setMidiaAmpliada(null)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Voltar à conversa"><ArrowLeft size={22}/></button>
+              <div className="min-w-0 flex-1">
+                <b className="block truncate text-sm">{midiaAmpliada.arquivo_nome||'Anexo do WhatsApp'}</b>
+                <p className="text-xs text-slate-400">{ativa?.contato_nome||ativa?.grupo_nome||'Conversa'} · {new Date(midiaAmpliada.created_at).toLocaleString('pt-BR')}</p>
+              </div>
+              <button type="button" onClick={()=>void baixarAnexo(midiaAmpliada)} title="Baixar arquivo"
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold hover:bg-blue-700">
+                <Download size={17}/><span className="hidden sm:inline">Baixar</span>
+              </button>
+              {midiaAmpliada.media_url && <a href={midiaAmpliada.media_url} target="_blank" rel="noopener noreferrer"
+                className="rounded-lg p-2 hover:bg-white/10" title="Abrir em outra aba"><ExternalLink size={20}/></a>}
+              <button type="button" onClick={()=>setMidiaAmpliada(null)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Fechar"><X size={22}/></button>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3 sm:p-6">
+              {midiaAmpliada.tipo==='imagem' && midiaAmpliada.media_url ? (
+                <img src={midiaAmpliada.media_url} alt={midiaAmpliada.arquivo_nome||'Foto recebida'}
+                  className="max-h-full max-w-full object-contain"/>
+              ) : midiaAmpliada.tipo==='video' && midiaAmpliada.media_url ? (
+                <video src={midiaAmpliada.media_url} controls autoPlay className="max-h-full max-w-full"/>
+              ) : midiaAmpliada.tipo==='documento' && midiaAmpliada.media_url &&
+                (String(midiaAmpliada.mime_type||'').includes('pdf')||String(midiaAmpliada.arquivo_nome||'').toLowerCase().endsWith('.pdf')) ? (
+                <iframe src={midiaAmpliada.media_url} title={midiaAmpliada.arquivo_nome||'Documento PDF'}
+                  className="h-full w-full max-w-5xl rounded-lg bg-white"/>
+              ) : (
+                <div className="rounded-xl border border-white/20 bg-slate-900 p-8 text-center">
+                  <Paperclip size={40} className="mx-auto text-blue-400"/>
+                  <p className="mt-3 text-sm font-bold">Este formato não possui prévia no navegador.</p>
+                  <p className="mt-1 text-xs text-slate-300">Use Baixar ou Abrir em outra aba para visualizar.</p>
+                </div>
+              )}
+            </div>
+            {midiaAmpliada.tipo==='imagem' && (
+              <div className="flex items-center justify-center gap-2 overflow-x-auto border-t border-white/10 p-2">
+                {mensagensVisiveis.filter(m=>m.tipo==='imagem'&&Boolean(m.media_url)).map(m=>(
+                  <button key={m.id} type="button" onClick={()=>setMidiaAmpliada(m)}
+                    className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 ${m.id===midiaAmpliada.id?'border-blue-500':'border-transparent'}`}>
+                    <img src={m.media_url||undefined} alt="Miniatura" className="h-full w-full object-cover"/>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {conversaInternaAberta && (
           <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"

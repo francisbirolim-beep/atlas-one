@@ -254,8 +254,12 @@ async function acessoGrupoWhatsApp(
   let atender = false
   let transferir = false
   if (atribuicaoPontual) {
+    // Quem recebeu uma transferência de grupo pode transferir novamente.
+    // A atribuição é registrada pelo fluxo autorizado e não amplia acesso
+    // a outros grupos ou canais.
     visualizar = true
     atender = true
+    transferir = true
   } else if (substitutoAtivo) {
     visualizar = true
     atender = true
