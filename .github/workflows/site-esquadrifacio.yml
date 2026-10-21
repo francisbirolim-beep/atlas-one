@@ -1,0 +1,35 @@
+name: Site Esquadrifácio — validação isolada
+
+on:
+  pull_request:
+    paths:
+      - "site-esquadrifacio/**"
+      - ".github/workflows/site-esquadrifacio.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verificar site estático sem serviços externos
+        run: node site-esquadrifacio/validar-site.mjs
+      - name: Testar preparação segura da publicação
+        run: node site-esquadrifacio/testar-lancamento.mjs
+      - name: Verificar links internos, fotos e navegação
+        run: node site-esquadrifacio/verificar-links.mjs
+      - name: Validar blog e fila editorial sem publicação
+        run: node site-esquadrifacio/blog/validar-blog.mjs
+      - name: Gerar pacote público institucional (sem deploy)
+        run: |
+          node site-esquadrifacio/preparar-publicacao.mjs --modo=producao --sem-blog=true --dominio=https://esquadrifacio.com.br
+          node site-esquadrifacio/preparar-netlify.mjs
+          test ! -d site-esquadrifacio/.gerado/netlify-producao/blog
+          test -f site-esquadrifacio/.gerado/netlify-producao/_headers

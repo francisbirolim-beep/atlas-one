@@ -1,0 +1,71 @@
+{
+  "versao": 1,
+  "objetivo": "Alimentar o blog com conteúdo técnico, comercial e educativo sobre esquadrias de alumínio sob medida.",
+  "cadenciaProposta": "2 rascunhos por semana para revisão antes de qualquer publicação",
+  "pautas": [
+    {
+      "slug": "medidas-finais-de-esquadrias",
+      "title": "Por que a medição final é importante antes de fabricar esquadrias?",
+      "intent": "Explicar dimensões preliminares vs. conferidas e a importância do projeto",
+      "cluster": "Planejamento da obra",
+      "priority": 1,
+      "status": "ideia"
+    },
+    {
+      "slug": "acabamentos-aluminio-preto-branco-amadeirado",
+      "title": "Preto, branco ou amadeirado: como escolher a cor das esquadrias?",
+      "intent": "Mostrar critérios de composição, luz e amostras",
+      "cluster": "Cores e acabamentos",
+      "priority": 2,
+      "status": "ideia"
+    },
+    {
+      "slug": "persianas-automatizadas-em-esquadrias",
+      "title": "Quando considerar persianas automatizadas no projeto de janelas?",
+      "intent": "Ajuda no briefing e cuidados com infraestrutura elétrica",
+      "cluster": "Conforto",
+      "priority": 3,
+      "status": "ideia"
+    },
+    {
+      "slug": "porta-pivotante-ou-de-correr",
+      "title": "Porta pivotante ou de correr: quais diferenças no uso?",
+      "intent": "Compreender circulação, abertura e projeto sem promessas absolutas",
+      "cluster": "Portas e aberturas",
+      "priority": 4,
+      "status": "ideia"
+    },
+    {
+      "slug": "como-limpar-esquadrias-de-aluminio",
+      "title": "Como cuidar das esquadrias de alumínio no dia a dia?",
+      "intent": "Cuidados gerais, orientando a seguir recomendações específicas do fabricante",
+      "cluster": "Manutenção",
+      "priority": 5,
+      "status": "ideia"
+    },
+    {
+      "slug": "esquadrias-na-fachada-residencial",
+      "title": "Como planejar portas e janelas para a fachada de uma casa?",
+      "intent": "Discussão de integração arquitetônica e medição",
+      "cluster": "Fachadas",
+      "priority": 6,
+      "status": "ideia"
+    },
+    {
+      "slug": "tela-mosquiteira-planejamento",
+      "title": "Quando prever tela mosquiteira nas portas e janelas?",
+      "intent": "Explicar compatibilidade e usabilidade",
+      "cluster": "Complementos",
+      "priority": 7,
+      "status": "ideia"
+    },
+    {
+      "slug": "guarda-corpo-aluminio-vidro-cuidados",
+      "title": "Guarda-corpo de alumínio e vidro: o que deve ser avaliado no projeto?",
+      "intent": "Reforçar análise técnica e conformidade sem especificações normativas inventadas",
+      "cluster": "Guarda-corpos",
+      "priority": 8,
+      "status": "ideia"
+    }
+  ]
+}
