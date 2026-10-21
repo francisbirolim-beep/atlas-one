@@ -95,3 +95,10 @@ No modo de homologação, o construtor gera páginas com aviso **“Em revisão�
 Teste adicional: \`node site-esquadrifacio/blog/validar-blog.mjs\`. O \`verificar-links.mjs\` agora também audita todos os links do blog em uma cópia gerada localmente.
 
 **Integração Atlas:** etapa futura, projeto isolado, dependente de aprovação específica; não há conexão com dados de CRM, WhatsApp, financeiros ou publicações sociais.
+
+
+## Central editorial somente na prévia (21/10/2026)
+
+O caminho \`/blog/editorial/\` é gerado **exclusivamente em homologação**, no projeto separado e protegido da Vercel. Reúne os 3 artigos em rascunho, 10 pautas futuras, contadores de status e regras de aprovação. É um painel **somente de leitura**, sem botões de aprovação fictícios; a tarefa recorrente do ChatGPT gera rascunhos para revisão mas ainda não grava dados diretamente no repositório.
+
+A geração pública não inclui esta página, os rascunhos nem a fila de pautas. O workflow local e de CI verifica que o painel tem aviso de privacidade, não é indexável, tem navegação válida e fica ausente do pacote de produção.

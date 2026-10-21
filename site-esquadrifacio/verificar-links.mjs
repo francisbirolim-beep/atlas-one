@@ -14,6 +14,7 @@ const attr = (tag, name) => tag.match(new RegExp('\\b'+name+'="([^"]*)"', 'i'))?
 try {
   const blog = gerarBlog({mode:'homologacao',output:temp})
   const blogPages = blog.paths.map(path => path.endsWith('/') ? path.slice(1)+'index.html' : path.slice(1))
+  blogPages.push('blog/editorial/index.html')
   const pages = [...basePages,...blogPages]
   const lookup = p => p.startsWith('blog/') ? join(temp,p) : join(root,p)
   const contents = new Map(pages.map(file => [file,readFileSync(lookup(file),'utf8')]))
@@ -76,7 +77,11 @@ try {
       }
     }
   }
-  assert.ok(count.pages===7&&count.imagens===14&&count.links>=55&&count.ancoras>=10,'Quantidade inesperada de conteúdo')
+  assert.ok(count.pages===8&&count.imagens===14&&count.links>=55&&count.ancoras>=10,'Quantidade inesperada de conteúdo')
   assert.ok(contents.get('index.html').includes('href="/blog/"'),'Home não leva ao blog')
+  assert.ok(contents.get('blog/index.html').includes('href="/blog/editorial/"'),'Blog sem central de revisão')
+  const editorial=contents.get('blog/editorial/index.html')
+  assert.ok(editorial.includes('Central <em>editorial.</em>')&&editorial.includes('10</strong><span>Próximas pautas')&&
+    editorial.includes('noindex,nofollow'),'Central editorial sem proteção ou fila')
   console.log('SITE_LINKS_OK — '+JSON.stringify(count))
 }finally{rmSync(temp,{recursive:true,force:true})}

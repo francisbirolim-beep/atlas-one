@@ -1,7 +1,7 @@
 // Testes do processo de lançamento: tudo executado em diretório temporário.
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -75,6 +75,8 @@ try {
   const robots = readFileSync(join(pronto, 'robots.txt'), 'utf8')
   const sitemap = readFileSync(join(pronto, 'sitemap.xml'), 'utf8')
   const vercel = readFileSync(join(pronto, 'vercel.json'), 'utf8')
+  check('central editorial interna não entra no pacote público',
+    !existsSync(join(pronto, 'blog', 'editorial', 'index.html')))
   const blogIndex = readFileSync(join(pronto, 'blog', 'index.html'), 'utf8')
   const blogArticle = readFileSync(join(pronto, 'blog', blogTodos.articles[0].slug + '.html'), 'utf8')
   const rss = readFileSync(join(pronto, 'blog', 'feed.xml'), 'utf8')

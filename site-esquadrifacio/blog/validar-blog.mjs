@@ -18,6 +18,14 @@ try {
   check('blog e três artigos gerados',build.count===3 && build.paths.length===4)
   const index=readFileSync(join(dir,'blog','index.html'),'utf8')
   check('índice bloqueado de buscas e identificado como revisão',index.includes('noindex,nofollow')&&index.includes('Em revisão')&&index.includes('Conteúdos em preparação editorial'))
+  const editor = readFileSync(join(dir,'blog','editorial','index.html'),'utf8')
+  check('central editorial criada somente em homologação',editor.includes('Central <em>editorial.</em>') &&
+    editor.includes('noindex,nofollow') && editor.includes('Área interna da prévia protegida'))
+  check('central exibe dez pautas e três rascunhos',editor.includes('Próximas pautas') &&
+    (editor.match(/class="editorial-row"/g)||[]).length===3 &&
+    (editor.match(/class="editorial-n"/g)||[]).length===10)
+  check('central editorial informa que não publica nem aprova',editor.includes('aprovações não são realizadas aqui') &&
+    editor.includes('não grava automaticamente'))
   check('blog possui navegação e contatos reais',index.includes('href="/"')&&index.includes('href="/solucoes.html"')&&index.includes('instagram.com/esquadrifacio/')&&index.includes('maps.app.goo.gl/SnZxkUvSYJLgceed6'))
   check('blog sem carregamento de scripts de terceiros',!index.includes('<script') && !index.includes('googletagmanager'))
   for (const post of manifest.articles) {

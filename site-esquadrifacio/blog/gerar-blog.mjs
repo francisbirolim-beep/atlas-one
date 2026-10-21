@@ -10,6 +10,8 @@ const site = dirname(root)
 const source = JSON.parse(readFileSync(join(root, 'artigos.json'), 'utf8'))
 const safe = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 const title = 'Blog de soluções | Esquadrifácio®'
+const editorial = JSON.parse(readFileSync(join(root, 'pautas.json'), 'utf8'))
+
 const instagram = 'https://www.instagram.com/esquadrifacio/'
 const whatsapp = 'https://wa.me/5517996361318?text=Ol%C3%A1!%20Li%20o%20blog%20da%20Esquadrif%C3%A1cio%20e%20gostaria%20de%20um%20or%C3%A7amento.'
 const map = 'https://maps.app.goo.gl/SnZxkUvSYJLgceed6'
@@ -61,7 +63,7 @@ function blogIndex(posts, mode, origin) {
     '<meta property="og:title" content="' + title + '"><meta property="og:type" content="website">' + robots + canonical
   const intro = '<section class="intro"><p class="eyebrow">Conteúdo que ajuda na sua obra</p><h1>Ideias, orientações e <em>soluções.</em></h1>' +
     '<p>Do primeiro orçamento à escolha dos acabamentos, reunimos explicações para ajudar você a decidir com mais clareza.</p></section>'
-  const note = mode === 'homologacao' ? '<p class="staging-note">Conteúdos em preparação editorial: informações sujeitas à revisão técnica antes da publicação definitiva.</p>' : ''
+  const note = mode === 'homologacao' ? '<p class="staging-note">Conteúdos em preparação editorial: informações sujeitas à revisão técnica antes da publicação definitiva. <a href="/blog/editorial/"><strong>Abrir central editorial ↗</strong></a></p>' : ''
   const content = '<section class="listing" aria-label="Artigos do blog">' + note + '<div class="article-grid">' + posts.map(p => articleCard(p, mode)).join('') + '</div></section>'
   return shell(head, intro + content, true)
 }
@@ -93,6 +95,32 @@ function articleHTML(post, mode, origin) {
   }
   return {html:shell(head + jsonld, body, false),script:jsonld ? jsonld.slice(jsonld.indexOf('>') + 1, -9) : null}
 }
+function editorialHTML(posts) {
+  const status = { rascunho:'Rascunho — aguardando revisão', revisao:'Em revisão técnica', aprovado:'Aprovado' }
+  const reviewed = posts.filter(x=>x.status==='aprovado').length
+  const drafts = posts.filter(x=>x.status==='rascunho').length
+  const inReview = posts.filter(x=>x.status==='revisao').length
+  const row = post=>'<article class="editorial-row"><div><small class="editorial-category">' + safe(post.category) + '</small>' +
+    '<h3>' + safe(post.title) + '</h3><p>' + safe(post.description) + '</p><a href="/blog/' + post.slug + '.html">Conferir texto na prévia ↗</a></div>' +
+    '<span class="status-label">' + status[post.status] + '</span></article>'
+  const ideas = editorial.pautas.map(x=>'<li><span class="editorial-n">' + String(x.priority).padStart(2,'0') + '</span><div><strong>' + safe(x.title) +
+    '</strong><p>' + safe(x.cluster) + ' · ' + safe(x.intent) + '</p></div><span class="status-label">Pauta sugerida</span></li>').join('')
+  const doc = '<section class="intro"><p class="eyebrow">Gestão de conteúdo · somente homologação</p><h1>Central <em>editorial.</em></h1>' +
+    '<p>Acompanhe o que a IA preparou e o que precisa de revisão humana. Esta página é apenas para leitura: aprovações não são realizadas aqui.</p></section>' +
+    '<section class="listing editorial"><div class="staging-note">Área interna da prévia protegida. Nada desta página é levado para a publicação oficial do site.</div>' +
+    '<div class="editorial-metrics"><div><strong>' + drafts + '</strong><span>Rascunhos</span></div><div><strong>' + inReview +
+    '</strong><span>Em revisão</span></div><div><strong>' + reviewed + '</strong><span>Aprovados</span></div><div><strong>' + editorial.pautas.length +
+    '</strong><span>Próximas pautas</span></div></div>' +
+    '<h2>Artigos para revisar</h2><div class="editorial-rows">' + posts.map(row).join('') + '</div>' +
+    '<h2>Fila de assuntos recomendados</h2><ol class="editorial-ideas">' + ideas + '</ol>' +
+    '<section class="editorial-checklist"><h2>Antes de autorizar um texto</h2>' +
+    '<p>O especialista técnico deve conferir dimensões, tipologias, ferragens e afirmações que dependam de fabricante ou norma. O comercial deve conferir clareza, adequação ao serviço e contato. O responsável final valida a publicação.</p>' +
+    '<p>Fluxo: proposta da IA → revisão técnica → revisão editorial → autorização humana → teste da versão → publicação.</p>' +
+    '<p><strong>Automação:</strong> a tarefa agendada do ChatGPT prepara rascunhos para revisão, mas não grava automaticamente nesta biblioteca nem publica no site.</p></section></section>'
+  const head='<title>Central editorial | Homologação Esquadrifácio®</title>' +
+    '<meta name="robots" content="noindex,nofollow"><meta name="description" content="Prévia interna da fila de revisão editorial da Esquadrifácio.">'
+  return shell(head,doc,false)
+}
 function xmlEscape(s) {
   return safe(s).replace(/&#39;/g, '&apos;').replace(/&quot;/g, '&quot;')
 }
@@ -105,6 +133,11 @@ export function gerarBlog({mode, output, origin = ''}) {
   cpSync(join(root, 'blog.css'),join(out,'blog.css'))
   writeFileSync(join(out,'index.html'), blogIndex(posts,mode,origin))
   const paths = ['/blog/']
+  if (mode === 'homologacao') {
+    const adminDir = join(out, 'editorial')
+    mkdirSync(adminDir, { recursive: true })
+    writeFileSync(join(adminDir, 'index.html'), editorialHTML(source.articles))
+  }
   const cspHashes = []
   for (const post of posts) {
     const {html,script} = articleHTML(post,mode,origin)
