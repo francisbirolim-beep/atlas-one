@@ -11,7 +11,7 @@ import type {NivelPermissao,OrcamentoRapido,Tarefa} from '@/lib/tipos'
 type Orc=Pick<OrcamentoRapido,'id'|'numero'|'cliente_id'|'cliente_nome'|'cidade'|'origem'|'valor_estimado'|'status'|'temperatura'|'created_at'|'criado_por_id'|'criado_por_nome'>
 type Fase='rascunho'|'enviado'|'ganho'|'perdido'
 const FASES:{id:Fase;nome:string;cor:string}[]=[{id:'rascunho',nome:'Em elaboração',cor:'bg-sky-500'},{id:'enviado',nome:'Proposta enviada',cor:'bg-amber-500'},{id:'ganho',nome:'Ganho',cor:'bg-emerald-500'},{id:'perdido',nome:'Perdido',cor:'bg-rose-500'}]
-function fase(s:string):Fase{return s==='enviado'?'enviado':s==='aprovado'||s==='convertido'?'ganho':s==='recusado'?'perdido':'rascunho'}
+function fase(s:string):Fase{return s==='enviado'?'enviado':s==='aprovado'||s==='convertido'||s==='vendido'?'ganho':s==='recusado'?'perdido':'rascunho'}
 function moeda(v:number){return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0})}
 function dataBR(v?:string|null){return v?new Date(v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}):'Sem data'}
 function vencida(t:Tarefa){return Boolean(t.data_vencimento&&t.data_vencimento.slice(0,10)<new Date().toISOString().slice(0,10))}
@@ -19,7 +19,7 @@ function Cartao({o,tarefa}:{o:Orc;tarefa?:Tarefa}){
  return <Link href={'/kanban?orcamento='+encodeURIComponent(o.id)} className="block rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-md">
   <div className="flex justify-between gap-2"><div className="min-w-0"><p className="truncate text-[13px] font-black text-slate-900">{o.cliente_nome||'Cliente sem nome'}</p><p className="mt-1 text-[11px] text-slate-500">Orçamento {o.numero?'#'+o.numero:'sem número'} · {o.cidade||'Sem cidade'}</p></div><ChevronRight size={15} className="shrink-0 text-slate-300"/></div>
   <p className="mt-3 text-xl font-black text-[#142b4d]">{o.valor_estimado==null?'Sem valor':moeda(Number(o.valor_estimado)||0)}</p>
-  <div className="mt-3 flex flex-wrap gap-1.5">{o.temperatura&&<span className={'rounded-full px-2 py-1 text-[10px] font-bold '+(o.temperatura==='quente'?'bg-rose-50 text-rose-700':o.temperatura==='morno'?'bg-amber-50 text-amber-700':'bg-sky-50 text-sky-700')}>{o.temperatura.toUpperCase()}</span>}{o.origem&&<span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">{o.origem}</span>}</div>
+  <div className="mt-3 flex flex-wrap gap-1.5">{o.status==='vendido'&&<span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">Venda confirmada</span>}{o.temperatura&&<span className={'rounded-full px-2 py-1 text-[10px] font-bold '+(o.temperatura==='quente'?'bg-rose-50 text-rose-700':o.temperatura==='morno'?'bg-amber-50 text-amber-700':'bg-sky-50 text-sky-700')}>{o.temperatura.toUpperCase()}</span>}{o.origem&&<span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600">{o.origem}</span>}</div>
   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-[11px] text-slate-500"><span>{o.criado_por_nome||'Não atribuído'}</span><span className={'inline-flex items-center gap-1 '+(tarefa&&vencida(tarefa)?'font-bold text-rose-600':'')}><Clock3 size={12}/>{tarefa?'Retorno '+dataBR(tarefa.data_vencimento):'Sem retorno agendado'}</span></div>
  </Link>
 }
