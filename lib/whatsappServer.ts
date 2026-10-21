@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { pertenceFilaPrivada } from '@/lib/whatsappTriagemVisibilidade'
 import type { UsuarioTenant } from '@/lib/tenantServer'
 
 export type AtendimentoConversa = {
@@ -18,6 +19,9 @@ export type AtendimentoConversa = {
   status: string
   responsavel_id?: string | null
   responsavel_nome?: string | null
+  triagem_prazo_em?: string | null
+  triagem_destinos?: string[] | null
+  triagem_escalonada_em?: string | null
   setor?: string | null
   ultimo_preview?: string | null
   nao_lidas?: number | null
@@ -52,6 +56,9 @@ type ConfigAtendimento = {
   phone_number_id?: string | null
   setor_padrao?: string | null
   usuario_padrao_id?: string | null
+  triagem_privada_ativa?: boolean
+  triagem_tempo_minutos?: number
+  triagem_destinos?: string[]
   modo_integracao?: 'qr' | 'cloud_api' | null
   gateway_token_hash?: string | null
   gateway_status?: string | null
@@ -463,7 +470,7 @@ async function configuracaoPorNumero(phoneNumberId: string | null): Promise<Conf
   if (phoneNumberId) {
     const { data } = await supabaseAdmin
       .from('atendimento_configuracoes')
-      .select('empresa_id,numero_principal,phone_number_id,setor_padrao,usuario_padrao_id,ativo')
+      .select('empresa_id,numero_principal,phone_number_id,setor_padrao,usuario_padrao_id,triagem_privada_ativa,triagem_tempo_minutos,triagem_destinos,ativo')
       .eq('phone_number_id', phoneNumberId)
       .eq('ativo', true)
       .maybeSingle()
@@ -472,7 +479,7 @@ async function configuracaoPorNumero(phoneNumberId: string | null): Promise<Conf
 
   const { data } = await supabaseAdmin
     .from('atendimento_configuracoes')
-    .select('empresa_id,numero_principal,phone_number_id,setor_padrao,usuario_padrao_id,ativo')
+    .select('empresa_id,numero_principal,phone_number_id,setor_padrao,usuario_padrao_id,triagem_privada_ativa,triagem_tempo_minutos,triagem_destinos,ativo')
     .eq('ativo', true)
     .limit(2)
 
@@ -683,10 +690,14 @@ async function criarOuAtualizarConversa(params: {
   const cliente = await clientePorTelefone(params.config.empresa_id, telefone)
   if (existente) {
     const atual = existente as AtendimentoConversa
-    if (atual.responsavel_id) return atual
+    if (atual.responsavel_id || atual.triagem_escalonada_em) return atual
     const regra = await regraDeRoteamento(params.config.empresa_id, params.texto || null)
-    const responsavelId = regra?.usuario_id || params.config.usuario_padrao_id || null
+    const triagemAtiva = params.config.triagem_privada_ativa === true && Boolean(params.config.usuario_padrao_id)
+    const responsavelId = triagemAtiva ? params.config.usuario_padrao_id! : (regra?.usuario_id || params.config.usuario_padrao_id || null)
     const responsavelNome = await nomeUsuario(responsavelId)
+    const prazo = triagemAtiva && atual.status === 'finalizado'
+      ? new Date(Date.now() + Number(params.config.triagem_tempo_minutos || 10) * 60000).toISOString()
+      : atual.triagem_prazo_em || null
     const { data } = await supabaseAdmin.from('atendimento_conversas').update({
       contato_nome: params.contatoNome || (cliente as any)?.nome || atual.contato_nome || null,
       cliente_id: (cliente as any)?.id || atual.cliente_id || null,
@@ -694,13 +705,18 @@ async function criarOuAtualizarConversa(params: {
       responsavel_nome: responsavelNome,
       setor: regra?.setor || params.config.setor_padrao || atual.setor || null,
       status: 'aguardando',
+      triagem_prazo_em: prazo,
+      triagem_destinos: triagemAtiva && atual.status === 'finalizado'
+        ? (params.config.triagem_destinos || []) : (atual.triagem_destinos || []),
+      triagem_escalonada_em: triagemAtiva && atual.status === 'finalizado'
+        ? null : (atual.triagem_escalonada_em || null),
       updated_at: new Date().toISOString(),
     }).eq('id', atual.id).select('*').single()
     return data as AtendimentoConversa
   }
 
   const regra = await regraDeRoteamento(params.config.empresa_id, params.texto || null)
-  const responsavelId = regra?.usuario_id || params.config.usuario_padrao_id || null
+  const responsavelId = params.config.triagem_privada_ativa ? params.config.usuario_padrao_id || null : regra?.usuario_id || params.config.usuario_padrao_id || null
   const responsavelNome = await nomeUsuario(responsavelId)
   const { data, error } = await supabaseAdmin.from('atendimento_conversas').insert({
     empresa_id: params.config.empresa_id,
@@ -712,6 +728,8 @@ async function criarOuAtualizarConversa(params: {
     responsavel_id: responsavelId,
     responsavel_nome: responsavelNome,
     setor: regra?.setor || params.config.setor_padrao || null,
+    triagem_prazo_em: params.config.triagem_privada_ativa && responsavelId ? new Date(Date.now() + Number(params.config.triagem_tempo_minutos || 10) * 60000).toISOString() : null,
+    triagem_destinos: params.config.triagem_privada_ativa ? (params.config.triagem_destinos || []) : [],
   }).select('*').single()
   if (error) throw error
   return data as AtendimentoConversa
@@ -1097,6 +1115,16 @@ export async function conversaAcessivel(conversaId: string, usuario: UsuarioTena
     return data as AtendimentoConversa
   }
   if (!acesso.visualizar) return null
+  // Master ou quem tem permissao expressa de supervisao mantem acesso integral.
+  if (acesso.supervisionar) return data as AtendimentoConversa
+  if (!data.responsavel_id && (data.triagem_destinos || []).length > 0) {
+    return pertenceFilaPrivada(data, usuario.id, acesso.atender) ? data as AtendimentoConversa : null
+  }
+  const { data: configTriagem } = await supabaseAdmin.from('atendimento_configuracoes')
+    .select('triagem_privada_ativa').eq('empresa_id', usuario.empresa_id).maybeSingle()
+  if (configTriagem?.triagem_privada_ativa) {
+    return pertenceFilaPrivada(data, usuario.id, acesso.atender) ? data as AtendimentoConversa : null
+  }
   if (data.status === 'finalizado') return data as AtendimentoConversa
   if (data.responsavel_id === usuario.id) return data as AtendimentoConversa
   if (acesso.supervisionar) return data as AtendimentoConversa
@@ -1191,7 +1219,17 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
   }).filter((acesso: any) => acesso.visualizar)
 }
 
+export async function processarEscalonamentoTriagem(empresaId?: string) {
+  const { data, error } = await supabaseAdmin.rpc('whatsapp_escalonar_triagem', { p_empresa_id: empresaId || null })
+  if (error) throw error
+  return Number(data || 0)
+}
+
 export async function listarConversasAtendimento(usuario: UsuarioTenant) {
+  const { data: configTriagem } = await supabaseAdmin.from('atendimento_configuracoes')
+    .select('triagem_privada_ativa').eq('empresa_id', usuario.empresa_id).maybeSingle()
+  const triagemAtiva = configTriagem?.triagem_privada_ativa === true
+  if (triagemAtiva) await processarEscalonamentoTriagem(usuario.empresa_id)
   const acessos = await listarAcessosCanaisAtendimento(usuario)
   const canaisConectados = acessos.map(acesso => acesso.canal_id)
   if (!canaisConectados.length) return []
@@ -1278,8 +1316,9 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
     }
 
     if (usuario.role === 'master') return { conversa, permitido: true, grupo: null }
-    if (acesso?.dono || acesso?.supervisionar) return { conversa, permitido: true, grupo: null }
+    if (acesso?.supervisionar || (acesso?.dono && !triagemAtiva)) return { conversa, permitido: true, grupo: null }
     if (conversa.responsavel_id === usuario.id) return { conversa, permitido: true, grupo: null }
+    if (triagemAtiva) return { conversa, permitido: pertenceFilaPrivada(conversa, usuario.id, Boolean(acesso?.atender)), grupo: null }
     // "Ver canal" inclui o histórico já finalizado do número.
     // Conversa ativa de outro atendente continua protegida pela permissão "Supervisionar".
     if (conversa.status === 'finalizado' && acesso?.visualizar) {
@@ -2480,13 +2519,22 @@ export async function assumirConversa(conversaId: string, usuario: UsuarioTenant
     throw new Error('Esta conversa já está com outro atendente.')
   }
   const agora = new Date().toISOString()
-  await supabaseAdmin.from('atendimento_conversas').update({
+  let atribuir = supabaseAdmin.from('atendimento_conversas').update({
     responsavel_id: usuario.id,
     responsavel_nome: usuario.nome,
     status: 'em_atendimento',
     nao_lidas: 0,
+    triagem_prazo_em: null,
+    triagem_destinos: [],
+    triagem_escalonada_em: null,
     updated_at: agora,
-  }).eq('id', conversaId)
+  }).eq('id', conversaId).eq('status', conversa.status)
+  atribuir = conversa.responsavel_id
+    ? atribuir.eq('responsavel_id', conversa.responsavel_id)
+    : atribuir.is('responsavel_id', null)
+  const { data: atribuida, error: atribuicaoErro } = await atribuir.select('id').maybeSingle()
+  if (atribuicaoErro) throw atribuicaoErro
+  if (!atribuida) throw new Error('Esta conversa ja foi aceita ou transferida. Atualize a fila.')
   const sessao = await garantirSessao({ ...conversa, responsavel_id: usuario.id, responsavel_nome: usuario.nome, status: 'em_atendimento' })
   if (sessao?.id) {
     await supabaseAdmin.from('atendimento_sessoes').update({
@@ -2540,6 +2588,9 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
     responsavel_nome: destino.nome,
     setor: setor || conversa.setor || null,
     status: 'aguardando',
+    triagem_prazo_em: null,
+    triagem_destinos: [],
+    triagem_escalonada_em: null,
     updated_at: agora,
   }).eq('id', conversaId)
   const sessao = await garantirSessao(conversa)

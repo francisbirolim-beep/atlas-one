@@ -214,6 +214,9 @@ async function destinatariosWhatsApp(config: any, channel: any, conversation: an
     ids.add(conversation.responsavel_id);
     return [...ids];
   }
+  if (conversation.triagem_escalonada_em && Array.isArray(conversation.triagem_destinos)) {
+    return [...new Set(conversation.triagem_destinos)];
+  }
   if (channel.usuario_id) ids.add(channel.usuario_id);
 
   const [{ data: masters }, { data: permissoes }] = await Promise.all([
@@ -1531,7 +1534,7 @@ async function enfileirarRespostaAutomaticaWhatsapp(params: {
     ultima_mensagem_em: agora,
     ultima_saida_em: agora,
     nao_lidas: 0,
-    status: "em_atendimento",
+    status: params.conversation.triagem_prazo_em ? "aguardando" : "em_atendimento",
     updated_at: agora,
   }).eq("id", params.conversation.id);
 
@@ -2021,7 +2024,13 @@ async function conversationForInbound(
     ownerId = rule?.usuario_id || config.usuario_padrao_id || null;
     sector = rule?.setor || config.setor_padrao || null;
   }
-  if (!ownerName) ownerName = await userName(ownerId);
+  const triagemAtiva = !isGroup && channel.principal === true &&
+    config.triagem_privada_ativa === true && Boolean(config.usuario_padrao_id);
+  if (triagemAtiva) {
+    ownerId = config.usuario_padrao_id;
+    sector = config.setor_padrao || null;
+  }
+  if (!ownerName || triagemAtiva) ownerName = await userName(ownerId);
   const displayName = isGroup ? (grupoNome || nome || "Grupo WhatsApp") : (nome || customer?.nome || null);
 
   if (existing) {
@@ -2041,12 +2050,14 @@ async function conversationForInbound(
         .eq("ativo", true)
         .lte("fim_em", new Date().toISOString());
     }
-    const keepExistingOwner = usarPrincipalDoGrupo ? ownerId : (existing.responsavel_id || ownerId);
-    const keepExistingOwnerName = usarPrincipalDoGrupo
-      ? ownerName
-      : (existing.responsavel_nome || (
-          keepExistingOwner === ownerId ? ownerName : await userName(keepExistingOwner)
-        ));
+    const escalada = triagemAtiva && Boolean(existing.triagem_escalonada_em);
+    const iniciarNovaTriagem = triagemAtiva && existing.status === 'finalizado';
+    const keepExistingOwner = escalada && !iniciarNovaTriagem ? null
+      : iniciarNovaTriagem ? ownerId
+      : usarPrincipalDoGrupo ? ownerId : (existing.responsavel_id || ownerId);
+    const keepExistingOwnerName = !keepExistingOwner ? null
+      : iniciarNovaTriagem || usarPrincipalDoGrupo ? ownerName
+      : (existing.responsavel_nome || (keepExistingOwner === ownerId ? ownerName : await userName(keepExistingOwner)));
     const { data, error } = await db.from("atendimento_conversas").update({
       contato_nome: displayName || existing.contato_nome || null,
       cliente_id: isGroup ? null : (customer?.id || existing.cliente_id || null),
@@ -2059,6 +2070,11 @@ async function conversationForInbound(
       responsavel_id: keepExistingOwner,
       responsavel_nome: keepExistingOwnerName,
       setor: existing.setor || sector || null,
+      triagem_prazo_em: iniciarNovaTriagem
+        ? new Date(Date.now() + Number(config.triagem_tempo_minutos || 10) * 60000).toISOString()
+        : (existing.triagem_prazo_em || null),
+      triagem_destinos: iniciarNovaTriagem ? (config.triagem_destinos || []) : (existing.triagem_destinos || []),
+      triagem_escalonada_em: iniciarNovaTriagem ? null : (existing.triagem_escalonada_em || null),
       status: "aguardando",
       updated_at: new Date().toISOString(),
     }).eq("id", existing.id).select("*").single();
@@ -2082,6 +2098,9 @@ async function conversationForInbound(
     responsavel_id: ownerId,
     responsavel_nome: ownerName,
     setor: sector,
+    triagem_prazo_em: triagemAtiva
+      ? new Date(Date.now() + Number(config.triagem_tempo_minutos || 10) * 60000).toISOString() : null,
+    triagem_destinos: triagemAtiva ? (config.triagem_destinos || []) : [],
   }).select("*").single();
   if (error) throw error;
   return data;
@@ -2102,6 +2121,16 @@ Deno.serve(async (req) => {
     if (req.method === "GET" && url.searchParams.get("mode") === "push-pending") {
       const item = await proximaNotificacaoPush(config);
       return reply({ ok: true, item });
+    }
+
+    if (req.method === "GET" && url.searchParams.get("mode") === "triagem") {
+      // O gateway ja opera autenticado para esta empresa; nao faz acesso entre tenants.
+      if (!gatewayToken) return reply({ error: "Gateway nao autorizado." }, 401);
+      const { data, error } = await db.rpc("whatsapp_escalonar_triagem", {
+        p_empresa_id: config.empresa_id,
+      });
+      if (error) throw error;
+      return reply({ ok: true, transferidas: Number(data || 0) });
     }
 
     if (req.method === "GET" && url.searchParams.get("mode") === "channels") {

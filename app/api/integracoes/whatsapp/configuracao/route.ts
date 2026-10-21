@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   ] = await Promise.all([
     supabaseAdmin
       .from('atendimento_configuracoes')
-      .select('empresa_id,numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao,gateway_status,gateway_qr_data_url,gateway_qr_updated_at,gateway_connected_jid,gateway_last_seen_at,gateway_device_name')
+      .select('empresa_id,numero_principal,setor_padrao,usuario_padrao_id,triagem_privada_ativa,triagem_tempo_minutos,triagem_destinos,ativo,modo_integracao,gateway_status,gateway_qr_data_url,gateway_qr_updated_at,gateway_connected_jid,gateway_last_seen_at,gateway_device_name')
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle(),
     supabaseAdmin
@@ -69,8 +69,24 @@ export async function GET(req: NextRequest) {
       .order('created_at'),
   ])
 
+  // Compatibilidade de leitura com o banco anterior: a migração da triagem
+  // fica pendente até a aprovação, sem interromper as telas já existentes.
+  let configuracaoFinal: any = configResp.data
+  let erroConfig: any = configResp.error
+  if (erroConfig && /triagem_(privada_ativa|tempo_minutos|destinos)/.test(String(erroConfig.message || ''))) {
+    const legado = await supabaseAdmin.from('atendimento_configuracoes')
+      .select('empresa_id,numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao,gateway_status,gateway_qr_data_url,gateway_qr_updated_at,gateway_connected_jid,gateway_last_seen_at,gateway_device_name')
+      .eq('empresa_id', usuario.empresa_id).maybeSingle()
+    configuracaoFinal = legado.data ? {
+      ...legado.data,
+      triagem_privada_ativa: false,
+      triagem_tempo_minutos: 10,
+      triagem_destinos: [],
+    } : null
+    erroConfig = legado.error
+  }
   const erro =
-    configResp.error ||
+    erroConfig ||
     regrasResp.error ||
     usuariosResp.error ||
     gruposResp.error ||
@@ -90,7 +106,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    configuracao: configResp.data || null,
+    configuracao: configuracaoFinal || null,
     regras: regrasResp.data || [],
     usuarios: usuariosResp.data || [],
     grupos: gruposVisiveis,
@@ -115,13 +131,44 @@ export async function PUT(req: NextRequest) {
       '5517996355667',
     ).replace(/\D/g, '')
 
+    const triagemAtiva = body?.triagemPrivadaAtiva === true
+    const prazo = Number(body?.triagemTempoMinutos ?? 10)
+    const destinos = [...new Set((Array.isArray(body?.triagemDestinos) ? body.triagemDestinos : []).map(String))]
+    const responsavel = body?.usuarioPadraoId ? String(body.usuarioPadraoId) : null
+    if (!Number.isInteger(prazo) || prazo < 1 || prazo > 1440) throw new Error('Prazo da triagem deve ser de 1 a 1440 minutos.')
+    if (triagemAtiva && (!responsavel || destinos.length === 0)) throw new Error('Escolha o atendente inicial e pelo menos um substituto.')
+    if (destinos.includes(responsavel || '')) throw new Error('O atendente inicial nao pode ser seu proprio substituto.')
+    const { data: usuariosTenant, error: usuariosErro } = await supabaseAdmin.from('usuarios')
+      .select('id,role,nome').eq('empresa_id', usuario.empresa_id)
+    if (usuariosErro) throw usuariosErro
+    const validos = new Set((usuariosTenant || []).map(item => item.id))
+    if ((responsavel && !validos.has(responsavel)) || destinos.some(id => !validos.has(id))) throw new Error('Atendentes precisam pertencer a empresa.')
+    if (triagemAtiva) {
+      const { data: canal } = await supabaseAdmin.from('atendimento_whatsapp_canais')
+        .select('id,usuario_id').eq('empresa_id', usuario.empresa_id).eq('principal', true).eq('ativo', true).maybeSingle()
+      if (!canal) throw new Error('Configure o WhatsApp principal antes de ativar a triagem.')
+      const escolhidos = [responsavel!, ...destinos]
+      const { data: permissoes, error: permissaoErro } = await supabaseAdmin.from('atendimento_whatsapp_permissoes')
+        .select('usuario_id,pode_atender').eq('empresa_id', usuario.empresa_id)
+        .eq('canal_id', canal.id).in('usuario_id', escolhidos)
+      if (permissaoErro) throw permissaoErro
+      const permitidos = new Set((permissoes || []).filter(p => p.pode_atender).map(p => p.usuario_id))
+      const roles = new Map((usuariosTenant || []).map(u => [u.id, u.role]))
+      if (escolhidos.some(id => roles.get(id) !== 'master' && canal.usuario_id !== id && !permitidos.has(id))) {
+        throw new Error('Libere Atender no WhatsApp principal para todos os atendentes escolhidos.')
+      }
+    }
+
     const { error: configError } = await supabaseAdmin
       .from('atendimento_configuracoes')
       .upsert({
         empresa_id: usuario.empresa_id,
         numero_principal: numeroPrincipal,
         setor_padrao: body?.setorPadrao ? String(body.setorPadrao) : null,
-        usuario_padrao_id: body?.usuarioPadraoId || null,
+        usuario_padrao_id: responsavel,
+        triagem_privada_ativa: triagemAtiva,
+        triagem_tempo_minutos: prazo,
+        triagem_destinos: destinos,
         modo_integracao: 'qr',
         ativo: body?.ativo !== false,
         updated_at: new Date().toISOString(),
