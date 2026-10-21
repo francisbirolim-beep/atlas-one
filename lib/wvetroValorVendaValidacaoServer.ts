@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin as db } from './supabaseAdmin'
-import { usuarioPodeAcaoServer } from './acessoUsuarioServer'
-import { carregarPermissoesIA } from './ai/permissoesServer'
+import { podeValidarOrcamentoEmpresa } from './validacaoOrcamentoAcessoServer'
 import type { UsuarioTenant } from './tenantServer'
 import { centavosVendaWVetro, valorOrigemVendaWVetro } from './wvetroValorVendaValidacao'
 
@@ -13,19 +12,15 @@ const erro = (error: string, status = 400) => NextResponse.json({ error }, { sta
  * Jamais regravar preço/custo de itens ou valores de uma venda já confirmada.
  */
 export async function conferirValorVendaImportadoWVetro(usuario: UsuarioTenant, body: Record<string, any>) {
-  const acesso = (await carregarPermissoesIA(usuario)).dominios.orcamento
-  const edita = await usuarioPodeAcaoServer({
-    usuarioId: usuario.id, empresaId: usuario.empresa_id, role: usuario.role,
-    setorId: 'orcamentos', acaoId: 'comercial.orcamento.editar', minimo: 'edicao',
-  })
-  if (!acesso.permitido || !edita) return erro('Sem permissão para conferir o valor de venda.', 403)
+  const aprovado = await podeValidarOrcamentoEmpresa(usuario)
+  if (!aprovado) return erro('Sem permissão para conferir o valor de venda.', 403)
 
   const cardId = String(body.cardId || '').trim()
   if (!cardId) return erro('Orçamento não informado.')
   const { data: alvo, error: leitura } = await db.from('orcamentos').select('*')
     .eq('empresa_id', usuario.empresa_id).eq('id', cardId).maybeSingle()
   if (leitura) throw leitura
-  if (!alvo || (acesso.escopo === 'proprio' && alvo.criado_por_id !== usuario.id)) {
+  if (!alvo) {
     return erro('Orçamento não encontrado.', 404)
   }
 
@@ -120,3 +115,5 @@ export async function conferirValorVendaImportadoWVetro(usuario: UsuarioTenant, 
       : 'Valor de venda validado sem alteração.',
   }, { headers: { 'Cache-Control': 'no-store' } })
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
