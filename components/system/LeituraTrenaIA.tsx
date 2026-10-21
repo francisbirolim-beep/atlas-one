@@ -22,6 +22,7 @@ type EstadoLeitura = {
 type Props = {
   item: ItemEsquadria
   onAtualizar: (campo: CampoMedida, valor: number) => void
+  podeAtualizarAutomaticamente?: (eixo: Eixo) => boolean
 }
 
 const CAMPOS: Record<Eixo, CampoMedida[]> = {
@@ -37,7 +38,7 @@ function eixoTemValor(item: ItemEsquadria, eixo: Eixo) {
   return CAMPOS[eixo].some(campo => valorValido(item[campo]))
 }
 
-export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
+export default function LeituraTrenaIA({ item, onAtualizar, podeAtualizarAutomaticamente }: Props) {
   const [estados, setEstados] = useState<Record<Eixo, EstadoLeitura>>({
     largura: { tipo: 'ocioso', mensagem: '' },
     altura: { tipo: 'ocioso', mensagem: '' },
@@ -96,7 +97,7 @@ export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
       if (medidas.length !== 3) {
         atualizarEstado(eixo, {
           tipo: 'erro',
-          mensagem: `A IA encontrou ${medidas.length} de 3 medidas de ${eixo}. Nenhum campo foi alterado para evitar troca de posição.`,
+          mensagem: `Não foi possível confirmar as 3 leituras de ${eixo} (${medidas.length}/3). A foto foi preservada. Digite os valores em milímetros nos campos abaixo; a falha da IA não bloqueia o salvamento manual.`, 
         })
         return
       }
@@ -109,6 +110,13 @@ export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
         ? [medidas[2], medidas[1], medidas[0]]
         : medidas
 
+      if (podeAtualizarAutomaticamente && !podeAtualizarAutomaticamente(eixo)) {
+        atualizarEstado(eixo, {
+          tipo: 'sucesso',
+          mensagem: 'A leitura automática foi obtida, mas os valores digitados manualmente foram preservados. Confira os campos antes de salvar.',
+        })
+        return
+      }
       CAMPOS[eixo].forEach((campo, index) => onAtualizar(campo, Math.round(medidasParaCampos[index])))
 
       const confianca = Math.round((Number(json?.confianca) || 0) * 100)

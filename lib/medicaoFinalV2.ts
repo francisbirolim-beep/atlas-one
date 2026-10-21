@@ -271,7 +271,15 @@ export async function concluirMedicaoFinal(
   }
 
   const checklist = await validarChecklistObrigatorioV2(medicaoId)
-  if (!checklist.ok) return { ok: false, mensagem: `Complete as medidas e ${checklist.faltantes.length} campo(s) obrigatório(s).` }
+  if (!checklist.ok) {
+    const exemplos = checklist.faltantes.slice(0, 3)
+      .map(({ itemDescricao, campo }) => `${itemDescricao.slice(0, 70)}: ${campo.replace(/_/g, ' ')}`)
+      .join('; ')
+    return {
+      ok: false,
+      mensagem: `Ainda faltam ${checklist.faltantes.length} campo(s) na Medição Final${exemplos ? `: ${exemplos}` : '.'}. Confira também as outras peças.`,
+    }
+  }
   const [{ data: itens, error: erroItens }, { count: pendenciasAbertas, error: erroPendencias }] = await Promise.all([
     supabase
       .from('medicao_itens')
