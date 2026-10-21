@@ -25,6 +25,7 @@ type RefTipologia = {
   imagem_url: string | null
   ocorrencias: number | null
   status_mapeamento: string | null
+  nomes_observados?: string[] | null
 }
 
 type RefVariavel = {
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest) {
     const [{ data: refs, error: erroRefs }, { data: vars, error: erroVars }, { data: comps, error: erroComps }] = await Promise.all([
       supabaseAdmin
         .from('wvetro_referencias_tipologias')
-        .select('id,tipologia_atlas_id,linha_raw,modelo_raw,imagem_url,ocorrencias,status_mapeamento')
+        .select('id,tipologia_atlas_id,linha_raw,modelo_raw,imagem_url,ocorrencias,status_mapeamento,nomes_observados')
         .not('tipologia_atlas_id', 'is', null),
       supabaseAdmin
         .from('wvetro_referencias_variaveis')
@@ -129,18 +130,76 @@ export async function GET(req: NextRequest) {
         imagemUrl: ref.imagem_url,
         ocorrencias: Number(ref.ocorrencias || 0),
         statusMapeamento: ref.status_mapeamento || 'referencia',
-        variaveis: (variaveisPorRef.get(ref.id) || []).map(v => ({
-          id: v.id,
-          variavelId: v.variavel_atlas_id,
-          chave: v.variavel_chave_raw,
-          label: v.variavel_label_raw || v.variavel_chave_raw,
-          valor: v.valor_normalizado || v.valor_raw || '',
-          valorRaw: v.valor_raw,
-          origemTipo: v.origem_tipo,
-          confianca: Number(v.confianca ?? 1),
-          evidencia: v.evidencia,
-          statusMapeamento: v.status_mapeamento || 'referencia',
-        })),
+        variaveis: (() => {
+          const explicitas = (variaveisPorRef.get(ref.id) || []).map(v => ({
+            id: v.id,
+            variavelId: v.variavel_atlas_id,
+            chave: v.variavel_chave_raw,
+            label: v.variavel_label_raw || v.variavel_chave_raw,
+            valor: v.valor_normalizado || v.valor_raw || '',
+            valorRaw: v.valor_raw,
+            origemTipo: v.origem_tipo,
+            confianca: Number(v.confianca ?? 1),
+            evidencia: v.evidencia,
+            statusMapeamento: v.status_mapeamento || 'referencia',
+          }))
+
+          const derivados: Array<{
+            id: string
+            variavelId: null
+            chave: string
+            label: string
+            valor: string
+            valorRaw: string
+            origemTipo: string
+            confianca: number
+            evidencia: string
+            statusMapeamento: string
+          }> = []
+          const vistos = new Set(explicitas.map(v => `${v.chave}::${String(v.valor).toLowerCase()}`))
+          const adicionar = (chave: string, label: string, valor: string, evidencia: string, confianca = 0.95) => {
+            const k = `${chave}::${valor.toLowerCase()}`
+            if (vistos.has(k)) return
+            vistos.add(k)
+            derivados.push({
+              id: `observado-${ref.id}-${chave}-${valor.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+              variavelId: null,
+              chave,
+              label,
+              valor,
+              valorRaw: valor,
+              origemTipo: 'historico_composicao',
+              confianca,
+              evidencia,
+              statusMapeamento: 'referencia',
+            })
+          }
+
+          const nomesObservados = Array.isArray(ref.nomes_observados) ? ref.nomes_observados : []
+          const texto = [...nomesObservados, ...componentes.map(c => c.nome || '')].join(' ').toUpperCase()
+
+          if (componentes.some(c => c.tipo === 'vidro')) {
+            adicionar('preenchimento', 'Preenchimento da folha', 'vidro', 'Composição W.Vetro observada com vidro.', 1)
+          }
+          if (texto.includes('LAMBRI')) {
+            adicionar('preenchimento', 'Preenchimento da folha', 'lambri', 'Histórico W.Vetro observado com lambri.')
+          }
+          if (texto.includes('VENEZIANA')) {
+            adicionar('preenchimento', 'Preenchimento da folha', 'veneziana', 'Histórico W.Vetro observado com veneziana.')
+          }
+
+          const vidros = Array.from(new Set(
+            componentes
+              .filter(c => c.tipo === 'vidro')
+              .map(c => String(c.nome || '').trim())
+              .filter(Boolean),
+          ))
+          for (const vidro of vidros) {
+            adicionar('tipo_vidro', 'Tipo de vidro', vidro, `Vidro observado na composição W.Vetro: ${vidro}`, 1)
+          }
+
+          return [...explicitas, ...derivados]
+        })(),
         componentes: componentes.map(c => ({
           tipo: c.tipo,
           produtoId: c.produto_atlas_id,
