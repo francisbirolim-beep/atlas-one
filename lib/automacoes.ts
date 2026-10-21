@@ -61,8 +61,16 @@ export async function excluirAutomacaoOrcamento(id: string): Promise<boolean> {
   return !error
 }
 
-async function criarTarefaAutomaticaCompatibilidade(usuarioAlvo: string, titulo: string) {
-  const atribuicao = await atribuirTarefa({ responsavelId: usuarioAlvo, titulo })
+async function criarTarefaAutomaticaCompatibilidade(
+  usuarioAlvo: string,
+  titulo: string,
+  origemOrcamentoId?: string,
+) {
+  const atribuicao = await atribuirTarefa({
+    responsavelId: usuarioAlvo,
+    titulo,
+    ...(origemOrcamentoId ? { dataHora: new Date().toISOString(), origemOrcamentoId } : {}),
+  })
   if (atribuicao.ok) return
 
   // Janela transitória entre deploy do código e apply da migration: enquanto
@@ -70,7 +78,7 @@ async function criarTarefaAutomaticaCompatibilidade(usuarioAlvo: string, titulo:
   // a API passa a ser o único caminho cross-user permitido pela RLS.
   if (atribuicao.code === 'COLABORACAO_INATIVA') {
     const colunaTarefaId = await primeiraColunaTarefaId(usuarioAlvo)
-    if (colunaTarefaId) await criarTarefa(usuarioAlvo, colunaTarefaId, titulo)
+    if (colunaTarefaId) await criarTarefa(usuarioAlvo, colunaTarefaId, titulo, undefined, origemOrcamentoId ? new Date().toISOString() : null)
     return
   }
   console.error('Erro ao criar tarefa automática:', atribuicao.error)
@@ -78,7 +86,7 @@ async function criarTarefaAutomaticaCompatibilidade(usuarioAlvo: string, titulo:
 
 export async function executarAutomacoesColuna(
   colunaId: string,
-  orcamento: { cliente_nome?: string | null; criado_por_id?: string | null }
+  orcamento: { id?: string | null; cliente_nome?: string | null; criado_por_id?: string | null; coluna_nome?: string | null }
 ): Promise<void> {
   try {
     const { data, error } = await supabase
@@ -99,7 +107,13 @@ export async function executarAutomacoesColuna(
 
       const cliente = orcamento.cliente_nome || 'cliente'
       const titulo = automacao.titulo_tarefa.replace(/\{cliente\}/g, cliente)
-      await criarTarefaAutomaticaCompatibilidade(usuarioAlvo, titulo)
+      // Gatilho especializado apenas para "Orçamento feito"; outras automações
+      // continuam no fluxo legado, sem mudança de prazos ou duplicação.
+      const etapa = String(orcamento.coluna_nome || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+      const origem = etapa === 'orcamento feito' && automacao.destino_tipo === 'solicitante'
+        ? orcamento.id || undefined : undefined
+      await criarTarefaAutomaticaCompatibilidade(usuarioAlvo, titulo, origem)
     }
   } catch (e) {
     console.error('Erro ao executar automacoes da coluna:', e)

@@ -17,6 +17,7 @@ import {
   concluirTarefa,
   reabrirTarefa,
   excluirTarefa,
+  editarTarefa,
   criarTarefaRecorrente,
 } from '@/lib/tarefas'
 import { TipoRecorrencia, LABEL_RECORRENCIA } from '@/lib/recorrencia'
@@ -52,6 +53,8 @@ export default function Tarefas() {
   const [prioridadeNova, setPrioridadeNova] = useState<PrioridadeTarefa>('normal')
   const [usuariosTarefa, setUsuariosTarefa] = useState<{ id: string; nome: string }[]>([])
   const [selecionada, setSelecionada] = useState<TarefaPessoal | null>(null)
+  const [novoPrazoSelecionada, setNovoPrazoSelecionada] = useState('')
+  const [alterandoPrazo, setAlterandoPrazo] = useState(false)
 
   useEffect(() => {
     carregar()
@@ -187,6 +190,35 @@ export default function Tarefas() {
     if (data) setDataNova(paraDatetimeLocal(data))
   }
 
+  async function atualizarPrazoSelecionada(novaData: Date) {
+    const tarefa = selecionada
+    if (!tarefa || tarefa.concluida_em || alterandoPrazo) return
+    if (!Number.isFinite(novaData.getTime()) || novaData.getTime() <= Date.now()) {
+      alert('Escolha uma data e hora futuras.')
+      return
+    }
+    setAlterandoPrazo(true)
+    try {
+      const novoIso = novaData.toISOString()
+      const ok = await editarTarefa(tarefa.id, { data_hora: novoIso })
+      if (!ok) {
+        alert('Não foi possível alterar o prazo da tarefa.')
+        return
+      }
+      setTarefas(prev => prev.map(t => t.id === tarefa.id ? { ...t, data_hora: novoIso } : t))
+      setSelecionada(null)
+    } finally {
+      setAlterandoPrazo(false)
+    }
+  }
+
+  function adiarTarefaSelecionada(minutos: number) {
+    if (!selecionada) return
+    const anterior = selecionada.data_hora ? new Date(selecionada.data_hora).getTime() : 0
+    const proximo = new Date(Math.max(Date.now(), anterior) + minutos * 60000)
+    void atualizarPrazoSelecionada(proximo)
+  }
+
   async function alternarConcluida(t: TarefaPessoal) {
     if (t.concluida_em) {
       const ok = await reabrirTarefa(t.id)
@@ -273,7 +305,7 @@ export default function Tarefas() {
                         key={t.id}
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)}
-                        onClick={() => setSelecionada(t)}
+                        onClick={() => { setSelecionada(t); setNovoPrazoSelecionada(t.data_hora ? paraDatetimeLocal(new Date(t.data_hora)) : '') }}
                         className={`rounded-xl border-2 bg-white p-3 cursor-pointer hover:shadow-md transition ${
                           atrasada ? 'border-red-300' : t.concluida_em ? 'border-emerald-200' : 'border-slate-200'
                         }`}
@@ -432,6 +464,33 @@ export default function Tarefas() {
               <p className="text-xs text-emerald-600">
                 Tempo ate concluir: {formatarDuracao(new Date(selecionada.concluida_em).getTime() - new Date(selecionada.created_at).getTime())}
               </p>
+            )}
+            {!selecionada.concluida_em && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+                <p className="text-xs font-semibold text-slate-700">Adiar o próximo prazo</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={alterandoPrazo}
+                    onClick={() => adiarTarefaSelecionada(30)}
+                    className="rounded-lg border bg-white px-3 py-2 text-xs font-medium">30 min</button>
+                  <button type="button" disabled={alterandoPrazo}
+                    onClick={() => adiarTarefaSelecionada(60)}
+                    className="rounded-lg border bg-white px-3 py-2 text-xs font-medium">1 hora</button>
+                  <button type="button" disabled={alterandoPrazo}
+                    onClick={() => adiarTarefaSelecionada(1440)}
+                    className="rounded-lg border bg-white px-3 py-2 text-xs font-medium">1 dia</button>
+                </div>
+                <label className="block text-xs font-semibold text-slate-600">Ou reagendar para data e hora específicas</label>
+                <div className="flex gap-2">
+                  <input type="datetime-local" value={novoPrazoSelecionada}
+                    onChange={e => setNovoPrazoSelecionada(e.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border px-2 py-2 text-xs"/>
+                  <button type="button" disabled={alterandoPrazo || !novoPrazoSelecionada}
+                    onClick={() => void atualizarPrazoSelecionada(new Date(novoPrazoSelecionada))}
+                    className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                    Reagendar
+                  </button>
+                </div>
+              </div>
             )}
             <div className="flex gap-2 pt-2">
               <button

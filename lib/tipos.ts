@@ -423,6 +423,10 @@ export interface TarefaPessoal {
       solicitante_nome?: string | null
       atribuida_em?: string | null
       prioridade?: 'baixa' | 'normal' | 'alta' | 'urgente'
+      lembrete_minutos?: number[] | null
+      cobranca_intervalo_minutos?: number | null
+      audio_url?: string | null
+      audio_transcricao?: string | null
       created_at?: string
 }
 
@@ -455,6 +459,11 @@ export interface NotificacaoPreferencias {
       nao_perturbe_inicio: string
       nao_perturbe_fim: string
       timezone: string
+      avisos_tarefa_minutos?: number[]
+      avisos_agenda_minutos?: number[]
+      cobranca_tarefa_ativa?: boolean
+      cobranca_tarefa_intervalo_minutos?: number
+      whatsapp_lembretes_ativo?: boolean
       updated_at?: string
 }
 
@@ -468,6 +477,9 @@ export interface Evento {
       local?: string | null
       data_inicio: string
       data_fim?: string | null
+      lembrete_minutos?: number[] | null
+      audio_url?: string | null
+      audio_transcricao?: string | null
       recorrencia_tipo?: string | null
       recorrencia_valor?: number | null
       regra_origem_id?: string | null
