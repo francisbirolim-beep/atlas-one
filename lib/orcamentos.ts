@@ -25,6 +25,8 @@ export interface ItemOrcamentoForm {
   largura: string
   altura: string
   quantidade: string
+  larguraBatenteCm?: string
+  larguraGuarnicaoCm?: string
   descricao: string
   observacaoTempera?: string
   observacaoProducao?: string
@@ -248,6 +250,11 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     const preco_total = preco_unit != null ? preco_unit * quantidadeNum : null
     const tipoMedidaItem = it.tipoMedida || tipoMedida || 'comum'
     const itemTipo = it.itemTipo || 'sob_medida'
+    const nomeProdutoItem = itemTipo === 'kit_porta_pronta' ? (it.produtoNome || it.tipoOutroTexto?.trim() || (it.descricao?.trim() ? 'Kit porta pronta' : null)) : it.produtoNome || null
+    const camposKit = itemTipo === 'kit_porta_pronta' ? {
+      largura_batente_cm: numeroOpcional(it.larguraBatenteCm || ''),
+      largura_guarnicao_cm: numeroOpcional(it.larguraGuarnicaoCm || ''),
+    } : {}
 
     const referencia = it.tipologiaId ? referenciasWvetro[it.tipologiaId] || null : null
     const variaveisUsadasWvetro = !it.configuracaoValidada && referencia
@@ -309,7 +316,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
       const todasFotosItem = [...itemFotoUrls, ...(foto_larguras_url ? [foto_larguras_url] : []), ...(foto_alturas_url ? [foto_alturas_url] : [])]
 
       itensSalvos.push({
-        id: it.id, item_tipo: itemTipo, material_categoria: it.materialCategoria || null, material_unidade: it.materialUnidade || null, produto_nome: it.produtoNome || null, contramarco: it.contramarcoOverride || contramarco || null, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
+        id: it.id, item_tipo: itemTipo, material_categoria: it.materialCategoria || null, material_unidade: it.materialUnidade || null, produto_nome: nomeProdutoItem, contramarco: it.contramarcoOverride || contramarco || null, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
         tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null, folhas: it.folhas || null,
         tipo_medida: tipoMedidaItem,
         largura_mm: lm, altura_mm: am,
@@ -319,17 +326,17 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
         foto_url: itemFotoUrls[0] || foto_larguras_url || foto_alturas_url || null,
         foto_urls: todasFotosItem.length ? todasFotosItem : null,
         descricao: it.descricao || undefined, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
-        ...snapshotConfiguracao,
+        ...snapshotConfiguracao, ...camposKit,
       })
     } else {
       itensSalvos.push({
-        id: it.id, item_tipo: itemTipo, material_categoria: it.materialCategoria || null, material_unidade: it.materialUnidade || null, produto_nome: it.produtoNome || null, contramarco: it.contramarcoOverride || contramarco || null, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
+        id: it.id, item_tipo: itemTipo, material_categoria: it.materialCategoria || null, material_unidade: it.materialUnidade || null, produto_nome: nomeProdutoItem, contramarco: it.contramarcoOverride || contramarco || null, ambiente: it.ambiente?.trim() || null, tipo_esquadria: it.tipo as TipoEsquadria,
         tipo_outro_texto: it.tipo === 'outro' ? it.tipoOutroTexto || null : null, folhas: it.folhas || null,
         tipo_medida: tipoMedidaItem,
-        largura_mm: parseFloat(it.largura), altura_mm: parseFloat(it.altura), quantidade: quantidadeNum,
+        largura_mm: numeroOpcional(it.largura) || 0, altura_mm: numeroOpcional(it.altura) || 0, quantidade: quantidadeNum,
         foto_url: itemFotoUrls[0] || null, foto_urls: itemFotoUrls.length ? itemFotoUrls : null,
         descricao: it.descricao || undefined, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
-        ...snapshotConfiguracao,
+        ...snapshotConfiguracao, ...camposKit,
       })
     }
   }
@@ -443,3 +450,5 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
   return { ok: true, id: idResultado }
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]

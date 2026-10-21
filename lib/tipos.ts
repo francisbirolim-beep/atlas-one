@@ -115,6 +115,8 @@ export interface ItemEsquadria {
       material_categoria?: 'perfil' | 'acessorio' | 'vidro' | 'outros' | null
       material_unidade?: string | null
       produto_nome?: string | null
+      largura_batente_cm?: number | null
+      largura_guarnicao_cm?: number | null
       contramarco?: Contramarco | null
       // Ambiente/cômodo onde essa esquadria vai ser instalada (ex: Sala, Quarto 1,
 // Cozinha, Banheiro social...). Ajuda quem elabora o orçamento a saber onde
@@ -721,3 +723,5 @@ export interface Cor {
   ativo: boolean
   created_at?: string
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
