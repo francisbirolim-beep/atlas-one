@@ -1,5 +1,4 @@
-import {carregarPermissoesIA} from '@/lib/ai/permissoesServer'
-import {usuarioPodeAcaoServer} from '@/lib/acessoUsuarioServer'
+import {podeValidarOrcamentoEmpresa} from '@/lib/validacaoOrcamentoAcessoServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
@@ -53,8 +52,8 @@ export async function POST(req:NextRequest){
   try{
     const usuario=await autenticarTenant(req)
     if(!usuario)return NextResponse.json({error:'Sessão inválida.'},{status:401})
-    const acesso=(await carregarPermissoesIA(usuario)).dominios.orcamento
-    if(!acesso.permitido || !await usuarioPodeAcaoServer({usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,setorId:'orcamentos',acaoId:'comercial.orcamento.editar',minimo:'edicao'}))return NextResponse.json({error:'Sem permissão para validar orçamento.'},{status:403})
+    const aprovado=await podeValidarOrcamentoEmpresa(usuario)
+    if(!aprovado)return NextResponse.json({error:'Sem permissão para validar orçamento.'},{status:403})
     const body=await req.json().catch(()=>({}))
     const orcamentoId=String(body?.orcamentoId||'').trim()
     const acao=String(body?.acao||'').trim()
@@ -65,8 +64,7 @@ export async function POST(req:NextRequest){
       .select('*').eq('empresa_id',usuario.empresa_id).eq('id',orcamentoId).maybeSingle()
     if(error)throw error
     if(!orcamento)return NextResponse.json({error:'Orçamento não encontrado.'},{status:404})
-    if(acesso.escopo==='proprio'&&orcamento.criado_por_id!==usuario.id)return NextResponse.json({error:'Orçamento não encontrado.'},{status:404})
-    if(!orcamento.ia_criado)return NextResponse.json({error:'Este orçamento não foi criado pela IA.'},{status:409})
+        if(!orcamento.ia_criado)return NextResponse.json({error:'Este orçamento não foi criado pela IA.'},{status:409})
 
     const final=snapshotOrcamento(orcamento)
     const original=snapshotOriginal(orcamento.ia_resultado_original||{})
@@ -116,3 +114,5 @@ export async function POST(req:NextRequest){
     return NextResponse.json({error:e?.message||'Erro ao validar orçamento da IA.'},{status:500})
   }
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]

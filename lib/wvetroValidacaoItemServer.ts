@@ -1,20 +1,19 @@
+import {carregarPermissoesIA} from './ai/permissoesServer'
 import {NextRequest,NextResponse} from 'next/server'
 import {materializarPacoteTecnicoWVetro} from './wvetroPacoteTecnicoServer'
 import {randomUUID} from 'node:crypto'
 import {supabaseAdmin as db} from './supabaseAdmin'
-import {usuarioPodeAcaoServer} from './acessoUsuarioServer'
-import {carregarPermissoesIA} from './ai/permissoesServer'
+import {podeValidarOrcamentoEmpresa} from './validacaoOrcamentoAcessoServer'
 import type {UsuarioTenant} from './tenantServer'
 import {CAMPOS_ITEM_WVETRO,snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from './wvetroValidacaoItem'
 
 const erro=(error:string,status=400)=>NextResponse.json({error},{status})
 export async function validarItemImportadoWVetro(req:NextRequest,usuario:UsuarioTenant,body:Record<string,any>) {
-  const acesso=(await carregarPermissoesIA(usuario)).dominios.orcamento
-  const edita=await usuarioPodeAcaoServer({usuarioId:usuario.id,empresaId:usuario.empresa_id,role:usuario.role,setorId:'orcamentos',acaoId:'comercial.orcamento.editar',minimo:'edicao'})
-  if(!acesso.permitido||!edita)return erro('Sem permissão para conferir esquadrias importadas.',403)
+  const aprovado=await podeValidarOrcamentoEmpresa(usuario)
+  if(!aprovado)return erro('Sem permissão para conferir esquadrias importadas.',403)
   const {data:alvo,error:leitura}=await db.from('orcamentos').select('*').eq('empresa_id',usuario.empresa_id).eq('id',String(body.cardId||'')).maybeSingle()
   if(leitura)throw leitura
-  if(!alvo||(acesso.escopo==='proprio'&&alvo.criado_por_id!==usuario.id))return erro('Orçamento não encontrado.',404)
+  if(!alvo)return erro('Orçamento não encontrado.',404)
   const fluxo=alvo.wvetro_fluxo||{}
   if(!String(fluxo.origem||'').toLowerCase().includes('wvetro')||!(fluxo.numero||fluxo.numero_wvetro))return erro('Este orçamento não foi importado do W.Vetro.',409)
   const itens:any[]=Array.isArray(alvo.itens)?alvo.itens:[]
@@ -25,6 +24,7 @@ export async function validarItemImportadoWVetro(req:NextRequest,usuario:Usuario
   const modelo=String(raw.Modelo||raw.Nome||raw.Descricao||raw.Codigo||original.referencia_wvetro?.modelo||'').trim()
   const linha=String(raw.Linha||raw.LinhaNome||raw.LinhaDescricao||original.referencia_wvetro?.linha||'').trim()
   if(body.acao==='sugerir_item_importacao'){
+    const acesso=(await carregarPermissoesIA(usuario)).dominios.orcamento
     if(!modelo)return NextResponse.json({sugestao:null})
     let consulta=db.from('ai_orcamento_feedback').select('resultado_final,diferencas')
       .eq('empresa_id',usuario.empresa_id).eq('avaliacao','corrigido')
@@ -112,3 +112,5 @@ export async function validarItemImportadoWVetro(req:NextRequest,usuario:Usuario
   const pacoteTecnico=todos?await materializarPacoteTecnicoWVetro(alvo.id,usuario).catch(()=>({ok:false,error:'Materiais pendentes de sincronização.'})):null
   return NextResponse.json({ok:true,pacoteTecnico,orcamento:atualizado,itemId:original.id,aprendizado:{registrado:true,diferencas:diffs},mensagem:corrigindo?'Esquadria corrigida. Somente os campos alterados foram registrados para aprendizado.':'Esquadria conferida. As demais continuam com sua própria validação.'},{headers:{'Cache-Control':'no-store'}})
 }
+
+[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
