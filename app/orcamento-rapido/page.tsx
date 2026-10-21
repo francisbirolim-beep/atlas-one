@@ -121,6 +121,12 @@ function resumoMedidas(item: ItemForm) {
 
 type ProdutoAtlasBusca = { id:string; codigo?:string|null; nome:string; categoria?:string|null; unidade?:string|null; preco?:number|null; custo?:number|null; descricao?:string|null }
 
+function FotoPreviaLocal({ src, nome, ampliar }: { src: string; nome: string; ampliar: () => void }) {
+  const [erroPrevia, setErroPrevia] = useState(false)
+  if (erroPrevia || !src) return <div title={nome} className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-lg border border-amber-200 bg-amber-50 p-1 text-center text-[10px] text-amber-800"><Camera size={16}/>Foto anexada<br/>Prévia indisponível</div>
+  return <img src={src} alt={nome || 'Foto da obra'} onClick={ampliar} onError={() => setErroPrevia(true)} className="h-24 w-24 cursor-pointer rounded-lg object-cover"/>
+}
+
 function nomeNormalizado(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
 }
@@ -673,6 +679,12 @@ export default function OrcamentoRapido() {
         return
       }
 
+      if (resultado.error?.startsWith('FOTO_NAO_ENVIADA:')) {
+        setSalvando(false)
+        setErro(resultado.error.replace('FOTO_NAO_ENVIADA:', '').trim())
+        setErroEhValidacao(true)
+        return
+      }
       await salvarComoPendente(
         dadosForm,
         resultado.error ? `Servidor: ${resultado.error}` : 'Servidor não confirmou o salvamento',
@@ -924,7 +936,7 @@ export default function OrcamentoRapido() {
             {item.itemTipo!=='material_avulso' && <div><p className="mb-2 text-xs font-semibold text-slate-700">Contramarco na obra</p><p className="mb-2 text-[11px] text-slate-500">{contramarco==='com'?'A obra está com contramarco. Se este item não tiver contramarco, selecione abaixo.':'A obra está sem contramarco. Se este item tiver contramarco, selecione abaixo.'}</p><div className="grid grid-cols-2 gap-2"><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button></div></div>}
           </div>}
 
-          <div><label className="block text-xs text-slate-500 mb-2">Fotos (opcional)</label><div className="flex flex-wrap gap-2">{item.fotosPreviews.map((src,i) => <div key={i} className="relative w-24 h-24"><img src={src} alt="Foto" onClick={() => setFotoAmpliada(src)} className="w-24 h-24 object-cover rounded-lg cursor-pointer"/><button onClick={() => removerFotoItem(item.id,i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button></div>)}<label className="flex flex-col items-center justify-center gap-1 w-24 h-24 border border-dashed rounded-lg text-xs cursor-pointer"><Camera size={16}/>Adicionar<input type="file" accept="image/*" multiple className="hidden" onChange={e => { adicionarFotoItem(item.id,e.target.files); e.target.value='' }}/></label></div></div>
+          <div><label className="block text-xs text-slate-500 mb-2">Fotos (opcional)</label><div className="flex flex-wrap gap-2">{item.fotos.map((arquivo,i) => <div key={i} className="relative w-24 h-24"><FotoPreviaLocal src={item.fotosPreviews[i] || ''} nome={arquivo.name} ampliar={() => item.fotosPreviews[i] && setFotoAmpliada(item.fotosPreviews[i])}/><button onClick={() => removerFotoItem(item.id,i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button></div>)}<label className="flex flex-col items-center justify-center gap-1 w-24 h-24 border border-dashed rounded-lg text-xs cursor-pointer"><Camera size={16}/>Adicionar<input type="file" accept="image/*" multiple className="hidden" onChange={e => { adicionarFotoItem(item.id,e.target.files); e.target.value='' }}/></label></div></div>
           <div><label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label><input data-preserve-case="true" value={item.cor} onChange={e => atualizarItem(item.id,'cor',e.target.value)} placeholder="Só preencha se for diferente da cor geral" className="w-full border rounded-lg p-2.5 text-sm"/></div>
           {item.itemTipo==='sob_medida' ? <><div className="grid gap-3 sm:grid-cols-2"><div><label className="block text-xs text-slate-500 mb-1">Obs. do projeto para o cliente</label><textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Texto que poderá aparecer no orçamento..." className="w-full h-20 border rounded-lg p-2.5 text-sm resize-none"/></div><div><label className="block text-xs text-slate-500 mb-1">Observações para produção</label><textarea data-preserve-case="true" value={item.observacaoProducao} onChange={e => atualizarItem(item.id,'observacaoProducao',e.target.value)} placeholder="Informações que devem acompanhar a medida final e a produção..." className="w-full h-20 border rounded-lg p-2.5 text-sm resize-none"/></div></div><div className="grid gap-2 sm:grid-cols-2"><button type="button" onClick={()=>duplicarItemNovaMedida(item)} className="rounded-xl border border-brand-navy px-3 py-2.5 text-xs font-bold text-brand-navy hover:bg-brand-navyLight">Incluir mesmo item e informar nova medida</button><button type="button" onClick={adicionarOutroProjeto} className="rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Escolher outro projeto</button></div></> : <div><label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label><textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Alguma observação da obra pro orçamentista saber..." className="w-full h-16 border rounded-lg p-2.5 text-sm resize-none"/></div>}</>}
         </div>)}<button onClick={() => setItens(prev => [...prev, fluxoSobMedida ? { ...novoItem(), itemTipo: 'sob_medida' } : novoItem()])} className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500"><Plus size={16}/>{fluxoSobMedida ? 'Escolher outro projeto' : 'Adicionar outra esquadria'}</button></div>
