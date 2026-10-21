@@ -13,6 +13,8 @@ const opcoes = new Map(process.argv.slice(2).map((arg) => {
 }))
 const modo = opcoes.get('modo') || 'homologacao'
 if (!['homologacao', 'producao'].includes(modo)) throw new Error('Modo inválido')
+const semBlog = opcoes.get('sem-blog') === 'true'
+
 const saida = join(pasta, '.gerado', modo)
 const aprovacao = JSON.parse(readFileSync(join(pasta, 'controle-lancamento.json'), 'utf8'))
 
@@ -87,7 +89,23 @@ for (const name of ['index.html', 'solucoes.html', 'politica-de-privacidade.html
   cpSync(join(pasta, name), join(saida, name))
 }
 cpSync(join(pasta, 'assets'), join(saida, 'assets'), { recursive: true })
-const blog = gerarBlog({mode:modo, output:saida, origin:dominio})
+const blog = semBlog ? {paths:[],cspHashes:[],count:0} : gerarBlog({mode:modo, output:saida, origin:dominio})
+if (semBlog) {
+  let homepage = readFileSync(join(saida,'index.html'), 'utf8')
+  let solutions = readFileSync(join(saida,'solucoes.html'), 'utf8')
+  homepage = homepage.replace('<a href="/blog/">Blog</a>', '')
+    .replace('<a href="/blog/">Blog de soluções</a>', '')
+    .replace(/<section class="section blog-feature" id="blog">[\s\S]*?<\/section>/, '')
+  solutions = solutions.replace('<a class="hide-small" href="/blog/">Blog</a>', '')
+    .replace('<a href="/blog/">Blog de soluções</a>', '')
+  if (homepage.includes('href="/blog/') || solutions.includes('href="/blog/') ||
+      homepage.includes('id="blog"') || homepage.includes('class="section blog-feature"') ||
+      existsSync(join(saida,'blog'))) {
+    throw new Error('Falha ao separar o blog da versão institucional')
+  }
+  writeFileSync(join(saida,'index.html'),homepage)
+  writeFileSync(join(saida,'solucoes.html'),solutions)
+}
 
 if (modo === 'producao') {
   const home = join(saida, 'index.html')
@@ -97,6 +115,8 @@ if (modo === 'producao') {
   let principal = removerNoindex(readFileSync(home, 'utf8'))
   let privacidade = removerNoindex(readFileSync(privacy, 'utf8'))
   let solucoes = removerNoindex(readFileSync(solutions, 'utf8'))
+
+
   const endereco = {
     '@type': 'PostalAddress',
     streetAddress: 'Avenida Leonel Guilherme Pereira, 775',
@@ -153,6 +173,7 @@ if (modo === 'producao') {
     '  <url><loc>' + origin + '/politica-de-privacidade.html</loc></url>\n' +
     blog.paths.map(path => '  <url><loc>' + origin + path + '</loc></url>\n').join('') +
     '</urlset>\n')
+  if (semBlog && existsSync(join(saida,'blog'))) throw new Error('A versão institucional não pode conter pasta de blog')
   const configuracao = JSON.parse(readFileSync(join(saida, 'vercel.json'), 'utf8'))
   for (const rota of configuracao.headers || []) {
     rota.headers = rota.headers.filter((h) => h.key.toLowerCase() !== 'x-robots-tag')
@@ -170,7 +191,7 @@ const conf = JSON.parse(readFileSync(join(saida, 'vercel.json'), 'utf8'))
 const policy = JSON.stringify(conf.headers || [])
 if (modo === 'homologacao') {
   if (!html.includes('noindex,nofollow') || !readFileSync(join(saida, 'solucoes.html'), 'utf8').includes('noindex,nofollow') || !policy.includes('noindex, nofollow') ||
-      !readFileSync(join(saida, 'blog', 'index.html'), 'utf8').includes('noindex,nofollow') ||
+      (!semBlog && !readFileSync(join(saida, 'blog', 'index.html'), 'utf8').includes('noindex,nofollow')) ||
       !readFileSync(join(saida, 'robots.txt'), 'utf8').includes('Disallow: /')) {
     throw new Error('A prévia de homologação perdeu o bloqueio aos buscadores')
   }

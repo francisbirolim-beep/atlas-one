@@ -102,3 +102,21 @@ Teste adicional: \`node site-esquadrifacio/blog/validar-blog.mjs\`. O \`verifica
 O caminho \`/blog/editorial/\` é gerado **exclusivamente em homologação**, no projeto separado e protegido da Vercel. Reúne os 3 artigos em rascunho, 10 pautas futuras, contadores de status e regras de aprovação. É um painel **somente de leitura**, sem botões de aprovação fictícios; a tarefa recorrente do ChatGPT gera rascunhos para revisão mas ainda não grava dados diretamente no repositório.
 
 A geração pública não inclui esta página, os rascunhos nem a fila de pautas. O workflow local e de CI verifica que o painel tem aviso de privacidade, não é indexável, tem navegação válida e fica ausente do pacote de produção.
+
+
+## Decisão de publicação institucional — 21/10/2026
+
+O proprietário autorizou expressamente a publicação **do site institucional agora**, mantendo o blog para revisão posterior. Por isso \`publicacao_autorizada=true\`. A **política de privacidade ainda precisa de aceite específico**, portanto \`privacidade_revisada=false\` e o gerador de produção segue bloqueado até essa aprovação.
+
+Para publicar só o institucional, usar o modo \`--modo=producao --sem-blog=true --dominio=https://esquadrifacio.com.br\` após todos os bloqueios estarem verdadeiros. Este modo retira os links e a seção do blog, não copia rascunhos nem central editorial, e não inclui RSS ou blog no sitemap. Os demais elementos aprovados (fotos, soluções, WhatsApp, Instagram, GPS, cores) não são modificados. O blog continua protegido em projeto separado até aprovação técnica dos artigos.
+
+Não apontar DNS ou anunciar lançamento enquanto privacidade não estiver aprovada e os testes e backup DNS não estiverem completos.
+
+
+### Homologação da versão institucional (sem blog)
+
+Antes de publicar, gerar e conferir o **mesmo recorte visual sem blog** usando:
+\`\`\`
+node site-esquadrifacio/preparar-publicacao.mjs --modo=homologacao --sem-blog=true
+\`\`\`
+Este comando mantém os cabeçalhos de bloqueio de indexação e deixa o site original inalterado. Não cria páginas de blog nem aponta domínio.

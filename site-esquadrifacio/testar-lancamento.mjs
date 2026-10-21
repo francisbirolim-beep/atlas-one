@@ -21,10 +21,17 @@ try {
   const origemIndex = readFileSync(join(pasta, 'index.html'))
   const origemPrivacidade = readFileSync(join(pasta, 'politica-de-privacidade.html'))
   const aprovacao = JSON.parse(readFileSync(join(pasta, 'controle-lancamento.json'), 'utf8'))
-  check('Fotos e domínio conferidos, publicação e privacidade bloqueadas', Object.values(aprovacao).length === 4 &&
+  check('Fotos, domínio e publicação autorizados, privacidade bloqueada', Object.values(aprovacao).length === 4 &&
     aprovacao.fotos_autorizadas === true && aprovacao.dominio_controlado === true &&
-    ['privacidade_revisada','publicacao_autorizada'].every(k => aprovacao[k] === false))
+    aprovacao.privacidade_revisada === false && aprovacao.publicacao_autorizada === true)
 
+  const institucionalStaging = run(copia, ['--modo=homologacao', '--sem-blog=true'])
+  check('Site institucional isolado compila em homologação', institucionalStaging.status === 0)
+  const semBlogRaiz = join(copia,'.gerado','homologacao')
+  check('Site institucional de prévia mantém noindex sem arquivos do blog',
+    !existsSync(join(semBlogRaiz,'blog')) &&
+    readFileSync(join(semBlogRaiz,'index.html'),'utf8').includes('noindex,nofollow') &&
+    !readFileSync(join(semBlogRaiz,'index.html'),'utf8').includes('href="/blog/'))
   const staging = run(copia, ['--modo=homologacao'])
   check('Prévia construída', staging.status === 0)
   const saidaTeste = join(copia, '.gerado', 'homologacao')
@@ -66,6 +73,14 @@ try {
   blogTodos.articles[0].revisaoTecnicaConfirmada = true
   blogTodos.articles[0].publishedAt = '2026-10-21'
   writeFileSync(blogArquivo, JSON.stringify(blogTodos))
+  const soInstitucional = run(copia, ['--modo=producao', '--sem-blog=true', '--dominio=https://esquadrifacio.com.br'])
+  check('Candidato institucional sem blog funciona com aprovações simuladas no teste', soInstitucional.status === 0)
+  const institucional = join(copia, '.gerado', 'producao')
+  const institucionalHome = readFileSync(join(institucional,'index.html'),'utf8')
+  const institucionalSitemap = readFileSync(join(institucional,'sitemap.xml'),'utf8')
+  check('Blog em revisão não aparece no site institucional', !institucionalHome.includes('href="/blog/') &&
+    !institucionalHome.includes('class="section blog-feature"') &&
+    !existsSync(join(institucional,'blog')) && !institucionalSitemap.includes('/blog/'))
   const ok = run(copia, ['--modo=producao', '--dominio=https://esquadrifacio.com.br'])
   check('Candidato público gera arquivos apenas em sandbox', ok.status === 0)
   const pronto = join(copia, '.gerado', 'producao')
