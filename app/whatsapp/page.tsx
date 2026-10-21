@@ -1591,7 +1591,30 @@ export default function WhatsAppAtendimentoPage() {
     : '/cadastro/fornecedores'
 
   return (
-    <main className="h-[100dvh] min-h-0 w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white p-0">
+    <main className="h-[100dvh] min-h-0 w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white p-0 lg:pl-[156px]">
+      <nav aria-label="Navegação do WhatsApp Atlas" className="fixed inset-y-0 left-0 z-30 hidden w-[156px] flex-col bg-[#0e1b2b] text-slate-100 lg:flex">
+        <div className="flex flex-col items-center gap-1 border-b border-white/10 px-2 py-7">
+          <span className="text-4xl font-black tracking-tight text-blue-500">A</span>
+          <span className="text-xs font-black tracking-[0.15em]">ATLAS ONE</span>
+        </div>
+        <div className="mt-5 flex flex-col gap-1 px-2 text-xs font-semibold">
+          <button type="button" onClick={()=>mudarArea('individuais')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='individuais'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <MessageCircle size={17}/> Atendimentos
+          </button>
+          <button type="button" onClick={()=>mudarArea('grupos')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='grupos'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <Users size={17}/> Grupos
+          </button>
+          {podeMonitorar && <button type="button" onClick={()=>mudarArea('monitoramento')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='monitoramento'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <Eye size={17}/> Monitoramento
+          </button>}
+          <button type="button" onClick={()=>mudarArea('internas')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='internas'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <Users size={17}/> Equipe interna
+          </button>
+          <Link href="/whatsapp/configuracao" className="mt-4 flex items-center gap-2 rounded-lg px-3 py-3 text-slate-300 hover:bg-white/10">
+            <Settings size={17}/> Configurações
+          </Link>
+        </div>
+      </nav>
       <div className="h-[100dvh] w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white">
         <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white px-5">
           <div className="flex items-center gap-3">
@@ -1653,7 +1676,14 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
 
-        <div className="grid h-[calc(100dvh-72px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px]">
+        <div className="flex h-[54px] gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-2 lg:hidden">
+          <button type="button" onClick={()=>mudarArea('individuais')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='individuais'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Individuais</button>
+          <button type="button" onClick={()=>mudarArea('grupos')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='grupos'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Grupos</button>
+          {podeMonitorar && <button type="button" onClick={()=>mudarArea('monitoramento')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='monitoramento'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Monitoramento</button>}
+          <button type="button" onClick={()=>mudarArea('internas')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='internas'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Equipe interna</button>
+        </div>
+
+        <div className={`${areaAtendimento==='monitoramento'?'hidden':'grid'} h-[calc(100dvh-126px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] lg:h-[calc(100dvh-72px)]`}>
           <aside className={`${ativa || conversaInternaAtiva ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
@@ -1680,8 +1710,8 @@ export default function WhatsAppAtendimentoPage() {
               )}
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-extrabold text-slate-900">Conversas</p>
-                  <p className="text-[11px] text-slate-500">WhatsApp + conversas internas da equipe</p>
+                  <p className="text-sm font-extrabold text-slate-900">{areaAtendimento==='grupos'?'Grupos':areaAtendimento==='internas'?'Equipe interna':'Conversas'}</p>
+                  <p className="text-[11px] text-slate-500">{areaAtendimento==='grupos'?'Grupos atribuídos a você':areaAtendimento==='internas'?'Mensagens privadas da equipe':'Atendimentos individuais'}</p>
                 </div>
                 <div className="flex items-center gap-1">
                   {canais.length > 1 && (
@@ -1698,16 +1728,22 @@ export default function WhatsAppAtendimentoPage() {
                   </button>
                 </div>
               </div>
+              <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                <button type="button" onClick={()=>mudarArea('individuais')}
+                  className={`rounded-lg px-2 py-2 text-xs font-bold ${areaAtendimento==='individuais'?'bg-white text-emerald-700 shadow':'text-slate-500 hover:bg-white/70'}`}>Individuais</button>
+                <button type="button" onClick={()=>mudarArea('grupos')}
+                  className={`rounded-lg px-2 py-2 text-xs font-bold ${areaAtendimento==='grupos'?'bg-white text-blue-700 shadow':'text-slate-500 hover:bg-white/70'}`}>Grupos</button>
+              </div>
               <div className="flex items-center gap-2 rounded-xl border bg-slate-50 px-3">
                 <Search size={16} className="text-slate-400"/>
-                <input value={busca} onChange={e=>setBusca(e.target.value)}
-                  placeholder="Buscar conversas..." className="w-full bg-transparent py-2.5 text-sm outline-none"/>
+                <input value={areaAtendimento==='internas'?buscaInterna:busca} onChange={e=>areaAtendimento==='internas'?setBuscaInterna(e.target.value):setBusca(e.target.value)}
+                  placeholder={areaAtendimento==='grupos'?'Buscar grupos...':areaAtendimento==='internas'?'Buscar equipe interna...':'Buscar por nome ou telefone...'} className="w-full bg-transparent py-2.5 text-sm outline-none"/>
               </div>
               <div className="mt-3 flex items-center justify-between px-0.5">
-                <span className="text-xs font-extrabold text-slate-800">Conversas</span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400">{totais.todas} no total</span>
+                <span className="text-xs font-extrabold text-slate-800">{areaAtendimento==='grupos'?'Grupos':areaAtendimento==='internas'?'Conversas internas':'Conversas'}</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400">{areaAtendimento==='internas'?internasFiltradas.length:totais.todas} no total</span>
               </div>
-              <div className="mt-2 min-w-0 max-w-full">
+              <div className={`mt-2 min-w-0 max-w-full ${areaAtendimento==='internas'?'hidden':''}`}>
                 <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
                 <button onClick={()=>setFiltro('todas')}
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='todas'?'border-blue-600 bg-blue-600 text-white':'bg-white text-slate-600'}`}>
@@ -1741,23 +1777,28 @@ export default function WhatsAppAtendimentoPage() {
                   className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='finalizadas'?'border-slate-400 bg-slate-100 text-slate-700':'bg-white text-slate-600'}`}>
                   Finalizadas {totais.finalizadas}
                 </button>
-                <button onClick={()=>setFiltro('grupos')}
-                  className={`shrink-0 rounded-full border px-3 py-1.5 ${filtro==='grupos'?'border-violet-400 bg-violet-50 text-violet-700':'bg-white text-slate-600'}`}>
-                  Grupos {totais.grupos}
-                </button>
+
                 </div>
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {carregando ? (
                 <div className="p-8 text-center text-sm text-slate-400">Carregando atendimentos...</div>
-              ) : filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos ? (
+              ) : (areaAtendimento==='internas'?internasFiltradas.length===0:(filtradas.length === 0 && contatosBuscaVisiveis.length === 0 && usuariosInternosBusca.length === 0 && !buscandoContatos)) ? (
                 <div className="p-8 text-center text-sm text-slate-400">
                   {busca.trim().length >= 2 ? 'Nenhum contato ou conversa encontrado.' : 'Nenhuma conversa neste filtro.'}
                 </div>
               ) : (
                 <>
-                  {filtradas.map(c => (
+                  {areaAtendimento==='internas' ? internasFiltradas.map(c=>(
+                    <button key={c.id} type="button" onClick={()=>selecionarConversaInterna(c)}
+                      className={`flex w-full items-center gap-3 border-b px-4 py-3 text-left hover:bg-blue-50 ${conversaInternaAtiva?.id===c.id?'bg-blue-50':''}`}>
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-100 font-bold text-blue-700">{c.tipo==='grupo'?<Users size={18}/>:String(c.nome||'?').slice(0,1).toUpperCase()}</span>
+                      <span className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">{c.nome||'Conversa interna'}</b>
+                        <span className="block truncate text-xs text-slate-500">{c.ultima_mensagem||'Equipe Atlas'}</span></span>
+                      {!!c.nao_lidas && <span className="rounded-full bg-blue-600 px-2 py-1 text-xs font-bold text-white">{c.nao_lidas}</span>}
+                    </button>
+                  )) : filtradas.map(c => (
                 <div key={c.id} role="button" tabIndex={0}
                   onClick={()=>selecionarConversa(c)}
                   onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selecionarConversa(c)}}}
@@ -2621,7 +2662,7 @@ export default function WhatsAppAtendimentoPage() {
             </>}
           </section>
 
-          <aside className="hidden min-h-0 min-w-0 flex-col border-l border-slate-200 bg-white xl:flex">
+          <aside className="hidden min-h-0 min-w-0 flex-col border-l border-slate-200 bg-white">
             <div className="border-b border-slate-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
