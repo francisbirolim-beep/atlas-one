@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Bot, Zap, ListChecks, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, UserPlus, Users, Clock, ShieldAlert, ChevronDown, ChevronUp, LayoutGrid, Target, Save, RotateCcw, Plus, Wrench, Columns3, Building2, Bot, Zap, ListChecks, Pencil, Trash2, BellRing } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
@@ -694,6 +694,15 @@ async function salvarSla(colunaId: string) {
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-8">
       {abaAtiva === null && (
         <div className="space-y-2">
+          <Link href="/configuracoes/notificacoes" className="flex w-full items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 p-4 text-left transition hover:border-blue-400 hover:bg-blue-100">
+            <span className="flex items-center gap-3">
+              <BellRing size={20} className="text-blue-700" />
+              <span><strong className="block text-sm text-slate-900">Notificações e Lembretes</strong>
+                <span className="mt-0.5 block text-xs text-slate-600">Configure avisos de Tarefas, Agenda, celular e horários de silêncio.</span>
+              </span>
+            </span>
+            <ChevronDown size={16} className="-rotate-90 text-blue-600" />
+          </Link>
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <p className="flex items-center gap-3 text-sm font-medium text-slate-700 mb-3"><Columns3 size={18} className="text-brand-navy" /> Kanban</p>
             <div className="space-y-1 pl-2">

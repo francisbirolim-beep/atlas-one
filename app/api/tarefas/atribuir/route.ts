@@ -50,6 +50,14 @@ export async function POST(req: NextRequest) {
     const descricao = typeof body.descricao === 'string' ? body.descricao.trim() : ''
     const dataHora = typeof body.dataHora === 'string' && body.dataHora.trim() ? body.dataHora.trim() : null
     const prioridade = PRIORIDADES.has(body.prioridade) ? body.prioridade : 'normal'
+    const avisos = Array.isArray(body.avisosMinutos) ? body.avisosMinutos : null
+    if (avisos && (avisos.length > 10 || avisos.some((n: unknown) => !Number.isInteger(n) || Number(n) < 0 || Number(n) > 43200))) {
+      return NextResponse.json({ error: 'Lista de lembretes inválida.' }, { status: 400 })
+    }
+    const repetir = body.repetirPendenteMinutos
+    if (repetir != null && ![0,15,30,60,120,360,1440].includes(repetir)) {
+      return NextResponse.json({ error: 'Intervalo de repetição inválido.' }, { status: 400 })
+    }
 
     if (!responsavelId || !titulo) {
       return NextResponse.json({ error: 'Responsável e título são obrigatórios' }, { status: 400 })
@@ -81,6 +89,8 @@ export async function POST(req: NextRequest) {
         descricao: descricao || null,
         data_hora: dataHora,
         prioridade,
+        ...(avisos ? { avisos_minutos: avisos } : {}),
+        ...(repetir != null ? { repetir_pendente_minutos: repetir } : {}),
         solicitante_id: solicitante.id,
         solicitante_nome: solicitante.nome,
         atribuida_em: atribuidaParaOutro ? new Date().toISOString() : null,

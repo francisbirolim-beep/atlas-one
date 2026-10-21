@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Boxes, FilePlus2, FileText, LayoutGrid, Settings, Star, X } from 'lucide-react'
+import { BellRing, Boxes, FilePlus2, FileText, LayoutGrid, Settings, Star, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import type { Usuario } from '@/lib/tipos'
@@ -196,6 +196,12 @@ export default function MobileFavorites({ mostrarAcessoRapido = false }: { mostr
                 </div>
               </div>
 
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Minhas preferências</p>
+                <Link href="/configuracoes/notificacoes" onClick={() => setAberto(false)} className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-sm font-semibold text-blue-800">
+                  <BellRing size={17} /> Notificações e Lembretes
+                </Link>
+              </div>
               {isMaster && (
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Administração</p>

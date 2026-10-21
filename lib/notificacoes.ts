@@ -15,6 +15,11 @@ export const PREFERENCIAS_PADRAO: NotificacaoPreferencias = {
   nao_perturbe_inicio: '22:00:00',
   nao_perturbe_fim: '07:00:00',
   timezone: 'America/Sao_Paulo',
+  tarefas_avisos_minutos: [1440, 60],
+  agenda_avisos_minutos: [1440, 60, 10],
+  tarefas_repetir_pendente_minutos: 60,
+  agenda_repetir_pendente_minutos: 0,
+  lembretes_whatsapp_ativo: false,
 }
 
 export async function listarNotificacoes(usuarioId: string, limite = 30): Promise<Notificacao[]> {
@@ -52,7 +57,7 @@ export async function carregarPreferenciasNotificacao(usuarioId: string): Promis
     .eq('usuario_id', usuarioId)
     .maybeSingle()
   if (error || !data) return { ...PREFERENCIAS_PADRAO, usuario_id: usuarioId }
-  return data as NotificacaoPreferencias
+  return { ...PREFERENCIAS_PADRAO, ...data } as NotificacaoPreferencias
 }
 
 export async function salvarPreferenciasNotificacao(

@@ -419,6 +419,10 @@ export interface TarefaPessoal {
       recorrencia_tipo?: string | null
       recorrencia_valor?: number | null
       regra_origem_id?: string | null
+      avisos_minutos?: number[] | null
+      repetir_pendente_minutos?: number | null
+      pausado_ate?: string | null
+      origem_lembrete?: string | null
       solicitante_id?: string | null
       solicitante_nome?: string | null
       atribuida_em?: string | null
@@ -455,6 +459,11 @@ export interface NotificacaoPreferencias {
       nao_perturbe_inicio: string
       nao_perturbe_fim: string
       timezone: string
+      tarefas_avisos_minutos: number[]
+      agenda_avisos_minutos: number[]
+      tarefas_repetir_pendente_minutos: number
+      agenda_repetir_pendente_minutos: number
+      lembretes_whatsapp_ativo: boolean
       updated_at?: string
 }
 
@@ -468,6 +477,10 @@ export interface Evento {
       local?: string | null
       data_inicio: string
       data_fim?: string | null
+      avisos_minutos?: number[] | null
+      repetir_pendente_minutos?: number | null
+      pausado_ate?: string | null
+      concluido_em?: string | null
       recorrencia_tipo?: string | null
       recorrencia_valor?: number | null
       regra_origem_id?: string | null
