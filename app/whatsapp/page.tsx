@@ -331,6 +331,20 @@ export default function WhatsAppAtendimentoPage() {
       const conversaIdSolicitada = selecionar && typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('conversaId')
         : null
+      if (conversaIdSolicitada) {
+        const solicitada = conversasRecebidas.find(c=>c.id===conversaIdSolicitada)
+        if (solicitada) {
+          const conversaAlheia = solicitada.responsavel_id &&
+            solicitada.responsavel_id!==json.usuario?.id
+          if (conversaAlheia &&
+              (json.usuario?.role==='master' ||
+               (json.acessos||[]).some((a:AcessoCanal)=>a.canal_id===solicitada.whatsapp_canal_id&&(a.supervisionar||a.dono)))) {
+            setAreaAtendimento('monitoramento')
+          } else {
+            setAreaAtendimento(solicitada.whatsapp_chat_tipo==='grupo'?'grupos':'individuais')
+          }
+        }
+      }
       setAtiva(atual => {
         if (atual) {
           return conversasRecebidas.find((c: Conversa) => c.id === atual.id) || null
@@ -1250,17 +1264,23 @@ export default function WhatsAppAtendimentoPage() {
       // O atributo download não força baixar URLs de outro domínio.
       // Baixar o blob e criar uma URL local preserva o nome e evita abrir
       // o arquivo no navegador em vez de salvá-lo.
-      const respostaArquivo = await fetch(arquivo.url, { cache: 'no-store' })
-      if (!respostaArquivo.ok) throw new Error('Não foi possível carregar o arquivo para download.')
-      const blob = await respostaArquivo.blob()
-      const urlLocal = URL.createObjectURL(blob)
+      let urlLocal: string | null = null
+      try {
+        const respostaArquivo = await fetch(arquivo.url, { cache: 'no-store' })
+        if (!respostaArquivo.ok) throw new Error('Arquivo indisponível.')
+        urlLocal = URL.createObjectURL(await respostaArquivo.blob())
+      } catch {
+        // Preserva o comportamento anterior quando o Storage não permitir
+        // buscar o blob por CORS; o link assinado ainda pode ser aberto.
+      }
       const link = document.createElement('a')
-      link.href = urlLocal
+      link.href = urlLocal || arquivo.url
       link.download = arquivo.nome || m.arquivo_nome || 'anexo'
+      link.rel = 'noopener noreferrer'
       document.body.appendChild(link)
       link.click()
       link.remove()
-      window.setTimeout(()=>URL.revokeObjectURL(urlLocal),60_000)
+      if (urlLocal) window.setTimeout(()=>URL.revokeObjectURL(urlLocal!),60_000)
     } catch (erro) {
       setErro(erro instanceof Error ? erro.message : 'Não foi possível baixar o anexo.')
     }
@@ -1617,9 +1637,9 @@ export default function WhatsAppAtendimentoPage() {
           <button type="button" onClick={()=>mudarArea('internas')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='internas'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
             <Users size={17}/> Equipe interna
           </button>
-          <Link href="/whatsapp/configuracao" className="mt-4 flex items-center gap-2 rounded-lg px-3 py-3 text-slate-300 hover:bg-white/10">
+          {eu?.role==='master' && <Link href="/whatsapp/configuracao" className="mt-4 flex items-center gap-2 rounded-lg px-3 py-3 text-slate-300 hover:bg-white/10">
             <Settings size={17}/> Configurações
-          </Link>
+          </Link>}
         </div>
       </nav>
       <div className="h-[100dvh] w-full max-w-full overflow-x-hidden overflow-y-hidden bg-white">
