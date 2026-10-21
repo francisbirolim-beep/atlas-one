@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { gerarBlog } from './blog/gerar-blog.mjs'
 
 const pasta = dirname(fileURLToPath(import.meta.url))
 const opcoes = new Map(process.argv.slice(2).map((arg) => {
@@ -86,6 +87,7 @@ for (const name of ['index.html', 'solucoes.html', 'politica-de-privacidade.html
   cpSync(join(pasta, name), join(saida, name))
 }
 cpSync(join(pasta, 'assets'), join(saida, 'assets'), { recursive: true })
+const blog = gerarBlog({mode:modo, output:saida, origin:dominio})
 
 if (modo === 'producao') {
   const home = join(saida, 'index.html')
@@ -149,6 +151,7 @@ if (modo === 'producao') {
     '  <url><loc>' + origin + '/</loc></url>\n' +
     '  <url><loc>' + origin + '/solucoes.html</loc></url>\n' +
     '  <url><loc>' + origin + '/politica-de-privacidade.html</loc></url>\n' +
+    blog.paths.map(path => '  <url><loc>' + origin + path + '</loc></url>\n').join('') +
     '</urlset>\n')
   const configuracao = JSON.parse(readFileSync(join(saida, 'vercel.json'), 'utf8'))
   for (const rota of configuracao.headers || []) {
@@ -156,7 +159,7 @@ if (modo === 'producao') {
     for (const cabecalho of rota.headers) {
       if (cabecalho.key.toLowerCase() === 'content-security-policy') {
         cabecalho.value = cabecalho.value.replace("script-src 'none'",
-          "script-src 'sha256-" + hash + "'")
+          "script-src 'sha256-" + [hash,...blog.cspHashes].join("' 'sha256-") + "'")
       }
     }
   }
@@ -167,6 +170,7 @@ const conf = JSON.parse(readFileSync(join(saida, 'vercel.json'), 'utf8'))
 const policy = JSON.stringify(conf.headers || [])
 if (modo === 'homologacao') {
   if (!html.includes('noindex,nofollow') || !readFileSync(join(saida, 'solucoes.html'), 'utf8').includes('noindex,nofollow') || !policy.includes('noindex, nofollow') ||
+      !readFileSync(join(saida, 'blog', 'index.html'), 'utf8').includes('noindex,nofollow') ||
       !readFileSync(join(saida, 'robots.txt'), 'utf8').includes('Disallow: /')) {
     throw new Error('A prévia de homologação perdeu o bloqueio aos buscadores')
   }

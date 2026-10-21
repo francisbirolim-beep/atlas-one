@@ -82,3 +82,16 @@ Regra obrigatória do corte: preservar nameservers e registros MX, TXT de SPF/DK
 Texto da política complementado para informar responsável (razão social da Esquadrifácio), exemplos de dados recebidos no atendimento, finalidades de elaboração de propostas, compartilhamento com provedores e conservação proporcional às obrigações. É uma **minuta técnica**, sem parecer jurídico ou aprovação do usuário. O controle privacidade_revisada permanece false até aceite explícito do proprietário ou revisão especializada.
 
 A prévia online existente deverá ser atualizada apenas no projeto independente, com autenticação Vercel e noindex. Não configurar o domínio oficial nem permitir indexação enquanto faltar a aprovação do texto.
+
+
+## Blog de soluções com IA editorial (21/10/2026)
+
+O site ganhou seção “Blog de soluções” na homepage, link no menu e rodapé, e páginas estáticas dedicadas ao blog. **Três artigos completos estão disponíveis somente em homologação e marcados como rascunhos**: escolha da porta de correr, informações para orçamento e painéis ripados amadeirados. São materiais educativos, não prescrições de engenharia. Nenhum texto foi publicado no domínio oficial.
+
+O diretório \`blog/\` contém a biblioteca de artigos (\`artigos.json\`), dez pautas futuras (\`pautas.json\`), identidade visual (\`blog.css\`), renderizador (\`gerar-blog.mjs\`) e procedimentos de revisão por papéis de especialista (\`GUIA_EDITORIAL_IA.md\`).
+
+No modo de homologação, o construtor gera páginas com aviso **“Em revisão”** e \`noindex,nofollow\`. No modo público, só gera artigos com \`status=aprovado\`, \`revisaoTecnicaConfirmada=true\`, data válida e sob as quatro autorizações globais de publicação. O build gera automaticamente rotas dos artigos aprovados no \`sitemap.xml\`, feed RSS e metadados \`BlogPosting\`. Publicação automática de conteúdos novos segue **desativada** até a validação técnica/editorial.
+
+Teste adicional: \`node site-esquadrifacio/blog/validar-blog.mjs\`. O \`verificar-links.mjs\` agora também audita todos os links do blog em uma cópia gerada localmente.
+
+**Integração Atlas:** etapa futura, projeto isolado, dependente de aprovação específica; não há conexão com dados de CRM, WhatsApp, financeiros ou publicações sociais.

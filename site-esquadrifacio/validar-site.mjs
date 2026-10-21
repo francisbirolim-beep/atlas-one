@@ -88,6 +88,10 @@ check('links externos protegidos', !/<a(?=[^>]*href="https:\/\/)(?![^>]*rel="noo
 check('não sobrou modal de demonstração', !home.includes('id="demo-modal"') && !home.includes('data-contact'))
 check('não sobrou aviso público de protótipo', !home.includes('PRÉVIA NÃO PUBLICADA') && !home.includes('Prévia conceitual'))
 check('seções e chamadas comerciais presentes', home.includes('Nossas obras') && home.includes('Solicitar orçamento'))
+check('blog educativo integrado sem alterar a homepage premium',
+ home.includes('class="section blog-feature"') && home.includes('href="/blog/"') &&
+ home.includes('Conhecimento para') && solucoes.includes('href="/blog/"'))
+
 check('página de privacidade local vinculada', home.includes('href="/politica-de-privacidade.html"') && privacidade.includes('Lei Geral de Proteção de Dados'))
 check('sem formulários ou rastreadores embutidos', !/<form\b/i.test(home) && !/googletagmanager|google-analytics|facebook\.net\/en_US\/fbevents/i.test(home))
 check('página de soluções sem formulários ou rastreadores', !/<form\b/i.test(solucoes) && !/googletagmanager|google-analytics|facebook\.net\/en_US\/fbevents/i.test(solucoes))

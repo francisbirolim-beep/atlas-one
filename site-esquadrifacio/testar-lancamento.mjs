@@ -57,6 +57,15 @@ try {
   }))
   const invalido = run(copia, ['--modo=producao', '--dominio=http://localhost:3000'])
   check('Bloqueio de domínio inseguro', invalido.status !== 0 && invalido.stderr.includes('domínio público'))
+  const blogArquivo = join(copia, 'blog', 'artigos.json')
+  const blogTodos = JSON.parse(readFileSync(blogArquivo, 'utf8'))
+  const blogBloqueado = run(copia, ['--modo=producao', '--dominio=https://esquadrifacio.com.br'])
+  check('Artigos não revisados impedem blog público', blogBloqueado.status !== 0 &&
+    blogBloqueado.stderr.includes('BLOG SEM ARTIGOS APROVADOS'))
+  blogTodos.articles[0].status = 'aprovado'
+  blogTodos.articles[0].revisaoTecnicaConfirmada = true
+  blogTodos.articles[0].publishedAt = '2026-10-21'
+  writeFileSync(blogArquivo, JSON.stringify(blogTodos))
   const ok = run(copia, ['--modo=producao', '--dominio=https://esquadrifacio.com.br'])
   check('Candidato público gera arquivos apenas em sandbox', ok.status === 0)
   const pronto = join(copia, '.gerado', 'producao')
@@ -66,10 +75,23 @@ try {
   const robots = readFileSync(join(pronto, 'robots.txt'), 'utf8')
   const sitemap = readFileSync(join(pronto, 'sitemap.xml'), 'utf8')
   const vercel = readFileSync(join(pronto, 'vercel.json'), 'utf8')
+  const blogIndex = readFileSync(join(pronto, 'blog', 'index.html'), 'utf8')
+  const blogArticle = readFileSync(join(pronto, 'blog', blogTodos.articles[0].slug + '.html'), 'utf8')
+  const rss = readFileSync(join(pronto, 'blog', 'feed.xml'), 'utf8')
+  check('Blog público somente com artigo simulado como aprovado', blogIndex.includes(blogTodos.articles[0].title) &&
+    !blogIndex.includes(blogTodos.articles[1].title) && !blogIndex.includes(blogTodos.articles[2].title))
+  check('Artigos possuem canonical e dados estruturados próprios', blogArticle.includes('rel="canonical" href="https://esquadrifacio.com.br/blog/') &&
+    blogArticle.includes('application/ld+json') && !blogArticle.includes('noindex,nofollow'))
+  check('RSS apenas com publicação aprovada', rss.includes(blogTodos.articles[0].title) &&
+    !rss.includes(blogTodos.articles[1].title))
+
   check('Canonical público', html.includes('rel="canonical" href="https://esquadrifacio.com.br/"') &&
     privacy.includes('href="https://esquadrifacio.com.br/politica-de-privacidade.html"'))
   check('Soluções possuem canonical próprio', solucoes.includes('rel="canonical" href="https://esquadrifacio.com.br/solucoes.html"'))
   check('Imagem social com endereço completo', html.includes('property="og:image" content="https://esquadrifacio.com.br/assets/porta-correr-integrada.webp"'))
+  check('Blog aprovado no sitemap, rascunhos privados', sitemap.includes('https://esquadrifacio.com.br/blog/') &&
+    sitemap.includes('https://esquadrifacio.com.br/blog/' + blogTodos.articles[0].slug + '.html') &&
+    !sitemap.includes(blogTodos.articles[1].slug))
   check('Mapa do site e robots vinculados', sitemap.includes('https://esquadrifacio.com.br/solucoes.html') && sitemap.includes('https://esquadrifacio.com.br/politica-de-privacidade.html') &&
     robots.includes('Sitemap: https://esquadrifacio.com.br/sitemap.xml') &&
     robots.includes('Allow: /'))
@@ -78,6 +100,10 @@ try {
   const m = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)
   check('Dados estruturados da empresa válidos', !!m && JSON.parse(m[1]).address.addressLocality === 'José Bonifácio')
   const hash = createHash('sha256').update(m[1]).digest('base64')
+  const a = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(blogArticle)
+  const blogHash = createHash('sha256').update(a[1]).digest('base64')
+  check('CSP admite apenas marcação estruturada verificada no blog', vercel.includes("'sha256-" + blogHash + "'"))
+
   check('CSP restringe script aos dados estruturados exatos', vercel.includes("'sha256-" + hash + "'"))
   check('Fotos copiadas sem modificação', checksum(readFileSync(join(pasta, 'assets', 'obra-porta-especial.webp'))) ===
     checksum(readFileSync(join(pronto, 'assets', 'obra-porta-especial.webp'))))

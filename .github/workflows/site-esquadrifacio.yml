@@ -25,3 +25,5 @@ jobs:
         run: node site-esquadrifacio/testar-lancamento.mjs
       - name: Verificar links internos, fotos e navegação
         run: node site-esquadrifacio/verificar-links.mjs
+      - name: Validar blog e fila editorial sem publicação
+        run: node site-esquadrifacio/blog/validar-blog.mjs
