@@ -450,5 +450,3 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   await registrarHistorico(novoId, usuario, 'Criou o orcamento')
   return { ok: true, id: idResultado }
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
