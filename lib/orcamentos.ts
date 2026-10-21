@@ -25,6 +25,9 @@ export interface ItemOrcamentoForm {
   largura: string
   altura: string
   quantidade: string
+  larguraBatenteMm?: string
+  larguraGuarnicaoMm?: string
+  // Compatibilidade com pedidos pendentes salvos no iPhone antes da mudança.
   larguraBatenteCm?: string
   larguraGuarnicaoCm?: string
   descricao: string
@@ -252,8 +255,9 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     const itemTipo = it.itemTipo || 'sob_medida'
     const nomeProdutoItem = itemTipo === 'kit_porta_pronta' ? (it.produtoNome || it.tipoOutroTexto?.trim() || (it.descricao?.trim() ? 'Kit porta pronta' : null)) : it.produtoNome || null
     const camposKit = itemTipo === 'kit_porta_pronta' ? {
-      largura_batente_cm: numeroOpcional(it.larguraBatenteCm || ''),
-      largura_guarnicao_cm: numeroOpcional(it.larguraGuarnicaoCm || ''),
+      // Os números antigos são preservados, sem multiplicar por 10.
+      largura_batente_mm: numeroOpcional(it.larguraBatenteMm || it.larguraBatenteCm || ''),
+      largura_guarnicao_mm: numeroOpcional(it.larguraGuarnicaoMm || it.larguraGuarnicaoCm || ''),
     } : {}
 
     const referencia = it.tipologiaId ? referenciasWvetro[it.tipologiaId] || null : null
