@@ -174,6 +174,9 @@ export default function WhatsAppAtendimentoPage() {
   const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
+  const [areaAtendimento, setAreaAtendimento] = useState<'individuais' | 'grupos' | 'monitoramento' | 'internas'>('individuais')
+  const [atendenteMonitorado, setAtendenteMonitorado] = useState('todos')
+  const [midiaAmpliada, setMidiaAmpliada] = useState<Mensagem | null>(null)
   const [filtro, setFiltro] = useState<'todas' | 'internas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
   const [erro, setErro] = useState('')
@@ -371,6 +374,25 @@ export default function WhatsAppAtendimentoPage() {
     setSugestaoIA(null)
     setErro('')
     setAtiva(conversa)
+  }
+
+  function mudarArea(area: 'individuais' | 'grupos' | 'monitoramento' | 'internas') {
+    setAreaAtendimento(area)
+    setFiltro('todas')
+    setBusca('')
+    setAtiva(null)
+    setConversaInternaAtiva(null)
+    setMidiaAmpliada(null)
+  }
+
+  function conversaDaMinhaCaixa(c: Conversa) {
+    if (c.whatsapp_chat_tipo === 'grupo') {
+      if (c.responsavel_id) return c.responsavel_id === eu?.id
+      if (c.grupo_responsavel_efetivo_id) return c.grupo_responsavel_efetivo_id === eu?.id
+      return c.grupo_pode_atender === true
+    }
+    // Supervisão de terceiros só acontece na área Monitoramento.
+    return !c.responsavel_id || c.responsavel_id === eu?.id
   }
 
   function selecionarCanal(canalId: string) {
@@ -984,8 +1006,11 @@ export default function WhatsAppAtendimentoPage() {
   const filtradas = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
     return conversas.filter(c => {
-      if (filtro === 'internas') return false
-      if (!c.ultima_mensagem_em && filtro !== 'grupos') return false
+      if (areaAtendimento === 'monitoramento' || areaAtendimento === 'internas') return false
+      if (areaAtendimento === 'grupos' && c.whatsapp_chat_tipo !== 'grupo') return false
+      if (areaAtendimento === 'individuais' && c.whatsapp_chat_tipo === 'grupo') return false
+      if (!conversaDaMinhaCaixa(c)) return false
+      if (!c.ultima_mensagem_em && areaAtendimento !== 'grupos') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
       if (filtro === 'aguardando') {
         const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || eu?.role === 'master'
@@ -1004,7 +1029,7 @@ export default function WhatsAppAtendimentoPage() {
       return `${c.contato_nome || ''} ${c.grupo_nome || ''} ${c.telefone} ${c.responsavel_nome || ''} ${c.setor || ''}`
         .toLocaleLowerCase('pt-BR').includes(q)
     })
-  }, [conversas, busca, filtro, canalFiltro, eu?.id, eu?.role])
+  }, [conversas, busca, filtro, canalFiltro, areaAtendimento, eu?.id, eu?.role])
 
   const usuariosInternosBusca = useMemo(() => {
     const q = busca.toLocaleLowerCase('pt-BR').trim()
@@ -1435,7 +1460,9 @@ export default function WhatsAppAtendimentoPage() {
 
   const totais = useMemo(() => {
     const doCanal = conversas.filter(c =>
-      canalFiltro === 'todos' || c.whatsapp_canal_id === canalFiltro
+      (canalFiltro === 'todos' || c.whatsapp_canal_id === canalFiltro) &&
+      (areaAtendimento === 'grupos' ? c.whatsapp_chat_tipo === 'grupo' : c.whatsapp_chat_tipo !== 'grupo') &&
+      conversaDaMinhaCaixa(c)
     )
     const chats = doCanal.filter(c => Boolean(c.ultima_mensagem_em))
     return {
@@ -1455,7 +1482,24 @@ export default function WhatsAppAtendimentoPage() {
       transferidas: chats.filter(c => Boolean(c.transferida_em)).length,
       finalizadas: chats.filter(c => c.status === 'finalizado').length,
     }
-  }, [conversas, conversasInternas.length, eu?.id, canalFiltro])
+  }, [conversas, conversasInternas.length, eu?.id, canalFiltro, areaAtendimento])
+
+  const podeMonitorar = eu?.role === 'master' || acessos.some(a => a.supervisionar || a.dono)
+  const conversasMonitoramento = conversas.filter(c => {
+    const acesso = acessos.find(a => a.canal_id === c.whatsapp_canal_id)
+    if (eu?.role !== 'master' && !acesso?.supervisionar && !acesso?.dono) return false
+    if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
+    return atendenteMonitorado === 'todos' || c.responsavel_id === atendenteMonitorado
+  })
+  const totalMonitoramentoAguardando = conversasMonitoramento.filter(c =>
+    c.status === 'aguardando' || (c.status !== 'finalizado' && Number(c.nao_lidas || 0) > 0)
+  ).length
+  const monitoradosVisiveis = usuarios.filter(u =>
+    conversas.some(c => c.responsavel_id === u.id &&
+      (eu?.role === 'master' || acessos.some(a =>
+        a.canal_id === c.whatsapp_canal_id && (a.supervisionar || a.dono)
+      )))
+  )
 
   const acessoCanalAtivo = ativa?.whatsapp_canal_id
     ? acessos.find(a => a.canal_id === ativa.whatsapp_canal_id) || null
