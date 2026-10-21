@@ -226,20 +226,23 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
   const fotosUrls: string[] = []
   for (const foto of fotos) {
     const url = await uploadFoto(foto)
-    if (url) fotosUrls.push(url)
+    if (!url) return { ok: false, error: `Falha ao enviar a foto geral "${foto.name}". O pedido não foi finalizado; tente novamente.` }
+    fotosUrls.push(url)
   }
 
   const anexosSalvos: Anexo[] = []
   for (const arquivo of arquivos) {
     const url = await uploadArquivo(arquivo)
-    if (url) anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
+    if (!url) return { ok: false, error: `Falha ao enviar o anexo "${arquivo.name}". O pedido não foi finalizado; tente novamente.` }
+    anexosSalvos.push({ titulo: arquivo.name, nome: arquivo.name, url })
   }
 
   for (const it of itens) {
     const itemFotoUrls: string[] = []
     for (const f of it.fotos) {
       const url = await uploadFoto(f)
-      if (url) itemFotoUrls.push(url)
+      if (!url) return { ok: false, error: `Falha ao enviar a foto "${f.name}" da esquadria "${it.ambiente || it.descricao || it.tipo}". O pedido não foi finalizado; tente novamente.` }
+      itemFotoUrls.push(url)
     }
 
     const produto_id = it.modoOrigem === 'produto' ? (it.produtoId || null) : null
@@ -294,6 +297,12 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
       const usaFotoAltura = it.modoAltura === 'foto'
       const foto_larguras_url = usaFotoLargura && it.fotoLargura ? await uploadFoto(it.fotoLargura) : null
       const foto_alturas_url = usaFotoAltura && it.fotoAltura ? await uploadFoto(it.fotoAltura) : null
+      if (usaFotoLargura && it.fotoLargura && !foto_larguras_url) {
+        return { ok: false, error: `Falha ao enviar a foto das larguras de "${it.ambiente || it.descricao || it.tipo}". O pedido não foi finalizado.` }
+      }
+      if (usaFotoAltura && it.fotoAltura && !foto_alturas_url) {
+        return { ok: false, error: `Falha ao enviar a foto das alturas de "${it.ambiente || it.descricao || it.tipo}". O pedido não foi finalizado.` }
+      }
 
       const [medidasLidasLargura, medidasLidasAltura] = await Promise.all([
         foto_larguras_url ? lerTrena(foto_larguras_url, 'largura') : Promise.resolve([]),
