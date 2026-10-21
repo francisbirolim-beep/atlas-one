@@ -112,5 +112,3 @@ export async function validarItemImportadoWVetro(req:NextRequest,usuario:Usuario
   const pacoteTecnico=todos?await materializarPacoteTecnicoWVetro(alvo.id,usuario).catch(()=>({ok:false,error:'Materiais pendentes de sincronização.'})):null
   return NextResponse.json({ok:true,pacoteTecnico,orcamento:atualizado,itemId:original.id,aprendizado:{registrado:true,diferencas:diffs},mensagem:corrigindo?'Esquadria corrigida. Somente os campos alterados foram registrados para aprendizado.':'Esquadria conferida. As demais continuam com sua própria validação.'},{headers:{'Cache-Control':'no-store'}})
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
