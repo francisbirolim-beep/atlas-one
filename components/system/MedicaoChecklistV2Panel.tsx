@@ -22,6 +22,7 @@ import {
   camposDoItemV2,
   carregarChecklistMedicaoV2,
   salvarMedidasFixasItemV2,
+  salvarMedidaIndividualItemV2,
   salvarRespostaChecklistV2,
   statusItemChecklistV2,
   valorRespostaItemV2,
@@ -93,6 +94,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   const [medidas, setMedidas] = useState<MedidasFormulario>(MEDIDAS_VAZIAS)
   const [salvando, setSalvando] = useState<string | null>(null)
   const [salvandoMedidas, setSalvandoMedidas] = useState(false)
+  const [salvandoCampoMedida, setSalvandoCampoMedida] = useState<string | null>(null)
+  const camposDigitados = useRef(new Set<string>())
   const [enviandoFoto, setEnviandoFoto] = useState<string | null>(null)
   const [categoriaFoto, setCategoriaFoto] = useState('visao_geral')
   const [mensagem, setMensagem] = useState('')
@@ -130,12 +133,57 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   const campos = useMemo(() => item ? camposDoItemV2(dados.campos, item, dados.respostas) : [], [dados.campos, dados.respostas, item])
   const fotosItem = useMemo(() => dados.fotos.filter(f => f.item_id === itemId && !f.categoria.startsWith('checklist:')), [dados.fotos, itemId])
 
+  function chaveRascunhoMedidas(id: string) {
+    return `atlas-medicao-final-draft:${medicaoId}:${id}`
+  }
+
+  function obterRascunhoMedidas(id: string): Partial<MedidasFormulario> {
+    try {
+      const salvo = sessionStorage.getItem(chaveRascunhoMedidas(id))
+      const bruto = salvo ? JSON.parse(salvo) : null
+      if (!bruto || typeof bruto !== 'object' || Array.isArray(bruto)) return {}
+      const lido: Partial<MedidasFormulario> = {}
+      for (const campo of CHAVES_MEDIDAS) {
+        if (typeof bruto[campo] === 'string') lido[campo] = bruto[campo]
+      }
+      return lido
+    } catch { return {} }
+  }
+
+  function registrarRascunhoCampo(id: string, campo: keyof MedidasFormulario, valor: string) {
+    try {
+      sessionStorage.setItem(chaveRascunhoMedidas(id), JSON.stringify({
+        ...obterRascunhoMedidas(id), [campo]: valor,
+      }))
+    } catch { /* O formulário continua funcionando sem armazenamento de sessão. */ }
+  }
+
+  function limparRascunhoCampo(id: string, campo: keyof MedidasFormulario, valorSalvo: string) {
+    try {
+      const atual = obterRascunhoMedidas(id)
+      if (atual[campo] !== valorSalvo) return // O usuário já digitou outro valor.
+      delete atual[campo]
+      if (Object.keys(atual).length) sessionStorage.setItem(chaveRascunhoMedidas(id), JSON.stringify(atual))
+      else sessionStorage.removeItem(chaveRascunhoMedidas(id))
+    } catch { /* Ignora falha local, valor permanece salvo no banco. */ }
+  }
+
+  function alterarMedidaManual(campo: keyof MedidasFormulario, valor: string) {
+    if (!item) return
+    camposDigitados.current.add(campo)
+    registrarRascunhoCampo(item.id, campo, valor)
+    setMedidas(prev => ({ ...prev, [campo]: valor }))
+  }
+
   useEffect(() => {
+    camposDigitados.current.clear()
     if (!item) {
       setMedidas(MEDIDAS_VAZIAS)
       return
     }
 
+    // A leitura do banco é a base; somente alterações ainda não confirmadas
+    // da aba atual prevalecem quando a peça é reaberta.
     setMedidas({
       largura_baixo_mm: textoValor(item.largura_baixo_mm),
       largura_meio_mm: textoValor(item.largura_meio_mm),
@@ -143,8 +191,32 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       altura_direita_mm: textoValor(item.altura_direita_mm),
       altura_meio_mm: textoValor(item.altura_meio_mm),
       altura_esquerda_mm: textoValor(item.altura_esquerda_mm),
+      ...obterRascunhoMedidas(item.id),
     })
-  }, [item?.id])
+  // Carregar apenas na troca de peça, não a cada atualização do checklist.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [medicaoId, item?.id])
+
+  async function salvarCampoMedida(campo: keyof MedidasFormulario) {
+    if (!item) return
+    const id = item.id
+    const texto = medidas[campo]
+    const valor = numeroMedida(texto)
+    if (valor === null) {
+      if (texto.trim()) setMensagem('Medida inválida. Informe um valor positivo em milímetros.')
+      return
+    }
+    setSalvandoCampoMedida(campo)
+    const ok = await salvarMedidaIndividualItemV2(medicaoId, id, campo, valor, usuario)
+    setSalvandoCampoMedida(null)
+    if (!ok) {
+      setMensagem('Não foi possível confirmar este campo. O valor digitado foi preservado; tente salvar novamente.')
+      return
+    }
+    limparRascunhoCampo(id, campo, texto)
+    // Atualiza o espelho na tela, sem redefinir o restante do formulário.
+    setDados(prev => ({ ...prev, itens: prev.itens.map(peca => peca.id === id ? { ...peca, [campo]: valor } : peca) }))
+  }
 
   useEffect(() => {
     if (!item) return
@@ -180,6 +252,11 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
   async function salvarMedidasFixas() {
     if (!item || salvandoMedidas) return
 
+    const medidasValidas = CHAVES_MEDIDAS.every(campo => numeroMedida(medidas[campo]) !== null)
+    if (!medidasValidas) {
+      setMensagem('Preencha as 3 larguras e as 3 alturas para confirmar a peça. Cada campo também é salvo automaticamente ao sair dele.')
+      return
+    }
     setSalvandoMedidas(true)
     setMensagem('')
 
@@ -199,6 +276,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       return
     }
 
+    try { sessionStorage.removeItem(chaveRascunhoMedidas(item.id)) } catch { /* Sem armazenamento de sessão. */ }
     setMensagem('Medidas finais salvas.')
     await carregar()
     window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
@@ -500,7 +578,17 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                   {itemLeituraTrena && (item.foto_larguras_url || item.foto_alturas_url) && (
                     <LeituraTrenaIA
                       item={itemLeituraTrena}
-                      onAtualizar={(campo, valor) => setMedidas(prev => ({ ...prev, [campo]: String(valor) }))}
+                      podeAtualizarAutomaticamente={eixo =>
+                        (eixo === 'largura'
+                          ? CHAVES_MEDIDAS.slice(0, 3)
+                          : CHAVES_MEDIDAS.slice(3)
+                        ).every(campo => !camposDigitados.current.has(campo))
+                      }
+                      onAtualizar={(campo, valor) => setMedidas(prev => {
+                        // Uma sugestão tardia da IA nunca sobrescreve o que foi digitado.
+                        if (camposDigitados.current.has(campo) || prev[campo].trim()) return prev
+                        return { ...prev, [campo]: String(valor) }
+                      })}
                     />
                   )}
 
@@ -532,6 +620,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                     </div>
                   </div>}
 
+                  <p className="text-xs text-slate-600">Se a IA não conseguir ler o visor, digite as medidas em mm. Os campos são salvos individualmente quando você sai deles; o botão abaixo confirma as seis medidas.</p>
+                  {salvandoCampoMedida && <p role="status" className="text-xs font-semibold text-blue-700">Salvando medida manual...</p>}
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-slate-500">Larguras (mm) — baixo, meio, cima</p>
                     <div className="grid grid-cols-3 gap-2">
@@ -545,7 +635,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                           step="1"
                           placeholder={['Baixo', 'Meio', 'Cima'][indice]}
                           value={medidas[chave]}
-                          onChange={e => setMedidas(prev => ({ ...prev, [chave]: e.target.value }))}
+                          onChange={e => alterarMedidaManual(chave, e.target.value)}
+                          onBlur={() => void salvarCampoMedida(chave)}
                           className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
                         />
                       ))}
@@ -565,7 +656,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                           step="1"
                           placeholder={['Direita', 'Meio', 'Esquerda'][indice]}
                           value={medidas[chave]}
-                          onChange={e => setMedidas(prev => ({ ...prev, [chave]: e.target.value }))}
+                          onChange={e => alterarMedidaManual(chave, e.target.value)}
+                          onBlur={() => void salvarCampoMedida(chave)}
                           className="min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
                         />
                       ))}
