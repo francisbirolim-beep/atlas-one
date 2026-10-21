@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import {
   ArrowLeft, Boxes, CheckSquare, ChevronDown, ExternalLink, FileText, Loader2,
-  MoreVertical, Printer, RefreshCw, Square, TriangleAlert
+  MoreVertical, Printer, RefreshCw, Square, TriangleAlert, Camera, ImageIcon, X
 } from 'lucide-react'
 import {
   carregarPrecificacaoOrcamento,
@@ -40,6 +40,16 @@ function itemDescricao(item:any){
 }
 function itemCor(item:any, orc:any){ const raw=item?.wvetro_item||{}; return item?.cor||item?.acabamento||raw?.Cor||orc?.acabamento||'—' }
 function itemMedida(item:any){ const raw=item?.wvetro_item||{}; const l=item?.largura_mm||raw?.Largura; const a=item?.altura_mm||raw?.Altura; return l&&a?`${l} × ${a} mm`:'—' }
+function fotosDoLevantamento(obj:any):string[] {
+  const lista=Array.isArray(obj?.foto_urls)?obj.foto_urls:[]
+  return [...new Set([...lista,obj?.foto_url,obj?.foto_larguras_url,obj?.foto_alturas_url]
+    .filter((url):url is string=>typeof url==='string'&&/^https?:\/\//i.test(url)))]
+}
+function mm(v:any):string {
+  if(v===null||v===undefined||v==='')return '—'
+  const n=Number(v)
+  return Number.isFinite(n)?`${n.toLocaleString('pt-BR')} mm`:'—'
+}
 function acharPdf(obj:any):string|null{
   if(!obj||typeof obj!=='object')return null
   for(const [k,v] of Object.entries(obj)){
@@ -58,6 +68,8 @@ export default function ComposicaoOrcamentoPage(){
   const [erro,setErro]=useState('')
   const [selecionados,setSelecionados]=useState<Set<string>>(new Set())
   const [menuItem,setMenuItem]=useState<string|null>(null)
+  const [levantamentoAberto,setLevantamentoAberto]=useState(false)
+  const [fotoAmpliada,setFotoAmpliada]=useState<string|null>(null)
   const [margemGeralEdit,setMargemGeralEdit]=useState('')
   const geracaoAutomatica=useRef(false)
 
@@ -120,11 +132,51 @@ export default function ComposicaoOrcamentoPage(){
         <p className="mt-1 text-sm text-slate-500">Cliente: {cliente}{fluxo?.vendedor?` · Vendedor: ${fluxo.vendedor}`:''}{fluxo?.sincronizado_em?` · Última sincronização: ${new Date(fluxo.sincronizado_em).toLocaleString('pt-BR')}`:''}</p>
       </div>
       <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={()=>setLevantamentoAberto(atual=>!atual)}
+          aria-expanded={levantamentoAberto} aria-controls="levantamento-da-obra"
+          className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-800 hover:bg-blue-100">
+          <Camera size={16}/> {levantamentoAberto?'Ocultar fotos e medidas':'Ver fotos e medidas da obra'}
+        </button>
         {wv&&pdf?<a href={pdf} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-semibold"><ExternalLink size={15}/> Ver PDF original W.Vetro</a>:wv?<button disabled title="A API do W.Vetro não informou uma URL de PDF para este orçamento." className="inline-flex items-center gap-2 rounded-xl border bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-400"><ExternalLink size={15}/> PDF original W.Vetro</button>:null}
         <Link href={`/orcamento/${orcamentoId}/imprimir`} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white"><Printer size={15}/> Orçamento Atlas (PDF)</Link>
         <button onClick={()=>void recalcular()} disabled={ocupado} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50">{ocupado?<Loader2 size={15} className="animate-spin"/>:<RefreshCw size={15}/>} Recalcular</button>
       </div>
     </header>
+
+    {levantamentoAberto && <section id="levantamento-da-obra" className="space-y-4 rounded-2xl border-2 border-blue-200 bg-blue-50/40 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div><h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><Camera size={19}/> Levantamento da obra — fotos e medidas</h2>
+          <p className="mt-1 text-xs text-slate-600">As informações abaixo vêm do pedido original. Fotos aparecem aqui quando foram recebidas e vinculadas ao orçamento.</p></div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-blue-800">{itens.length} tipologias</span>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {itens.map((item:any,indice:number)=>{
+          const fotos=fotosDoLevantamento(item)
+          const nome=item?.produto_nome||itemNome(item,indice)
+          const observacoes=[item?.descricao,item?.observacao_producao,item?.observacao_tempera].filter((v:any)=>typeof v==='string'&&v.trim())
+          return <article key={itemRef(item,indice)} className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex items-start justify-between gap-2"><div>
+              <p className="text-[11px] font-semibold uppercase text-slate-500">Tipologia {indice+1} · {item?.ambiente||item?.wvetro_item?.Ambiente||'Ambiente não informado'}</p>
+              <h3 className="mt-1 text-sm font-bold text-slate-900">{nome}</h3>
+            </div><span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold">Qtd. {item?.quantidade||item?.wvetro_item?.Qtde||1}</span></div>
+            <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-3 text-xs sm:grid-cols-4">
+              <div><span className="block text-slate-500">Largura</span><b>{mm(item?.largura_mm||item?.wvetro_item?.Largura)}</b></div>
+              <div><span className="block text-slate-500">Altura</span><b>{mm(item?.altura_mm||item?.wvetro_item?.Altura)}</b></div>
+              {(item?.largura_batente_mm!=null||item?.largura_batente_cm!=null)&&<div><span className="block text-slate-500">Batente</span><b>{mm(item?.largura_batente_mm??item?.largura_batente_cm)}</b></div>}
+              {(item?.largura_guarnicao_mm!=null||item?.largura_guarnicao_cm!=null)&&<div><span className="block text-slate-500">Guarnição</span><b>{mm(item?.largura_guarnicao_mm??item?.largura_guarnicao_cm)}</b></div>}
+              <div><span className="block text-slate-500">Contramarco</span><b>{item?.contramarco==='com'?'Com':item?.contramarco==='sem'?'Sem':'Não informado'}</b></div>
+            </div>
+            {observacoes.length>0&&<div className="mt-3 space-y-1">{observacoes.map((obs:string,i:number)=><p key={i} className="whitespace-pre-wrap text-xs text-slate-700"><strong>{i===0?'Observação: ': 'Informação adicional: '}</strong>{obs}</p>)}</div>}
+            <div className="mt-3 border-t pt-3">
+              <h4 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-800"><ImageIcon size={14}/> Fotos da obra ({fotos.length})</h4>
+              {fotos.length ? <div className="flex flex-wrap gap-2">{fotos.map((url:string,i:number)=><button key={url} type="button" onClick={()=>setFotoAmpliada(url)} className="h-24 w-24 overflow-hidden rounded-lg border bg-slate-100" title="Ampliar foto"><img src={url} alt={`Foto ${i+1} da tipologia ${indice+1}`} loading="lazy" className="h-full w-full object-cover"/></button>)}</div>
+                : <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Nenhuma foto foi vinculada a esta tipologia no envio. As medidas continuam salvas.</p>}
+            </div>
+          </article>
+        })}
+      </div>
+      {fotosDoLevantamento(orc).length>0&&<div className="rounded-xl border bg-white p-4"><h3 className="mb-2 text-sm font-bold">Fotos gerais da obra</h3><div className="flex flex-wrap gap-2">{fotosDoLevantamento(orc).map((url:string,i:number)=><button key={url} type="button" onClick={()=>setFotoAmpliada(url)} className="h-24 w-24 overflow-hidden rounded-lg border"><img src={url} alt={`Foto geral ${i+1}`} className="h-full w-full object-cover" loading="lazy"/></button>)}</div></div>}
+    </section>}
 
     {erro&&<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
     {dados.pendencias.length>0&&<div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"><TriangleAlert size={16} className="mr-2 inline"/>{dados.pendencias.length} pendência(s) técnica(s) precisam de conferência antes do fechamento.</div>}
@@ -185,6 +237,12 @@ export default function ComposicaoOrcamentoPage(){
         })}</tbody>
       </table></div>
     </section>
+
+    {fotoAmpliada&&<div role="dialog" aria-modal="true" aria-label="Foto da medição ampliada" className="fixed inset-0 z-[150] flex flex-col items-center justify-center gap-3 bg-black/90 p-4" onClick={()=>setFotoAmpliada(null)}>
+      <button type="button" aria-label="Fechar foto" onClick={()=>setFotoAmpliada(null)} className="absolute right-4 top-4 rounded-lg bg-white/15 p-2 text-white"><X size={24}/></button>
+      <img src={fotoAmpliada} alt="Foto ampliada do levantamento" onClick={e=>e.stopPropagation()} className="max-h-[80vh] max-w-full object-contain"/>
+      <a href={fotoAmpliada} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} className="rounded-lg bg-white px-4 py-2 text-xs font-bold text-slate-900">Abrir imagem original</a>
+    </div>}
 
     <p className="text-xs text-slate-500">Regra automática de sobra: preto e branco não cobram por padrão; demais cores cobram. A decisão pode ser alterada individualmente ou em lote sem apagar a origem W.Vetro.</p>
   </div></main>
