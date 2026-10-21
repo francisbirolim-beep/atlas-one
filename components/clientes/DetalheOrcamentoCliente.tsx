@@ -59,19 +59,19 @@ export default function DetalheOrcamentoCliente({ clienteId, orcamentoId, onFech
     setCarregando(true)
     setErro('')
     setOrcamento(null)
-    void supabase.from('orcamentos').select('*')
-      .eq('id', orcamentoId).eq('cliente_id', clienteId).maybeSingle()
-      .then(({ data, error }) => {
+    void (async () => {
+      try {
+        const { data, error } = await supabase.from('orcamentos').select('*')
+          .eq('id', orcamentoId).eq('cliente_id', clienteId).maybeSingle()
         if (!ativo) return
         if (error || !data) setErro('Não foi possível abrir o orçamento deste cliente.')
         else setOrcamento(data as Registro)
-        setCarregando(false)
-      })
-      .catch(() => {
-        if (!ativo) return
-        setErro('Falha ao carregar o orçamento. Tente novamente.')
-        setCarregando(false)
-      })
+      } catch {
+        if (ativo) setErro('Falha ao carregar o orçamento. Tente novamente.')
+      } finally {
+        if (ativo) setCarregando(false)
+      }
+    })()
     return () => { ativo = false }
   }, [clienteId, orcamentoId])
 
