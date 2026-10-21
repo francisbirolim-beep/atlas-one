@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buscarAcessoValidoMedicao } from '@/lib/medicaoAcessoExternoServer'
 import { consultarOpenCodePublicFree } from '@/lib/ai/opencode'
+import { extrairMedidasMmDeResposta } from '@/lib/medicaoTrenaParse'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -115,12 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     }
 
     const parsed = parseJsonSeguro(resultado.resposta)
-    const medidas = Array.isArray(parsed?.medidas_mm)
-      ? parsed.medidas_mm
-          .map((v: any) => Number(v))
-          .filter((v: number) => Number.isFinite(v) && v > 0 && v <= 10000)
-          .slice(0, 3)
-      : []
+    const medidas = extrairMedidasMmDeResposta(resultado.resposta)
 
     if (medidas.length !== 3) {
       return NextResponse.json({

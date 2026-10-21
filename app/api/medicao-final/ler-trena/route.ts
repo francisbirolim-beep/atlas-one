@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { consultarOpenCode } from '@/lib/ai/opencode'
+import { extrairMedidasMmDeResposta } from '@/lib/medicaoTrenaParse'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -81,12 +82,7 @@ export async function POST(req: NextRequest) {
     })
 
     const parsed = parseJsonSeguro(resultado.resposta)
-    const medidas = Array.isArray(parsed?.medidas_mm)
-      ? parsed.medidas_mm
-          .map((v: any) => Number(v))
-          .filter((v: number) => Number.isFinite(v) && v > 0 && v <= 10000)
-          .slice(0, 3)
-      : []
+    const medidas = extrairMedidasMmDeResposta(resultado.resposta)
     const confianca = Math.max(0, Math.min(1, Number(parsed?.confianca) || 0))
     const observacao = typeof parsed?.observacao === 'string' ? parsed.observacao.slice(0, 240) : ''
 
