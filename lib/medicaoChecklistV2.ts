@@ -249,6 +249,32 @@ export async function salvarMedidasFixasItemV2(
   return sincronizarStatusItemChecklistV2(medicaoId, itemId, usuario)
 }
 
+/**
+ * Salva somente o campo confirmado manualmente. Não altera os outros cinco,
+ * mesmo quando o formulário está incompleto ou a leitura de IA falhou.
+ */
+export async function salvarMedidaIndividualItemV2(
+  medicaoId: string,
+  itemId: string,
+  campo: keyof MedidasFixasItemV2,
+  valor: number,
+  usuario: Usuario | null,
+): Promise<boolean> {
+  if (!CAMPOS_MEDIDA_FIXA.some(chave => chave === campo)) return false
+  if (!Number.isFinite(valor) || valor <= 0) return false
+  const { data, error } = await supabase.from('medicao_itens')
+    .update({ [campo]: valor })
+    .eq('id', itemId)
+    .eq('medicao_id', medicaoId)
+    .select('id')
+    .maybeSingle()
+  if (error || !data) {
+    console.error('Erro ao salvar campo individual da Medição Final:', error)
+    return false
+  }
+  return sincronizarStatusItemChecklistV2(medicaoId, itemId, usuario)
+}
+
 export async function carregarChecklistMedicaoV2(medicaoId: string): Promise<DadosChecklistMedicaoV2> {
   const [itens, camposResp, respostasResp, fotosResp] = await Promise.all([
     listarItensMedicao(medicaoId),
