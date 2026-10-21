@@ -115,5 +115,3 @@ export async function conferirValorVendaImportadoWVetro(usuario: UsuarioTenant, 
       : 'Valor de venda validado sem alteração.',
   }, { headers: { 'Cache-Control': 'no-store' } })
 }
-
-[executed on device: MacBook-Air-de-Francis.local (d826e938-c59b-466a-8dd2-7429b4a59e10)]
