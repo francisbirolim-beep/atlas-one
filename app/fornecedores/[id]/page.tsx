@@ -20,6 +20,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { tokenAtual } from "@/lib/auth";
+import { isoLocal, formatarData } from "@/lib/financeiroPeriodo";
 
 type Fornecedor = {
   id: string;
@@ -68,10 +69,17 @@ type Necessidade = {
   updated_at: string;
 };
 
+type ContaFinanceira = {
+  id: string; documento: string | null; parcela: string; descricao: string | null;
+  vencimento: string | null; valor: number; valor_pago: number | null;
+  status: string; data_pagamento: string | null; forma_pagamento_prevista: string | null;
+};
 type Dados = {
   fornecedor: Fornecedor;
   cotacoes: Cotacao[];
   necessidades: Necessidade[];
+  financeiroAutorizado: boolean;
+  contasFinanceiras: ContaFinanceira[];
 };
 
 function moeda(v: number | null | undefined) {
@@ -137,6 +145,17 @@ export default function FornecedorPagina() {
     [cotacoesPendentes, necessidadePorId],
   );
 
+  const contasFinanceiras = useMemo(() => dados?.contasFinanceiras || [], [dados]);
+  const financeiro = useMemo(() => {
+    const abertas = contasFinanceiras.filter(c => c.status === 'aberto' || c.status === 'pendente_vencimento');
+    const hoje = isoLocal(new Date());
+    return {
+      boletosAbertos: abertas.length,
+      saldoAberto: abertas.reduce((s,c) => s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)),0),
+      vencidos: abertas.filter(c => !!c.vencimento && c.vencimento < hoje).length,
+      pagos: contasFinanceiras.filter(c => c.status === 'pago').length,
+    };
+  }, [contasFinanceiras]);
   const fornecedor = dados?.fornecedor;
   const prazo = fornecedor?.prazo_medio_dias ?? fornecedor?.prazo_entrega_dias ?? null;
   const faltaPedidoMinimo = fornecedor?.pedido_minimo != null ? fornecedor.pedido_minimo - totalPendente : null;
@@ -187,6 +206,7 @@ export default function FornecedorPagina() {
         <section className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <Acao href={`/fornecedores/${id}/catalogos`} icon={PackageSearch} titulo="Catálogos e produtos" texto="Subir PDFs, tabelas, fotos e vincular produtos do fornecedor." destaque />
           <Acao href="#compras" icon={ShoppingCart} titulo="Compras" texto="Consultar o que foi comprado e recebido deste fornecedor." />
+          <Acao href="#financeiro" icon={WalletCards} titulo="Financeiro do fornecedor" texto="Boletos, vencimentos, pagamentos e saldo em aberto." />
           <Acao href="#cotacoes" icon={ReceiptText} titulo="Cotações" texto="Acompanhar preços, prazos, fretes e propostas em aberto." />
           <Acao href={`/fornecedores/${id}/catalogos#documentos`} icon={FileText} titulo="Documentos" texto="Catálogos e arquivos originais preservados por fornecedor." />
         </section>
@@ -201,6 +221,15 @@ export default function FornecedorPagina() {
             <Info label="Pagamento padrão" valor={fornecedor.condicao_pagamento_padrao} />
             <Info label="Observações comerciais" valor={fornecedor.observacoes_comerciais || fornecedor.observacoes} />
           </div>
+        </section>
+
+        <section id="financeiro" className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><WalletCards size={19} className="text-brand-navy"/><h2 className="font-semibold text-slate-800">Financeiro do fornecedor</h2></div>{dados?.financeiroAutorizado&&<Link href="/financeiro/contas-pagar" className="text-xs font-semibold text-blue-700 hover:underline">Abrir Contas a Pagar ↗</Link>}</div>
+          {!dados?.financeiroAutorizado?<p className="text-sm text-slate-500">Seu usuário não tem permissão para consultar os títulos financeiros.</p>:<>
+            <div className="mb-4 grid gap-3 sm:grid-cols-4"><Resumo titulo="Boletos em aberto" valor={String(financeiro.boletosAbertos)} detalhe="A pagar"/><Resumo titulo="Saldo em aberto" valor={moeda(financeiro.saldoAberto)} detalhe="Total pendente"/><Resumo titulo="Boletos vencidos" valor={String(financeiro.vencidos)} detalhe="Ainda não pagos"/><Resumo titulo="Boletos pagos" valor={String(financeiro.pagos)} detalhe="Histórico de baixas"/></div>
+            {contasFinanceiras.length===0?<Vazio texto="Nenhum boleto ou lançamento financeiro vinculado a este fornecedor."/>:<div className="max-h-[550px] overflow-auto"><table className="w-full min-w-[720px] text-sm"><thead className="sticky top-0 bg-slate-50 text-left text-xs text-slate-600"><tr><th className="p-2">Boleto / documento</th><th className="p-2">Parcela</th><th className="p-2">Vencimento</th><th className="p-2">Status</th><th className="p-2 text-right">Valor</th><th className="p-2 text-right">Saldo</th></tr></thead><tbody>{contasFinanceiras.map(c=><tr key={c.id} className="border-b border-slate-100"><td className="p-2"><span className="font-medium">{c.documento||c.descricao||'Sem número'}</span>{c.descricao&&c.documento&&<p className="text-xs text-slate-500">{c.descricao}</p>}</td><td className="p-2">{c.parcela}</td><td className="p-2">{formatarData(c.vencimento)}</td><td className="p-2 capitalize">{c.status.replace(/_/g,' ')}</td><td className="p-2 text-right">{moeda(c.valor)}</td><td className="p-2 text-right">{moeda(c.status==='cancelado'||c.status==='pago'?0:Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)))}</td></tr>)}</tbody></table></div>}
+            {contasFinanceiras.length>=1000&&<p className="mt-2 text-xs text-slate-500">Exibindo os mil títulos mais recentes desta consulta. Para histórico completo, use Contas a Pagar.</p>}
+          </>}
         </section>
 
         <section id="cotacoes" className="rounded-2xl border border-slate-200 bg-white p-5">

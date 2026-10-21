@@ -11,7 +11,7 @@ import type { ContaReceberCliente360 } from '@/lib/cliente360'
 import { saldoParcela } from '@/lib/cliente360Recebimentos'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
-type RecebimentoGeral = { id:string; cliente_id?:string|null; cliente_nome?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
+type RecebimentoGeral = { id:string; cliente_id?:string|null; cliente_nome?:string|null; cliente_cpf_cnpj?:string|null; cliente_cidade?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
 
 function moeda(valor: number) {
   return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -89,12 +89,12 @@ export default function ContasReceberPage() {
       (filtro === 'vencido' && vencida) ||
       (filtro === 'aberto' && conta.status !== 'pago' && conta.status !== 'cancelado' && saldo > 0.009)
 
-    return bateFiltro && (!clienteFiltro||conta.cliente_id===clienteFiltro) && (!obraFiltro||conta.obra_id===obraFiltro) && noPeriodo(dataBase==='pagamento'?conta.data_pagamento:conta.vencimento,periodo.inicio,periodo.fim) && correspondeBuscaAtlas(busca, conta.cliente_nome, conta.documento, conta.forma, conta.observacoes, conta.status)
+    return bateFiltro && (!clienteFiltro||conta.cliente_id===clienteFiltro) && (!obraFiltro||conta.obra_id===obraFiltro) && noPeriodo(dataBase==='pagamento'?conta.data_pagamento:conta.vencimento,periodo.inicio,periodo.fim) && correspondeBuscaAtlas(busca, conta.cliente_nome, (conta as ContaReceberCliente360 & {cliente_cpf_cnpj?:string|null}).cliente_cpf_cnpj, (conta as ContaReceberCliente360 & {cliente_cidade?:string|null}).cliente_cidade, conta.documento, conta.forma, conta.observacoes, conta.status)
   }), [busca, contas, filtro, hoje, clienteFiltro,obraFiltro,periodo,dataBase])
 
   const recebimentosFiltrados = useMemo(() => recebimentos.filter(r =>
     (!clienteFiltro||r.cliente_id===clienteFiltro) && (!obraFiltro||r.obra_id===obraFiltro) && noPeriodo(r.data_recebimento,periodo.inicio,periodo.fim) &&
-    correspondeBuscaAtlas(busca, r.cliente_nome, r.forma, r.referencia, r.observacoes, r.criado_por_nome, r.status)
+    correspondeBuscaAtlas(busca, r.cliente_nome, r.cliente_cpf_cnpj, r.cliente_cidade, r.forma, r.referencia, r.observacoes, r.criado_por_nome, r.status)
   ), [busca, recebimentos,clienteFiltro,obraFiltro,periodo])
   const exibidas=useMemo(()=>agrupar?[...filtradas].sort((a,b)=>(a.cliente_nome||'').localeCompare(b.cliente_nome||'','pt-BR')||(a.vencimento||'').localeCompare(b.vencimento||'')):filtradas,[filtradas,agrupar])
   const valorFiltrado=filtradas.reduce((s,c)=>s+Number(c.valor||0),0)
@@ -141,7 +141,7 @@ export default function ContasReceberPage() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative min-w-0 flex-1">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente, documento, forma de pagamento..." className="w-full rounded-xl border bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-emerald-400 focus:bg-white"/>
+              <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar nome, CPF/CNPJ, cidade, documento..." className="w-full rounded-xl border bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-emerald-400 focus:bg-white"/>
             </div>
             <div className="flex flex-wrap gap-2">
               {([['aberto','Em aberto'],['vencido','Vencidas'],['pago','Pagas'],['todos','Todas']] as const).map(([id,label]) => (

@@ -61,8 +61,8 @@ export async function GET(req:NextRequest){
  if(!pagar&&!receber)return erro('Sem permissão para consultar Financeiro.',403)
  try{
   const [forn,cli,plano,obras,compras]=await Promise.all([
-   pagar?supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(600):Promise.resolve({data:[],error:null}),
-   receber?supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj').eq('empresa_id',u.empresa_id).order('nome').limit(1000):Promise.resolve({data:[],error:null}),
+   pagar?supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf,telefone,whatsapp,cidade,endereco,email,contato').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(600):Promise.resolve({data:[],error:null}),
+   receber?supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,telefone,whatsapp,cidade,endereco,email').eq('empresa_id',u.empresa_id).order('nome').limit(1000):Promise.resolve({data:[],error:null}),
    pagar?supabaseAdmin.from('financeiro_plano_contas').select('id,codigo,nome,grupo').eq('empresa_id',u.empresa_id).eq('ativo',true).order('codigo').limit(250):Promise.resolve({data:[],error:null}),
    receber?supabaseAdmin.from('obras').select('id,cliente_id,nome,numero').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(1000):Promise.resolve({data:[],error:null}),
    pagar?supabaseAdmin.from('compras_nfs').select('id,numero,fornecedor_id,fornecedor_nome,data_emissao').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(250):Promise.resolve({data:[],error:null})
@@ -124,20 +124,35 @@ export async function POST(req:NextRequest){
   }
   if(operacao==='novo-cadastro'){
    const nome=str(b.nome,170)
-   if(nome.length<3)return erro('Informe o nome completo do cadastro.')
+   const documento=str(b.documento,35)
+   const telefone=str(b.telefone,30)
+   const cidade=str(b.cidade,120)
+   const endereco=str(b.endereco,220)
+   const email=str(b.email,160)
+   if(nome.length<3)return erro('Informe o nome ou razão social (mínimo de 3 caracteres).')
+   if(![11,14].includes(documento.replace(/\D/g,'').length))return erro('Informe CPF (11 dígitos) ou CNPJ (14 dígitos).')
+   if(telefone.replace(/\D/g,'').length<10)return erro('Informe telefone com DDD.')
+   const tabela=tipo==='pagar'?'fornecedores':'clientes'
+   const colunaDocumento=tipo==='pagar'?'cnpj_cpf':'cpf_cnpj'
+   // Reutiliza cadastro existente e evita associar títulos a outra pessoa por engano.
+   const encontrado=await supabaseAdmin.from(tabela).select(`id,nome,${colunaDocumento}`).eq('empresa_id',u.empresa_id).ilike('nome',nome).limit(2)
+   if(encontrado.error)throw encontrado.error
+   const cadastrado=(encontrado.data||[]).find(c=>String(('cnpj_cpf' in c?c.cnpj_cpf:c.cpf_cnpj)||'').replace(/\D/g,'')===documento.replace(/\D/g,''))
+   if(cadastrado)return NextResponse.json({ok:true,cadastro:cadastrado,existente:true})
+   if(encontrado.data?.length)return erro('Já existe um cadastro com este nome. Selecione-o na pesquisa ou confira CPF/CNPJ antes de criar outro.',409)
+   const digitos=documento.replace(/\D/g,'')
+   const formatado=digitos.length===11?`${digitos.slice(0,3)}.${digitos.slice(3,6)}.${digitos.slice(6,9)}-${digitos.slice(9)}`:`${digitos.slice(0,2)}.${digitos.slice(2,5)}.${digitos.slice(5,8)}/${digitos.slice(8,12)}-${digitos.slice(12)}`
+   const documentos=[...new Set([documento,digitos,formatado])]
+   const duplicado=await supabaseAdmin.from(tabela).select('id,nome').eq('empresa_id',u.empresa_id).in(colunaDocumento,documentos).limit(1).maybeSingle()
+   if(duplicado.error)throw duplicado.error
+   if(duplicado.data)return NextResponse.json({ok:true,cadastro:duplicado.data,existente:true})
+   const comuns={empresa_id:u.empresa_id,nome,cidade:cidade||null,endereco:endereco||null,email:email||null}
    if(tipo==='pagar'){
-    const existente=await supabaseAdmin.from('fornecedores').select('id,nome').eq('empresa_id',u.empresa_id).ilike('nome',nome).limit(1).maybeSingle()
-    if(existente.error)throw existente.error
-    if(existente.data)return NextResponse.json({ok:true,cadastro:existente.data,existente:true})
-    const {data,error}=await supabaseAdmin.from('fornecedores').insert({empresa_id:u.empresa_id,nome,cnpj_cpf:str(b.documento,35)||null,ativo:true,criado_por_id:u.id,criado_por_nome:u.nome}).select('id,nome,cnpj_cpf').single()
+    const {data,error}=await supabaseAdmin.from('fornecedores').insert({...comuns,cnpj_cpf:documento,telefone,ativo:true,criado_por_id:u.id,criado_por_nome:u.nome}).select('id,nome,cnpj_cpf').single()
     if(error)throw error
     return NextResponse.json({ok:true,cadastro:data})
    }
-   if(nome.split(/\s+/).length<2)return erro('Para um novo cliente, informe nome e sobrenome.')
-   const existente=await supabaseAdmin.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).ilike('nome',nome).limit(1).maybeSingle()
-   if(existente.error)throw existente.error
-   if(existente.data)return NextResponse.json({ok:true,cadastro:existente.data,existente:true})
-   const {data,error}=await supabaseAdmin.from('clientes').insert({empresa_id:u.empresa_id,nome,cpf_cnpj:str(b.documento,35)||null,whatsapp:str(b.telefone,30)||null}).select('id,nome,cpf_cnpj').single()
+   const {data,error}=await supabaseAdmin.from('clientes').insert({...comuns,cpf_cnpj:documento,telefone,whatsapp:telefone}).select('id,nome,cpf_cnpj').single()
    if(error)throw error
    return NextResponse.json({ok:true,cadastro:data})
   }
