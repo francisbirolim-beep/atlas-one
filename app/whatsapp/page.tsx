@@ -2749,6 +2749,107 @@ export default function WhatsAppAtendimentoPage() {
             </div>
           </aside>
         </div>
+
+        {areaAtendimento==='monitoramento' && podeMonitorar && (
+          <div className="h-[calc(100dvh-126px)] overflow-y-auto bg-slate-50 px-4 py-5 lg:h-[calc(100dvh-72px)] lg:px-8">
+            <div className="mx-auto max-w-[1500px] space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900">Monitoramento de atendimentos</h2>
+                  <p className="text-sm text-slate-500">Acompanhe as conversas da equipe sem misturar com seus atendimentos.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <select value={atendenteMonitorado} onChange={e=>{setAtendenteMonitorado(e.target.value);setAtiva(null)}}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
+                    <option value="todos">Todos os atendentes</option>
+                    {monitoradosVisiveis.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                  {canais.length>1 && <select value={canalFiltro} onChange={e=>selecionarCanal(e.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
+                    <option value="todos">Todos os números</option>
+                    {canais.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>}
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  {titulo:'Em atendimento',quantidade:conversasMonitoramento.filter(c=>c.status==='em_atendimento').length,destaque:'text-blue-600'},
+                  {titulo:'Aguardando resposta',quantidade:totalMonitoramentoAguardando,destaque:'text-amber-600'},
+                  {titulo:'Conversas não lidas',quantidade:conversasMonitoramento.filter(c=>Number(c.nao_lidas||0)>0).length,destaque:'text-violet-600'},
+                  {titulo:'Finalizadas',quantidade:conversasMonitoramento.filter(c=>c.status==='finalizado').length,destaque:'text-emerald-600'},
+                ].map(item=><div key={item.titulo} className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                  <span className={`text-3xl font-extrabold ${item.destaque}`}>{item.quantidade}</span>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">{item.titulo}</p>
+                </div>)}
+              </div>
+              <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,1fr)]">
+                <div className="space-y-4">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-5 py-4"><h3 className="font-bold text-slate-900">Equipe</h3></div>
+                    <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3">Atendente</th><th className="px-4 py-3">Conversas</th><th className="px-4 py-3">Aguardando</th><th className="px-4 py-3">Ação</th></tr></thead>
+                      <tbody>{monitoradosVisiveis.map(u=>{
+                        const atribuídas = conversas.filter(c=>c.responsavel_id===u.id &&
+                          (canalFiltro==='todos'||c.whatsapp_canal_id===canalFiltro) &&
+                          (eu?.role==='master'||acessos.some(a=>a.canal_id===c.whatsapp_canal_id&&(a.supervisionar||a.dono))))
+                        const pendentes=atribuídas.filter(c=>c.status==='aguardando'||(c.status!=='finalizado'&&Number(c.nao_lidas||0)>0)).length
+                        return <tr key={u.id} className="border-t border-slate-100"><td className="px-4 py-3 font-bold text-slate-800">{u.nome}</td><td className="px-4 py-3">{atribuídas.length}</td><td className="px-4 py-3">{pendentes}</td><td className="px-4 py-3">
+                          <button type="button" onClick={()=>{setAtendenteMonitorado(u.id);setAtiva(null)}} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 font-semibold text-blue-700">Ver conversas</button>
+                        </td></tr>
+                      })}</tbody>
+                    </table></div>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-5 py-4"><h3 className="font-bold text-slate-900">Conversas para acompanhamento</h3></div>
+                    <div className="max-h-[430px] overflow-y-auto">
+                      {conversasMonitoramento.filter(c=>Boolean(c.ultima_mensagem_em)).map(c=>(
+                        <button key={c.id} type="button" onClick={()=>selecionarConversa(c)}
+                          className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-blue-50 ${ativa?.id===c.id?'bg-blue-50':''}`}>
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-700">{c.whatsapp_chat_tipo==='grupo'?<Users size={17}/>:String(c.contato_nome||c.telefone||'?').slice(0,1).toUpperCase()}</span>
+                          <span className="min-w-0 flex-1"><b className="block truncate text-sm text-slate-900">{c.grupo_nome||c.contato_nome||telefoneFormatado(c.telefone)}</b>
+                            <span className="block truncate text-xs text-slate-500">{c.responsavel_nome||'Sem responsável'} · {c.ultimo_preview||'Sem mensagens'}</span></span>
+                          {!!c.nao_lidas && <span className="rounded-full bg-red-500 px-2 py-1 text-xs font-bold text-white">{c.nao_lidas}</span>}
+                          <Eye size={16} className="text-blue-600"/>
+                        </button>
+                      ))}
+                      {conversasMonitoramento.length===0 && <p className="p-6 text-center text-sm text-slate-500">Nenhuma conversa para os filtros selecionados.</p>}
+                    </div>
+                  </div>
+                </div>
+                <div className="min-h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  {ativa ? (
+                    <div className="flex h-full min-h-[420px] max-h-[780px] flex-col">
+                      <div className="border-b border-slate-100 px-5 py-4">
+                        <b className="block truncate text-sm text-slate-900">{ativa.grupo_nome||ativa.contato_nome||telefoneFormatado(ativa.telefone)}</b>
+                        <p className="mt-1 text-xs text-blue-700">Visualização de supervisão · sem assumir o atendimento</p>
+                        <span className="text-xs text-slate-500">Responsável: {ativa.responsavel_nome||'Não atribuído'}</span>
+                      </div>
+                      <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
+                        {mensagensVisiveis.map(m=><div key={m.id} className={`flex ${m.direcao==='saida'?'justify-end':'justify-start'}`}>
+                          <div className={`max-w-[90%] rounded-xl px-3 py-2 text-sm shadow-sm ${m.direcao==='saida'?'bg-emerald-100':'bg-white'}`}>
+                            {m.media_url && ['imagem','documento','video'].includes(m.tipo) ? (
+                              <button type="button" onClick={()=>setMidiaAmpliada(m)} className="inline-flex items-center gap-1 text-blue-700 underline">
+                                <Eye size={14}/> {m.arquivo_nome||'Visualizar anexo'}
+                              </button>
+                            ) : m.tipo==='audio' && m.media_url ? (
+                              <audio src={m.media_url} controls className="max-w-full"/>
+                            ) : <p className="whitespace-pre-wrap break-words">{m.texto||`[${m.tipo}]`}</p>}
+                            <span className="mt-1 block text-right text-[10px] text-slate-400">{hora(m.created_at)}</span>
+                          </div>
+                        </div>)}
+                        {!mensagensVisiveis.length && <p className="py-10 text-center text-xs text-slate-400">Sem mensagens para exibir.</p>}
+                      </div>
+                    </div>
+                  ) : <div className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
+                    <Eye size={40} className="text-blue-400"/>
+                    <b className="mt-4 text-sm text-slate-800">Escolha uma conversa</b>
+                    <p className="mt-1 text-xs text-slate-500">O histórico será mostrado aqui sem alterar o responsável.</p>
+                  </div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
         {conversaInternaAberta && (
