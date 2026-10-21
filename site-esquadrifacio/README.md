@@ -120,3 +120,8 @@ Antes de publicar, gerar e conferir o **mesmo recorte visual sem blog** usando:
 node site-esquadrifacio/preparar-publicacao.mjs --modo=homologacao --sem-blog=true
 \`\`\`
 Este comando mantém os cabeçalhos de bloqueio de indexação e deixa o site original inalterado. Não cria páginas de blog nem aponta domínio.
+
+
+## Política de privacidade aprovada para publicação institucional — 21/10/2026
+
+O proprietário respondeu **“você pode fazer”** à pergunta direta que solicitava aprovação do texto da privacidade e autorização para avançar com a hospedagem comercial gratuita Netlify. Isto registra o aceite da **minuta atual** para divulgação no site institucional, e o controle \`privacidade_revisada=true\`. Não representa parecer jurídico independente nem autorização para publicar os artigos do blog, que seguem em revisão. O ato de apontar DNS continuará exigindo conferência do alvo da nova hospedagem, backup integral da zona do hPanel e testes de SSL e de e-mail. Caso a conta Netlify não esteja conectada, o proprietário deve se autenticar antes da configuração do domínio.

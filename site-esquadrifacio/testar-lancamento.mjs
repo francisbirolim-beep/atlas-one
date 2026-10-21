@@ -21,9 +21,8 @@ try {
   const origemIndex = readFileSync(join(pasta, 'index.html'))
   const origemPrivacidade = readFileSync(join(pasta, 'politica-de-privacidade.html'))
   const aprovacao = JSON.parse(readFileSync(join(pasta, 'controle-lancamento.json'), 'utf8'))
-  check('Fotos, domínio e publicação autorizados, privacidade bloqueada', Object.values(aprovacao).length === 4 &&
-    aprovacao.fotos_autorizadas === true && aprovacao.dominio_controlado === true &&
-    aprovacao.privacidade_revisada === false && aprovacao.publicacao_autorizada === true)
+  check('Quatro aprovações institucionais existentes', Object.values(aprovacao).length === 4 &&
+    Object.values(aprovacao).every(x => x === true))
 
   const institucionalStaging = run(copia, ['--modo=homologacao', '--sem-blog=true'])
   check('Site institucional isolado compila em homologação', institucionalStaging.status === 0)
@@ -51,11 +50,14 @@ try {
     alterada.stderr.includes('FOTO MODIFICADA DEPOIS DA AUTORIZAÇÃO'))
   writeFileSync(join(copia, 'assets', 'porta-correr-integrada.webp'), aprovada)
 
+  const estadoAprovado = {...aprovacao}
+  writeFileSync(join(copia,'controle-lancamento.json'),JSON.stringify({...aprovacao,privacidade_revisada:false}))
   const bloqueado = run(copia, ['--modo=producao', '--dominio=https://esquadrifacio.com.br'])
-  check('Produção impedida sem privacidade e publicação', bloqueado.status !== 0 &&
+  check('Produção impede alteração de aprovação de privacidade', bloqueado.status !== 0 &&
     bloqueado.stderr.includes('PUBLICAÇÃO BLOQUEADA') &&
     bloqueado.stderr.includes('revisão e aprovação dos textos de privacidade') &&
     !bloqueado.stderr.includes('autorização de divulgação de todas as fotos'))
+  writeFileSync(join(copia,'controle-lancamento.json'),JSON.stringify(estadoAprovado))
 
   // Somente no diretório de teste! Nunca muda os registros aprovados pelo proprietário.
   writeFileSync(join(copia, 'controle-lancamento.json'), JSON.stringify({

@@ -49,8 +49,8 @@ check('soluções preservam canais oficiais', solucoes.includes('wa.me/551799636
 check('soluções têm navegação e conteúdo sem JS externo', solucoes.includes('href="#conteudo"') && solucoes.includes('<details>') && !solucoes.includes('<script'))
 check('soluções protegidas da indexação na homologação', solucoes.includes('name="robots" content="noindex,nofollow"'))
 const controle = JSON.parse(readFileSync(join(root, 'controle-lancamento.json'), 'utf8'))
-check('fotos, domínio e lançamento autorizados, privacidade pendente', controle.fotos_autorizadas === true &&
-  controle.privacidade_revisada === false && controle.dominio_controlado === true &&
+check('quatro autorizações de publicação institucionais confirmadas', controle.fotos_autorizadas === true &&
+  controle.privacidade_revisada === true && controle.dominio_controlado === true &&
   controle.publicacao_autorizada === true)
 const dominio = JSON.parse(readFileSync(join(root,'evidencia-dominio.json'),'utf8'))
 check('domínio oficial e e-mail preservados em plano de corte',
