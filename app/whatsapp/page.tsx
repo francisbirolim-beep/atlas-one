@@ -1247,13 +1247,20 @@ export default function WhatsAppAtendimentoPage() {
       if (!resposta.ok || !arquivo.url) {
         throw new Error(arquivo.error || 'Não foi possível baixar o anexo.')
       }
+      // O atributo download não força baixar URLs de outro domínio.
+      // Baixar o blob e criar uma URL local preserva o nome e evita abrir
+      // o arquivo no navegador em vez de salvá-lo.
+      const respostaArquivo = await fetch(arquivo.url, { cache: 'no-store' })
+      if (!respostaArquivo.ok) throw new Error('Não foi possível carregar o arquivo para download.')
+      const blob = await respostaArquivo.blob()
+      const urlLocal = URL.createObjectURL(blob)
       const link = document.createElement('a')
-      link.href = arquivo.url
+      link.href = urlLocal
       link.download = arquivo.nome || m.arquivo_nome || 'anexo'
-      link.rel = 'noopener noreferrer'
       document.body.appendChild(link)
       link.click()
       link.remove()
+      window.setTimeout(()=>URL.revokeObjectURL(urlLocal),60_000)
     } catch (erro) {
       setErro(erro instanceof Error ? erro.message : 'Não foi possível baixar o anexo.')
     }
@@ -2349,10 +2356,10 @@ export default function WhatsAppAtendimentoPage() {
                         )}
 
                         {m.tipo === 'imagem' && midia && (
-                          <a href={m.media_url || '#'} target="_blank" rel="noreferrer">
+                          <button type="button" onClick={()=>setMidiaAmpliada(m)} title="Ampliar imagem" className="block max-w-full cursor-zoom-in">
                             <img src={m.media_url || undefined} alt={m.arquivo_nome || 'Imagem do WhatsApp'}
                               className="max-h-80 max-w-full rounded-lg object-contain"/>
-                          </a>
+                          </button>
                         )}
                         {m.tipo === 'imagem' && midia && (
                           <button type="button" onClick={()=>void baixarAnexo(m)}
@@ -2370,6 +2377,12 @@ export default function WhatsAppAtendimentoPage() {
                             className="max-h-80 max-w-full rounded-lg"/>
                         )}
                         {m.tipo === 'video' && midia && (
+                          <button type="button" onClick={()=>setMidiaAmpliada(m)}
+                            className="mt-1 mr-2 inline-flex items-center gap-1.5 rounded-lg border bg-white/80 px-2.5 py-1 text-xs text-blue-700 hover:bg-white">
+                            <Eye size={13}/> Ampliar vídeo
+                          </button>
+                        )}
+                        {m.tipo === 'video' && midia && (
                           <button type="button" onClick={()=>void baixarAnexo(m)}
                             className="mt-1 inline-flex items-center gap-1.5 rounded-lg border bg-white/80 px-2.5 py-1 text-xs text-slate-600 hover:bg-white">
                             <Download size={13}/> Baixar vídeo
@@ -2380,12 +2393,12 @@ export default function WhatsAppAtendimentoPage() {
                         )}
 
                         {m.tipo === 'documento' && midia && (
-                          <a href={m.media_url || '#'} target="_blank" rel="noreferrer"
-                            className="flex items-center gap-2 rounded-lg border bg-white/70 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-white">
+                          <button type="button" onClick={()=>setMidiaAmpliada(m)}
+                            className="flex w-full items-center gap-2 rounded-lg border bg-white/70 px-3 py-2 text-left text-xs font-semibold text-blue-700 hover:bg-white">
                             <Paperclip size={16}/>
                             <span className="min-w-0 truncate">{m.arquivo_nome || texto || 'Abrir documento'}</span>
-                            <ExternalLink size={13} className="ml-auto shrink-0"/>
-                          </a>
+                            <Eye size={14} className="ml-auto shrink-0"/>
+                          </button>
                         )}
                         {m.tipo === 'documento' && midia && (
                           <button type="button" onClick={()=>void baixarAnexo(m)}
@@ -2851,6 +2864,55 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
       </div>
+
+        {midiaAmpliada && (
+          <div className="fixed inset-0 z-[180] flex flex-col bg-[#101820]/95 text-white"
+            role="dialog" aria-modal="true" aria-label="Visualização de anexo"
+            onKeyDown={e=>{if(e.key==='Escape')setMidiaAmpliada(null)}}>
+            <div className="flex min-h-[64px] items-center gap-3 border-b border-white/10 px-4">
+              <button type="button" onClick={()=>setMidiaAmpliada(null)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Voltar à conversa"><ArrowLeft size={22}/></button>
+              <div className="min-w-0 flex-1">
+                <b className="block truncate text-sm">{midiaAmpliada.arquivo_nome||'Anexo do WhatsApp'}</b>
+                <p className="text-xs text-slate-400">{ativa?.contato_nome||ativa?.grupo_nome||'Conversa'} · {new Date(midiaAmpliada.created_at).toLocaleString('pt-BR')}</p>
+              </div>
+              <button type="button" onClick={()=>void baixarAnexo(midiaAmpliada)} title="Baixar arquivo"
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold hover:bg-blue-700">
+                <Download size={17}/><span className="hidden sm:inline">Baixar</span>
+              </button>
+              {midiaAmpliada.media_url && <a href={midiaAmpliada.media_url} target="_blank" rel="noopener noreferrer"
+                className="rounded-lg p-2 hover:bg-white/10" title="Abrir em outra aba"><ExternalLink size={20}/></a>}
+              <button type="button" onClick={()=>setMidiaAmpliada(null)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Fechar"><X size={22}/></button>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3 sm:p-6">
+              {midiaAmpliada.tipo==='imagem' && midiaAmpliada.media_url ? (
+                <img src={midiaAmpliada.media_url} alt={midiaAmpliada.arquivo_nome||'Foto recebida'}
+                  className="max-h-full max-w-full object-contain"/>
+              ) : midiaAmpliada.tipo==='video' && midiaAmpliada.media_url ? (
+                <video src={midiaAmpliada.media_url} controls autoPlay className="max-h-full max-w-full"/>
+              ) : midiaAmpliada.tipo==='documento' && midiaAmpliada.media_url &&
+                (String(midiaAmpliada.mime_type||'').includes('pdf')||String(midiaAmpliada.arquivo_nome||'').toLowerCase().endsWith('.pdf')) ? (
+                <iframe src={midiaAmpliada.media_url} title={midiaAmpliada.arquivo_nome||'Documento PDF'}
+                  className="h-full w-full max-w-5xl rounded-lg bg-white"/>
+              ) : (
+                <div className="rounded-xl border border-white/20 bg-slate-900 p-8 text-center">
+                  <Paperclip size={40} className="mx-auto text-blue-400"/>
+                  <p className="mt-3 text-sm font-bold">Este formato não possui prévia no navegador.</p>
+                  <p className="mt-1 text-xs text-slate-300">Use Baixar ou Abrir em outra aba para visualizar.</p>
+                </div>
+              )}
+            </div>
+            {midiaAmpliada.tipo==='imagem' && (
+              <div className="flex items-center justify-center gap-2 overflow-x-auto border-t border-white/10 p-2">
+                {mensagensVisiveis.filter(m=>m.tipo==='imagem'&&Boolean(m.media_url)).map(m=>(
+                  <button key={m.id} type="button" onClick={()=>setMidiaAmpliada(m)}
+                    className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 ${m.id===midiaAmpliada.id?'border-blue-500':'border-transparent'}`}>
+                    <img src={m.media_url||undefined} alt="Miniatura" className="h-full w-full object-cover"/>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {conversaInternaAberta && (
           <div className="fixed inset-0 z-[145] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
