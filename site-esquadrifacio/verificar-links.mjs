@@ -77,11 +77,11 @@ try {
       }
     }
   }
-  assert.ok(count.pages===8&&count.imagens===14&&count.links>=55&&count.ancoras>=10,'Quantidade inesperada de conteúdo')
+  assert.ok(count.pages===10&&count.imagens===18&&count.links>=85&&count.ancoras>=35,'Quantidade inesperada de conteúdo')
   assert.ok(contents.get('index.html').includes('href="/blog/"'),'Home não leva ao blog')
   assert.ok(contents.get('blog/index.html').includes('href="/blog/editorial/"'),'Blog sem central de revisão')
   const editorial=contents.get('blog/editorial/index.html')
-  assert.ok(editorial.includes('Central <em>editorial.</em>')&&editorial.includes('10</strong><span>Próximas pautas')&&
+  assert.ok(editorial.includes('Central <em>editorial.</em>')&&editorial.includes('8</strong><span>Próximas pautas')&&
     editorial.includes('noindex,nofollow'),'Central editorial sem proteção ou fila')
   console.log('SITE_LINKS_OK — '+JSON.stringify(count))
 }finally{rmSync(temp,{recursive:true,force:true})}

@@ -86,7 +86,7 @@ A prévia online existente deverá ser atualizada apenas no projeto independente
 
 ## Blog de soluções com IA editorial (21/10/2026)
 
-O site ganhou seção “Blog de soluções” na homepage, link no menu e rodapé, e páginas estáticas dedicadas ao blog. **Três artigos completos estão disponíveis somente em homologação e marcados como rascunhos**: escolha da porta de correr, informações para orçamento e painéis ripados amadeirados. São materiais educativos, não prescrições de engenharia. Nenhum texto foi publicado no domínio oficial.
+O site ganhou seção “Blog de soluções” na homepage, link no menu e rodapé, e páginas estáticas dedicadas ao blog. **Cinco artigos completos estão disponíveis somente em homologação e marcados como rascunhos**: escolha da porta de correr, informações para orçamento e painéis ripados amadeirados. Dois temas adicionais: janela de correr versus maxim-ar; vidro temperado versus laminado. São materiais educativos, não prescrições de engenharia. Nenhum texto foi publicado no domínio oficial.
 
 O diretório \`blog/\` contém a biblioteca de artigos (\`artigos.json\`), dez pautas futuras (\`pautas.json\`), identidade visual (\`blog.css\`), renderizador (\`gerar-blog.mjs\`) e procedimentos de revisão por papéis de especialista (\`GUIA_EDITORIAL_IA.md\`).
 
@@ -99,7 +99,7 @@ Teste adicional: \`node site-esquadrifacio/blog/validar-blog.mjs\`. O \`verifica
 
 ## Central editorial somente na prévia (21/10/2026)
 
-O caminho \`/blog/editorial/\` é gerado **exclusivamente em homologação**, no projeto separado e protegido da Vercel. Reúne os 3 artigos em rascunho, 10 pautas futuras, contadores de status e regras de aprovação. É um painel **somente de leitura**, sem botões de aprovação fictícios; a tarefa recorrente do ChatGPT gera rascunhos para revisão mas ainda não grava dados diretamente no repositório.
+O caminho \`/blog/editorial/\` é gerado **exclusivamente em homologação**, no projeto separado e protegido da Vercel. Reúne os 5 artigos em rascunho, 8 pautas futuras, contadores de status e regras de aprovação. É um painel **somente de leitura**, sem botões de aprovação fictícios; a tarefa recorrente do ChatGPT gera rascunhos para revisão mas ainda não grava dados diretamente no repositório.
 
 A geração pública não inclui esta página, os rascunhos nem a fila de pautas. O workflow local e de CI verifica que o painel tem aviso de privacidade, não é indexável, tem navegação válida e fica ausente do pacote de produção.
 
@@ -125,3 +125,9 @@ Este comando mantém os cabeçalhos de bloqueio de indexação e deixa o site or
 ## Política de privacidade aprovada para publicação institucional — 21/10/2026
 
 O proprietário respondeu **“você pode fazer”** à pergunta direta que solicitava aprovação do texto da privacidade e autorização para avançar com a hospedagem comercial gratuita Netlify. Isto registra o aceite da **minuta atual** para divulgação no site institucional, e o controle \`privacidade_revisada=true\`. Não representa parecer jurídico independente nem autorização para publicar os artigos do blog, que seguem em revisão. O ato de apontar DNS continuará exigindo conferência do alvo da nova hospedagem, backup integral da zona do hPanel e testes de SSL e de e-mail. Caso a conta Netlify não esteja conectada, o proprietário deve se autenticar antes da configuração do domínio.
+
+
+### Melhoria editorial de 21/10/2026 — versão ainda em análise
+A página do blog foi aprimorada com destaque principal, índice de temas clicáveis, cartões responsivos e estimativa de tempo de leitura. Os artigos exibem sumário por seções, perguntas e respostas expandíveis sem JavaScript, links para soluções relacionadas e chamadas de WhatsApp. Há cinco rascunhos ao todo e oito pautas ainda na fila. A central editorial também reflete os novos totais.
+
+**Não publicar os rascunhos** sem revisão técnica e aprovação humana. O site institucional que já está online na Netlify continua exatamente como estava; nenhuma mudança de DNS, deploy público ou alteração no Atlas foi feita por este trabalho. A prévia do blog continua marcada `noindex,nofollow`.

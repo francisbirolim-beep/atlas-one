@@ -4,27 +4,11 @@
   "cadenciaProposta": "2 rascunhos por semana para revisão antes de qualquer publicação",
   "pautas": [
     {
-      "slug": "janela-correr-ou-maxim-ar",
-      "title": "Janela de correr ou maxim-ar: qual faz sentido para cada ambiente?",
-      "intent": "Comparar aplicações práticas sem afirmar desempenho não testado",
-      "cluster": "Janelas e ventilação",
-      "priority": 1,
-      "status": "ideia"
-    },
-    {
       "slug": "medidas-finais-de-esquadrias",
       "title": "Por que a medição final é importante antes de fabricar esquadrias?",
       "intent": "Explicar dimensões preliminares vs. conferidas e a importância do projeto",
       "cluster": "Planejamento da obra",
-      "priority": 2,
-      "status": "ideia"
-    },
-    {
-      "slug": "vidro-temperado-ou-laminado",
-      "title": "Vidro temperado ou laminado: como entender as diferenças?",
-      "intent": "Orientar sem prescrever espessuras ou aplicações normativas",
-      "cluster": "Vidros e segurança",
-      "priority": 3,
+      "priority": 1,
       "status": "ideia"
     },
     {
@@ -32,7 +16,7 @@
       "title": "Preto, branco ou amadeirado: como escolher a cor das esquadrias?",
       "intent": "Mostrar critérios de composição, luz e amostras",
       "cluster": "Cores e acabamentos",
-      "priority": 4,
+      "priority": 2,
       "status": "ideia"
     },
     {
@@ -40,7 +24,7 @@
       "title": "Quando considerar persianas automatizadas no projeto de janelas?",
       "intent": "Ajuda no briefing e cuidados com infraestrutura elétrica",
       "cluster": "Conforto",
-      "priority": 5,
+      "priority": 3,
       "status": "ideia"
     },
     {
@@ -48,7 +32,7 @@
       "title": "Porta pivotante ou de correr: quais diferenças no uso?",
       "intent": "Compreender circulação, abertura e projeto sem promessas absolutas",
       "cluster": "Portas e aberturas",
-      "priority": 6,
+      "priority": 4,
       "status": "ideia"
     },
     {
@@ -56,7 +40,7 @@
       "title": "Como cuidar das esquadrias de alumínio no dia a dia?",
       "intent": "Cuidados gerais, orientando a seguir recomendações específicas do fabricante",
       "cluster": "Manutenção",
-      "priority": 7,
+      "priority": 5,
       "status": "ideia"
     },
     {
@@ -64,7 +48,7 @@
       "title": "Como planejar portas e janelas para a fachada de uma casa?",
       "intent": "Discussão de integração arquitetônica e medição",
       "cluster": "Fachadas",
-      "priority": 8,
+      "priority": 6,
       "status": "ideia"
     },
     {
@@ -72,7 +56,7 @@
       "title": "Quando prever tela mosquiteira nas portas e janelas?",
       "intent": "Explicar compatibilidade e usabilidade",
       "cluster": "Complementos",
-      "priority": 9,
+      "priority": 7,
       "status": "ideia"
     },
     {
@@ -80,7 +64,7 @@
       "title": "Guarda-corpo de alumínio e vidro: o que deve ser avaliado no projeto?",
       "intent": "Reforçar análise técnica e conformidade sem especificações normativas inventadas",
       "cluster": "Guarda-corpos",
-      "priority": 10,
+      "priority": 8,
       "status": "ideia"
     }
   ]

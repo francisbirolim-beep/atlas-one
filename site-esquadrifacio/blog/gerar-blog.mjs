@@ -22,10 +22,12 @@ function validate(posts, mode) {
   for (const post of posts) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(post.slug || '') || slugs.has(post.slug)) throw new Error('Slug inválido ou duplicado: ' + post.slug)
     slugs.add(post.slug)
-    if (!post.title || !post.description || !post.category || !post.intro || !Array.isArray(post.sections) || post.sections.length < 3) throw new Error('Artigo incompleto: ' + post.slug)
+    if (!post.title || !post.description || !post.category || !post.intro || !Number.isInteger(post.readMinutes) || post.readMinutes < 2 || post.readMinutes > 12 || !post.reviewerRequired || !Array.isArray(post.sections) || post.sections.length < 3) throw new Error('Artigo incompleto: ' + post.slug)
     if (!['rascunho', 'revisao', 'aprovado'].includes(post.status)) throw new Error('Status inválido: ' + post.slug)
     if (!/^assets\/[a-z0-9-]+\.webp$/.test(post.photo || '') || !post.photoAlt || !Number.isInteger(post.photoWidth) || !Number.isInteger(post.photoHeight) || post.photoWidth<=0 || post.photoHeight<=0) throw new Error('Imagem não permitida: ' + post.slug)
     for (const section of post.sections) if (!section.heading || !Array.isArray(section.paragraphs) || !section.paragraphs.length) throw new Error('Seção inválida: ' + post.slug)
+    if (!Array.isArray(post.faq) || post.faq.length < 2 || post.faq.some(f => !f.question || !f.answer)) throw new Error('Perguntas frequentes ausentes: ' + post.slug)
+
     if (post.status === 'aprovado' && (post.revisaoTecnicaConfirmada !== true || !/^\d{4}-\d{2}-\d{2}$/.test(post.publishedAt || ''))) throw new Error('Artigo marcado como aprovado sem revisão técnica/data: ' + post.slug)
   }
   if (mode === 'producao' && !posts.some(post => post.status === 'aprovado' && post.revisaoTecnicaConfirmada === true)) {
@@ -48,42 +50,73 @@ function shell(head, body, selected) {
     '<meta name="theme-color" content="#FAFBF8">' + head + '<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/blog/blog.css"></head><body>' +
     header(selected) + '<main id="conteudo">' + body + '</main>' + footer() + '</body></html>'
 }
-function articleCard(post, mode) {
+function articleCard(post, mode, featured=false) {
   const preview = mode === 'homologacao' && post.status !== 'aprovado'
-  return '<article class="article-card">' +
-   '<a href="/blog/' + post.slug + '.html" class="card-image" aria-label="Ler ' + safe(post.title) + '"><img loading="lazy" src="/' + safe(post.photo) + '" alt="' + safe(post.photoAlt) + '" width="' + post.photoWidth + '" height="' + post.photoHeight + '"></a>' +
-   '<div class="card-body"><p class="category">' + safe(post.category) + (preview ? ' · <span class="draft">Em revisão</span>' : '') + '</p>' +
-   '<h2><a href="/blog/' + post.slug + '.html">' + safe(post.title) + '</a></h2><p>' + safe(post.description) + '</p>' +
-   '<a class="read" href="/blog/' + post.slug + '.html">Ler artigo ↗</a></div></article>'
+  return '<article id="artigo-' + post.slug + '" class="article-card' + (featured ? ' article-featured' : '') + '">' +
+    '<a href="/blog/' + post.slug + '.html" class="card-image" aria-label="Ler ' + safe(post.title) + '">' +
+    '<img loading="' + (featured ? 'eager' : 'lazy') + '" src="/' + safe(post.photo) + '" alt="' + safe(post.photoAlt) + '" width="' + post.photoWidth + '" height="' + post.photoHeight + '"></a>' +
+    '<div class="card-body"><p class="category">' + safe(post.category) + (preview ? ' · <span class="draft">Em revisão</span>' : '') + '</p>' +
+    '<h2><a href="/blog/' + post.slug + '.html">' + safe(post.title) + '</a></h2><p>' + safe(post.description) + '</p>' +
+    '<div class="card-bottom"><span class="reading-time">Leitura de ' + post.readMinutes + ' min</span>' +
+    '<a class="read" href="/blog/' + post.slug + '.html">Ler artigo ↗</a></div></div></article>'
 }
 function blogIndex(posts, mode, origin) {
   const robots = mode === 'homologacao' ? '<meta name="robots" content="noindex,nofollow">' : ''
   const canonical = mode === 'producao' ? '<link rel="canonical" href="' + origin + '/blog/"><meta property="og:url" content="' + origin + '/blog/">' : ''
-  const head = '<title>' + title + '</title><meta name="description" content="Guias e soluções sobre portas de correr, janelas, ripados, vidros e esquadrias de alumínio sob medida em José Bonifácio.">' +
-    '<meta property="og:title" content="' + title + '"><meta property="og:type" content="website">' + robots + canonical
-  const intro = '<section class="intro"><p class="eyebrow">Conteúdo que ajuda na sua obra</p><h1>Ideias, orientações e <em>soluções.</em></h1>' +
-    '<p>Do primeiro orçamento à escolha dos acabamentos, reunimos explicações para ajudar você a decidir com mais clareza.</p></section>'
+  const head = '<title>' + title + '</title><meta name="description" content="Dicas e guias da Esquadrifácio sobre portas, janelas, vidros, ripados e esquadrias de alumínio em José Bonifácio e região.">' +
+    '<meta property="og:title" content="' + title + '"><meta property="og:description" content="Informações para escolher esquadrias de alumínio sob medida."><meta property="og:type" content="website">' + robots + canonical
+  const intro = '<section class="intro"><p class="eyebrow">Esquadrifácio® · Blog de soluções</p>' +
+    '<h1>Escolhas melhores começam com <em>boas informações.</em></h1>' +
+    '<p>Guias sobre portas, janelas, vidros e acabamentos. Conteúdos claros para planejar sua obra, comparar alternativas e conversar com nossa equipe.</p>' +
+    '<div class="intro-links"><a href="/solucoes.html">Conhecer as soluções ↗</a><a href="' + whatsapp + '" target="_blank" rel="noopener noreferrer">Tirar dúvidas no WhatsApp ↗</a></div></section>'
   const note = mode === 'homologacao' ? '<p class="staging-note">Conteúdos em preparação editorial: informações sujeitas à revisão técnica antes da publicação definitiva. <a href="/blog/editorial/"><strong>Abrir central editorial ↗</strong></a></p>' : ''
-  const content = '<section class="listing" aria-label="Artigos do blog">' + note + '<div class="article-grid">' + posts.map(p => articleCard(p, mode)).join('') + '</div></section>'
+  const topics = [...new Map(posts.map(post => [post.category,post])).values()]
+  const nav = '<nav class="topics" aria-label="Navegar por temas"><span>Explore por assunto</span>' +
+    topics.map(post => '<a href="#artigo-' + post.slug + '">' + safe(post.category) + '</a>').join('') + '</nav>'
+  const featured = posts[0] ? '<section class="feature-section" aria-labelledby="titulo-destaque"><div class="section-heading"><p class="eyebrow">Comece por aqui</p>' +
+    '<h2 id="titulo-destaque">Artigo em destaque</h2></div>' + articleCard(posts[0],mode,true) + '</section>' : ''
+  const more = posts.length > 1 ? '<section class="more-section" aria-labelledby="titulo-leituras"><div class="section-heading"><p class="eyebrow">Dúvidas do seu projeto</p>' +
+    '<h2 id="titulo-leituras">Mais guias para explorar</h2></div><div class="article-grid">' + posts.slice(1).map(p => articleCard(p,mode)).join('') + '</div></section>' : ''
+  const content = '<div class="listing">' + note + nav + featured + more +
+    '<section class="blog-help"><h2>Não encontrou a sua dúvida?</h2><p>Conte o que você precisa para sua obra. Nossa equipe ajuda a identificar opções para o projeto.</p>' +
+    '<a href="' + whatsapp + '" target="_blank" rel="noopener noreferrer">Conversar sobre meu projeto ↗</a></section></div>'
   return shell(head, intro + content, true)
 }
-function articleHTML(post, mode, origin) {
+function articleHTML(post, mode, origin, visiblePosts) {
   const draft = mode === 'homologacao' && post.status !== 'aprovado'
   const robots = mode === 'homologacao' ? '<meta name="robots" content="noindex,nofollow">' : ''
   const canonical = mode === 'producao' ? '<link rel="canonical" href="' + origin + '/blog/' + post.slug + '.html">' +
     '<meta property="og:url" content="' + origin + '/blog/' + post.slug + '.html"><meta property="og:image" content="' + origin + '/' + post.photo + '">' : ''
   const head = '<title>' + safe(post.title) + ' | Esquadrifácio®</title><meta name="description" content="' + safe(post.description) + '">' +
-    '<meta property="og:title" content="' + safe(post.title) + '"><meta property="og:type" content="article">' + robots + canonical
+    '<meta property="og:title" content="' + safe(post.title) + '"><meta property="og:description" content="' + safe(post.description) + '"><meta property="og:type" content="article">' + robots + canonical
   const sections = post.sections.map((s, i) => '<section class="article-section" aria-labelledby="cap-' + (i + 1) + '">' +
     '<h2 id="cap-' + (i + 1) + '">' + safe(s.heading) + '</h2>' + s.paragraphs.map(p => '<p>' + safe(p) + '</p>').join('') +
     (Array.isArray(s.bullets) ? '<ul>' + s.bullets.map(v => '<li>' + safe(v) + '</li>').join('') + '</ul>' : '') + '</section>').join('')
+  const toc = '<nav class="article-toc" aria-label="Sumário do artigo"><strong>Neste guia</strong><ol>' + post.sections.map((s,i) =>
+    '<li><a href="#cap-' + (i + 1) + '">' + safe(s.heading) + '</a></li>').join('') + '<li><a href="#perguntas-frequentes">Perguntas frequentes</a></li></ol></nav>'
+  const faqs = '<section class="faq-section" aria-labelledby="perguntas-frequentes"><h2 id="perguntas-frequentes">Perguntas frequentes</h2>' +
+    post.faq.map(f => '<details><summary>' + safe(f.question) + '</summary><p>' + safe(f.answer) + '</p></details>').join('') + '</section>'
+  const links = {
+    'como-escolher-porta-de-correr-aluminio':'#correr',
+    'o-que-enviar-para-orcamento-esquadrias':'',
+    'painel-ripado-aluminio-amadeirado':'#ripados',
+    'janela-de-correr-ou-maxim-ar-qual-escolher':'#janelas',
+    'vidro-temperado-ou-laminado-entenda-diferencas':'#fachadas'
+  }
+  const related = visiblePosts.filter(p => p.slug !== post.slug).slice(0,2)
+  const further = '<aside class="related" aria-labelledby="titulo-relacionados"><h2 id="titulo-relacionados">Continue explorando</h2>' +
+    '<a class="related-service" href="/solucoes.html' + (links[post.slug] ?? '') + '">Veja nossas soluções em alumínio ↗</a>' +
+    '<div class="related-grid">' + related.map(p => '<a href="/blog/' + p.slug + '.html"><small>' + safe(p.category) + '</small><strong>' + safe(p.title) + '</strong><span>Leia também ↗</span></a>').join('') + '</div></aside>'
   const info = draft ? '<div class="staging-note" role="note">Artigo em revisão técnica · Este texto ainda não está aprovado para publicação pública.</div>' : ''
   const body = '<article class="article"><div class="article-hero"><a class="back" href="/blog/">← Voltar ao blog</a>' +
-    '<p class="eyebrow">' + safe(post.category) + '</p><h1>' + safe(post.title) + '</h1><p class="lead">' + safe(post.intro) + '</p>' + info + '</div>' +
-    '<figure class="article-photo"><img src="/' + safe(post.photo) + '" alt="' + safe(post.photoAlt) + '" width="' + post.photoWidth + '" height="' + post.photoHeight + '"><figcaption>Projeto realizado pela Esquadrifácio®</figcaption></figure>' +
-    '<div class="prose">' + sections + '<div class="article-cta"><h2>Vamos conversar sobre seu projeto?</h2><p>Envie as medidas aproximadas, fotos do local e sua cidade. Nossa equipe orienta os próximos passos.</p>' +
+    '<p class="eyebrow">' + safe(post.category) + '</p><h1>' + safe(post.title) + '</h1><p class="lead">' + safe(post.intro) + '</p>' +
+    '<p class="article-meta">Esquadrifácio® · Leitura de ' + post.readMinutes + ' min' +
+    (mode === 'producao' ? ' · Publicado em <time datetime="' + post.publishedAt + '">' + post.publishedAt.split('-').reverse().join('/') + '</time>' : '') + '</p>' + info + '</div>' +
+    '<figure class="article-photo"><img src="/' + safe(post.photo) + '" alt="' + safe(post.photoAlt) + '" width="' + post.photoWidth + '" height="' + post.photoHeight + '"><figcaption>Imagem do portfólio Esquadrifácio®</figcaption></figure>' +
+    '<div class="prose">' + toc + sections + faqs +
+    '<div class="article-cta"><h2>Vamos conversar sobre seu projeto?</h2><p>Envie as medidas aproximadas, fotos do local e sua cidade. Nossa equipe orienta os próximos passos.</p>' +
     '<a href="' + whatsapp + '" target="_blank" rel="noopener noreferrer">Solicitar orçamento pelo WhatsApp ↗</a></div>' +
-    '<p class="disclaimer">Conteúdo informativo. Medidas finais, dimensionamentos e exigências de segurança devem ser avaliados para cada obra pelo responsável técnico.</p>' +
+    '<p class="disclaimer">Conteúdo informativo. Medidas finais, dimensionamentos e exigências de segurança devem ser avaliados para cada obra pelo responsável técnico.</p>' + further +
     '</div></article>'
   let jsonld = ''
   if (mode === 'producao') {
@@ -140,7 +173,7 @@ export function gerarBlog({mode, output, origin = ''}) {
   }
   const cspHashes = []
   for (const post of posts) {
-    const {html,script} = articleHTML(post,mode,origin)
+    const {html,script} = articleHTML(post,mode,origin,posts)
     writeFileSync(join(out, post.slug + '.html'), html)
     paths.push('/blog/' + post.slug + '.html')
     if (script) cspHashes.push(createHash('sha256').update(script,'utf8').digest('base64'))

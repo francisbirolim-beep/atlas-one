@@ -98,11 +98,14 @@ try {
   const blogArticle = readFileSync(join(pronto, 'blog', blogTodos.articles[0].slug + '.html'), 'utf8')
   const rss = readFileSync(join(pronto, 'blog', 'feed.xml'), 'utf8')
   check('Blog público somente com artigo simulado como aprovado', blogIndex.includes(blogTodos.articles[0].title) &&
-    !blogIndex.includes(blogTodos.articles[1].title) && !blogIndex.includes(blogTodos.articles[2].title))
+    blogTodos.articles.slice(1).every(post=>!blogIndex.includes(post.title)))
+  check('Artigo aprovado só relaciona outros aprovados', !blogArticle.includes('href="/blog/'+blogTodos.articles[1].slug+'.html"'))
+  check('Sumário e FAQ permanecem no candidato público',blogArticle.includes('class="article-toc"') &&
+    blogArticle.includes('id="perguntas-frequentes"') && blogArticle.includes('<details>'))
   check('Artigos possuem canonical e dados estruturados próprios', blogArticle.includes('rel="canonical" href="https://esquadrifacio.com.br/blog/') &&
     blogArticle.includes('application/ld+json') && !blogArticle.includes('noindex,nofollow'))
   check('RSS apenas com publicação aprovada', rss.includes(blogTodos.articles[0].title) &&
-    !rss.includes(blogTodos.articles[1].title))
+    blogTodos.articles.slice(1).every(post=>!rss.includes(post.title)))
 
   check('Canonical público', html.includes('rel="canonical" href="https://esquadrifacio.com.br/"') &&
     privacy.includes('href="https://esquadrifacio.com.br/politica-de-privacidade.html"'))
@@ -110,7 +113,7 @@ try {
   check('Imagem social com endereço completo', html.includes('property="og:image" content="https://esquadrifacio.com.br/assets/porta-correr-integrada.webp"'))
   check('Blog aprovado no sitemap, rascunhos privados', sitemap.includes('https://esquadrifacio.com.br/blog/') &&
     sitemap.includes('https://esquadrifacio.com.br/blog/' + blogTodos.articles[0].slug + '.html') &&
-    !sitemap.includes(blogTodos.articles[1].slug))
+    blogTodos.articles.slice(1).every(post=>!sitemap.includes(post.slug)))
   check('Mapa do site e robots vinculados', sitemap.includes('https://esquadrifacio.com.br/solucoes.html') && sitemap.includes('https://esquadrifacio.com.br/politica-de-privacidade.html') &&
     robots.includes('Sitemap: https://esquadrifacio.com.br/sitemap.xml') &&
     robots.includes('Allow: /'))

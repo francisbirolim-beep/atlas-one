@@ -45,3 +45,11 @@ Arquitetura proposta:
 
 ## Indicadores sugeridos (quando o site estiver publicado e houver consentimento adequado)
 Visualizações por artigo, contatos originados dos artigos, buscas que mostram as páginas no Search Console, atualizações necessárias por conteúdo, taxa de revisão técnica e perguntas recorrentes sobre produtos. **Nenhuma métrica real está conectada nesta etapa.**
+
+
+## Ciclo editorial atual — 21/10/2026
+Cinco rascunhos aguardam revisão. Foram incorporadas duas novas dúvidas práticas (janela de correr x maxim-ar; vidro temperado x laminado) e retiradas da fila para impedir republicação duplicada. Oito pautas permanecem disponíveis. O leitor ganhou sumário por capítulo, perguntas frequentes (sem dados estruturados de FAQ), artigos relacionados, categorias e estimativa de leitura.
+
+A IA deve conferir antes de cada nova pauta os slugs/títulos já existentes em `artigos.json` **e** as propostas de `pautas.json`. Não tratar o texto gerado como informação técnica aprovada; nunca trocar `status`, `revisaoTecnicaConfirmada` ou `publishedAt` sem aprovação humana específica. Os artigos enviados pelas tarefas agendadas do ChatGPT são rascunhos na conversa, não publicações nem alterações automáticas do repositório.
+
+A publicação pública do blog só pode ocorrer num deploy separado do site institucional, com pacote, prévia, testes, backup/rollback e aceite explícito do responsável.
