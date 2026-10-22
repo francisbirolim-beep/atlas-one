@@ -197,6 +197,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [obra,setObra]=useState<Obra|null>(null)
   const [orcamento,setOrcamento]=useState<Orcamento|null>(null)
   const [contas,setContas]=useState<Conta[]>([])
+  const [conciliandoVenda,setConciliandoVenda]=useState(false)
+  const [mensagemConciliacao,setMensagemConciliacao]=useState('')
+
   const [realizadoCmvManual,setRealizadoCmvManual]=useState(0)
   const [previsaoCmvRevisada,setPrevisaoCmvRevisada]=useState<{vendaId:string;valor:number|null}|null>(null)
   const [compras,setCompras]=useState<Compra[]>([])
@@ -213,6 +216,11 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [setorColunas,setSetorColunas]=useState<Record<string,SetorColuna>>({})
   const [documentos,setDocumentos]=useState<Documento[]>([])
   const [recebimentosVenda,setRecebimentosVenda]=useState<RecebimentoVenda[]>([])
+  const [podeCancelarReceb,setPodeCancelarReceb]=useState(false)
+  const [cancelamentoFinanceiroAviso,setCancelamentoFinanceiroAviso]=useState('')
+  const [cancelandoReceb,setCancelandoReceb]=useState(false)
+  const [historicoCancelamentos,setHistoricoCancelamentos]=useState<Array<{id:string;justificativa:string;valor_original:number;autorizado_por_nome:string;cancelado_em:string}>>([])
+
   const [materiaisTecnicos,setMateriaisTecnicos]=useState<MaterialTecnico[]>([])
   const [sincronizacaoListaCompraKey,setSincronizacaoListaCompraKey]=useState(0)
   const [separacoesMateriais,setSeparacoesMateriais]=useState<SeparacaoMaterial[]>([])
@@ -278,6 +286,76 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     tentouMaterializarVenda.current=venda.id
     void sincronizarMateriaisWVetro(true)
   },[carregando,venda?.id,pacoteTecnicoId])
+
+  useEffect(()=>{if(aba==='financeiro')void carregarCancelamentos()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[aba,vendaId])
+
+  async function carregarCancelamentos(){
+    try{
+      const token=await tokenAtual()
+      if(!token)return
+      const r=await fetch('/api/financeiro/recebimentos-cancelar?vendaId='+encodeURIComponent(vendaId),{
+        headers:{Authorization:'Bearer '+token},cache:'no-store'
+      })
+      const d=await r.json().catch(()=>({}))
+      setPodeCancelarReceb(Boolean(r.ok&&d.podeCancelar&&d.disponivel))
+      if(r.ok)setHistoricoCancelamentos(d.cancelamentos||[])
+    }catch{setPodeCancelarReceb(false)}
+  }
+  async function cancelarRecebimentoFinanceiro(rec:RecebimentoVenda,corrigir:boolean){
+    if(cancelandoReceb)return
+    const justificativa=window.prompt('Somente Master: justifique o cancelamento do recebimento de '+moeda(rec.valor)+' (mínimo 10 caracteres). O lançamento permanecerá no histórico:')
+    if(justificativa===null)return
+    if(justificativa.trim().length<10){setCancelamentoFinanceiroAviso('Informe pelo menos 10 caracteres de justificativa.');return}
+    if(!window.confirm('Confirma o cancelamento auditável? Parcelas serão reabertas. A operação não reembolsa automaticamente o cliente.'))return
+    setCancelandoReceb(true);setCancelamentoFinanceiroAviso('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw Error('Sessão expirada.')
+      const r=await fetch('/api/financeiro/recebimentos-cancelar',{
+        method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({vendaId,recebimentoId:rec.id,justificativa:justificativa.trim()})
+      })
+      const d=await r.json().catch(()=>({}))
+      if(!r.ok)throw Error(d.error||'Falha no cancelamento.')
+      if(d.simulado)setCancelamentoFinanceiroAviso('Prévia: cancelamento simulado. Nenhum lançamento foi alterado.')
+      else{
+        await carregar()
+        await carregarCancelamentos()
+        setCancelamentoFinanceiroAviso('Recebimento cancelado com histórico. Confira a posição financeira.')
+        if(corrigir)setModalRecebimento(true)
+      }
+    }catch(e){setCancelamentoFinanceiroAviso(e instanceof Error?e.message:'Falha no cancelamento.')}
+    finally{setCancelandoReceb(false)}
+  }
+
+  async function conciliarFinanceiroVenda(){
+    if(!venda||conciliandoVenda)return
+    const atual=Number(venda.valor_venda||0)
+    const ativos=contas.filter(c=>c.status!=='cancelado')
+    const total=ativos.reduce((acc,c)=>acc+Number(c.valor||0),0)
+    if(!window.confirm('Atualizar os títulos desta venda para '+moeda(atual)+'?\n\nTotal atual dos títulos: '+moeda(total)+'\nDiferença: '+moeda(atual-total)+'\n\nParcelas com pagamentos ou descontos não serão alteradas.'))return
+    setConciliandoVenda(true);setMensagemConciliacao('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente.')
+      const resp=await fetch('/api/financeiro/conciliar-valor-venda',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({vendaId:venda.id,valorConfirmado:atual}),
+      })
+      const dados=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw new Error(dados.error||'A conciliação não pôde ser concluída.')
+      if(dados.simulado){
+        setMensagemConciliacao(dados.mensagem||'Na prévia, nenhum dado financeiro foi modificado.')
+      }else{
+        await carregar()
+        setMensagemConciliacao('Conciliação concluída. As parcelas abertas foram atualizadas e o histórico do ajuste foi registrado.')
+      }
+    }catch(e){setMensagemConciliacao(e instanceof Error?e.message:'Falha ao conciliar o Financeiro.')}
+    finally{setConciliandoVenda(false)}
+  }
 
   async function atualizarComposicaoTipologia(){
     if(!pacoteTecnicoId)return
@@ -1147,7 +1225,11 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
       </div>
 
-      {valorVendaDifereFinanceiro&&<div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">A venda está em {moeda(valorVenda)}, mas os títulos financeiros ativos somam {moeda(totalTitulosAtivos)}. Confira e concilie o Financeiro; nenhuma parcela ou recebimento foi alterado automaticamente.</div>}
+      {valorVendaDifereFinanceiro&&<div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <span>A venda está em <b>{moeda(valorVenda)}</b>, mas os títulos financeiros ativos somam <b>{moeda(totalTitulosAtivos)}</b>. Diferença: <b>{moeda(valorVenda-totalTitulosAtivos)}</b>. Alterações futuras no preço sincronizam automaticamente apenas títulos sem pagamentos ou descontos; para esta diferença anterior, confirme a conciliação.</span>
+        <button type="button" disabled={conciliandoVenda} onClick={()=>void conciliarFinanceiroVenda()} className="rounded-lg border border-amber-500 bg-white px-3 py-2 font-bold text-amber-900 disabled:opacity-50">{conciliandoVenda?'Conferindo...':'Atualizar valor a receber'}</button>
+      </div>}
+      {mensagemConciliacao&&<p role="status" className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-900">{mensagemConciliacao}</p>}
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Progresso titulo="Venda" valor={100} detalhe="Orçamento confirmado e venda criada" ativo={painelEtapa==='venda'} onClick={()=>setPainelEtapa(painelEtapa==='venda'?null:'venda')}/>
         <Progresso titulo="Financeiro" valor={pct(Math.max(0,valorVenda-aReceber),valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`} ativo={painelEtapa==='financeiro'} onClick={()=>setPainelEtapa(painelEtapa==='financeiro'?null:'financeiro')}/>
@@ -1319,8 +1401,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </tbody></table></div>
           <div className="mt-5 border-t pt-4">
             <h3 className="mb-3 text-sm font-bold text-slate-800">Histórico de recebimentos desta venda</h3>
-            <div className="space-y-3">{recebimentosVenda.map(r=>{const desconto=Number(r.desconto||0);return <div key={r.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b className="text-sm text-slate-900">{moeda(r.valor)} recebido</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.forma||'Forma não informada'}</span></div><p className="mt-1 text-xs text-slate-600">Data do recebimento: <b>{dataBR(r.data_recebimento)}</b>{desconto>0?<> · Total baixado: {moeda(Number(r.valor||0)+desconto)}</>:null}</p><p className="mt-1 text-xs text-slate-400">Registrado no Atlas em {dataHoraBR(r.created_at)}{r.criado_por_nome?<> por {r.criado_por_nome}</>:null}</p>{r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}{r.observacoes&&<p className="mt-1 text-xs text-slate-500">Observações: {r.observacoes}</p>}</div><span className="text-xs font-semibold text-slate-400">{status(r.status||'registrado')}</span></div></div>})}{!recebimentosVenda.length&&(recebido>0?<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">O financeiro informa {moeda(recebido)} como recebido, mas não há comprovante detalhado associado à venda neste histórico. Pode ser um pagamento importado ou um registro anterior. Consulte o Caixa Geral antes de tentar lançar o valor novamente.</p>:<p className="py-5 text-center text-sm text-slate-400">Nenhum recebimento registrado para esta venda.</p>)}</div>
+            <div className="space-y-3">{recebimentosVenda.map(r=>{const desconto=Number(r.desconto||0);return <div key={r.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b className="text-sm text-slate-900">{moeda(r.valor)} recebido</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.forma||'Forma não informada'}</span></div><p className="mt-1 text-xs text-slate-600">Data do recebimento: <b>{dataBR(r.data_recebimento)}</b>{desconto>0?<> · Total baixado: {moeda(Number(r.valor||0)+desconto)}</>:null}</p><p className="mt-1 text-xs text-slate-400">Registrado no Atlas em {dataHoraBR(r.created_at)}{r.criado_por_nome?<> por {r.criado_por_nome}</>:null}</p>{r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}{r.observacoes&&<p className="mt-1 text-xs text-slate-500">Observações: {r.observacoes}</p>}</div><div className="flex flex-col items-end gap-2"><span className="text-xs font-semibold text-slate-400">{status(r.status||'registrado')}</span>
+                {podeCancelarReceb&&r.status!=='cancelado'&&<div className="flex flex-wrap gap-2">
+                  <button type="button" disabled={cancelandoReceb} onClick={()=>void cancelarRecebimentoFinanceiro(r,true)} className="rounded-lg border border-blue-300 px-2 py-1.5 text-xs font-bold text-blue-800">Corrigir valor</button>
+                  <button type="button" disabled={cancelandoReceb} onClick={()=>void cancelarRecebimentoFinanceiro(r,false)} className="rounded-lg border border-red-300 px-2 py-1.5 text-xs font-bold text-red-800">Cancelar recebimento</button>
+                </div>}</div></div></div>})}{!recebimentosVenda.length&&(recebido>0?<p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">O financeiro informa {moeda(recebido)} como recebido, mas não há comprovante detalhado associado à venda neste histórico. Pode ser um pagamento importado ou um registro anterior. Consulte o Caixa Geral antes de tentar lançar o valor novamente.</p>:<p className="py-5 text-center text-sm text-slate-400">Nenhum recebimento registrado para esta venda.</p>)}</div>
           </div>
+          {cancelamentoFinanceiroAviso&&<p role="status" className="mb-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">{cancelamentoFinanceiroAviso}</p>}
+          {historicoCancelamentos.length>0&&<div className="mb-3 rounded-lg border bg-slate-50 p-3"><h4 className="text-sm font-bold">Recebimentos cancelados — histórico preservado</h4>
+            {historicoCancelamentos.map(h=><p key={h.id} className="mt-2 border-t pt-2 text-xs text-slate-700">{moeda(h.valor_original)} cancelado em {dataHoraBR(h.cancelado_em)} por {h.autorizado_por_nome}. Motivo: {h.justificativa}</p>)}
+          </div>}
           <VendaFinanceiroHaver clienteId={clienteId} vendaId={venda.id} obraId={obra?.id||null} aReceber={aReceber} onAtualizar={atualizarComposicaoTipologia}/>
         </Box>}
 
