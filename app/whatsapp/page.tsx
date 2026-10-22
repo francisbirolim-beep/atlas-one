@@ -21,6 +21,7 @@ import {
   marcarConversaComoLida,
 } from '@/lib/chatInterno'
 import { ativarPushNesteDispositivo, statusPushNesteDispositivo } from '@/lib/notificacoes'
+import { calcularIndicadoresWhatsApp } from '@/lib/whatsappIndicadores'
 
 type Usuario = { id: string; nome: string; role?: string; cargo?: string | null }
 type Canal = {
@@ -390,9 +391,12 @@ export default function WhatsAppAtendimentoPage() {
     setAtiva(conversa)
   }
 
-  function mudarArea(area: 'individuais' | 'grupos' | 'monitoramento' | 'internas') {
+  function mudarArea(
+    area: 'individuais' | 'grupos' | 'monitoramento' | 'internas',
+    filtroInicial: 'todas' | 'aguardando' = 'todas',
+  ) {
     setAreaAtendimento(area)
-    setFiltro('todas')
+    setFiltro(filtroInicial)
     setBusca('')
     setAtiva(null)
     setConversaInternaAtiva(null)
@@ -1511,6 +1515,11 @@ export default function WhatsAppAtendimentoPage() {
     }
   }, [conversas, conversasInternas.length, eu?.id, canalFiltro, areaAtendimento])
 
+  // Contadores constantes entre abas e baseados apenas nas conversas da caixa.
+  const indicadores = useMemo(() => calcularIndicadoresWhatsApp(
+    conversas, canalFiltro, conversaDaMinhaCaixa,
+  ), [conversas, canalFiltro, eu?.id])
+
   const podeMonitorar = eu?.role === 'master' || acessos.some(a => a.supervisionar || a.dono)
   const conversasMonitoramento = conversas.filter(c => {
     const acesso = acessos.find(a => a.canal_id === c.whatsapp_canal_id)
@@ -1625,11 +1634,19 @@ export default function WhatsAppAtendimentoPage() {
           <span className="text-xs font-black tracking-[0.15em]">ATLAS ONE</span>
         </div>
         <div className="mt-5 flex flex-col gap-1 px-2 text-xs font-semibold">
-          <button type="button" onClick={()=>mudarArea('individuais')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='individuais'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+          <button type="button" onClick={()=>mudarArea('individuais')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='individuais'&&filtro!=='aguardando'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
             <MessageCircle size={17}/> Atendimentos
+            <span className="ml-auto rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-extrabold tabular-nums" title="Atendimentos individuais em aberto">{indicadores.atendimentos}</span>
+          </button>
+          <button type="button" onClick={()=>mudarArea('individuais','aguardando')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='individuais'&&filtro==='aguardando'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
+            <Clock3 size={17}/> Aguardando
+            <span className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-extrabold text-white tabular-nums" title="Conversas aguardando atendimento ou resposta">{indicadores.aguardando}</span>
           </button>
           <button type="button" onClick={()=>mudarArea('grupos')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='grupos'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
             <Users size={17}/> Grupos
+            <span className="ml-auto flex items-center gap-1.5 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-extrabold tabular-nums" title={`${indicadores.grupos} grupos em aberto; ${indicadores.gruposNaoLidos} com mensagens não lidas`}>
+              {indicadores.grupos}{indicadores.gruposNaoLidos>0 && <span className="h-2 w-2 rounded-full bg-red-400" aria-label="Há mensagens novas nos grupos"/>}
+            </span>
           </button>
           {podeMonitorar && <button type="button" onClick={()=>mudarArea('monitoramento')} className={`flex items-center gap-2 rounded-lg px-3 py-3 text-left ${areaAtendimento==='monitoramento'?'bg-blue-600 text-white':'text-slate-300 hover:bg-white/10'}`}>
             <Eye size={17}/> Monitoramento
@@ -1704,8 +1721,9 @@ export default function WhatsAppAtendimentoPage() {
         )}
 
         <div className="flex h-[54px] gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-2 lg:hidden">
-          <button type="button" onClick={()=>mudarArea('individuais')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='individuais'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Individuais</button>
-          <button type="button" onClick={()=>mudarArea('grupos')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='grupos'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Grupos</button>
+          <button type="button" onClick={()=>mudarArea('individuais')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='individuais'&&filtro!=='aguardando'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Atendimentos {indicadores.atendimentos}</button>
+          <button type="button" onClick={()=>mudarArea('individuais','aguardando')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='individuais'&&filtro==='aguardando'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Aguardando {indicadores.aguardando}</button>
+          <button type="button" onClick={()=>mudarArea('grupos')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='grupos'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Grupos {indicadores.grupos}{indicadores.gruposNaoLidos>0?' •':''}</button>
           {podeMonitorar && <button type="button" onClick={()=>mudarArea('monitoramento')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='monitoramento'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Monitoramento</button>}
           <button type="button" onClick={()=>mudarArea('internas')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='internas'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Equipe interna</button>
         </div>
