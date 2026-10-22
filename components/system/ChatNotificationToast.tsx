@@ -66,6 +66,14 @@ export default function ChatNotificationToast() {
     timerRef.current = null
     setToast(null)
     if (!n.lida_em) await marcarNotificacaoLida(n.id)
+    // Na mesma página a querystring não remonta a caixa; recarregar a rota
+    // seleciona corretamente a conversa apontada pelo aviso.
+    if (typeof window !== 'undefined' &&
+        window.location.pathname === '/whatsapp' &&
+        n.href?.startsWith('/whatsapp?conversaId=')) {
+      window.location.assign(n.href)
+      return
+    }
     router.push(n.href || '/')
   }
 

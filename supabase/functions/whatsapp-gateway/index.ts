@@ -210,6 +210,12 @@ function estaEmNaoPerturbe(preferencias: any) {
 
 async function destinatariosWhatsApp(config: any, channel: any, conversation: any) {
   const ids = new Set<string>();
+  if (conversation.whatsapp_chat_tipo === "grupo") {
+    // Nunca avisar todos os supervisores: o grupo tem responsável próprio.
+    const responsavel = conversation.responsavel_id ||
+      (await groupPrimaryOwner(config.empresa_id, channel.id, conversation.whatsapp_chat_jid || null))?.id;
+    return responsavel ? [responsavel] : [];
+  }
   if (conversation.responsavel_id) {
     ids.add(conversation.responsavel_id);
     return [...ids];
@@ -235,22 +241,29 @@ async function destinatariosWhatsApp(config: any, channel: any, conversation: an
 }
 
 async function notificarMensagemWhatsApp(config: any, channel: any, conversation: any, body: any, text: string) {
+  const grupo = conversation.whatsapp_chat_tipo === "grupo";
+  // Nos grupos, avisar no início de cada pendência, sem inundar o responsável.
+  if (grupo && Number(conversation.nao_lidas || 0) > 0) return;
   const recipients = await destinatariosWhatsApp(config, channel, conversation);
   if (!recipients.length) return;
 
   const originId = `${channel.id}:${body.whatsappMessageId || crypto.randomUUID()}`;
-  const titulo = `WhatsApp · ${conversation.contato_nome || conversation.telefone}`;
-  const mensagem = String(text || "Nova mensagem").slice(0, 500);
+  const titulo = grupo
+    ? `WhatsApp · grupo ${conversation.grupo_nome || conversation.contato_nome || "sem nome"}`
+    : `WhatsApp · ${conversation.contato_nome || conversation.telefone}`;
+  const mensagem = grupo
+    ? "Há uma mensagem aguardando sua atenção nesse grupo."
+    : String(text || "Nova mensagem").slice(0, 500);
 
   const rows = recipients.map((usuarioId) => ({
     empresa_id: config.empresa_id,
     usuario_id: usuarioId,
     categoria: "chat",
-    tipo: "whatsapp_mensagem",
+    tipo: grupo ? "whatsapp_grupo_mensagem" : "whatsapp_mensagem",
     titulo,
     mensagem,
     href: `/whatsapp?conversaId=${conversation.id}`,
-    origem_tipo: "whatsapp_mensagem",
+    origem_tipo: grupo ? "whatsapp_grupo_mensagem" : "whatsapp_mensagem",
     origem_id: originId,
     push_status: "pendente",
   }));
