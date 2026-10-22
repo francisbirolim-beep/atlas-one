@@ -1,3 +1,18 @@
+## 2026-10-22 — Complemento: fornecedor no cadastro CORRETO do CMV (prévia local, NÃO publicado)
+
+- Print do usuário confirmou que a tela operacional é `Custos / CMV da obra` → `Adicionar compra` ou `Corrigir lançamento existente` (e não a prévia do quadro de recebimentos).
+- Agora ambos usam `FornecedorCmvCampo`: busca fornecedores ativos por nome, cidade, CPF/CNPJ e contato, seleção explícita, novo cadastro oficial completo. Correção mantém fornecedor original, inclusive nomes antigos sem correspondência atual, até o usuário escolher outro.
+- O modal de cadastro não dispara o envio do formulário pai (parada de propagação do submit); vários formulários simultâneos usam identificadores acessíveis únicos. Não alterou as regras do Custo/CMV, nem o controle de Recebimentos, nem dados de produção.
+- Validado com `npm run typecheck`, testes CMV de regras/pesos e `node scripts/test-cmv-fornecedor-cadastro.cjs` (checagens estruturais). Necessita homologação visual/funcional antes de publicar.
+
+## 2026-10-22 — CMV: busca e cadastro completo de fornecedor (ISOLADO; NÃO publicado)
+
+- Branch local `feat/cmv-fornecedor-busca-20261022`, baseada em `origin/main` c30da1d. Somente o campo Fornecedor em Recebimento de material passou a buscar fornecedores ativos por nome, CPF/CNPJ, telefone, cidade e contato, com seleção explícita; novo registro usa a mesma tabela e campos do cadastro oficial de Fornecedores.
+- Cadastro novo exige nome, CPF/CNPJ e telefone com DDD; mantém demais campos cadastrais e comerciais opcionais, respeita permissão de criação e evita duplicar CPF/CNPJ. Recebimentos antigos com texto livre permanecem preservados ao editar.
+- O backend do recebimento segue recebendo o nome do fornecedor para compatibilidade; NÃO foi criada chave estrangeira de fornecedor. Nenhum registro de fornecedor foi criado em teste; sem migração ou escrita em produção.
+- A proteção existente do Recebimento de material continua bloqueando salvar/conferir enquanto a estrutura separada não for homologada. Sem publicação no atlasonesystem.com.
+- `npm run typecheck` passou; testes de regra e peso CMV passaram. `next build` compilou, mas a etapa de geração das páginas não completou por ausência de SUPABASE_URL neste worktree isolado.
+
 ## 2026-10-19 — Recebimento parcial e permissões (PRÉVIA, não publicado)
 
 - Branch isolada `feat/financeiro-recebimento-parcial-preview-20261019` baseada na prévia do PR #902. Correção do erro mostrado ao registrar recebimento no Cliente 360 (`permission denied for table financeiro_contas_receber`), sem abrir permissão direta no banco.
