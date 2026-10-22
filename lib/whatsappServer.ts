@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { notificarGrupoWhatsAppPendente } from '@/lib/whatsappAlertasGrupo'
 import type { UsuarioTenant } from '@/lib/tenantServer'
 
 export type AtendimentoConversa = {
@@ -751,7 +752,7 @@ export async function processarWebhookMeta(payload: any) {
         })
         const media = mediaDaMensagem(msg)
         const dataMeta = msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : null
-        const { error } = await supabaseAdmin.from('atendimento_mensagens').insert({
+        const { data: mensagemInserida, error } = await supabaseAdmin.from('atendimento_mensagens').insert({
           empresa_id: config.empresa_id,
           conversa_id: conversa.id,
           sessao_id: sessao?.id || null,
@@ -763,7 +764,7 @@ export async function processarWebhookMeta(payload: any) {
           whatsapp_message_id: msg.id || null,
           provider_timestamp: dataMeta,
           payload: msg,
-        })
+        }).select('id').single()
         if (error?.code === '23505') continue
         if (error) throw error
         recebidas += 1
@@ -782,6 +783,7 @@ export async function processarWebhookMeta(payload: any) {
           tipo: 'mensagem_recebida',
           dados: { whatsapp_message_id: msg.id || null, tipo: msg.type || null },
         })
+        if (mensagemInserida?.id) await notificarGrupoWhatsAppPendente(conversaRoteada, mensagemInserida.id)
       }
 
       for (const status of value.statuses || []) {
@@ -939,7 +941,7 @@ export async function registrarEntradaGateway(
     '[Mensagem]'
   )
 
-  const { error } = await supabaseAdmin.from('atendimento_mensagens').insert({
+  const { data: mensagemInserida, error } = await supabaseAdmin.from('atendimento_mensagens').insert({
     empresa_id: config.empresa_id,
     conversa_id: conversa.id,
     sessao_id: sessao?.id || null,
@@ -956,7 +958,7 @@ export async function registrarEntradaGateway(
       mediaSize: dados.mediaSize || null,
       ...(dados.payload || {}),
     },
-  })
+  }).select('id').single()
   if (error) throw error
 
   await supabaseAdmin.from('atendimento_conversas').update({
@@ -975,6 +977,7 @@ export async function registrarEntradaGateway(
     tipo: 'mensagem_recebida_qr',
     dados: { whatsapp_message_id: dados.whatsappMessageId || null, tipo: dados.tipo || 'text' },
   })
+  if (mensagemInserida?.id) await notificarGrupoWhatsAppPendente(conversaRoteada, mensagemInserida.id)
 
   return { duplicate: false, conversaId: conversa.id }
 }
