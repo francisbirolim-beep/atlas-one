@@ -1,3 +1,15 @@
+## 2026-10-22 — CMV compra/correção com fornecedor oficial
+
+- Integração incremental de `FornecedorCmvCampo` em `components/clientes/VendaCmvPainel.tsx`: duas entradas, `Adicionar compra` e `Corrigir lançamento existente`. Não muda APIs, payload de CMV, valores, documentos, anexos ou histórico.
+- Melhoria da edição de fornecedor: identifica nomes antigos, IDs distintos de campos e modal de cadastro sem submit acidental da compra.
+- Adicionado `scripts/test-cmv-fornecedor-cadastro.cjs` com testes estruturais para garantir integração nas telas corretas, preservação do legado, permissões e proteção contra duplo envio.
+
+## 2026-10-22 — CMV: campo de fornecedor com cadastro completo (prévia isolada)
+
+- Adicionado `components/clientes/FornecedorCmvCampo.tsx`: autocomplete reutilizando Fornecedores, seleção por nome, pesquisa por documento e cidade, modal com cadastro completo, validação dos obrigatórios, permissão e prevenção de CPF/CNPJ duplicado.
+- Integrado somente a `VendaCmvRecebimentos.tsx`, preservando todo o formulário, anexos, cálculo de custo e bloqueios de confirmação. Gravação do fornecedor novo usa a função existente `criarFornecedor`; não há gravação automática de recebimento ou custo.
+- Não houve alteração em produção, banco, rotas de API ou compra. TypeScript e testes locais CMV aprovados. Build completo requer configuração de ambiente isolado.
+
 ## 2026-10-19 — Recebimento parcial e permissões (PRÉVIA, não publicado)
 
 - Branch isolada `feat/financeiro-recebimento-parcial-preview-20261019` baseada na prévia do PR #902. Correção do erro mostrado ao registrar recebimento no Cliente 360 (`permission denied for table financeiro_contas_receber`), sem abrir permissão direta no banco.

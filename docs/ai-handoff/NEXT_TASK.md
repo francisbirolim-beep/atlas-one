@@ -1,3 +1,17 @@
+## 2026-10-22 — Homologar cadastro de fornecedor NA COMPRA CMV
+
+1. Testar a tela operacional `Custos / CMV da obra` → `Adicionar compra` e `Corrigir lançamento existente`: digitar FEL, verificar cadastro da Feld, escolher e salvar correção de um lançamento fictício em homologação.
+2. Conferir cadastro completo pelo botão de novo fornecedor, CPF/CNPJ duplicado, telefone obrigatório, cidade na busca, permissões e retorno sem alterar dados digitados no CMV.
+3. Verificar que um fornecedor antigo sem correspondente no catálogo permanece preservado ao corrigir outros campos.
+4. Conferir regra de exclusão, comprovantes, histórico, cálculo de comprado/recebido e bloqueio da prévia de recebimentos. Prévia e produção: somente após homologação real e autorização explícita, no domínio atlasonesystem.com.
+
+## 2026-10-22 — Homologar fornecedor no Recebimento de material (NÃO publicar sem autorização)
+
+1. Testar em ambiente de homologação o autocomplete: digitar FEL para localizar Feld, selecionar, alterar texto, buscar por cidade e CPF/CNPJ, e conferir fornecedor inativo e histórico.
+2. Testar cadastro completo (nome, CPF/CNPJ, telefone obrigatórios; demais opcionais), usuário sem permissão e CNPJ duplicado. Usar dados fictícios: não criar fornecedores reais em teste.
+3. Validar retorno do formulário de fornecedor e conservação de nota, romaneio, arquivo, unidade, custo e outros campos; preservar bloqueio de salvar/conferir recebimento até homologação própria.
+4. Rodar `npm run release:check` com variáveis de homologação somente, revisar diff, abrir PR; publicação no domínio atlasonesystem.com somente após aprovação expressa.
+
 ## 2026-10-19 — Recebimento parcial e permissões (PRÉVIA, não publicado)
 
 - Branch isolada `feat/financeiro-recebimento-parcial-preview-20261019` baseada na prévia do PR #902. Correção do erro mostrado ao registrar recebimento no Cliente 360 (`permission denied for table financeiro_contas_receber`), sem abrir permissão direta no banco.

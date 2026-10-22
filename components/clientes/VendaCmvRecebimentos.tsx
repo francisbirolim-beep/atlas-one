@@ -3,6 +3,7 @@ import {FormEvent,useState} from 'react'
 import {FileText,Pencil,Plus,Trash2} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import {recebimentoConferivelCmv} from '@/lib/vendaCmvConferencia'
+import FornecedorCmvCampo from './FornecedorCmvCampo'
 import {UNIDADES_CMV,unidadePadraoCmv,rotuloUnidadeCmv,mostrarQuantidadeCmv} from '@/lib/vendaCmvUnidades'
 export type RecebimentoCmv={
  id:string;categoria:string;peso_kg:number|null;preco_kg:number|null;quantidade?:number|null;unidade?:string|null;preco_unitario?:number|null;valor_total:number;fornecedor:string;
@@ -119,8 +120,7 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
     <label className="text-xs font-semibold">Preço por {rotuloUnidadeCmv(unidade)} (R$) *<input name="preco_unitario" required inputMode="decimal" value={preco} onChange={e=>onChangePreco(e.target.value)}
      placeholder="Ex.: 8,32" className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <div className="rounded-lg border bg-white p-2.5"><div className="text-[11px] font-semibold text-slate-500">Custo recebido calculado</div><b className="text-lg">{moedas(Math.round(num(peso)*num(preco)*100)/100)}</b></div>
-    <label className="text-xs font-semibold">Fornecedor *<input required maxLength={150} name="fornecedor"
-     defaultValue={registrosCategoria.find(r=>r.id===editar)?.fornecedor||''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
+    <FornecedorCmvCampo inicial={registrosCategoria.find(r=>r.id===editar)?.fornecedor||''} />
     <label className="text-xs font-semibold">Número da nota fiscal<input name="nota_numero" maxLength={100}
      defaultValue={registrosCategoria.find(r=>r.id===editar)?.nota_numero||''} className="mt-1 w-full rounded-lg border bg-white p-2.5"/></label>
     <label className="text-xs font-semibold">Número do romaneio<input name="romaneio_numero" maxLength={100}

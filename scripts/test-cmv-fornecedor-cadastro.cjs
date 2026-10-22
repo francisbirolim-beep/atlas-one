@@ -1,0 +1,23 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const root = path.resolve(__dirname, '..')
+const painel = fs.readFileSync(path.join(root, 'components/clientes/VendaCmvPainel.tsx'), 'utf8')
+const recebimentos = fs.readFileSync(path.join(root, 'components/clientes/VendaCmvRecebimentos.tsx'), 'utf8')
+const campo = fs.readFileSync(path.join(root, 'components/clientes/FornecedorCmvCampo.tsx'), 'utf8')
+
+assert.match(painel, /<FornecedorCmvCampo \/>/, 'Cadastro da compra precisa de autocomplete')
+assert.match(painel, /<FornecedorCmvCampo inicial=\{l\.fornecedor\?\?''\} \/>/, 'Correção deve preservar fornecedor original')
+assert.match(recebimentos, /<FornecedorCmvCampo inicial=/, 'Recebimento em prévia deve continuar sem alteração de regras')
+assert.match(campo, /listarFornecedores\(true\)/, 'Deve carregar fornecedores ativos do cadastro oficial')
+assert.match(campo, /correspondeBuscaAtlas\(/, 'Busca deve incluir campos normalizados')
+assert.match(campo, /somenteNumerosAtlas\(f\.cnpj_cpf\) === documento/, 'CPF\/CNPJ já cadastrado não pode duplicar')
+assert.match(campo, /criarFornecedor\(/, 'Cadastro rápido deve usar função oficial')
+assert.match(campo, /podeAcaoCadastro\(acesso, 'fornecedores', 'criar'\)/, 'Deve respeitar permissão de cadastro')
+assert.match(campo, /e\.stopPropagation\(\)/, 'Salvar cadastro no modal não pode enviar o formulário de compra')
+assert.match(campo, /name="fornecedor"/, 'Nome selecionado deve ir ao mesmo campo aceito pelo CMV')
+assert.match(campo, /setLegado\(true\)/, 'Dados anteriores sem vínculo devem ser preservados')
+assert.match(recebimentos, /const bloqueado=!disponivel/, 'Prévia ainda deve bloquear recebimentos não homologados')
+
+console.log('PASS: fornecedor nas telas reais de adicionar/corrigir compra; cadastro oficial, prevenção de duplicidade, proteção de dados e modal isolado.')
