@@ -8,6 +8,7 @@ import { salvarFotoMedicaoItem } from '@/lib/medicaoFoto'
 import { excluirFotoComHistorico, listarCorrecoesFoto, type CorrecaoFoto } from '@/lib/medicaoFotoCorrecoes'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
 import { referenciaDaTipologia } from '@/lib/medicaoChecklistRegras'
+import { medidasNumericasCompletas, possuiFotoTrena, medicaoRequerConferencia } from '@/lib/medicaoComprovacao'
 import MedicaoCroqui from './MedicaoCroqui'
 import LeituraTrenaIA from './LeituraTrenaIA'
 import MedicaoAdicionarCampo from './MedicaoAdicionarCampo'
@@ -24,6 +25,7 @@ import {
   salvarMedidasFixasItemV2,
   salvarRespostaChecklistV2,
   statusItemChecklistV2,
+  sincronizarStatusItemChecklistV2,
   valorRespostaItemV2,
   type CampoChecklistV2,
   type DadosChecklistMedicaoV2,
@@ -76,10 +78,7 @@ function numeroMedida(valor: string): number | null {
 }
 
 function itemTemMedidasFinais(item: MedicaoItem) {
-  return CHAVES_MEDIDAS.every(chave => {
-    const numero = Number(item[chave])
-    return Number.isFinite(numero) && numero > 0
-  })
+  return medidasNumericasCompletas(item)
 }
 
 export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medicaoId: string; selecao?: { itemId: string } | null }) {
@@ -225,9 +224,12 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       return
     }
 
-    setMensagem(eixo === 'largura'
-      ? 'Foto da largura registrada. A IA vai ler a trena automaticamente.'
-      : 'Foto da altura registrada. A IA vai ler a trena automaticamente.')
+    const statusSincronizado = await sincronizarStatusItemChecklistV2(medicaoId, item.id, usuario)
+    setMensagem(!statusSincronizado
+      ? 'Foto salva. O status da peça será conferido novamente na finalização.'
+      : eixo === 'largura'
+        ? 'Foto da largura registrada. A IA vai tentar ler a trena automaticamente.'
+        : 'Foto da altura registrada. A IA vai tentar ler a trena automaticamente.')
     setEnviandoFoto(null)
     await carregar()
     window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
@@ -305,8 +307,8 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
         altura_esquerda_mm: numeroMedida(medidas.altura_esquerda_mm),
       }
 
-      if (Object.values(medidasAtuais).some(valor => !valor)) {
-        setMensagem('Preencha as 3 larguras e as 3 alturas antes de finalizar a Medição Final.')
+      if (!Object.values(medidasAtuais).every(valor => valor !== null) && !possuiFotoTrena(item)) {
+        setMensagem('Para finalizar, informe as 3 larguras e as 3 alturas ou anexe uma foto da trena. A leitura da IA é opcional.')
         return
       }
 
@@ -380,6 +382,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
       const mensagem = await excluirFotoComHistorico(medicaoId, { ...alvoExclusao, motivo: motivoExclusao })
       setAlvoExclusao(null)
       setMensagem(mensagem)
+      await sincronizarStatusItemChecklistV2(medicaoId, alvoExclusao.itemId, usuario)
       await carregar()
       window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada'))
       if (historicoFotos !== null) await abrirHistoricoFotos()
@@ -428,7 +431,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                     <span className="block whitespace-pre-wrap break-words font-semibold">{peca.descricao || peca.tipo_outro_texto || 'Descrição não informada'}</span>
                     <span className={`mt-0.5 block ${peca.id === itemId ? 'text-slate-300' : 'text-slate-400'}`}>Peça {indice + 1} · Quantidade: {peca.quantidade}</span>
                     <span className={`mt-1 block ${medidasOk ? 'text-emerald-400' : peca.id === itemId ? 'text-amber-300' : 'text-amber-600'}`}>
-                      {medidasOk ? 'Medidas completas' : 'Medidas pendentes'}
+                      {medidasOk ? 'Medidas completas' : medicaoRequerConferencia(peca) ? 'Foto salva · conferir valores' : 'Medidas pendentes'}
                     </span>
                     {req.length > 0 && <span className={`mt-0.5 block ${ok === req.length ? 'text-emerald-400' : ''}`}>{ok}/{req.length} checklist obrigatório</span>}
                   </button>
@@ -443,7 +446,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                     <p className="text-sm font-semibold text-slate-800">{String(dados.itens.findIndex(i => i.id === item.id) + 1).padStart(2, '0')} · {item.descricao || item.tipo_esquadria}</p>
                     <p className="mt-1 text-xs text-slate-500">Ambiente: {item.ambiente || '—'} · Quantidade: {item.quantidade} · Medido por: {item.medido_por_nome || usuario?.nome || '—'}</p>
                     <p className="text-xs text-slate-500">
-                      {medidasCompletas ? 'Medidas finais completas' : 'Medidas finais pendentes'}
+                      {medidasCompletas ? 'Medidas finais completas' : medicaoRequerConferencia(item) ? 'Foto da trena salva · conferir valores numéricos' : 'Medidas finais pendentes'}
                       {obrigatorios.length ? ` · ${obrigatoriosRespondidos}/${obrigatorios.length} campos de checklist obrigatórios` : ''}
                     </p>
                   </div>
@@ -454,10 +457,10 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500"><Ruler size={14} /> Medidas finais da peça</p>
-                      <p className="mt-1 text-xs text-slate-500">Sempre registre 3 larguras, 3 alturas e as fotos da trena quando disponíveis.</p>
+                      <p className="mt-1 text-xs text-slate-500">Informe as 3 larguras e as 3 alturas manualmente ou anexe foto da trena. A IA apenas sugere valores.</p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${medidasCompletas ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                      {medidasCompletas ? 'Completa' : 'Pendente'}
+                      {medidasCompletas ? 'Completa' : medicaoRequerConferencia(item) ? 'Foto registrada' : 'Pendente'}
                     </span>
                   </div>
 
@@ -572,6 +575,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                     </div>
                   </div>
 
+                  {medicaoRequerConferencia(item) && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900">Foto da trena registrada. Esta peça pode ser concluída, mas as medidas numéricas faltantes precisam de conferência antes da fabricação.</p>}
                   <MedicaoCroqui item={item} medidas={medidas} />
                   <p className="text-xs font-semibold text-slate-500">Referência: vista {referenciaDaTipologia(item)} do ambiente</p>
                   <div className="flex justify-end">
@@ -687,7 +691,7 @@ export default function MedicaoChecklistV2Panel({ medicaoId, selecao }: { medica
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-emerald-900">Terminou a medição?</p>
-                      <p className="mt-1 text-xs text-emerald-800">O Atlas salva as medidas atuais, confere os campos obrigatórios e envia a Medição Final para a próxima etapa.</p>
+                      <p className="mt-1 text-xs text-emerald-800">O Atlas aceita as seis medidas manuais ou uma foto da trena salva. Fotos sem valores completos ficam pendentes de conferência técnica antes da fabricação; o checklist obrigatório permanece exigido.</p>
                     </div>
                     <button
                       type="button"

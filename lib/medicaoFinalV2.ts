@@ -271,7 +271,7 @@ export async function concluirMedicaoFinal(
   }
 
   const checklist = await validarChecklistObrigatorioV2(medicaoId)
-  if (!checklist.ok) return { ok: false, mensagem: `Complete as medidas e ${checklist.faltantes.length} campo(s) obrigatório(s).` }
+  if (!checklist.ok) return { ok: false, mensagem: `Informe as medidas ou a foto da trena e resolva ${checklist.faltantes.length} pendência(s) do checklist.` }
   const [{ data: itens, error: erroItens }, { count: pendenciasAbertas, error: erroPendencias }] = await Promise.all([
     supabase
       .from('medicao_itens')
@@ -298,13 +298,20 @@ export async function concluirMedicaoFinal(
     return { ok: false, mensagem: 'Separe as unidades agrupadas antes de concluir a medicao.' }
   }
 
-  const faltantes = lista.filter(item => !item.medido)
-  if (faltantes.length > 0) {
-    return { ok: false, mensagem: `Ainda existem ${faltantes.length} peca(s) sem medicao.` }
-  }
-
   if ((pendenciasAbertas || 0) > 0) {
     return { ok: false, mensagem: `Resolva ${pendenciasAbertas} pendencia(s) antes de concluir.` }
+  }
+
+  // O registro "medido" pode ter sido gravado antes de a foto ser anexada.
+  // O checklist acima já confirmou a prova (foto OU seis medidas) para todas as peças.
+  const faltantes = lista.filter(item => !item.medido)
+  if (faltantes.length > 0) {
+    const { error: erroAtualizacao } = await supabase.from('medicao_itens')
+      .update({ medido: true, medido_em: new Date().toISOString() })
+      .in('id', faltantes.map(item => item.id))
+    if (erroAtualizacao) {
+      return { ok: false, mensagem: 'As medidas foram conferidas, mas não foi possível atualizar o status das peças.' }
+    }
   }
 
   const { error } = await supabase

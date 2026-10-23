@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buscarAcessoValidoMedicao } from '@/lib/medicaoAcessoExternoServer'
+import { medicaoComprovada, possuiFotoTrena } from '@/lib/medicaoComprovacao'
 
 function numeroValido(valor: unknown) {
   const n = Number(valor)
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
   const { data: item } = await supabaseAdmin
     .from('medicao_itens')
-    .select('id')
+    .select('id, foto_larguras_url, foto_alturas_url')
     .eq('id', itemId)
     .eq('medicao_id', acesso.medicao_id)
     .maybeSingle()
@@ -46,10 +47,10 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     altura_esquerda_mm: numeroValido(medidas.altura_esquerda_mm),
   }
 
-  if (Object.values(valores).some(v => v === null)) {
-    return NextResponse.json({ error: 'Preencha as 3 larguras e as 3 alturas com valores validos.' }, { status: 400 })
+  if (!medicaoComprovada({ ...valores, foto_larguras_url: item.foto_larguras_url, foto_alturas_url: item.foto_alturas_url })) {
+    return NextResponse.json({ error: 'Preencha as 3 larguras e as 3 alturas ou anexe foto da trena.' }, { status: 400 })
   }
-  if (!referenciaVista) {
+  if (!referenciaVista && !possuiFotoTrena(item as any)) {
     return NextResponse.json({ error: 'Selecione a referencia das alturas: vista interna ou vista externa.' }, { status: 400 })
   }
 
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
     .from('medicao_itens')
     .update({
       ...valores,
-      referencia_vista: referenciaVista,
+      ...(referenciaVista ? { referencia_vista: referenciaVista } : {}),
       status_medicao: 'concluida',
       updated_at: new Date().toISOString(),
       medido: true,

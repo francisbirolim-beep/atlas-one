@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import type { ItemEsquadria, MedicaoItem, Usuario } from './tipos'
 import { listarItensMedicao } from './medicaoFinal'
 import { camposAplicaveis, respostaDoCampo, valorValidoChecklist } from './medicaoChecklistRegras'
+import { medicaoComprovada } from './medicaoComprovacao'
 
 export type CampoChecklistV2 = {
   id: string
@@ -184,9 +185,8 @@ export function statusItemChecklistV2(
 ): 'pendente' | 'em_andamento' | 'concluida' {
   const camposAtivos = camposDoItemV2(campos, item, respostas)
   const obrigatorios = camposAtivos.filter(c => c.obrigatorio)
-  const medidasCompletas = CAMPOS_MEDIDA_FIXA.every(campo => medidaPositiva(item[campo]))
   const checklistCompleto = obrigatorios.every(campo => valorValidoChecklist(campo, valorRespostaItemV2(item, campo, respostas)))
-  if (medidasCompletas && checklistCompleto) return 'concluida'
+  if (medicaoComprovada(item) && checklistCompleto) return 'concluida'
 
   const iniciouMedidas = CAMPOS_MEDIDA_FIXA.some(campo => medidaPositiva(item[campo]))
   const iniciouChecklist = camposAtivos.some(campo => valorValidoChecklist(campo, valorRespostaItemV2(item, campo, respostas)))
@@ -196,7 +196,7 @@ export function statusItemChecklistV2(
   return iniciou ? 'em_andamento' : 'pendente'
 }
 
-async function sincronizarStatusItemChecklistV2(
+export async function sincronizarStatusItemChecklistV2(
   medicaoId: string,
   itemId: string,
   usuario: Usuario | null,
@@ -375,7 +375,7 @@ export async function validarChecklistObrigatorioV2(medicaoId: string): Promise<
   const faltantes: { itemId: string; itemDescricao: string; campo: string }[] = []
 
   for (const item of dados.itens) {
-    for (const chave of CAMPOS_MEDIDA_FIXA) if (!medidaPositiva(item[chave])) faltantes.push({ itemId: item.id, itemDescricao: item.descricao || item.tipo_esquadria, campo: chave })
+    if (!medicaoComprovada(item)) faltantes.push({ itemId: item.id, itemDescricao: item.descricao || item.tipo_esquadria, campo: '6 medidas numéricas ou foto da trena' })
     const campos = camposDoItemV2(dados.campos, item, dados.respostas).filter(c => c.obrigatorio)
     for (const campo of campos) {
       const valor = valorRespostaItemV2(item, campo, dados.respostas)

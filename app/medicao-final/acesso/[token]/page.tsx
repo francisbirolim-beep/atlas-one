@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Camera, CheckCircle2, Loader2, MapPin, Ruler, Save } from 'lucide-react'
+import { medicaoComprovada, possuiFotoTrena, medicaoRequerConferencia } from '@/lib/medicaoComprovacao'
 
 type Dados = {
   acesso: { nome_convidado: string | null; telefone_convidado: string | null; expira_em: string | null }
@@ -126,7 +127,7 @@ export default function AcessoExternoMedicaoPage() {
     }
 
     if (!resp.ok || json?.leituraOk === false) {
-      setMensagem(json.error || 'Foto salva, mas nao foi possivel preencher as medidas automaticamente.')
+      setMensagem((json?.fotoUrl ? 'Foto da trena salva. Você pode concluir a medição mesmo sem leitura automática. ' : '') + (json.error || 'Não foi possível preencher os valores automaticamente.'))
       return
     }
 
@@ -144,8 +145,8 @@ export default function AcessoExternoMedicaoPage() {
 
   async function salvarMedidas() {
     if (!item) return
-    if (!referenciaVista) {
-      setMensagem('Selecione a referencia das alturas: vista interna ou vista externa.')
+    if (!referenciaVista && !possuiFotoTrena({ ...item, foto_larguras_url: fotosTrena.largura, foto_alturas_url: fotosTrena.altura })) {
+      setMensagem('Selecione a referência das alturas ou anexe a foto da trena.')
       return
     }
     setSalvando(true); setMensagem('')
@@ -232,7 +233,7 @@ export default function AcessoExternoMedicaoPage() {
   const endereco = [dados.medicao.endereco, dados.medicao.bairro, dados.medicao.cidade, dados.medicao.cep].filter(Boolean).join(' - ')
   const iniciado = ['em_medicao', 'com_pendencia', 'concluido', 'aprovado'].includes(dados.medicao.status_operacional)
   const concluido = ['concluido', 'aprovado'].includes(dados.medicao.status_operacional)
-  const totalMedidas = dados.itens.filter(i => i.medido).length
+  const totalMedidas = dados.itens.filter(i => medicaoComprovada(i)).length
 
   return (
     <div className="min-h-screen bg-slate-100 pb-10">
@@ -289,7 +290,7 @@ export default function AcessoExternoMedicaoPage() {
           <>
             <section className="overflow-x-auto rounded-2xl bg-white p-3 shadow-sm">
               <div className="flex gap-2">
-                {dados.itens.map((peca, idx) => <button key={peca.id} onClick={() => setItemId(peca.id)} className={`min-w-[150px] rounded-xl border px-3 py-2 text-left text-xs ${peca.id === itemId ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600'}`}><span className="block font-bold">Peca {idx + 1}</span><span className="block truncate opacity-70">{peca.descricao || peca.tipo_esquadria}</span>{peca.medido && <span className="mt-1 block text-emerald-400">Medida salva</span>}</button>)}
+                {dados.itens.map((peca, idx) => <button key={peca.id} onClick={() => setItemId(peca.id)} className={`min-w-[150px] rounded-xl border px-3 py-2 text-left text-xs ${peca.id === itemId ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600'}`}><span className="block font-bold">Peca {idx + 1}</span><span className="block truncate opacity-70">{peca.descricao || peca.tipo_esquadria}</span>{medicaoComprovada(peca) && <span className="mt-1 block text-emerald-400">{medicaoRequerConferencia(peca) ? 'Foto salva · conferir números' : 'Medida salva'}</span>}</button>)}
               </div>
             </section>
 
