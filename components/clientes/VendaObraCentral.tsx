@@ -7,6 +7,7 @@ import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
 import VendaTipologiasMateriais from '@/components/clientes/VendaTipologiasMateriais'
+import VendaMedidaFinal from '@/components/clientes/VendaMedidaFinal'
 import {gruposItensEmEtapa, urlPdfCardCotacao, progressoLotesCotacao, ETAPAS_COTACAO, type EtapaCotacao} from '@/lib/cotacaoEtapas'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 
@@ -87,7 +88,7 @@ type LoteCotacao = {
   status:string;quantidade_itens:number;versao:number;itens:Array<{material_id:string;codigo:string|null;descricao:string;unidade:string;quantidade_cotar:number;cor?:string|null;comprimento_corte_mm?:number|null;status_etapa?:string|null;grupo_card_id?:string|null}>
   gerado_por_nome?:string|null;created_at:string;updated_at:string
 }
-type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
+type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'medida-final'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
 interface Props{clienteId:string;vendaId:string}
 
 function moeda(v?:number|null){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
@@ -1107,7 +1108,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   const abas:{id:Aba;label:string}[]=[
     {id:'visao',label:'Visão geral'},{id:'financeiro',label:'Financeiro'},{id:'custos',label:'Custos / CMV'},
-    {id:'compras',label:'Compras'},{id:'materiais',label:'Materiais'},{id:'tipologias',label:'Tipologias'},{id:'producao',label:'Produção'},
+    {id:'compras',label:'Compras'},{id:'materiais',label:'Materiais'},{id:'tipologias',label:'Tipologias'},{id:'medida-final',label:'Medida Final'},{id:'producao',label:'Produção'},
     {id:'instalacao',label:'Instalação'},{id:'notas',label:'Notas / Recibos'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'}
   ]
 
@@ -1599,6 +1600,10 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           imagensProdutos={produtosMateriais}
           onAtualizar={carregar}
         />}
+
+        {aba==='medida-final'&&<Box titulo="Medida Final desta obra">
+          <VendaMedidaFinal clienteId={clienteId} obraId={venda.obra_id || null} orcamentoId={venda.orcamento_id}/>
+        </Box>}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
           <VendaProducaoKanbanPreview

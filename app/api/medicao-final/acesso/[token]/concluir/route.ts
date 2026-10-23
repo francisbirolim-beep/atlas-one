@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buscarAcessoValidoMedicao } from '@/lib/medicaoAcessoExternoServer'
+import { medicaoComprovada } from '@/lib/medicaoComprovacao'
 
 function presente(valor: unknown) {
   return !(valor === undefined || valor === null || valor === '' || (Array.isArray(valor) && valor.length === 0))
@@ -21,7 +22,7 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
   }
 
   const [itensResp, camposResp, respostasResp, pendenciasResp] = await Promise.all([
-    supabaseAdmin.from('medicao_itens').select('id, tipo_esquadria, descricao, quantidade, medido, campos_extras').eq('medicao_id', acesso.medicao_id),
+    supabaseAdmin.from('medicao_itens').select('id, tipo_esquadria, descricao, quantidade, medido, campos_extras, largura_baixo_mm, largura_meio_mm, largura_cima_mm, altura_direita_mm, altura_meio_mm, altura_esquerda_mm, foto_larguras_url, foto_alturas_url').eq('medicao_id', acesso.medicao_id),
     supabaseAdmin.from('tipologia_campos_extras').select('tipo_esquadria, chave, nome, obrigatorio, ativo').eq('ativo', true).eq('obrigatorio', true),
     supabaseAdmin.from('medicao_respostas').select('item_id, campo_chave, valor').eq('medicao_id', acesso.medicao_id),
     supabaseAdmin.from('medicao_pendencias').select('id', { count: 'exact', head: true }).eq('medicao_id', acesso.medicao_id).eq('status', 'aberta'),
@@ -35,8 +36,8 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
   if (itens.some(i => Math.max(1, i.quantidade || 1) > 1)) {
     return NextResponse.json({ error: 'Existem pecas agrupadas. Separe as unidades no Atlas antes de concluir.' }, { status: 409 })
   }
-  if (itens.some(i => !i.medido)) {
-    return NextResponse.json({ error: 'Ainda existem pecas sem as medidas finais.' }, { status: 409 })
+  if (itens.some(i => !medicaoComprovada(i))) {
+    return NextResponse.json({ error: 'Existem pecas sem foto da trena e sem as seis medidas manuais.' }, { status: 409 })
   }
   if ((pendenciasResp.count || 0) > 0) {
     return NextResponse.json({ error: 'Existem pendencias abertas que precisam ser resolvidas no Atlas.' }, { status: 409 })
@@ -56,6 +57,15 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
 
   if (faltantes.length > 0) {
     return NextResponse.json({ error: 'Checklist obrigatorio incompleto.', faltantes: faltantes.slice(0, 20) }, { status: 409 })
+  }
+
+  // Links externos podem salvar a foto mesmo quando a IA retorna 0/3.
+  const semStatus = itens.filter(i => !i.medido)
+  if (semStatus.length > 0) {
+    const { error: erroStatus } = await supabaseAdmin.from('medicao_itens')
+      .update({ medido: true, medido_em: new Date().toISOString(), status_medicao: 'concluida' })
+      .in('id', semStatus.map(i => i.id)).eq('medicao_id', acesso.medicao_id)
+    if (erroStatus) return NextResponse.json({ error: 'Falha ao atualizar o status das pecas.' }, { status: 500 })
   }
 
   const { error } = await supabaseAdmin
