@@ -248,6 +248,7 @@ export default function WhatsAppAtendimentoPage() {
   const carregandoConversasRef = useRef(false)
   const recarregarConversasPendenteRef = useRef(false)
   const refreshConversasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const buscaInternaDireitaRef = useRef<HTMLInputElement | null>(null)
   const arquivoInternoInputRef = useRef<HTMLInputElement | null>(null)
   const cameraInternaInputRef = useRef<HTMLInputElement | null>(null)
   const gravadorInternoRef = useRef<MediaRecorder | null>(null)
@@ -395,6 +396,13 @@ export default function WhatsAppAtendimentoPage() {
     area: 'individuais' | 'grupos' | 'monitoramento' | 'internas',
     filtroInicial: 'todas' | 'aguardando' = 'todas',
   ) {
+    // Em telas amplas, a equipe interna mora na coluna direita.
+    // A navegação é um atalho para essa coluna, não uma segunda lista à esquerda.
+    if (area === 'internas' && typeof window !== 'undefined' && window.innerWidth >= 1280) {
+      if (areaAtendimento === 'monitoramento' || areaAtendimento === 'internas') setAreaAtendimento('individuais')
+      requestAnimationFrame(() => buscaInternaDireitaRef.current?.focus())
+      return
+    }
     setAreaAtendimento(area)
     setFiltro(filtroInicial)
     setBusca('')
@@ -427,7 +435,7 @@ export default function WhatsAppAtendimentoPage() {
     const id = usuarioId || eu?.id
     if (!id) return
     try {
-      const lista = await listarConversasInternas(id)
+      const lista = await listarConversasInternas(id, true)
       setConversasInternas(lista)
       setConversaInternaAtiva(atual => atual ? (lista.find(c => c.id === atual.id) || atual) : atual)
     } catch {}
@@ -1050,12 +1058,15 @@ export default function WhatsAppAtendimentoPage() {
   }, [conversas, busca, filtro, canalFiltro, areaAtendimento, eu?.id, eu?.role])
 
   const usuariosInternosBusca = useMemo(() => {
+    // Pesquisa de clientes/grupos do WhatsApp não deve misturar pessoas internas.
+    // Para conversas internas, use o painel Equipe interna e seu botão +.
+    if (areaAtendimento !== 'internas') return []
     const q = busca.toLocaleLowerCase('pt-BR').trim()
     if (q.length < 2) return []
     return usuarios
       .filter(u => u.id !== eu?.id && String(u.nome || '').toLocaleLowerCase('pt-BR').includes(q))
       .slice(0, 12)
-  }, [usuarios, eu?.id, busca])
+  }, [usuarios, eu?.id, busca, areaAtendimento])
 
   const contatosBuscaVisiveis = useMemo(() => {
     if (busca.trim().length < 2) return []
@@ -1728,7 +1739,7 @@ export default function WhatsAppAtendimentoPage() {
           <button type="button" onClick={()=>mudarArea('internas')} className={`shrink-0 rounded-lg px-3 text-xs font-bold ${areaAtendimento==='internas'?'bg-blue-600 text-white':'bg-white text-slate-600'}`}>Equipe interna</button>
         </div>
 
-        <div className={`${areaAtendimento==='monitoramento'?'hidden':'grid'} h-[calc(100dvh-126px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] lg:h-[calc(100dvh-72px)]`}>
+        <div className={`${areaAtendimento==='monitoramento'?'hidden':'grid'} h-[calc(100dvh-126px)] min-h-0 w-full max-w-full grid-cols-[minmax(0,1fr)] overflow-hidden md:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px] lg:h-[calc(100dvh-72px)]`}>
           <aside className={`${ativa || conversaInternaAtiva ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 w-full max-w-full flex-col overflow-hidden border-r`}>
             <div className="border-b p-3">
               {canais.length > 1 && (
@@ -2713,20 +2724,20 @@ export default function WhatsAppAtendimentoPage() {
             </>}
           </section>
 
-          <aside className="hidden min-h-0 min-w-0 flex-col border-l border-slate-200 bg-white">
+          <aside aria-label="Equipe interna — minhas conversas" className="hidden min-h-0 min-w-0 flex-col border-l border-slate-200 bg-white xl:flex">
             <div className="border-b border-slate-200 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <Users size={17} className="shrink-0 text-blue-600"/>
-                    <b className="truncate text-sm text-slate-900">Conversas internas</b>
+                    <b className="truncate text-sm text-slate-900">Equipe interna</b>
                     {totalInternasNaoLidas > 0 && (
                       <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
                         {totalInternasNaoLidas > 99 ? '99+' : totalInternasNaoLidas}
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-[11px] text-slate-500">Equipe Atlas · atualiza em tempo real</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">Suas conversas · individuais e grupos</p>
                 </div>
                 <button type="button" onClick={abrirConversaInterna}
                   className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white shadow-sm hover:bg-blue-700"
@@ -2737,7 +2748,7 @@ export default function WhatsAppAtendimentoPage() {
 
               <div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">
                 <Search size={15} className="text-slate-400"/>
-                <input value={buscaInterna} onChange={e=>setBuscaInterna(e.target.value)}
+                <input ref={buscaInternaDireitaRef} value={buscaInterna} onChange={e=>setBuscaInterna(e.target.value)}
                   placeholder="Buscar conversa interna..."
                   className="w-full bg-transparent py-2.5 text-xs outline-none"/>
               </div>
