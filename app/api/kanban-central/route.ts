@@ -211,7 +211,9 @@ export async function GET(req:NextRequest){
     if(erroCardsMedicao)throw erroCardsMedicao
     const idSet=new Set<string>()
     for(const card of cardsMedicao||[]){
-     const id=String(card.descricao||'').match(/\\[medicao:([a-f0-9-]{36})\\]/i)?.[1]
+     const marcador=String(card.descricao||'')
+     const parte=marcador.split('[medicao:')[1]?.split(']')[0]
+     const id=parte&&/^[a-f0-9-]{36}$/i.test(parte)?parte:null
      if(id)idSet.add(id)
     }
     const medicaoIds=[...idSet]
