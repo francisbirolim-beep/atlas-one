@@ -70,6 +70,7 @@ const server=load('lib/wvetroValorVendaValidacaoServer.ts',{
  'next/server':{NextResponse:{json:(data,o={})=>({data,status:o.status||200})}},
  './supabaseAdmin':{supabaseAdmin:{from:query}},
  './acessoUsuarioServer':{usuarioPodeAcaoServer:async()=>allowed},
+ './validacaoOrcamentoAcessoServer':{podeValidarOrcamentoEmpresa:async()=>allowed},
  './ai/permissoesServer':{carregarPermissoesIA:async()=>({dominios:{orcamento:{permitido:true,escopo:scope}}})},
  './wvetroValorVendaValidacao':core,
 })
@@ -130,7 +131,8 @@ const request=(modo,extra={})=>server.conferirValorVendaImportadoWVetro(usuario,
  assert.equal(r.status,409);assert.equal(row.valor_estimado,9461.43)
  reset();row.status='vendido';r=await request('validar');assert.equal(r.status,409)
  reset();allowed=false;r=await request('validar');assert.equal(r.status,403)
- reset();scope='proprio';row.criado_por_id='outro';r=await request('validar');assert.equal(r.status,404)
+ // A permissão explícita de aprovação de orçamento permite conferir também registros de outro autor.
+ reset();scope='proprio';row.criado_por_id='outro';r=await request('validar');assert.equal(r.status,200)
  reset();conflict=true;r=await request('corrigir',{valorCorrigido:10217.92,justificativa:'Corrigido'})
  assert.equal(r.status,409);assert.equal(feedback.length,0,'CAS remove feedback de operação não aplicada')
  reset();feedbackFail=true;await assert.rejects(request('corrigir',{valorCorrigido:10217.92,justificativa:'Corrigido'}))
