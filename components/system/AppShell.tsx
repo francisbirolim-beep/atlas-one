@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { medicaoIdDaRota } from '@/lib/medicaoRota'
 import Sidebar from '@/components/Sidebar'
 import AppTopbar from '@/components/system/AppTopbar'
+import AtlasVoltar from '@/components/system/AtlasVoltar'
 import HomeDashboard from '@/components/system/HomeDashboard'
 import MobileFavorites from '@/components/system/MobileFavorites'
 import MobileNavigationControls from '@/components/system/MobileNavigationControls'
@@ -40,6 +41,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {!ehWhatsAppAtendimento && <MobileNavigationControls />}
       <div className={`atlas-app-content min-w-0 w-full max-w-full flex-1 overflow-x-hidden ${ehWhatsAppAtendimento ? 'h-screen bg-white overflow-hidden' : 'bg-slate-50 md:h-screen md:overflow-y-auto'}`}>
         {!ehWhatsAppAtendimento && <AppTopbar />}
+        {!ehWhatsAppAtendimento && !ehHome && <AtlasVoltar />}
         {ehWhatsAppAtendimento && <ChatNotificationToast />}
         <main className={`atlas-app-main atlas-main-surface w-full max-w-full overflow-x-hidden ${ehWhatsAppAtendimento ? 'min-h-screen bg-white pb-0' : 'min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0'} ${ehHome ? 'atlas-home-v2' : ''}`}>
           {ehHome && <HomeDashboard />}

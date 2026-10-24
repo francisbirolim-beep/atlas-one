@@ -8,6 +8,7 @@ import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
 import VendaTipologiasMateriais from '@/components/clientes/VendaTipologiasMateriais'
 import VendaMedidaFinal from '@/components/clientes/VendaMedidaFinal'
+import VendaMedidaStatus from '@/components/clientes/VendaMedidaStatus'
 import {gruposItensEmEtapa, urlPdfCardCotacao, progressoLotesCotacao, ETAPAS_COTACAO, type EtapaCotacao} from '@/lib/cotacaoEtapas'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 
@@ -234,6 +235,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const listaMateriaisRef=useRef<HTMLDivElement>(null)
   const tentouMaterializarVenda=useRef<string|null>(null)
   const [aba,setAba]=useState<Aba>('visao')
+  useEffect(()=>{
+    if(new URLSearchParams(window.location.search).get('aba')==='medida-final')setAba('medida-final')
+  },[vendaId])
   const [editorCortesAberto,setEditorCortesAberto]=useState(false)
   const [painelEtapa,setPainelEtapa]=useState<'financeiro'|'compras'|'mercadoria'|'producao'|'instalacao'|'venda'|null>(null)
   const [categoriaAberta,setCategoriaAberta]=useState<'perfil'|'vidro'|'acessorios'|'outros'>('perfil')
@@ -1122,6 +1126,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold text-slate-900">{obra?.nome||`Venda #${venda.numero||'—'}`}</h1><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">{status(venda.status||'ativa')}</span></div>
               <p className="mt-1 text-sm text-slate-500">{cliente.nome} · Orçamento #{numeroOrcamento(orcamento)}{obra?.numero?` · Obra #${obra.numero}`:''}</p>
               <p className="mt-1 text-xs text-slate-400">Venda confirmada em {dataBR(venda.confirmado_em)}{venda.confirmado_por_nome?` por ${venda.confirmado_por_nome}`:''}</p>
+              <VendaMedidaStatus clienteId={clienteId} obraId={venda.obra_id||null} orcamentoId={venda.orcamento_id} onAbrir={()=>setAba('medida-final')}/>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1602,7 +1607,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         />}
 
         {aba==='medida-final'&&<Box titulo="Medida Final desta obra">
-          <VendaMedidaFinal clienteId={clienteId} obraId={venda.obra_id || null} orcamentoId={venda.orcamento_id}/>
+          <VendaMedidaFinal clienteId={clienteId} vendaId={venda.id} obraId={venda.obra_id || null} orcamentoId={venda.orcamento_id}/>
         </Box>}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">

@@ -68,6 +68,8 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
   const [novaPendencia, setNovaPendencia] = useState('')
   const [mostrandoPendencias, setMostrandoPendencias] = useState(false)
   const [revisando, setRevisando] = useState(false)
+  const [responsaveisRevisao, setResponsaveisRevisao] = useState<string[]>([])
+  const [responsaveisInicializados, setResponsaveisInicializados] = useState(false)
   const [operacoesAbertas, setOperacoesAbertas] = useState(false)
 
   const master = usuario?.role === 'master'
@@ -97,6 +99,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     return () => window.clearInterval(timer)
   }, [carregar])
 
+  useEffect(() => {
+    if (responsaveisInicializados || usuarios.length === 0) return
+    const iniciais = usuarios.filter(u => ['DAIANE', 'GABRIELLE'].includes(u.nome.trim().toLocaleUpperCase('pt-BR'))).map(u => u.id)
+    setResponsaveisRevisao(iniciais)
+    setResponsaveisInicializados(true)
+  }, [usuarios, responsaveisInicializados])
+
   const responsavelExibicao = useMemo(() => {
     if (operacao?.responsavel_nome) return operacao.responsavel_nome
     if (resumo.medidores.length === 1) return resumo.medidores[0]
@@ -119,6 +128,66 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
           : pendenciasAbertas.length > 0
             ? 'Resolva as pendências abertas antes de concluir.'
             : ''
+
+  const seletorResponsaveis = (
+    <fieldset className="mt-3 rounded-xl border border-blue-200 bg-white p-3">
+      <legend className="px-1 text-xs font-bold text-blue-800">Quem deve conferir a Medida Final?</legend>
+      <p className="mb-3 text-xs text-slate-600">Selecione uma ou mais pessoas. Cada responsável receberá sua própria tarefa e notificação.</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {usuarios.map(u => (
+          <label key={u.id} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700">
+            <input type="checkbox" checked={responsaveisRevisao.includes(u.id)} disabled={processando}
+              onChange={e => setResponsaveisRevisao(prev => e.target.checked ? [...prev, u.id] : prev.filter(id => id !== u.id))}
+              className="h-4 w-4 accent-blue-700" />
+            <span>{u.nome}</span>
+          </label>
+        ))}
+      </div>
+      {responsaveisRevisao.length === 0 && <p className="mt-2 text-xs font-semibold text-amber-700">Escolha pelo menos um responsável para criar as tarefas.</p>}
+    </fieldset>
+  )
+
+  async function encaminharConferencia(concluirAntes: boolean) {
+    if (processando || !master || responsaveisRevisao.length === 0) return
+    limparRetorno()
+    setProcessando(true)
+    try {
+      let mensagemConclusao = ''
+      if (concluirAntes) {
+        const resultado = await concluirMedicaoFinal(medicaoId)
+        if (!resultado.ok) { setErro(resultado.mensagem || 'Não foi possível concluir a medição.'); return }
+        mensagemConclusao = resultado.mensagem || ''
+        if (mensagemConclusao.includes('envio à Produção está pendente')) {
+          setErro(mensagemConclusao + ' Reenvie à Produção antes de atribuir as tarefas.')
+          await carregar()
+          return
+        }
+      }
+      const token = await tokenAtual()
+      if (!token) { setErro('Medição concluída. Sessão expirada: entre novamente para distribuir as tarefas.'); return }
+      const resp = await fetch(`/api/medicao-final/${medicaoId}/atribuir-conferencia`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ responsaveis: responsaveisRevisao }),
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        setErro((concluirAntes ? 'Medição enviada à Produção. ' : '') +
+          (json.error || 'Tarefas não confirmadas. Use a opção de conferir tarefas sem reenviar a medição.'))
+        return
+      }
+      setMensagem(`${concluirAntes ? 'Medição Final enviada à Produção. ' : ''}${json.criadas} tarefa(s) criada(s) e ${json.existentes} já existente(s). Responsáveis notificados.`)
+      setRevisando(false)
+      await carregar()
+      window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
+    } catch (e) {
+      console.error('Erro ao encaminhar conferência:', e)
+      setErro('Não foi possível confirmar as tarefas. A Medição Final permanece salva.')
+      await carregar()
+    } finally {
+      setProcessando(false)
+    }
+  }
 
   function limparRetorno() {
     setMensagem('')
@@ -534,17 +603,30 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               </div>
               <button type="button" onClick={() => setRevisando(false)} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700">Voltar e revisar</button>
             </div>
+            {master && seletorResponsaveis}
             <div className="mt-3 flex justify-end">
               <button
                 type="button"
-                disabled={processando || !podeConcluir}
+                disabled={processando || !podeConcluir || (master && responsaveisRevisao.length === 0)}
                 title={fluxoVendaBloqueado ? 'Confirme a venda e envie o orçamento para o fluxo Vendido antes de enviar a Medição Final.' : undefined}
-                onClick={() => void executar(() => concluirMedicaoFinal(medicaoId), 'Medição Final enviada para aprovação.').then(() => setRevisando(false))}
+                onClick={() => master ? void encaminharConferencia(true) : void executar(() => concluirMedicaoFinal(medicaoId), 'Medição Final enviada para aprovação.').then(() => setRevisando(false))}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-40"
               >
-                <CheckCircle2 size={14} /> Enviar medição final
+                <CheckCircle2 size={14} /> {master ? 'Enviar Medida Final e criar tarefas' : 'Enviar medição final'}
               </button>
             </div>
+          </div>
+        )}
+
+        {master && ['concluido','aprovado'].includes(operacao?.status_operacional || '') && (
+          <div className="border-b border-blue-100 bg-blue-50/50 p-3 md:p-4">
+            <p className="text-sm font-semibold text-slate-800">Tarefas de conferência após envio</p>
+            {seletorResponsaveis}
+            <button type="button" disabled={processando || responsaveisRevisao.length === 0}
+              onClick={() => void encaminharConferencia(false)}
+              className="mt-3 rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">
+              Criar / conferir tarefas dos responsáveis
+            </button>
           </div>
         )}
 

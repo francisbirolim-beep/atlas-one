@@ -37,8 +37,9 @@ function descricaoStatus(status: string | null) {
   } as Record<string, string>)[status || ''] || String(status || 'Pendente').replaceAll('_', ' ')
 }
 
-export default function VendaMedidaFinal({ clienteId, obraId, orcamentoId }: {
+export default function VendaMedidaFinal({ clienteId, vendaId, obraId, orcamentoId }: {
   clienteId: string
+  vendaId: string
   obraId: string | null
   orcamentoId: string
 }) {
@@ -49,6 +50,11 @@ export default function VendaMedidaFinal({ clienteId, obraId, orcamentoId }: {
   const [tipo, setTipo] = useState<TipoMedicaoFinal>('tipologia')
   const [filtro, setFiltro] = useState<Filtro>('todas')
   const [erro, setErro] = useState('')
+
+  function registrarRetorno(medicaoId: string) {
+    window.sessionStorage.setItem(`atlas-medicao-retorno:${medicaoId}`,
+      `/clientes/${clienteId}/vendas/${vendaId}?aba=medida-final`)
+  }
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -103,6 +109,7 @@ export default function VendaMedidaFinal({ clienteId, obraId, orcamentoId }: {
         return
       }
       // O criador também recupera a medição existente quando o orçamento e o tipo já estão vinculados.
+      registrarRetorno(registro.id)
       window.location.assign(`/producao/medicao-final/${registro.id}`)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao iniciar a Medida Final.')
@@ -144,7 +151,7 @@ export default function VendaMedidaFinal({ clienteId, obraId, orcamentoId }: {
         filtradas.length === 0 ? <p className="rounded-lg border border-dashed p-4 text-sm text-slate-500">Nenhuma medição encontrada neste filtro para esta obra.</p> :
         <div className="grid gap-3 md:grid-cols-2">
           {filtradas.map(m => (
-            <Link key={m.id} href={`/producao/medicao-final/${m.id}`} className="rounded-xl border border-slate-200 bg-white p-4 hover:border-blue-400 hover:shadow-sm">
+            <Link key={m.id} href={`/producao/medicao-final/${m.id}`} onClick={() => registrarRetorno(m.id)} className="rounded-xl border border-slate-200 bg-white p-4 hover:border-blue-400 hover:shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-2 text-sm font-bold text-slate-800"><Ruler size={16} /> {m.tipo_medicao === 'contramarco' ? 'Contramarco' : 'Tipologia / esquadria'}</span>
                 <span className="text-xs font-bold text-blue-700">Abrir / conferir →</span>
