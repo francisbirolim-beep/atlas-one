@@ -40,6 +40,7 @@ const server=load('lib/wvetroValidacaoItemServer.ts',{
  'node:crypto':{randomUUID:require('node:crypto').randomUUID},
  './supabaseAdmin':{supabaseAdmin:{from:query}},
  './acessoUsuarioServer':{usuarioPodeAcaoServer:async()=>allowed},
+ './validacaoOrcamentoAcessoServer':{podeValidarOrcamentoEmpresa:async()=>allowed},
  './ai/permissoesServer':{carregarPermissoesIA:async()=>({dominios:{orcamento:{permitido:true,escopo:scope}}})},
  './wvetroValidacaoItem':p,
  './wvetroPacoteTecnicoServer':{materializarPacoteTecnicoWVetro:async()=>{packageCalls++;return {ok:true}}},
@@ -105,7 +106,8 @@ const request=(acao,correcao={},itemId='i1',original)=>server.validarItemImporta
  r=await request('corrigir_item_importacao',{});assert.equal(r.status,400)
  r=await request('validar_item_importacao',{},'i1',{...p.snapshotItemWVetro(item),ambiente:'Antigo'});assert.equal(r.status,409)
  reset();allowed=false;r=await request('validar_item_importacao');assert.equal(r.status,403);assert.equal(feedback.length,0)
- reset();scope='proprio';row.criado_por_id='outro';r=await request('validar_item_importacao');assert.equal(r.status,404)
+ // Delegação explícita de aprovar orçamento não depende da autoria nem do escopo de consulta da IA.
+ reset();scope='proprio';row.criado_por_id='outro';r=await request('validar_item_importacao');assert.equal(r.status,200)
  reset();conflict=true;r=await request('corrigir_item_importacao',{ambiente:'Nova'});assert.equal(r.status,409);assert.equal(row.itens[0].ambiente,'Sala');assert.equal(feedback.length,0,'Conflito remove feedback não aplicado')
  reset();feedbackFail=true;await assert.rejects(request('corrigir_item_importacao',{ambiente:'Nova'}));assert.equal(row.itens[0].ambiente,'Sala')
  reset();row.updated_at=null;r=await request('validar_item_importacao');assert.equal(r.status,200);assert.ok(filters.some(([t,c,v])=>t==='orcamentos'&&c==='updated_at'&&v===null),'CAS para timestamps legados nulos')
