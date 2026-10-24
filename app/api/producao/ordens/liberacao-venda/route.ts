@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { avaliarLiberacaoProducao } from '@/lib/vendaLiberacaoProducao'
 
 export const runtime='nodejs'
@@ -73,12 +74,20 @@ async function avaliarNoBanco(usuario:UsuarioTenant,vendaId:string){
 export async function GET(req:NextRequest){
   const usuario=await autenticarTenant(req)
   if(!usuario)return erro('Sessão inválida.',401)
+  let podeConsultar=false, podeLiberar=false
+  try{
+    [podeConsultar,podeLiberar]=await Promise.all([
+      usuarioPodeAcaoServer({usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,setorId:'producao',acaoId:'producao.geral.consultar',minimo:'consulta'}),
+      usuarioPodeAcaoServer({usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,setorId:'producao',acaoId:'producao.geral.liberar',minimo:'edicao'}),
+    ])
+  }catch{return erro('Não foi possível conferir seu acesso à Produção.',503)}
+  if(!podeConsultar)return erro('Sem permissão para consultar a liberação da Produção.',403)
   const vendaId=String(req.nextUrl.searchParams.get('vendaId')||'').trim()
   if(!uuid.test(vendaId))return erro('Venda inválida.')
   try{
     const dados=await avaliarNoBanco(usuario,vendaId)
     if(!dados)return erro('Venda não localizada nesta empresa.',404)
-    return NextResponse.json({ok:true,...dados.resumo,liberacaoPermitida:usuario.role==='master'})
+    return NextResponse.json({ok:true,...dados.resumo,liberacaoPermitida:podeLiberar})
   }catch(e){
     console.error('[Produção][Conferir liberação]',e)
     return erro('Não foi possível conferir a liberação desta venda.',500)
@@ -87,7 +96,14 @@ export async function GET(req:NextRequest){
 export async function POST(req:NextRequest){
   const usuario=await autenticarTenant(req)
   if(!usuario)return erro('Sessão inválida.',401)
-  if(usuario.role!=='master')return erro('Esta liberação operacional exige autorização do Master.',403)
+  let autorizado=false
+  try{
+    autorizado=await usuarioPodeAcaoServer({
+      usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,
+      setorId:'producao',acaoId:'producao.geral.liberar',minimo:'edicao',
+    })
+  }catch{return erro('Não foi possível conferir a permissão para liberar a Produção.',503)}
+  if(!autorizado)return erro('Seu usuário não recebeu autorização para liberar a Produção.',403)
   try{
     const body=await req.json().catch(()=>({}))
     const vendaId=String(body?.vendaId||'').trim()

@@ -2,6 +2,7 @@ import {unidadeCmvValida,quantidadeCmvValida} from '@/lib/vendaCmvUnidades'
 // Custo previsto e realizado por obra.
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
+import { usuarioTemDelegacaoExplicitaServer } from '@/lib/acessoUsuarioServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { extrairPrevisaoWVetro } from '@/lib/wvetroCmvResumo'
 import { lerRevisaoCmv, type RevisaoCmv, type CategoriaCmvRevisao } from '@/lib/vendaCmvRevisao'
@@ -207,8 +208,13 @@ export async function PATCH(req:NextRequest){
   if(erroAntigo)throw erroAntigo
   if(!antigo)return erro('Lançamento não encontrado nesta venda.',404)
   // Evita que outro colaborador altere lançamentos de terceiros sem autorização Master.
-  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id)
-    return erro('A edição deste lançamento exige o autor original ou o Master.',403)
+  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id){
+   const delegado=await usuarioTemDelegacaoExplicitaServer({
+    usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,
+    setorId:'financeiro',acaoId:'financeiro.cmv.editar_terceiros'
+   })
+   if(!delegado)return erro('A edição exige autoria ou delegação específica do Master.',403)
+  }
   if(antigo.versao!==versao)return erro('Este lançamento foi alterado por outra pessoa. Atualize antes de editar.',409)
   const categoria=txt(form.get('categoria'),30)
   const origem=txt(form.get('origem'),30)
@@ -296,8 +302,13 @@ export async function DELETE(req:NextRequest){
    .eq('venda_obra_id',vendaId).eq('orcamento_id',venda.orcamento_id).maybeSingle()
   if(erroAntigo)throw erroAntigo
   if(!antigo)return erro('Lançamento não encontrado nesta venda.',404)
-  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id)
-   return erro('A exclusão deste lançamento exige o autor original ou o Master.',403)
+  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id){
+   const delegado=await usuarioTemDelegacaoExplicitaServer({
+    usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,
+    setorId:'financeiro',acaoId:'financeiro.cmv.excluir_terceiros'
+   })
+   if(!delegado)return erro('A exclusão exige autoria ou delegação específica do Master.',403)
+  }
   if(antigo.cancelado_em)return erro('Lançamento já excluído. Atualize a tela.',409)
   if(antigo.versao!==versao)return erro('Este lançamento foi alterado por outra pessoa. Atualize antes de excluir.',409)
   const agora=new Date().toISOString()
@@ -338,8 +349,13 @@ export async function PUT(req:NextRequest){
    .eq('orcamento_id',venda.orcamento_id).maybeSingle()
   if(erroAntigo)throw erroAntigo
   if(!antigo)return erro('Lançamento não encontrado nesta venda.',404)
-  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id)
-   return erro('A restauração deste lançamento exige o autor original ou o Master.',403)
+  if(usuario.role!=='master'&&antigo.criado_por_id!==usuario.id){
+   const delegado=await usuarioTemDelegacaoExplicitaServer({
+    usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,
+    setorId:'financeiro',acaoId:'financeiro.cmv.restaurar_terceiros'
+   })
+   if(!delegado)return erro('A restauração exige autoria ou delegação específica do Master.',403)
+  }
   if(!antigo.cancelado_em)return erro('Lançamento já está ativo. Atualize a tela.',409)
   if(antigo.versao!==versao)return erro('O lançamento foi alterado. Atualize antes de restaurar.',409)
   const agora=new Date().toISOString()

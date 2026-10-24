@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabaseAdmin'
+import { moduloDaAcaoPermissao } from './permissoesBlocos'
 
 export type NivelAcessoServer = 'oculto' | 'consulta' | 'edicao'
 
@@ -47,12 +48,28 @@ export async function nivelAcaoUsuarioServer(params:{
   if(nivelSetor==='oculto') return 'oculto'
 
   const config=await lerAcessoConfigServer(params.usuarioId,params.empresaId)
+  const modulo=moduloDaAcaoPermissao(params.acaoId)
+  const escolhido=modulo?.setorId===params.setorId?config?.modulos?.[modulo.id]:undefined
+  const tetoModulo=escolhido?menor(nivelSetor,nivel(escolhido)):nivelSetor
+  if(tetoModulo==='oculto')return 'oculto'
   const explicito=nivel(config?.acoes?.[params.acaoId])
-  if(!config?.acoes || !(params.acaoId in config.acoes)) return nivelSetor
-  return menor(nivelSetor,explicito)
+  if(!config?.acoes || !(params.acaoId in config.acoes)) return tetoModulo
+  return menor(tetoModulo,explicito)
 }
 
-export async function usuarioPodeAcaoServer(params:{
+// Para exceder o limite legado de autoria (editar dados criados por terceiros),
+ // o Master precisa autorizar a ação NOMINALMENTE, sem herança genérica do setor.
+ // Falha de consulta é propagada e não concede acesso.
+ export async function usuarioTemDelegacaoExplicitaServer(params:{
+   usuarioId:string; role:string; empresaId:string; setorId:string; acaoId:string
+ }):Promise<boolean> {
+   if(params.role==='master')return true
+   const config=await lerAcessoConfigServer(params.usuarioId,params.empresaId)
+   if(!config || config.acoes?.[params.acaoId]!=='edicao')return false
+   return (await nivelAcaoUsuarioServer(params))==='edicao'
+ }
+
+ export async function usuarioPodeAcaoServer(params:{
   usuarioId:string
   role:string
   setorId:string

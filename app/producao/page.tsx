@@ -6,7 +6,11 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, FileSpreadsheet, FileText, Loader2, LockKeyhole, Package, Pencil, Play, Plus, Ruler, X, CheckCircle2, ClipboardCheck, ShieldCheck, UserRound } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
-import { criarColunaSetor, editarColunaSetor, editarItemSetor, listarColunasSetor, listarItensSetor, moverItemSetor } from '@/lib/setorKanban'
+import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
+import { listarPermissoesUsuario } from '@/lib/setores'
+import { podeExecutarAcao } from '@/lib/producaoPermissoes'
+import { listarColunasSetor, listarItensSetor } from '@/lib/setorKanban'
+import { criarEtapaProducao, editarEtapaProducao, editarCardProducao, moverCardProducao, avancarOrdemProducao, criarOrdemProducaoSegura, marcarCardLiberadoProducaoSeguro } from '@/lib/producaoOperacoesCliente'
 import type { SetorKanbanColuna, SetorKanbanItem, Usuario } from '@/lib/tipos'
 import { aprovarMedicaoFinal } from '@/lib/medicaoFinalV2'
 import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
@@ -14,14 +18,11 @@ import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import { gerarPacoteMedicaoFinal } from '@/lib/materialPlanejamento'
 import { vincularCardAMedicao, temMarcadorMedicaoDoCard } from '@/lib/producaoMedicaoCard'
 import {
-  atualizarOrdemProducao,
-  criarOrdemProducaoManual,
   listarClientesProducao,
   listarObrasProducao,
   listarOrdensProducao,
   listarVendasProducao,
   listarMedicoesFinaisProducao,
-  marcarCardLiberadoProducao,
   type ClienteProducao,
   type ObraProducao,
   type OrdemProducao,
@@ -61,6 +62,8 @@ function descricaoEtapa(coluna: SetorKanbanColuna, indice: number) {
 
 export default function Producao() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [acoesPermitidas, setAcoesPermitidas] = useState<Record<string, boolean>>({})
+  const pode = (acao: string) => usuario?.role === 'master' || Boolean(acoesPermitidas[acao])
   const [colunas, setColunas] = useState<SetorKanbanColuna[]>([])
   const [cards, setCards] = useState<SetorKanbanItem[]>([])
   const [ordens, setOrdens] = useState<OrdemProducao[]>([])
@@ -98,7 +101,26 @@ export default function Producao() {
   async function carregar() {
     setCarregando(true)
     const u = await usuarioAtual()
-    if (u) {
+    const acoes: Record<string, boolean> = {}
+    if (u && u.role !== 'master') {
+      try {
+        const [setores, config] = await Promise.all([listarPermissoesUsuario(u.id), lerAcessoUsuarioConfig(u)])
+        const operacoes: Array<[string,string,'consulta'|'edicao']> = [
+          ['producao.geral.mover','producao','edicao'],
+          ['producao.geral.editar','producao','edicao'],
+          ['producao.geral.criar','producao','edicao'],
+          ['producao.geral.etapas','producao','edicao'],
+          ['producao.geral.liberar','producao','edicao'],
+          ['producao.separacao.consultar','producao','consulta'],
+          ['producao.plano_corte.consultar','producao','consulta'],
+          ['producao.imprimir','producao','consulta'],
+          ['producao.medida_final.consultar','medida-final-msdwtt9y','consulta'],
+        ]
+        for (const [acao,setor,minimo] of operacoes) acoes[acao]=podeExecutarAcao(u.role,setores,config,setor,acao,minimo)
+      } catch { setErro('Não foi possível conferir as permissões. A edição foi bloqueada.') }
+    }
+    setAcoesPermitidas(acoes)
+    if (u && (u.role === 'master' || acoes['producao.geral.editar'])) {
       try {
         const token = await tokenAtual()
         if (token) {
@@ -193,14 +215,17 @@ export default function Producao() {
   }
 
   function abrirNovaEtapa() {
+    if (!pode('producao.geral.etapas')) return
     setEditorEtapa({ nome: '', descricao: '' })
   }
 
   function abrirEditarEtapa(col: SetorKanbanColuna) {
+    if (!pode('producao.geral.etapas')) return
     setEditorEtapa({ id: col.id, nome: col.nome, descricao: col.descricao || '' })
   }
 
   async function salvarEtapa() {
+    if (!pode('producao.geral.etapas')) return
     if (!editorEtapa) return
     const nome = editorEtapa.nome.trim()
     if (!nome) {
@@ -211,14 +236,14 @@ export default function Producao() {
     setSalvandoEtapa(true)
     try {
       if (editorEtapa.id) {
-        const atualizada = await editarColunaSetor(editorEtapa.id, { nome, descricao: editorEtapa.descricao })
+        const atualizada = await editarEtapaProducao(editorEtapa.id, { nome, descricao: editorEtapa.descricao })
         if (!atualizada) {
           setErro('Não foi possível salvar as alterações desta etapa.')
           return
         }
         setColunas(prev => prev.map(item => item.id === atualizada.id ? atualizada : item))
       } else {
-        const criada = await criarColunaSetor('producao', nome, editorEtapa.descricao)
+        const criada = await criarEtapaProducao(nome, editorEtapa.descricao)
         if (!criada) {
           setErro('Não foi possível criar a nova etapa da Produção.')
           return
@@ -232,6 +257,7 @@ export default function Producao() {
   }
 
   async function salvarEdicaoCard() {
+    if (!pode('producao.geral.editar')) return
     if (!selecionado) return
     const novoTitulo = tituloCard.trim()
     if (!novoTitulo) {
@@ -243,7 +269,7 @@ export default function Producao() {
     setErro('')
     const marcador = String(selecionado.descricao || '').match(/\[medicao:[^\]]+\]/)?.[0] || ''
     const novaDescricao = [descricaoCard.trim(), marcador].filter(Boolean).join(' ')
-    const ok = await editarItemSetor(selecionado.id, {
+    const ok = await editarCardProducao(selecionado.id, {
       titulo: novoTitulo,
       descricao: novaDescricao || null,
     })
@@ -263,6 +289,7 @@ export default function Producao() {
 
   async function moverCard(e: React.DragEvent, colunaId: string) {
     e.preventDefault()
+    if (!pode('producao.geral.mover')) return
     const id = e.dataTransfer.getData('text/plain')
     if (!id) return
 
@@ -296,7 +323,7 @@ export default function Producao() {
     const anterior = cards
     setErro('')
     setCards(prev => prev.map(c => c.id === id ? { ...c, coluna_id: colunaId } : c))
-    const ok = await moverItemSetor(id, colunaId)
+    const ok = await moverCardProducao(id, colunaId)
     if (!ok) {
       setCards(anterior)
       setErro('Não foi possível mover o card para esta etapa.')
@@ -304,6 +331,7 @@ export default function Producao() {
   }
 
   async function abrirRelatorioMedicao(medicaoId: string) {
+    if (!pode('producao.imprimir')) return
     setErro('')
     const [medicao, itens] = await Promise.all([
       buscarMedicao(medicaoId),
@@ -317,6 +345,7 @@ export default function Producao() {
   }
 
   async function liberarProducao(card: SetorKanbanItem, colunaDestinoId?: string) {
+    if (!pode('producao.geral.liberar')) return
     const medicao = medicaoDoCard(card)
     if (!medicao) {
       setErro('Este card ainda não possui uma Medição Final vinculada.')
@@ -361,7 +390,7 @@ export default function Producao() {
         .filter(c => Number(c.ordem || 0) > Number(colunaAtual?.ordem || 0))
         .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0))[0] || null
 
-      const marcado = await marcarCardLiberadoProducao(card.id, proxima?.id || null, usuario)
+      const marcado = await marcarCardLiberadoProducaoSeguro(card.id, proxima?.id || null)
       if (!marcado.ok) {
         setErro(marcado.error || 'A medição foi aprovada, mas não foi possível atualizar o Kanban.')
         await carregar()
@@ -381,20 +410,22 @@ export default function Producao() {
   }
 
   async function avancarOrdem(ordem: OrdemProducao) {
+    if (!pode('producao.geral.mover')) return
     if (ordem.bloqueada || ordem.status === 'concluida' || ordem.status === 'cancelada') return
     const proximo: OrdemProducao['status'] = ordem.status === 'liberada' || ordem.status === 'aguardando'
       ? 'em_producao' : ordem.status === 'em_producao' ? 'conferencia' : 'concluida'
-    const r = await atualizarOrdemProducao(ordem.id, { status: proximo })
+    const r = await avancarOrdemProducao(ordem.id, proximo)
     if (!r.ok) { setErro(r.error || 'Não foi possível atualizar a ordem.'); return }
     setOrdens(prev => prev.map(o => o.id === ordem.id ? { ...o, status: proximo } : o))
   }
 
   async function criarManual() {
+    if (!pode('producao.geral.criar')) return
     if (!titulo.trim()) { setErro('Informe o que será produzido.'); return }
     if (modo === 'vinculada' && !clienteId) { setErro('Selecione o cliente.'); return }
     setSalvando(true); setErro('')
     const venda = vendas.find(v => v.id === vendaId)
-    const r = await criarOrdemProducaoManual({
+    const r = await criarOrdemProducaoSegura({
       clienteId: modo === 'vinculada' ? clienteId : null,
       obraId: modo === 'vinculada' ? obraId || null : null,
       vendaId: modo === 'vinculada' ? vendaId || null : null,
@@ -431,10 +462,10 @@ export default function Producao() {
             <div><h1 className="text-lg font-bold text-brand-navy">Produção</h1><p className="text-xs text-slate-500">Cliente → Obra → Venda → Ordem de Produção → Plano de Corte</p></div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/producao/separacao" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"><Package size={16}/> Separação de Materiais</Link>
-            <Link href="/producao/plano-corte" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"><FileSpreadsheet size={16}/> Plano de Corte</Link>
-            <button onClick={abrirNovaEtapa} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700"><Plus size={16}/> Nova etapa</button>
-            <button onClick={() => setNovaAberta(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium"><Plus size={16}/> Nova produção</button>
+            {pode('producao.separacao.consultar') && <Link href="/producao/separacao" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"><Package size={16}/> Separação de Materiais</Link>}
+            {pode('producao.plano_corte.consultar') && <Link href="/producao/plano-corte" className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700"><FileSpreadsheet size={16}/> Plano de Corte</Link>}
+            {pode("producao.geral.etapas") && <button onClick={abrirNovaEtapa} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-700"><Plus size={16}/> Nova etapa</button>}
+            {pode("producao.geral.criar") && <button onClick={() => setNovaAberta(true)} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium"><Plus size={16}/> Nova produção</button>}
           </div>
         </div>
       </header>
@@ -451,7 +482,7 @@ export default function Producao() {
             const visual = visualEtapa(indice)
             const lista = cardsDaColuna(col.id)
             return (
-              <section key={col.id} onDragOver={e => e.preventDefault()} onDrop={e => moverCard(e, col.id)} className={`w-[15rem] shrink-0 overflow-hidden rounded-xl border shadow-sm ${visual.caixa}`}>
+              <section key={col.id} onDragOver={e => { if (pode("producao.geral.mover")) e.preventDefault() }} onDrop={e => moverCard(e, col.id)} className={`w-[15rem] shrink-0 overflow-hidden rounded-xl border shadow-sm ${visual.caixa}`}>
                 <div className={`border-b px-3 py-2.5 ${visual.topo}`}>
                   <div className="flex items-start justify-between gap-1.5">
                     <div className="min-w-0">
@@ -461,7 +492,7 @@ export default function Producao() {
                       </div>
                       <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-slate-500" title={descricaoEtapa(col, indice)}>{descricaoEtapa(col, indice)}</p>
                     </div>
-                    <button type="button" onClick={() => abrirEditarEtapa(col)} className="shrink-0 rounded-md border border-white/70 bg-white/80 p-1 text-slate-500 shadow-sm hover:text-brand-navy" title="Editar nome e descrição da etapa"><Pencil size={14}/></button>
+                    {pode('producao.geral.etapas') && <button type="button" onClick={() => abrirEditarEtapa(col)} className="shrink-0 rounded-md border border-white/70 bg-white/80 p-1 text-slate-500 shadow-sm hover:text-brand-navy" title="Editar nome e descrição da etapa"><Pencil size={14}/></button>}
                   </div>
                 </div>
                 <div className="min-h-28 space-y-1.5 p-2">
@@ -472,7 +503,7 @@ export default function Producao() {
                     const medicao = medicaoDoCard(card)
                     const descricao = descricaoVisivel(card)
                     return (
-                      <button key={card.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', card.id)} onClick={() => abrirCard(card)} className="w-full rounded-lg border border-white/80 bg-white px-2.5 py-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                      <button key={card.id} draggable={pode('producao.geral.mover')} onDragStart={e => { if (pode('producao.geral.mover')) e.dataTransfer.setData('text/plain', card.id) }} onClick={() => abrirCard(card)} className="w-full rounded-lg border border-white/80 bg-white px-2.5 py-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                         <div className="flex items-start gap-1.5"><Package size={13} className="mt-0.5 shrink-0 text-brand-navy"/><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-semibold leading-4 text-slate-800">{card.titulo}</p><p className="mt-0.5 truncate text-[10px] leading-4 text-slate-400">{medicao?.orcamento_numero ? `Orçamento #${medicao.orcamento_numero} · ` : ''}{ops.length} ordem(ns)</p></div></div>
                         {descricao && <p className="mt-1 line-clamp-1 text-[10px] leading-4 text-slate-500">{descricao}</p>}
                         {medicao && <div className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${medicao.status_operacional === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}><Ruler size={11}/>{medicao.status_operacional === 'aprovado' ? 'Medição final liberada' : 'Medição final enviada'}</div>}
@@ -487,17 +518,17 @@ export default function Producao() {
             )
           })}
 
-          <button type="button" onClick={abrirNovaEtapa} className="group grid min-h-[10rem] w-[15rem] shrink-0 place-items-center rounded-xl border-2 border-dashed border-slate-300 bg-white/70 p-4 text-center transition hover:border-brand-navy/40 hover:bg-white">
+          {pode('producao.geral.etapas') && <button type="button" onClick={abrirNovaEtapa} className="group grid min-h-[10rem] w-[15rem] shrink-0 place-items-center rounded-xl border-2 border-dashed border-slate-300 bg-white/70 p-4 text-center transition hover:border-brand-navy/40 hover:bg-white">
             <span>
               <span className="mx-auto grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-500 transition group-hover:bg-brand-navyLight group-hover:text-brand-navy"><Plus size={17}/></span>
               <span className="mt-2 block text-[12px] font-bold text-slate-700">Adicionar etapa</span>
               <span className="mt-1 block text-[10px] leading-4 text-slate-400">Crie outra coluna para adaptar o fluxo da Produção.</span>
             </span>
-          </button>
+          </button>}
         </div>
       </main>
 
-      {editorEtapa && (
+      {pode("producao.geral.etapas") && editorEtapa && (
         <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
@@ -532,7 +563,7 @@ export default function Producao() {
             <div className="sticky top-0 bg-white border-b border-slate-100 px-5 py-4 flex items-start justify-between gap-3">
               <div><h3 className="font-bold text-slate-900">{selecionado.titulo}</h3><p className="text-xs text-slate-500 mt-0.5">Ordens desta obra/produção</p></div>
               <div className="flex items-center gap-2">
-                <button
+                {pode('producao.geral.editar') && <button
                   onClick={() => {
                     if (!editandoCard) {
                       setTituloCard(selecionado.titulo)
@@ -543,12 +574,12 @@ export default function Producao() {
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                 >
                   <Pencil size={13}/> {editandoCard ? 'Cancelar' : 'Editar card'}
-                </button>
+                </button>}
                 <button onClick={() => setSelecionado(null)} className="p-1 text-slate-400"><X size={18}/></button>
               </div>
             </div>
             <div className="p-5 space-y-3">
-              {editandoCard && (
+              {pode('producao.geral.editar') && editandoCard && (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Editar card</p>
                   <div className="mt-3 space-y-3">
@@ -585,11 +616,11 @@ export default function Producao() {
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Link href={`/producao/medicao-final/${medicaoSelecionada.id}`} className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800"><Ruler size={14}/> Abrir Medição Final</Link>
-                    <button onClick={() => void abrirRelatorioMedicao(medicaoSelecionada.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"><FileText size={14}/> Relatório PDF</button>
+                    {pode('producao.imprimir') && <button onClick={() => void abrirRelatorioMedicao(medicaoSelecionada.id)} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"><FileText size={14}/> Relatório PDF</button>}
                     {selecionado?.orcamento_id && medicaoSelecionada.status_operacional === 'aprovado' && (
                       <Link href={`/orcamento/${selecionado.orcamento_id}/plano-corte`} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800"><FileSpreadsheet size={14}/> Plano de corte final</Link>
                     )}
-                    {medicaoSelecionada.status_operacional === 'concluido' && (
+                    {pode('producao.geral.liberar') && medicaoSelecionada.status_operacional === 'concluido' && (
                       <button
                         onClick={() => selecionado && void liberarProducao(selecionado)}
                         disabled={liberandoId === selecionado?.id}
@@ -639,7 +670,7 @@ export default function Producao() {
                   {o.bloqueio_motivo && <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800"><b>Bloqueio:</b> {o.bloqueio_motivo}</div>}
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Link href={`/producao/plano-corte?ordem=${o.id}`} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700"><Ruler size={14}/> Abrir plano de corte</Link>
-                    {!o.bloqueada && !['concluida','cancelada'].includes(o.status) && <button onClick={() => avancarOrdem(o)} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-navy px-3 py-2 text-xs font-medium text-white">{o.status === 'em_producao' ? <ClipboardCheck size={14}/> : o.status === 'conferencia' ? <CheckCircle2 size={14}/> : <Play size={14}/>} {o.status === 'em_producao' ? 'Enviar para conferência' : o.status === 'conferencia' ? 'Concluir ordem' : 'Iniciar produção'}</button>}
+                    {pode('producao.geral.mover') && !o.bloqueada && !['concluida','cancelada'].includes(o.status) && <button onClick={() => avancarOrdem(o)} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-navy px-3 py-2 text-xs font-medium text-white">{o.status === 'em_producao' ? <ClipboardCheck size={14}/> : o.status === 'conferencia' ? <CheckCircle2 size={14}/> : <Play size={14}/>} {o.status === 'em_producao' ? 'Enviar para conferência' : o.status === 'conferencia' ? 'Concluir ordem' : 'Iniciar produção'}</button>}
                     {o.cliente_id && <Link href={`/clientes/${o.cliente_id}/central?aba=andamento`} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700"><UserRound size={14}/> Cliente 360</Link>}
                   </div>
                 </div>
@@ -649,7 +680,7 @@ export default function Producao() {
         </div>
       )}
 
-      {novaAberta && (
+      {pode("producao.geral.criar") && novaAberta && (
         <div className="fixed inset-0 z-50 bg-black/40 p-4 flex items-center justify-center">
           <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between"><div><h3 className="font-bold text-slate-900">Nova produção</h3><p className="text-xs text-slate-500">Avulsa ou vinculada a cliente/obra.</p></div><button onClick={() => setNovaAberta(false)} className="text-slate-400"><X size={18}/></button></div>

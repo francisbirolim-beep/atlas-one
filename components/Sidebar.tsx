@@ -19,9 +19,11 @@ import {
   Sun,
 } from 'lucide-react'
 import { logout, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
-import type { Usuario } from '@/lib/tipos'
-import { listarPermissoesUsuario } from '@/lib/setores'
-import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
+import type { Usuario, Setor, NivelPermissao } from '@/lib/tipos'
+import { listarPermissoesUsuario, listarSetores, nivelEfetivo } from '@/lib/setores'
+import { podeAcessarRotaCatalogada } from '@/lib/permissoesRota'
+import { lerAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
+import { podeExecutarAcao, permissaoDaRotaProducao } from '@/lib/producaoPermissoes'
 import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { agruparGuias, GUIAS } from '@/lib/guias'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
@@ -37,6 +39,10 @@ export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [usuario, setUsuario] = useState<Usuario | null>(() => usuarioCacheLocal())
+  const [setoresAcesso, setSetoresAcesso] = useState<Setor[]>([])
+  const [permissoesAcesso, setPermissoesAcesso] = useState<Record<string,NivelPermissao>>({})
+  const [configAcesso, setConfigAcesso] = useState<AcessoUsuarioConfig | null>(null)
+  const [acessoCarregado, setAcessoCarregado] = useState(false)
   const [tema, setTema] = useState<TemaAtlas>('escuro')
   const [podeLancarNF, setPodeLancarNF] = useState(false)
   const [podeReceberManual, setPodeReceberManual] = useState(false)
@@ -47,6 +53,26 @@ export default function Sidebar() {
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({})
 
   useEffect(() => { void usuarioAtual().then(u => { if (u) setUsuario(u) }) }, [])
+
+  // Na navegação desktop, ocultar também o item do menu — não apenas a página.
+  useEffect(() => {
+    let ativo = true
+    setAcessoCarregado(false)
+    if (!usuario?.id || usuario.role === 'master') {
+      setAcessoCarregado(true)
+      return () => { ativo = false }
+    }
+    void Promise.all([
+      listarSetores(), listarPermissoesUsuario(usuario.id), lerAcessoUsuarioConfig(usuario),
+    ]).then(([setores, permissoes, config]) => {
+      if (!ativo) return
+      setSetoresAcesso(setores)
+      setPermissoesAcesso(permissoes)
+      setConfigAcesso(config)
+      setAcessoCarregado(true)
+    }).catch(() => { if (ativo) setAcessoCarregado(false) })
+    return () => { ativo = false }
+  }, [usuario?.id, usuario?.role])
 
   // O acesso ao CRM no menu respeita o setor autorizado; nunca exibir a um funcionário oculto.
   useEffect(() => {
@@ -141,14 +167,31 @@ export default function Sidebar() {
   }
 
   const termo = normalizar(busca)
+  function guiaLiberada(href: string) {
+    if (usuario?.role === 'master') return true
+    // Evita exibir módulos da Produção durante a consulta e após uma negativa.
+    const producao = permissaoDaRotaProducao(href)
+    if (producao) {
+      return acessoCarregado && configAcesso !== null &&
+        podeExecutarAcao(usuario?.role || '', permissoesAcesso, configAcesso, producao.setor, producao.acao)
+    }
+    // Nunca exibir links protegidos enquanto ainda não temos autorizações.
+    if (!acessoCarregado || !configAcesso) return false
+    const permitido=podeAcessarRotaCatalogada(href,usuario?.role||'',permissoesAcesso,configAcesso,setoresAcesso)
+    if(permitido!==null)return permitido
+    const setor = setoresAcesso
+      .filter(item => item.ativo && item.rota && (href === item.rota || href.startsWith(item.rota + '/')))
+      .sort((a,b) => (b.rota?.length || 0) - (a.rota?.length || 0))[0]
+    return !setor || nivelEfetivo(usuario, setor.id, permissoesAcesso) !== 'oculto'
+  }
   const gruposVisiveis = useMemo(() => {
-    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros) && (guia.href !== '/crm/comercial' || podeAcessarCRM) && (guia.href !== '/compras/entrada-manual' || podeReceberManual))
+    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros) && (guia.href !== '/crm/comercial' || podeAcessarCRM) && (guia.href !== '/compras/entrada-manual' || podeReceberManual) && guiaLiberada(guia.href))
     const filtradas = (termo
       ? permitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : permitidas
     ).filter(guia => guia.grupo !== 'Geral')
     return agruparGuias(filtradas)
-  }, [termo, usuario?.role, podeVerCadastros, podeReceberManual, podeAcessarCRM])
+  }, [termo, usuario, podeVerCadastros, podeReceberManual, podeAcessarCRM, acessoCarregado, permissoesAcesso, configAcesso, setoresAcesso])
 
   const adminVisiveis = useMemo(() => {
     if (!termo) return ITENS_ADMIN

@@ -8,6 +8,7 @@ export interface AcessoUsuarioConfig {
   cliente360?: MatrizCliente360
   crmEscopo: EscopoCRM
   acoes: Record<string, NivelPermissao>
+  modulos?: Record<string, NivelPermissao>
 }
 
 function chave(usuarioId: string) {
@@ -18,6 +19,7 @@ export function acessoUsuarioPadrao(role: Usuario['role'] = 'funcionario'): Aces
   return {
     crmEscopo: role === 'master' ? 'todos' : 'proprios',
     acoes: {},
+    modulos: {},
   }
 }
 
@@ -35,7 +37,14 @@ function normalizarConfig(valor: unknown, role: Usuario['role']): AcessoUsuarioC
       if (nivelValido(nivel)) acoes[id] = nivel
     })
   }
+  const modulos: Record<string, NivelPermissao> = {}
+  if(bruto.modulos && typeof bruto.modulos==='object' && !Array.isArray(bruto.modulos)){
+    Object.entries(bruto.modulos).forEach(([id,n])=>{
+      if(nivelValido(n))modulos[id]=n
+    })
+  }
   return {
+    modulos,
     cliente360: normalizarMatrizCliente360(bruto.cliente360),
     crmEscopo: bruto.crmEscopo === 'todos' ? 'todos' : 'proprios',
     acoes,
@@ -66,6 +75,7 @@ export async function salvarAcessoUsuarioConfig(usuarioId: string, config: Acess
   const normalizada: AcessoUsuarioConfig = {
     crmEscopo: config.crmEscopo === 'todos' ? 'todos' : 'proprios',
     cliente360: normalizarMatrizCliente360(config.cliente360),
+    modulos: Object.fromEntries(Object.entries(config.modulos || {}).filter(([, n]) => nivelValido(n))),
     acoes: Object.fromEntries(Object.entries(config.acoes || {}).filter(([, nivel]) => nivelValido(nivel))),
   }
   const { tokenAtual } = await import('./auth')

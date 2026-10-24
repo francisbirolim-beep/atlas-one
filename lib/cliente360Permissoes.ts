@@ -1,4 +1,5 @@
 import type { NivelPermissao } from './tipos'
+import { moduloDaAcaoPermissao } from './permissoesBlocos'
 
 export const CLIENTE_360_RECURSOS = [
   ['cadastro', 'Cadastro do cliente'], ['visao', 'Visão geral'],
@@ -12,7 +13,7 @@ export const CLIENTE_360_RECURSOS = [
 ] as const
 export type RecursoCliente360 = typeof CLIENTE_360_RECURSOS[number][0]
 export type MatrizCliente360 = Partial<Record<RecursoCliente360, NivelPermissao>>
-export type ContextoCliente360 = { role: string; setores: Record<string, NivelPermissao>; acoes: Record<string, NivelPermissao>; cliente360?: MatrizCliente360 }
+export type ContextoCliente360 = { role: string; setores: Record<string, NivelPermissao>; acoes: Record<string, NivelPermissao>; modulos?: Record<string, NivelPermissao>; cliente360?: MatrizCliente360 }
 const pesos: Record<NivelPermissao, number> = { oculto:0, consulta:1, edicao:2 }
 const bases: Partial<Record<RecursoCliente360, [string, string][]>> = {
   orcamentos: [['orcamentos','comercial.pedido_orcamento.consultar'],['fazer-orcamento-msanfyvj','comercial.orcamento.consultar']],
@@ -38,17 +39,25 @@ export function normalizarMatrizCliente360(v: unknown): MatrizCliente360 | undef
 }
 export function nivelCliente360(ctx: ContextoCliente360, recurso: RecursoCliente360): NivelPermissao {
   if (ctx.role==='master') return 'edicao'
+  // O setor Portal do Cliente explicitamente oculto bloqueia TODO o
+  // Cliente 360, inclusive financeiro, documentos, compras e subrotas.
+  // Usuários legados sem registro neste setor mantêm sua regra anterior.
+  const portal=ctx.setores['portal-cliente']
+  if(portal==='oculto'||ctx.modulos?.['portal-cliente']==='oculto')return 'oculto'
   const entradas=bases[recurso]
-  // Cadastros/visão/obras mantêm seu acesso legado até configuração explícita.
   let base: NivelPermissao = entradas ? 'oculto' : 'edicao'
-  for (const [setor, acao] of entradas || []) {
-    const setorNivel=ctx.setores[setor] || 'oculto'
-    const acaoNivel=ctx.acoes[acao] || (acao==='compras.geral.ver_proprios' ? 'oculto' : setorNivel)
-    const efetivo=pesos[acaoNivel]<pesos[setorNivel] ? acaoNivel : setorNivel
-    if (pesos[efetivo]>pesos[base]) base=efetivo
+  for(const [setor,acao] of entradas || []){
+    const setorNivel=ctx.setores[setor]||'oculto'
+    const modulo=moduloDaAcaoPermissao(acao)
+    const moduloNivel=modulo?.setorId===setor?ctx.modulos?.[modulo.id]:undefined
+    const teto=moduloNivel&&pesos[moduloNivel]<pesos[setorNivel]?moduloNivel:setorNivel
+    const acaoNivel=ctx.acoes[acao]||(acao==='compras.geral.ver_proprios'?'oculto':teto)
+    const efetivo=pesos[acaoNivel]<pesos[teto]?acaoNivel:teto
+    if(pesos[efetivo]>pesos[base])base=efetivo
   }
   const explicito=ctx.cliente360?.[recurso]
-  return explicito && pesos[explicito]<pesos[base] ? explicito : base
+  if(explicito&&pesos[explicito]<pesos[base])base=explicito
+  return portal&&pesos[portal]<pesos[base]?portal:base
 }
 export function podeCliente360(ctx: ContextoCliente360, recurso: RecursoCliente360, editar=false) {
   return pesos[nivelCliente360(ctx,recurso)] >= (editar ? 2 : 1)

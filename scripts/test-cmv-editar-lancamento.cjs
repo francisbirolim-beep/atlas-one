@@ -36,9 +36,12 @@ assert.match(ui,/Editar lançamento/)
 assert.match(ui,/Histórico de correções/)
 assert.match(ui,/Comprovante anterior/)
 assert.match(ui,/Sem comprovante anexado/)
-for(const name of ['categoria','origem','valor','data','fornecedor']) {
+for(const name of ['categoria','origem','valor','data']) {
   assert.ok(new RegExp('required name="'+name+'"').test(ui),'Campo obrigatório '+name)
 }
+const campoFornecedor=fs.readFileSync('components/clientes/FornecedorCmvCampo.tsx','utf8')
+assert.match(ui,/<FornecedorCmvCampo inicial=\{l\.fornecedor\?\?''\}/)
+assert.match(campoFornecedor,/name="fornecedor" required/)
 assert.match(ui,/Anexar ou substituir comprovante/)
 assert.match(sql,/ALTER TABLE public\.venda_cmv_lancamentos/)
 assert.match(sql,/ADD COLUMN IF NOT EXISTS versao integer NOT NULL DEFAULT 1/)

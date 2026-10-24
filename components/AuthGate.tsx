@@ -9,6 +9,8 @@ import BalcaoShell from '@/components/system/BalcaoShell'
 import Cliente360RouteGuard from '@/components/system/Cliente360RouteGuard'
 import Cadastro360RouteGuard from '@/components/system/Cadastro360RouteGuard'
 import PermissoesContextuais from '@/components/system/PermissoesContextuais'
+import ProducaoRouteGuard from '@/components/system/ProducaoRouteGuard'
+import SetorRouteGuard from '@/components/system/SetorRouteGuard'
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true)
@@ -109,6 +111,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     </div>
   )
   if (!autenticado) return null
-  if (rotaBalcao) return <><BalcaoShell>{children}</BalcaoShell><PermissoesContextuais /></>
-  return <><AppShell><Cadastro360RouteGuard><Cliente360RouteGuard>{children}</Cliente360RouteGuard></Cadastro360RouteGuard></AppShell><PermissoesContextuais /></>
+  if (rotaBalcao) return <><BalcaoShell><SetorRouteGuard>{children}</SetorRouteGuard></BalcaoShell><PermissoesContextuais /></>
+  return <><AppShell><SetorRouteGuard><ProducaoRouteGuard><Cadastro360RouteGuard><Cliente360RouteGuard>{children}</Cliente360RouteGuard></Cadastro360RouteGuard></ProducaoRouteGuard></SetorRouteGuard></AppShell><PermissoesContextuais /></>
 }

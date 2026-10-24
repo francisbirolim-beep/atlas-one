@@ -3,6 +3,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { CheckCircle2, ChevronDown, ChevronRight, FileText, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { listarPermissoesUsuario } from '@/lib/setores'
+import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import { custoPrevistoOriginal, custoRevisado, revisaoAtual, revisaoPerfilSobrepoePerda, type CategoriaCmvRevisao, type RevisaoCmv } from '@/lib/vendaCmvRevisao'
 import { compararPesosCmv } from '@/lib/vendaCmvPesos'
 import {UNIDADES_CMV,unidadePadraoCmv,rotuloUnidadeCmv,mostrarQuantidadeCmv} from '@/lib/vendaCmvUnidades'
@@ -11,7 +13,7 @@ import VendaCmvRecebimentos, { type RecebimentoCmv, type HistoricoRecebimento } 
 import FornecedorCmvCampo from '@/components/clientes/FornecedorCmvCampo'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
 type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null;perfil_previsao?:number|null;perfil_previsao_fonte?:'despesas_extras_wvetro'|'uso_mais_sobra_wvetro'|null;total_uso?:number|null;total_com_sobra?:number|null;perfil_centro_custo?:number|null;perda_fonte?:'wvetro'|'conciliacao_wvetro'|null}
-type Lancamento={id:string;categoria:Categoria;origem:string;etapa_cmv?:'comprado'|'recebido';descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;observacoes?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_nome?:string|null;versao?:number;atualizado_em?:string|null;atualizado_por_nome?:string|null;cancelado_em?:string|null;cancelado_por_nome?:string|null;motivo_cancelamento?:string|null}
+type Lancamento={id:string;categoria:Categoria;origem:string;etapa_cmv?:'comprado'|'recebido';descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;observacoes?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_id?:string|null;criado_por_nome?:string|null;versao?:number;atualizado_em?:string|null;atualizado_por_nome?:string|null;cancelado_em?:string|null;cancelado_por_nome?:string|null;motivo_cancelamento?:string|null}
 type HistoricoLancamento={id:string;lancamento_id:string;antes:Record<string,any>;depois:Record<string,any>;alterado_por_nome?:string|null;alterado_em:string;anexo_anterior_url?:string|null}
 type Dados={numeroWvetro:string;previsto:Previsao;lancamentos:Lancamento[];excluidos?:Lancamento[];historicoLancamentos?:HistoricoLancamento[];revisoes:Partial<Record<CategoriaCmvRevisao,RevisaoCmv>>;historicoRevisoes:RevisaoCmv[];feedbackIA:number;etapasDisponiveis?:boolean;vendaValorAtual?:number|null;vendaValorWvetro?:number|null;historicoValorVenda?:Array<{anterior:number;novo:number;acao:string;usuario:string;em:string;justificativa:string}>}
 
@@ -57,11 +59,34 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
  const [justificativa,setJustificativa]=useState('')
  const [salvandoRevisao,setSalvandoRevisao]=useState(false)
  const [podeRevisarVenda,setPodeRevisarVenda]=useState(false)
+ const [acessoCmv,setAcessoCmv]=useState<{id:string;master:boolean;podeEditar:boolean;delegacoes:Record<string,boolean>}|null>(null)
+ const podeModificarCmv=(registro:{criado_por_id?:string|null},acao:string)=>{
+  if(!acessoCmv)return false
+  return acessoCmv.master||Boolean(acessoCmv.podeEditar&&(Boolean(registro.criado_por_id&&registro.criado_por_id===acessoCmv.id)||acessoCmv.delegacoes[acao]))
+ }
  const [corrigirVenda,setCorrigirVenda]=useState(false)
  const [valorVendaConferido,setValorVendaConferido]=useState('')
  const [motivoVenda,setMotivoVenda]=useState('')
  const [salvandoVenda,setSalvandoVenda]=useState(false)
- useEffect(()=>{let ativo=true;void usuarioAtual().then(u=>{if(ativo)setPodeRevisarVenda(String(u?.role||'').toLowerCase()==='master')}).catch(()=>{});return()=>{ativo=false}},[])
+ useEffect(()=>{let ativo=true;void (async()=>{
+  try{
+   const u=await usuarioAtual()
+   if(!u)return
+   const master=u.role==='master'
+   if(ativo)setPodeRevisarVenda(master)
+   if(master){if(ativo)setAcessoCmv({id:u.id,master:true,podeEditar:true,delegacoes:{}});return}
+   const [setores,config]=await Promise.all([listarPermissoesUsuario(u.id),lerAcessoUsuarioConfig(u)])
+   const nomes=[
+    'editar_terceiros','excluir_terceiros','restaurar_terceiros',
+    'recebimentos_editar_terceiros','recebimentos_cancelar_terceiros','recebimentos_conferir_terceiros'
+   ]
+   const podeEditar=setores.financeiro==='edicao' &&
+      (config.modulos?.['custos-cmv']===undefined||config.modulos?.['custos-cmv']==='edicao')
+   const delegacoes=Object.fromEntries(nomes.map(nome=>[nome,
+    podeEditar&&config.acoes?.['financeiro.cmv.'+nome]==='edicao']))
+   if(ativo)setAcessoCmv({id:u.id,master:false,podeEditar,delegacoes})
+  }catch{if(ativo)setAcessoCmv(null)}
+ })();return()=>{ativo=false}},[])
  async function buscar(){
   setCarregando(true);setErro('')
   try{
@@ -390,7 +415,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
          {compara.unidadesMisturadas&&<p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">Existem unidades diferentes ou registros antigos em kg nesta categoria. Confira os lançamentos antes de comparar quantidades; kg não é convertido em peças.</p>}
          {compara.temRecebimento&&<div className="mt-2 rounded-lg border bg-white p-3 text-xs">Diferença de valor entre recebido e comprado nesta categoria: <b className={compara.diferencaCompraRecebido!==null&&compara.diferencaCompraRecebido>0?'text-red-700':'text-slate-800'}>{compara.diferencaCompraRecebido!==null?moedas(compara.diferencaCompraRecebido):'—'}</b>. Enquanto houver entrega pendente, os resultados são parciais.</div>}
          {compara.faltaQuantidadeComprada&&<p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">Há compras sem quantidade compatível. Confira os lançamentos e unidades na aba Compras antes de confiar na variação percentual.</p>}
-         <VendaCmvRecebimentos vendaId={vendaId} categoria={c} registros={recebimentos} historico={historicoRecebimentos} disponivel={recebimentosDisponiveis&&!dados.etapasDisponiveis} onAtualizar={buscar}/>
+         <VendaCmvRecebimentos acessoCmv={acessoCmv} vendaId={vendaId} categoria={c} registros={recebimentos} historico={historicoRecebimentos} disponivel={recebimentosDisponiveis&&!dados.etapasDisponiveis} onAtualizar={buscar}/>
         </>}
         <div className="mt-3 space-y-2">
          {Number(comprasExistentes[c]||0)>0&&<p className="text-xs text-slate-600">Compras vinculadas anteriormente: {moedas(Number(comprasExistentes[c]))}</p>}
@@ -413,19 +438,19 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
             </div>
             <div className="flex flex-wrap items-center gap-3">
              <b className="text-sm">{moedas(Number(l.valor))}</b>
-             <button type="button" disabled={salvandoEdicao||salvandoExclusao}
+             {podeModificarCmv(l,'editar_terceiros')&&<button type="button" disabled={salvandoEdicao||salvandoExclusao}
               onClick={()=>{setEtapaEdicao(l.etapa_cmv==='recebido'?'recebido':'comprado');setEditandoLancamento(editandoLancamento===l.id?null:l.id);setExcluindoLancamento(null);setMotivoExclusao('');setErro('');setSucesso('')}}
               className="inline-flex items-center gap-1 rounded-lg border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">
               <Pencil size={13}/>{editandoLancamento===l.id?'Fechar edição':'Editar lançamento'}
-             </button>
-             <button type="button" disabled={salvandoEdicao||salvandoExclusao}
+             </button>}
+             {podeModificarCmv(l,'excluir_terceiros')&&<button type="button" disabled={salvandoEdicao||salvandoExclusao}
               onClick={()=>{setExcluindoLancamento(excluindoLancamento===l.id?null:l.id);setEditandoLancamento(null);setMotivoExclusao('');setErro('');setSucesso('')}}
               className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
               <Trash2 size={13}/>{excluindoLancamento===l.id?'Fechar exclusão':'Excluir'}
-             </button>
+             </button>}
             </div>
            </div>
-           {excluindoLancamento===l.id&&<form onSubmit={e=>void excluirLancamento(e,l)} className="mt-3 rounded-xl border border-red-200 bg-red-50 p-4">
+           {podeModificarCmv(l,'excluir_terceiros')&&excluindoLancamento===l.id&&<form onSubmit={e=>void excluirLancamento(e,l)} className="mt-3 rounded-xl border border-red-200 bg-red-50 p-4">
             <h4 className="text-sm font-bold text-red-800">Excluir somente este lançamento?</h4>
             <p className="mt-1 text-xs text-red-900">Confirme: <b>{l.descricao}</b> · {moedas(Number(l.valor))} · {l.fornecedor||'Fornecedor não informado'}. Ele deixará de somar ao CMV desta obra e dos relatórios, mas o comprovante e a auditoria serão preservados. Não exclui a compra do módulo Compras.</p>
             <label className="mt-3 block text-xs font-semibold text-red-900">Motivo da exclusão *
@@ -446,7 +471,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
              </a>}
             </div>)}</div>
            </details>}
-           {editandoLancamento===l.id&&<form key={l.id+'-'+String(l.versao)} onSubmit={e=>void salvarEdicao(e,l)} className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+           {podeModificarCmv(l,'editar_terceiros')&&editandoLancamento===l.id&&<form key={l.id+'-'+String(l.versao)} onSubmit={e=>void salvarEdicao(e,l)} className="mt-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
             <h4 className="mb-1 text-sm font-bold text-slate-800">Corrigir lançamento existente</h4>
             <p className="mb-3 text-xs text-slate-600">Salva no mesmo lançamento, preservando comprovantes e histórico. Também permite corrigir o destino Comprado/Recebido sem recriar o custo.</p>
             <label className="mb-3 block max-w-md text-xs font-bold">Destino do lançamento *
@@ -494,7 +519,7 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
      <b className="text-slate-500 line-through">{moedas(Number(l.valor))}</b></div>
      <div className="mt-2 flex flex-wrap items-center gap-3">
       {l.anexo_url&&<a href={l.anexo_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-700 underline"><FileText size={12}/> {l.anexo_nome||'Comprovante preservado'}</a>}
-      <button type="button" disabled={Boolean(restaurandoId)} onClick={()=>void restaurarLancamento(l)} className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700 disabled:opacity-50">{restaurandoId===l.id?'Restaurando...':'Restaurar lançamento'}</button>
+      {podeModificarCmv(l,'restaurar_terceiros')&&<button type="button" disabled={Boolean(restaurandoId)} onClick={()=>void restaurarLancamento(l)} className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700 disabled:opacity-50">{restaurandoId===l.id?'Restaurando...':'Restaurar lançamento'}</button>}
      </div>
     </div>)}</div>
    </details>}

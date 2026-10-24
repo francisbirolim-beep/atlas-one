@@ -14,7 +14,7 @@ export async function PUT(req: NextRequest) {
     if(alvo.role==='master')return NextResponse.json({error:'Master mantém acesso completo.'},{status:400})
     const bruto=body.config
     if(!bruto||typeof bruto!=='object'||Array.isArray(bruto))return NextResponse.json({error:'Configuração inválida.'},{status:400})
-    const config={crmEscopo:bruto.crmEscopo==='todos'?'todos':'proprios',cliente360:normalizarMatrizCliente360(bruto.cliente360),acoes:Object.fromEntries(Object.entries(bruto.acoes||{}).filter(([,v])=>nivelValido360(v)))}
+    const config={crmEscopo:bruto.crmEscopo==='todos'?'todos':'proprios',cliente360:normalizarMatrizCliente360(bruto.cliente360),modulos:Object.fromEntries(Object.entries(bruto.modulos||{}).filter(([,v])=>nivelValido360(v))),acoes:Object.fromEntries(Object.entries(bruto.acoes||{}).filter(([,v])=>nivelValido360(v)))}
     const {error}=await supabaseAdmin.rpc('salvar_acesso_usuario_etapas_backend',{p_usuario_id:alvo.id,p_empresa_id:usuario.empresa_id,p_config:config})
     if(error)throw error
     return NextResponse.json({ok:true})

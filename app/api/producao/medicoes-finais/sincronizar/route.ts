@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { medicoesElegiveisParaProducao } from '@/lib/producaoMedicaoElegibilidade'
 import { executarAutomacaoMedidaFinal } from '@/lib/medicaoFinalAutomacaoServer'
@@ -63,6 +64,26 @@ export async function POST(req: NextRequest) {
     if (medicaoId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(medicaoId)) {
       return NextResponse.json({ error: 'Identificador de medição inválido.' }, { status: 400 })
     }
+    const acoesPermitidas = medicaoId
+      ? [
+          ['producao','producao.geral.editar'],
+          ['medida-final-msdwtt9y','producao.medida_final.preencher'],
+          ['medida-final-msdwtt9y','producao.medida_final.editar'],
+          ['medida-final-msdwtt9y','producao.medida_final.aprovar'],
+        ]
+      : [['producao','producao.geral.editar']]
+    // Esta API grava com credencial administrativa, portanto jamais deve
+    // sincronizar um quadro por solicitação de quem possui somente consulta.
+    let autorizado = false
+    try {
+      const verificacoes = await Promise.all(acoesPermitidas.map(([setorId,acaoId]) =>
+        usuarioPodeAcaoServer({usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,
+          setorId,acaoId,minimo:'edicao'})))
+      autorizado = verificacoes.some(Boolean)
+    } catch {
+      return NextResponse.json({error:'Não foi possível conferir a autorização de sincronização.'},{status:503})
+    }
+    if (!autorizado) return NextResponse.json({error:'Sem permissão para sincronizar a Produção.'},{status:403})
     const colunaEntrada = await garantirColunaEntrada(usuario.empresa_id)
 
     const { data: colunasProducao, error: erroColunas } = await supabaseAdmin

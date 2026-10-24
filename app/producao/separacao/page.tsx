@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, ArrowLeft, CheckCircle2, ClipboardCheck, Layers3, Loader2, PackageCheck, RefreshCcw, Ruler } from 'lucide-react'
-import { tokenAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { listarPermissoesUsuario } from '@/lib/setores'
+import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
+import { podeExecutarAcao } from '@/lib/producaoPermissoes'
 
 type Material = { id: string; categoria?: string; codigo?: string | null; descricao?: string; cor?: string | null; quantidade?: number; unidade?: string }
 type Peca = {
@@ -34,6 +37,33 @@ export default function SeparacaoMateriaisPage() {
   const [sucesso, setSucesso] = useState('')
   const [aberta, setAberta] = useState<string | null>(null)
   const [gerandoPacote, setGerandoPacote] = useState<string | null>(null)
+  const [acoes, setAcoes] = useState({ editar:false, pacote:false, medicao:false })
+
+  // Consulta não implica permissão para alterar separação ou gerar pacote.
+  useEffect(() => {
+    let ativo = true
+    void (async () => {
+      try {
+        const usuario = await usuarioAtual()
+        if (!usuario) return
+        if (usuario.role === 'master') {
+          if (ativo) setAcoes({ editar:true, pacote:true, medicao:true })
+          return
+        }
+        const [setores, acesso] = await Promise.all([
+          listarPermissoesUsuario(usuario.id), lerAcessoUsuarioConfig(usuario),
+        ])
+        if (ativo) setAcoes({
+          editar:podeExecutarAcao(usuario.role,setores,acesso,'producao','producao.separacao.editar','edicao'),
+          pacote:podeExecutarAcao(usuario.role,setores,acesso,'producao','producao.plano_corte.gerar','edicao'),
+          medicao:podeExecutarAcao(usuario.role,setores,acesso,'medida-final-msdwtt9y','producao.medida_final.consultar'),
+        })
+      } catch {
+        if (ativo) setAcoes({ editar:false, pacote:false, medicao:false })
+      }
+    })()
+    return () => { ativo = false }
+  }, [])
 
   const carregar = useCallback(async (filtro?: string) => {
     setCarregando(true); setErro('')
@@ -71,10 +101,12 @@ export default function SeparacaoMateriaisPage() {
   }, [pecas])
 
   function alterar(id: string, patch: Partial<Edicao>) {
+    if (!acoes.editar) return
     setEdicoes(prev => ({ ...prev, [id]: { conferidos: prev[id]?.conferidos || [], motivo: prev[id]?.motivo || '', ...patch } }))
   }
 
   async function salvar(peca: Peca, status: Peca['status']) {
+    if (!acoes.editar) return
     const edicao = edicoes[peca.id] || { conferidos: [], motivo: '' }
     if (status === 'pendente' && edicao.motivo.trim().length < 5) {
       setErro('Informe o motivo da pendência da peça com pelo menos cinco caracteres.'); return
@@ -100,6 +132,7 @@ export default function SeparacaoMateriaisPage() {
   }
 
   async function gerarPacote(medicaoId: string) {
+    if (!acoes.pacote) return
     if (!window.confirm('Gerar novo pacote técnico apenas para as unidades aprovadas nesta medição?\\n\\nIsso não libera Corte, não reserva estoque e não altera a medição das demais peças.')) return
     setErro(''); setSucesso(''); setGerandoPacote(medicaoId)
     try {
@@ -156,14 +189,14 @@ export default function SeparacaoMateriaisPage() {
             <div><h2 className="font-bold text-slate-900">{lista[0].clienteNome}</h2>
               <p className="text-xs text-slate-500">{lista.length} peça(s) aprovada(s) nesta medição</p></div>
             <div className="flex flex-wrap items-center gap-3">
-              {lista.some(p => !p.listaDisponivel) && <button
+              {acoes.pacote && lista.some(p => !p.listaDisponivel) && <button
                 onClick={() => void gerarPacote(medicaoId)} disabled={Boolean(gerandoPacote)}
                 className="flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-50">
                 {gerandoPacote === medicaoId ? <Loader2 size={14} className="animate-spin"/> : <PackageCheck size={14}/>}
                 Gerar pacote técnico das peças aprovadas
               </button>}
-              <Link href={'/producao/medicao-final/' + medicaoId} className="flex items-center gap-2 text-xs font-semibold text-blue-800">
-                <Ruler size={14}/> Conferir Medição Final</Link>
+              {acoes.medicao && <Link href={'/producao/medicao-final/' + medicaoId} className="flex items-center gap-2 text-xs font-semibold text-blue-800">
+                <Ruler size={14}/> Conferir Medição Final</Link>}
             </div>
           </div>
           <div className="space-y-3 p-3 sm:p-4">{lista.map(peca => {
@@ -186,7 +219,7 @@ export default function SeparacaoMateriaisPage() {
                 {peca.materiais.length > 0 && <div className="space-y-2">
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Conferir material físico</p>
                   {peca.materiais.map(m => <label key={m.id} className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm">
-                    <input type="checkbox" className="mt-1 h-4 w-4" checked={edicao.conferidos.includes(m.id)}
+                    <input type="checkbox" disabled={!acoes.editar} className="mt-1 h-4 w-4" checked={edicao.conferidos.includes(m.id)}
                       onChange={e => alterar(peca.id, { conferidos: e.target.checked
                         ? [...new Set([...edicao.conferidos, m.id])] : edicao.conferidos.filter(v => v !== m.id) })}/>
                     <span><b>{m.codigo ? m.codigo + ' — ' : ''}{m.descricao || 'Material'}</b>
@@ -194,10 +227,10 @@ export default function SeparacaoMateriaisPage() {
                   </label>)}
                 </div>}
                 <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-600">Motivo / observação da peça</span>
-                  <textarea value={edicao.motivo} onChange={e => alterar(peca.id, { motivo: e.target.value })}
+                  <textarea disabled={!acoes.editar} value={edicao.motivo} onChange={e => alterar(peca.id, { motivo: e.target.value })}
                     className="min-h-20 w-full rounded-lg border px-3 py-2 text-sm"
                     placeholder="Ex.: aguardando perfil SU..., material riscado, troca solicitada ao fornecedor."/></label>
-                <div className="flex flex-wrap gap-2">
+                {acoes.editar && <div className="flex flex-wrap gap-2">
                   <button disabled={processando === peca.id} onClick={() => void salvar(peca, 'aguardando')}
                     className="rounded-lg border px-3 py-2 text-xs font-semibold text-slate-700">Salvar em aguardando</button>
                   <button disabled={processando === peca.id} onClick={() => void salvar(peca, 'pendente')}
@@ -205,7 +238,7 @@ export default function SeparacaoMateriaisPage() {
                   <button disabled={processando === peca.id || !todas} onClick={() => void salvar(peca, 'separado')}
                     className="flex items-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">
                     <PackageCheck size={14}/> Materiais conferidos</button>
-                </div>
+                </div>}
                 {peca.status === 'pendente' && peca.motivo && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
                   Pendência registrada: {peca.motivo}</p>}
                 {peca.historico?.length > 0 && <div className="space-y-1 rounded-lg border bg-slate-50 p-3">
