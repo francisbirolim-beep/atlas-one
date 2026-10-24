@@ -144,6 +144,23 @@ export async function GET(req:NextRequest){
    if(!comentarioMaisRecente.has(chave))comentarioMaisRecente.set(chave,x.created_at)
    qtdComentarios.set(chave,(qtdComentarios.get(chave)||0)+1)
   }
+  // A Instalação não recebe todas as vendas por padrão: somente obras que
+  // já possuem card nativo, posição gravada ou acompanhamento real de instalação.
+  const orcamentosComCardInstalacao=new Set<string>()
+  if(permitidos.includes('instalacao')&&orcamentoIds.length){
+   const colInst=await db.from('setor_kanban_colunas').select('id')
+    .eq('empresa_id',ctx.u.empresa_id).eq('setor_id','instalacao')
+   if(colInst.error)throw colInst.error
+   const colIdsInst=(colInst.data||[]).map(x=>x.id)
+   if(colIdsInst.length){
+    const cardInst=await db.from('setor_kanban_itens').select('orcamento_id')
+     .eq('empresa_id',ctx.u.empresa_id).in('coluna_id',colIdsInst)
+     .in('orcamento_id',orcamentoIds).limit(5000)
+    if(cardInst.error)throw cardInst.error
+    for(const c of cardInst.data||[])if(c.orcamento_id)orcamentosComCardInstalacao.add(c.orcamento_id)
+   }
+  }
+  const vendasComPosicaoInstalacao=new Set(posicoes.filter(p=>p.setor==='instalacao').map(p=>p.venda_obra_id))
   const cards=vendas.map(v=>{
    const cp=compras.filter(x=>x.obra_id===v.obra_id&&v.obra_id)
    // A origem do percentual é a mesma lista de compras por item da venda.
@@ -174,6 +191,7 @@ export async function GET(req:NextRequest){
      percentualGeral:progressoOperacional(pv.compras,pv.producao,pv.instalacao),
      percentuais:Object.fromEntries(Object.entries(pv).filter(([s])=>s!=='financeiro'||acesso(ctx.mapa,'financeiro'))),
      conclusoes:Object.fromEntries(Object.entries(conclusoes).filter(([s])=>s!=='financeiro'||acesso(ctx.mapa,'financeiro'))),
+     instalacaoElegivel:orcamentosComCardInstalacao.has(v.orcamento_id)||vendasComPosicaoInstalacao.has(v.id)||it.length>0,
      contagens:{compras:comprasBase,producao:op.length,instalacao:it.length,financeiro:acesso(ctx.mapa,'financeiro')?co.length:0},
      observacoes:obs}
   })

@@ -7,7 +7,7 @@ import { QUADROS,indiceConclusaoOperacional,ehColunaConclusaoOperacional,type Qu
 
 type Coluna={id:string,setor:string,nome:string,ordem:number;nome_exibicao?:string|null;ordem_visual?:number|null}
 type Percentuais={compras?:number;mercadoria?:number;producao?:number;instalacao?:number;financeiro?:number}
-type Card={id:string;numero:number;clienteId:string;cliente:string;obra:string;cidade:string;previsao:string|null;
+type Card={instalacaoElegivel?:boolean;id:string;numero:number;clienteId:string;cliente:string;obra:string;cidade:string;previsao:string|null;
  percentualGeral:number;percentuais:Percentuais;conclusoes?:Record<string,boolean>;contagens:Record<string,number>;
  observacoes:Record<string,{comentarios:number;ultimoComentario:string|null}>}
 type EntradaMedicao={id:string;medicaoId:string;vendaId:string;cliente:string;obra:string;cidade:string;tipologia:string;quantidade:number;conferencia:boolean;href:string}
@@ -236,18 +236,19 @@ export default function CentralKanbans(){
   if(!cols.length)return <div className="rounded-xl border bg-white p-4 text-sm text-slate-600">Sem colunas configuradas para {qTitulo(s)}.</div>
   return <section key={s} className={'rounded-2xl border border-slate-200 bg-slate-50 p-3 '+(mini?'min-w-[320px] flex-1':'')}>
    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-    <h2 className="text-base font-bold text-slate-900">{qTitulo(s)} <span className="text-xs font-normal text-slate-500">({s==='producao'?entradasVisiveis.length+cardsVisiveis.filter(c=>origCard(c,s)!==cols[0]?.id).length:cardsVisiveis.length} {s==='producao'?'cards':'obras'})</span></h2>
+    <h2 className="text-base font-bold text-slate-900">{qTitulo(s)} <span className="text-xs font-normal text-slate-500">({s==='producao'?entradasVisiveis.length+cardsVisiveis.filter(c=>origCard(c,s)!==cols[0]?.id).length:s==='instalacao'?cardsVisiveis.filter(c=>c.instalacaoElegivel).length:cardsVisiveis.length} {s==='producao'?'cards':'obras'})</span></h2>
     <div className="flex gap-2">
      {mini&&<button onClick={()=>selecionarQuadro(s)} className="text-xs font-semibold text-blue-700">Abrir quadro ↗</button>}
      {!mini&&pode(s,'administrar')&&<button className="rounded-lg border bg-white px-2 py-1.5 text-xs" onClick={()=>setConfig(!config)}><Settings2 size={14} className="inline"/> Configurar</button>}
      {!mini&&dados?.usuarioMaster&&s==='producao'&&<Link href="/kanban/automacao-medida-final" className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-semibold text-indigo-800">Automação Medida Final</Link>}
+     {!mini&&dados?.usuarioMaster&&s==='instalacao'&&<Link href="/kanban/automacao-instalacao" className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-semibold text-indigo-800">Automação Produção → Instalação</Link>}
      {!mini&&dados?.usuarioMaster&&<Link href="/kanban/configuracao-colunas" className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-800">Personalizar colunas</Link>}
     </div>
    </div>
    <div className={'flex gap-3 overflow-x-auto pb-4 '+(mini?'max-h-[70vh]':'min-h-[370px]')}>
     {colsVisuais.map(col=>{
      const primeiraProducao=s==='producao'&&col.ordem===0
-     const itens=primeiraProducao?[]:cardsVisiveis.filter(c=>origCard(c,s)===col.id)
+     const itens=primeiraProducao?[]:cardsVisiveis.filter(c=>origCard(c,s)===col.id&&(s!=='instalacao'||c.instalacaoElegivel))
      const entrada=primeiraProducao?entradasVisiveis:[]
      return <div key={col.id} onDragOver={e=>{if(pode(s,'movimentar'))e.preventDefault()}}
       onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('text/plain');if(id&&arrastado?.setor===s)void mover(id,s,col.id);setArrastado(null)}}
