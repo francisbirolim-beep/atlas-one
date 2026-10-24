@@ -8,9 +8,10 @@ export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'
 export type ChatMensagem = { id:string; conversa_id:string; usuario_id?:string|null; usuario_nome?:string|null; texto?:string|null; anexo_url?:string|null; anexo_nome?:string|null; cliente_id?:string|null; orcamento_id?:string|null; mensagem_pai_id?:string|null; created_at:string }
 export type ChatParticipante = { id:string; conversa_id:string; usuario_id:string; usuario_nome?:string|null; ultima_leitura_em?:string|null }
 
-export async function listarConversas(usuarioId:string):Promise<ChatConversa[]> {
+export async function listarConversas(usuarioId:string, somenteParticipantes=false):Promise<ChatConversa[]> {
   const usuario=await usuarioAtual()
-  const master=usuario?.role==='master'
+  // No painel privado de WhatsApp, inclusive o master vê só chats de que participa.
+  const master=usuario?.role==='master' && !somenteParticipantes
 
   let conversas:ChatConversa[]=[]
   let ids:string[]=[]
