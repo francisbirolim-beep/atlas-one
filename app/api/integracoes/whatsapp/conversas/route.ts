@@ -22,10 +22,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Nao autenticado.' }, { status: 401 })
   }
   try {
-    const [conversas, acessos] = await Promise.all([
-      listarConversasAtendimento(usuario),
-      listarAcessosCanaisAtendimento(usuario),
-    ])
+    const acessos = await listarAcessosCanaisAtendimento(usuario)
+    const supervisionar = req.nextUrl.searchParams.get('visao') === 'monitoramento'
+    // O master não recebe conversas alheias na caixa padrão. O acesso à
+    // supervisão é explícito e conferido no servidor para todos os perfis.
+    if (supervisionar && usuario.role !== 'master' &&
+        !acessos.some(a => a.supervisionar || a.dono)) {
+      return NextResponse.json({ error: 'Acesso à supervisão não autorizado.' }, { status: 403 })
+    }
+    const resultado = await listarConversasAtendimento(usuario, {
+      modo: supervisionar ? 'monitoramento' : 'minhas',
+    })
+    // Em supervisão, cada gestor recebe somente os canais para os quais tem
+    // autorização de acompanhar; ter permissão em um canal não libera outros.
+    const supervisionados = new Set(acessos
+      .filter(a => a.supervisionar || a.dono)
+      .map(a => a.canal_id))
+    const conversas = supervisionar && usuario.role !== 'master'
+      ? resultado.filter(c => c.whatsapp_canal_id && supervisionados.has(c.whatsapp_canal_id))
+      : resultado
     // A lista de usuários internos serve também para o chat da equipe dentro
     // do WhatsApp Atlas. Por isso ela deve estar disponível para qualquer
     // usuário autenticado do mesmo tenant, não apenas para quem transfere atendimento.

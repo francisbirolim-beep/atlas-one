@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { pertenceAoHistoricoPessoal } from '@/lib/whatsappCaixaPessoal'
 import { notificarGrupoWhatsAppPendente } from '@/lib/whatsappAlertasGrupo'
 import type { UsuarioTenant } from '@/lib/tenantServer'
 
@@ -1198,7 +1199,32 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
   }).filter((acesso: any) => acesso.visualizar)
 }
 
-export async function listarConversasAtendimento(usuario: UsuarioTenant) {
+// A consulta é em lotes: o projeto pode conter mais de mil mensagens por
+// atendente, e um único limit(1000) ocultaria contatos mais antigos.
+async function conversasComRespostaDoUsuario(usuario: UsuarioTenant, ids: string[]) {
+  const participadas = new Set<string>()
+  if (!ids.length) return participadas
+  const tamanhoPagina = 1000
+  for (let inicio = 0; ; inicio += tamanhoPagina) {
+    const { data, error } = await supabaseAdmin.from('atendimento_mensagens')
+      .select('conversa_id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('usuario_id', usuario.id)
+      .eq('direcao', 'saida')
+      .in('conversa_id', ids)
+      .order('created_at', { ascending: true })
+      .range(inicio, inicio + tamanhoPagina - 1)
+    if (error) throw error
+    for (const mensagem of data || []) if (mensagem.conversa_id) participadas.add(mensagem.conversa_id)
+    if (!data || data.length < tamanhoPagina) break
+  }
+  return participadas
+}
+
+export async function listarConversasAtendimento(
+  usuario: UsuarioTenant,
+  opcoes: { modo?: 'minhas' | 'monitoramento' } = {},
+) {
   const acessos = await listarAcessosCanaisAtendimento(usuario)
   const canaisConectados = acessos.map(acesso => acesso.canal_id)
   if (!canaisConectados.length) return []
@@ -1294,7 +1320,18 @@ export async function listarConversasAtendimento(usuario: UsuarioTenant) {
     }
     return { conversa, permitido: !conversa.responsavel_id && Boolean(acesso?.atender), grupo: null }
   }))
-  const permitidasComGrupo = avaliadas.filter(item => item.permitido)
+  const autorizadas = avaliadas.filter(item => item.permitido)
+  // A supervisão é solicitada por rota separada, nunca embutida na caixa
+  // pessoal. Apenas mensagens de saída com o ID do usuário comprovam autoria.
+  const idsContatos = autorizadas
+    .filter(item => item.conversa.whatsapp_chat_tipo !== 'grupo')
+    .map(item => item.conversa.id)
+  const respondidas = opcoes.modo === 'monitoramento'
+    ? new Set<string>()
+    : await conversasComRespostaDoUsuario(usuario, idsContatos)
+  const permitidasComGrupo = opcoes.modo === 'monitoramento'
+    ? autorizadas
+    : autorizadas.filter(item => pertenceAoHistoricoPessoal(item.conversa, respondidas))
   const permitidas = permitidasComGrupo.map(item => item.conversa)
 
   const ids = permitidas.map(conversa => conversa.id)
