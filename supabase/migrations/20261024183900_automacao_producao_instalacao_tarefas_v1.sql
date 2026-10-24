@@ -88,18 +88,16 @@ begin
     'Produção concluída e obra liberada para preparação da instalação.'||E'\n'||
     'Cliente: '||coalesce(v_orc.cliente_nome,'—')||E'\n'||
     'Conferir agendamento, equipe e liberação de instalação: '||v_href,
-    new.executado_por_id,new.executado_por_nome,now(),
+    null,coalesce(new.executado_por_nome,'Automação de Produção'),now(),
     coalesce(v_regra.prioridade_tarefa,'normal'),v_regra.id,
     new.orcamento_id,v_orc.cliente_id,v_orc.obra_id)
   on conflict (workflow_automacao_id,orcamento_id,usuario_id)
    where workflow_automacao_id is not null and orcamento_id is not null
   do nothing returning id into v_tarefa;
 
-  -- A trigger de tarefas envia um aviso quando outra pessoa atribui a tarefa.
-  -- Quando foi criada sem solicitante ou para o próprio solicitante,
-  -- envia um único aviso alternativo, também idempotente.
-  if v_tarefa is not null and
-     (new.executado_por_id is null or new.executado_por_id=v_pessoa.id) then
+  -- Aviso explícito com empresa_id, sem acionar a notificação genérica
+  -- de atribuição (a tarefa automática não tem solicitante_id).
+  if v_tarefa is not null then
     insert into public.notificacoes
      (empresa_id,usuario_id,categoria,tipo,titulo,mensagem,href,
       origem_tipo,origem_id,criado_por_id,criado_por_nome)
