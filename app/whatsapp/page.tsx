@@ -177,6 +177,12 @@ export default function WhatsAppAtendimentoPage() {
   const [busca, setBusca] = useState('')
   const [areaAtendimento, setAreaAtendimento] = useState<'individuais' | 'grupos' | 'monitoramento' | 'internas'>('individuais')
   const [atendenteMonitorado, setAtendenteMonitorado] = useState('todos')
+  const [visaoSupervisao, setVisaoSupervisao] = useState<'atendimentos' | 'internas'>('atendimentos')
+  const [usuarioSupervisionado, setUsuarioSupervisionado] = useState('todos')
+  const [conversasSupervisao, setConversasSupervisao] = useState<ChatConversa[]>([])
+  const [conversaSupervisaoAtiva, setConversaSupervisaoAtiva] = useState<ChatConversa | null>(null)
+  const [mensagensSupervisao, setMensagensSupervisao] = useState<ChatMensagem[]>([])
+  const [carregandoSupervisao, setCarregandoSupervisao] = useState(false)
   const [midiaAmpliada, setMidiaAmpliada] = useState<Mensagem | null>(null)
   const [filtro, setFiltro] = useState<'todas' | 'internas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
@@ -249,6 +255,7 @@ export default function WhatsAppAtendimentoPage() {
   const recarregarConversasPendenteRef = useRef(false)
   const refreshConversasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const buscaInternaDireitaRef = useRef<HTMLInputElement | null>(null)
+  const conversaInternaRecemCriadaRef = useRef<string | null>(null)
   const arquivoInternoInputRef = useRef<HTMLInputElement | null>(null)
   const cameraInternaInputRef = useRef<HTMLInputElement | null>(null)
   const gravadorInternoRef = useRef<MediaRecorder | null>(null)
@@ -435,13 +442,24 @@ export default function WhatsAppAtendimentoPage() {
     const id = usuarioId || eu?.id
     if (!id) return
     try {
-      const lista = await listarConversasInternas(id, true)
+      const lista = await listarConversasInternas(id, { modo: 'minhas', apenasComHistorico: true })
       setConversasInternas(lista)
-      setConversaInternaAtiva(atual => atual ? (lista.find(c => c.id === atual.id) || atual) : atual)
+      setConversaInternaAtiva(atual => {
+        if (!atual) return null
+        const visivel = lista.find(c => c.id === atual.id)
+        if (visivel) {
+          if (conversaInternaRecemCriadaRef.current === atual.id) conversaInternaRecemCriadaRef.current = null
+          return visivel
+        }
+        // Uma conversa criada agora pode continuar aberta até a primeira mensagem.
+        // Qualquer outra que saiu das participações perde o acesso imediatamente.
+        return conversaInternaRecemCriadaRef.current === atual.id ? atual : null
+      })
     } catch {}
   }
 
   function selecionarConversaInterna(conversa: ChatConversa) {
+    conversaInternaRecemCriadaRef.current = conversasInternas.some(c => c.id === conversa.id) ? null : conversa.id
     conversaAtivaIdRef.current = null
     setAtiva(null)
     setMensagens([])
@@ -767,6 +785,37 @@ export default function WhatsAppAtendimentoPage() {
     }
   }, [eu?.id])
 
+  // Supervisão só consulta outros participantes quando o master entra
+  // conscientemente em Monitoramento > Conversas internas. Não marca como lida.
+  useEffect(() => {
+    if (areaAtendimento !== 'monitoramento' || visaoSupervisao !== 'internas' || eu?.role !== 'master') {
+      setConversasSupervisao([])
+      setConversaSupervisaoAtiva(null)
+      setMensagensSupervisao([])
+      return
+    }
+    let ativo = true
+    setCarregandoSupervisao(true)
+    void listarConversasInternas(eu.id, { modo: 'supervisao', apenasComHistorico: true })
+      .then(lista => { if (ativo) setConversasSupervisao(lista) })
+      .catch(() => { if (ativo) setErro('Não foi possível consultar a supervisão interna.') })
+      .finally(() => { if (ativo) setCarregandoSupervisao(false) })
+    return () => { ativo = false }
+  }, [areaAtendimento, visaoSupervisao, eu?.id, eu?.role])
+
+  useEffect(() => {
+    if (areaAtendimento !== 'monitoramento' || visaoSupervisao !== 'internas' || eu?.role !== 'master' || !conversaSupervisaoAtiva?.id) {
+      setMensagensSupervisao([])
+      return
+    }
+    let ativo = true
+    setMensagensSupervisao([])
+    void listarMensagensInternas(conversaSupervisaoAtiva.id).then(lista => {
+      if (ativo) setMensagensSupervisao(lista)
+    })
+    return () => { ativo = false }
+  }, [areaAtendimento, visaoSupervisao, eu?.role, conversaSupervisaoAtiva?.id])
+
   useEffect(() => {
     const conversaId = conversaInternaAtiva?.id
     if (!conversaId) {
@@ -1023,6 +1072,11 @@ export default function WhatsAppAtendimentoPage() {
       return `${c.nome || ''} ${c.ultima_mensagem || ''}`.toLocaleLowerCase('pt-BR').includes(q)
     })
   }, [conversasInternas, buscaInterna])
+
+  const conversasSupervisaoVisiveis = useMemo(() =>
+    conversasSupervisao.filter(c => usuarioSupervisionado === 'todos' || c.participantes_ids?.includes(usuarioSupervisionado)),
+    [conversasSupervisao, usuarioSupervisionado],
+  )
 
   const totalInternasNaoLidas = useMemo(
     () => conversasInternas.reduce((soma,c)=>soma+Number(c.nao_lidas||0),0),
@@ -2814,6 +2868,86 @@ export default function WhatsAppAtendimentoPage() {
 
         {areaAtendimento==='monitoramento' && podeMonitorar && (
           <div className="h-[calc(100dvh-126px)] overflow-y-auto bg-slate-50 px-4 py-5 lg:h-[calc(100dvh-72px)] lg:px-8">
+            {eu?.role==='master' && (
+              <div className="mx-auto mb-4 flex max-w-[1500px] gap-2 rounded-xl border border-slate-200 bg-white p-2">
+                <button type="button" onClick={()=>setVisaoSupervisao('atendimentos')}
+                  className={`rounded-lg px-4 py-2 text-sm font-bold ${visaoSupervisao==='atendimentos'?'bg-blue-600 text-white':'text-slate-600 hover:bg-slate-50'}`}>
+                  Atendimentos WhatsApp
+                </button>
+                <button type="button" onClick={()=>setVisaoSupervisao('internas')}
+                  className={`rounded-lg px-4 py-2 text-sm font-bold ${visaoSupervisao==='internas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-slate-50'}`}>
+                  Supervisão · conversas internas
+                </button>
+              </div>
+            )}
+            {eu?.role==='master' && visaoSupervisao==='internas' ? (
+              <div className="mx-auto max-w-[1500px] space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900">Supervisão de conversas internas</h2>
+                    <p className="text-sm text-slate-500">Somente leitura. As conversas privadas não aparecem na sua caixa pessoal.</p>
+                  </div>
+                  <select value={usuarioSupervisionado} onChange={e=>{setUsuarioSupervisionado(e.target.value);setConversaSupervisaoAtiva(null)}}
+                    aria-label="Selecionar usuário para supervisão"
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700">
+                    <option value="todos">Todos os colaboradores</option>
+                    {usuarios.filter(u=>u.id!==eu?.id).map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+                  </select>
+                </div>
+                <div className="grid min-h-[500px] gap-4 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.3fr)]">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-800">
+                      Conversas com histórico · {conversasSupervisaoVisiveis.length}
+                    </div>
+                    <div className="max-h-[650px] overflow-y-auto">
+                      {carregandoSupervisao && <p className="p-5 text-sm text-slate-500">Carregando supervisão...</p>}
+                      {!carregandoSupervisao && conversasSupervisaoVisiveis.length===0 && <p className="p-5 text-sm text-slate-500">Nenhuma conversa com mensagens para este filtro.</p>}
+                      {conversasSupervisaoVisiveis.map(c=>(
+                        <button type="button" key={c.id} onClick={()=>setConversaSupervisaoAtiva(c)}
+                          className={`flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-blue-50 ${conversaSupervisaoAtiva?.id===c.id?'bg-blue-50':''}`}>
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-blue-700">
+                            {c.tipo==='grupo'?<Users size={16}/>:<MessageCircle size={16}/>}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <b className="block truncate text-sm text-slate-900">{c.nome||'Conversa interna'}</b>
+                            <span className="block truncate text-xs text-slate-500">{c.ultima_mensagem||'Anexo'}</span>
+                          </span>
+                          <Eye size={15} className="shrink-0 text-slate-400"/>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex min-h-[500px] max-h-[700px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    {conversaSupervisaoAtiva ? (
+                      <>
+                        <div className="border-b border-slate-100 px-5 py-4">
+                          <b className="text-sm text-slate-900">{conversaSupervisaoAtiva.nome||'Conversa interna'}</b>
+                          <p className="text-xs text-blue-600">Histórico para supervisão · somente leitura</p>
+                        </div>
+                        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
+                          {mensagensSupervisao.map(m=>(
+                            <div key={m.id} className="rounded-xl bg-white p-3 text-sm shadow-sm">
+                              <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                                <b className="text-blue-700">{m.usuario_nome||'Colaborador'}</b>
+                                <span className="text-slate-400">{hora(m.created_at)}</span>
+                              </div>
+                              {m.texto && <p className="whitespace-pre-wrap break-words text-slate-700">{m.texto}</p>}
+                              {m.anexo_url && <a href={m.anexo_url} target="_blank" rel="noopener noreferrer" className="mt-2 block truncate text-xs font-semibold text-blue-600 underline">{m.anexo_nome||'Abrir anexo'}</a>}
+                            </div>
+                          ))}
+                          {!mensagensSupervisao.length && <p className="py-8 text-center text-sm text-slate-400">Sem mensagens para mostrar.</p>}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="m-auto p-8 text-center text-sm text-slate-500">
+                        <Eye className="mx-auto mb-2 text-blue-500" size={32}/>
+                        Selecione uma conversa para acompanhar o histórico sem interferir no atendimento.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className="mx-auto max-w-[1500px] space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -2910,6 +3044,7 @@ export default function WhatsAppAtendimentoPage() {
                 </div>
               </div>
             </div>
+            )}
           </div>
         )}
       </div>

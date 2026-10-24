@@ -3,15 +3,23 @@ import { primeiraColunaId } from './kanban'
 import { registrarHistorico } from './historico'
 import { usuarioAtual } from './auth'
 import { v4 as uuidv4 } from 'uuid'
+import { conversaInternaComHistorico, podeSupervisionarChatInterno } from './chatPrivacidade'
 
-export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'; criado_por_id?:string|null; criado_por_nome?:string|null; created_at:string; updated_at:string; ultima_mensagem?:string|null; ultima_mensagem_em?:string|null; nao_lidas?:number }
+export type ChatConversa = { id:string; nome?:string|null; tipo:'direta'|'grupo'; criado_por_id?:string|null; criado_por_nome?:string|null; created_at:string; updated_at:string; ultima_mensagem?:string|null; ultima_mensagem_em?:string|null; nao_lidas?:number; participantes_ids?:string[] }
 export type ChatMensagem = { id:string; conversa_id:string; usuario_id?:string|null; usuario_nome?:string|null; texto?:string|null; anexo_url?:string|null; anexo_nome?:string|null; cliente_id?:string|null; orcamento_id?:string|null; mensagem_pai_id?:string|null; created_at:string }
 export type ChatParticipante = { id:string; conversa_id:string; usuario_id:string; usuario_nome?:string|null; ultima_leitura_em?:string|null }
 
-export async function listarConversas(usuarioId:string, somenteParticipantes=false):Promise<ChatConversa[]> {
+export type OpcoesListaChat = {
+  modo?: 'minhas' | 'supervisao'
+  apenasComHistorico?: boolean
+}
+
+export async function listarConversas(usuarioId:string, opcoes:OpcoesListaChat={}):Promise<ChatConversa[]> {
   const usuario=await usuarioAtual()
-  // No painel privado de WhatsApp, inclusive o master vê só chats de que participa.
-  const master=usuario?.role==='master' && !somenteParticipantes
+  // Nenhum papel possui listagem geral por padrão. Supervisão exige ação
+  // explícita e perfil autorizado; nunca aceitar ID de outro usuário.
+  if (!usuario || usuario.id !== usuarioId) return []
+  const master=podeSupervisionarChatInterno(usuario, opcoes.modo)
 
   let conversas:ChatConversa[]=[]
   let ids:string[]=[]
@@ -39,7 +47,7 @@ export async function listarConversas(usuarioId:string, somenteParticipantes=fal
     if(p.usuario_id!==usuarioId&&!nomesDiretos.has(p.conversa_id)) nomesDiretos.set(p.conversa_id,p.usuario_nome)
   }
 
-  return await Promise.all(conversas.map(async c=>{
+  const resultado = await Promise.all(conversas.map(async c=>{
     const [{data:m},{data:participante}] = await Promise.all([
       supabase.from('chat_mensagens').select('texto,anexo_nome,anexo_url,created_at').eq('conversa_id',c.id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
       supabase.from('chat_participantes').select('ultima_leitura_em').eq('conversa_id',c.id).eq('usuario_id',usuarioId).maybeSingle(),
@@ -62,11 +70,13 @@ export async function listarConversas(usuarioId:string, somenteParticipantes=fal
     return {
       ...c,
       nome:c.tipo==='direta'?nomeDireta:c.nome,
+      participantes_ids: participantes.map(p=>p.usuario_id),
       ultima_mensagem:m?(m.texto||m.anexo_nome||(m.anexo_url?'📎 Anexo':null)):null,
       ultima_mensagem_em:m?.created_at||null,
       nao_lidas:naoLidas,
     }
   }))
+  return opcoes.apenasComHistorico ? resultado.filter(conversaInternaComHistorico) : resultado
 }
 
 export async function listarParticipantes(conversaId:string):Promise<ChatParticipante[]> {
