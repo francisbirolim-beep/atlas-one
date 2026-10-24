@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { tokenAtual } from './auth'
+import { avaliarEstadoAutomacaoMedicao } from './medicaoAutomacaoEstado'
 import type { MedicaoItem, Usuario } from './tipos'
 import { carregarChecklistMedicaoV2, statusItemChecklistV2, validarChecklistObrigatorioV2 } from './medicaoChecklistV2'
 import { verificarFluxoVendaOrcamento } from './medicaoFinal'
@@ -64,6 +65,8 @@ export type PendenciaMedicao = {
 export type ResultadoTransicaoMedicao = {
   ok: boolean
   mensagem?: string
+  automacaoAtiva?: boolean
+  automacaoPendente?: boolean
 }
 
 export async function carregarResumoMedicaoV2(medicaoId: string): Promise<ResumoMedicaoV2> {
@@ -244,7 +247,13 @@ export async function sincronizarMedicaoFinalComProducao(medicaoId: string): Pro
     if (!resp.ok || json.medicaoSincronizada !== true) {
       return { ok: false, mensagem: json.error || 'Não foi possível confirmar o card desta Medição Final na Produção.' }
     }
-    return { ok: true, mensagem: 'Medição Final confirmada no Kanban de Produção.' }
+    const automacao = avaliarEstadoAutomacaoMedicao(json.automacao)
+    return {
+      ok: true,
+      mensagem: automacao.mensagem,
+      automacaoAtiva: automacao.ativa,
+      automacaoPendente: automacao.pendente,
+    }
   } catch (error) {
     console.error('Falha na sincronização da Medição Final com Produção:', error)
     return { ok: false, mensagem: 'Falha de comunicação com a Produção. Use a opção de reenviar.' }
@@ -335,7 +344,12 @@ export async function concluirMedicaoFinal(
         + (sincronizacao.mensagem || 'não foi possível confirmar o card.'),
     }
   }
-  return { ok: true, mensagem: sincronizacao.mensagem }
+  return {
+    ok: true,
+    mensagem: sincronizacao.mensagem,
+    automacaoAtiva: sincronizacao.automacaoAtiva,
+    automacaoPendente: sincronizacao.automacaoPendente,
+  }
 
 }
 
