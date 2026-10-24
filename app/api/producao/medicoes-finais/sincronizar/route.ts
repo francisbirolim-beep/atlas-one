@@ -3,6 +3,7 @@ import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { medicoesElegiveisParaProducao } from '@/lib/producaoMedicaoElegibilidade'
 import { executarAutomacaoMedidaFinal } from '@/lib/medicaoFinalAutomacaoServer'
+import { idCardMedicaoFinal } from '@/lib/idCardMedicaoFinal'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -148,9 +149,13 @@ export async function POST(req: NextRequest) {
         continue
       }
 
+      // Idempotência no banco, inclusive em dois envios simultâneos:
+      // a chave é a empresa + a medição, nunca a venda ou orçamento.
+      const cardId = idCardMedicaoFinal(usuario.empresa_id, medicao.id)
       const { error: erroInsert } = await supabaseAdmin
         .from('setor_kanban_itens')
         .insert({
+          id: cardId,
           empresa_id: usuario.empresa_id,
           titulo: medicao.cliente_nome || 'Medição Final',
           descricao,
@@ -163,7 +168,22 @@ export async function POST(req: NextRequest) {
           atualizado_por_id: usuario.id,
           atualizado_por_nome: usuario.nome,
         })
-      if (erroInsert) throw erroInsert
+      if (erroInsert) {
+        if (erroInsert.code !== '23505') throw erroInsert
+
+        // Só tratar como reenvio quando a colisão é o mesmo card da
+        // mesma medição e empresa, jamais qualquer outro erro unique.
+        const { data: cardJaCriado, error: erroCardDuplicado } = await supabaseAdmin
+          .from('setor_kanban_itens')
+          .select('id')
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('id', cardId)
+          .ilike('descricao', '%' + marcador + '%')
+          .maybeSingle()
+        if (erroCardDuplicado || !cardJaCriado) throw erroInsert
+        ignorados += 1
+        continue
+      }
       criados += 1
     }
 
