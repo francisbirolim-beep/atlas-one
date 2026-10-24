@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "project_ref": "REPLACE_PROJECT_REF",
+  "postgres_major": 17,
+  "source_verified": false,
+  "auth_recovery_reviewed": false,
+  "destinations_independent_verified": false,
+  "external_alerts_verified": false,
+  "database_service": "REPLACE_LIBPQ_SERVICE_NAME",
+  "storage_url": "https://REPLACE_PROJECT_REF.supabase.co",
+  "pg_service_file": "/REPLACE_PRIVATE_PATH/pg_service.conf",
+  "pgpass_file": "/REPLACE_PRIVATE_PATH/pgpass",
+  "storage_key_file": "/REPLACE_PRIVATE_PATH/storage-key",
+  "rclone_config_file": "/REPLACE_PRIVATE_PATH/rclone.conf",
+  "age_recipient": "REPLACE_AGE_PUBLIC_RECIPIENT",
+  "work_directory": "/REPLACE_PRIVATE_PATH/work",
+  "alert_monitor_name": "REPLACE_EXTERNAL_MONITOR_NAME",
+  "destinations": [
+    {"remote": "REPLACE_IMMUTABLE_REMOTE:atlas-backups", "immutable_retention_verified": false},
+    {"remote": "REPLACE_ONEDRIVE_REMOTE:atlas-backups", "immutable_retention_verified": false}
+  ]
+}

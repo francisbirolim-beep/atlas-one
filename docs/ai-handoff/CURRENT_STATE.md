@@ -1,3 +1,16 @@
+## 2026-10-24 — Candidato de contenção e preparação de recuperação (não publicado)
+
+Branch `security/usuarios-hardening-20261024`, sobre o rascunho #952. Nenhuma alteração no banco ou ambiente de produção.
+
+- Restauração legada global bloqueada por padrão, com manutenção explícita e temporária vinculada a operador e backup; 16 testes simulados. O algoritmo legado permanece parcial e não transacional e não deve ser habilitado antes de recuperação isolada validada.
+- Candidato SQL de usuários está fora de migrations, marcado NÃO APLICAR: revoga escrita direta e grants de coluna de papéis de cliente, preservando leitura/RLS e escrita administrativa. Teste PostgreSQL WASM reproduz autoelevação antes e nega após; ainda não é homologação do schema integral nem teste da interface/API real.
+- `scripts/security-backup/` contém somente preflight offline e critérios de recuperação, com 9 testes sintéticos. NÃO exporta, agenda, cifra ou envia cópias; --run bloqueado.
+- Plano Pro confirmado por consulta de organização. A data 05/09 refere-se ao backup interno, sem concluir sobre backups nativos. Pontos nativos e PITR ainda precisam ser verificados. Arquivos Storage exigem cópia própria.
+- Credenciais de exportação, destinos independentes, chave de recuperação, OneDrive e teste integral seguem pendentes. Nunca informar segredos em documentos ou repositório.
+- Typecheck aprovado. Validação final de release registrada no PR; publicar somente após homologação e aprovação explícita.
+
+Próximos passos: homologar políticas em ambiente isolado completo, conferir cadastro/Master/funcionário/recuperação; verificar pontos nativos; disponibilizar conexões dedicadas e destinos; implementar exportador integral e alerta externo; testar restauração; somente então aprovar implantação. Segurança absoluta e recuperação garantida não foram demonstradas.
+
 ## 2026-10-22 — Complemento: fornecedor no cadastro CORRETO do CMV (prévia local, NÃO publicado)
 
 - Print do usuário confirmou que a tela operacional é `Custos / CMV da obra` → `Adicionar compra` ou `Corrigir lançamento existente` (e não a prévia do quadro de recebimentos).
