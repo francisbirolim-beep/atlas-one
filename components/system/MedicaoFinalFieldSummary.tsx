@@ -70,6 +70,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
   const [revisando, setRevisando] = useState(false)
   const [responsaveisRevisao, setResponsaveisRevisao] = useState<string[]>([])
   const [responsaveisInicializados, setResponsaveisInicializados] = useState(false)
+  const [automacaoAtiva, setAutomacaoAtiva] = useState(false)
   const [operacoesAbertas, setOperacoesAbertas] = useState(false)
 
   const master = usuario?.role === 'master'
@@ -98,6 +99,30 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     const timer = window.setInterval(() => void carregar(), 5000)
     return () => window.clearInterval(timer)
   }, [carregar])
+
+  useEffect(() => {
+    if (!master) return
+    let montado=true
+    async function lerAutomacao(){
+      try{
+       const token=await tokenAtual()
+       if(!token)return
+       const resp=await fetch('/api/medicao-final/automacao',{
+        headers:{Authorization:'Bearer '+token},cache:'no-store',
+       })
+       if(!resp.ok)return
+       const dados=await resp.json()
+       if(!montado)return
+       if(dados.ativo===true){
+        setAutomacaoAtiva(true)
+        setResponsaveisRevisao(dados.responsaveis||[])
+        setResponsaveisInicializados(true)
+       }
+      }catch(e){console.warn('Configuração automática indisponível',e)}
+    }
+    void lerAutomacao()
+    return ()=>{montado=false}
+  },[master])
 
   useEffect(() => {
     if (responsaveisInicializados || usuarios.length === 0) return
@@ -129,7 +154,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
             ? 'Resolva as pendências abertas antes de concluir.'
             : ''
 
-  const seletorResponsaveis = (
+  const seletorResponsaveis = automacaoAtiva ? (
+    <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-900">
+      Tarefas e notificações automáticas ativadas. Destinatários configurados:
+      {' '}{usuarios.filter(u=>responsaveisRevisao.includes(u.id)).map(u=>u.nome).join(', ')||'consultar configuração'}.
+      <Link href="/kanban/automacao-medida-final" className="ml-2 underline">Alterar responsáveis</Link>
+    </div>
+  ) : (
     <fieldset className="mt-3 rounded-xl border border-blue-200 bg-white p-3">
       <legend className="px-1 text-xs font-bold text-blue-800">Quem deve conferir a Medida Final?</legend>
       <p className="mb-3 text-xs text-slate-600">Selecione uma ou mais pessoas. Cada responsável receberá sua própria tarefa e notificação.</p>
@@ -162,6 +193,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
           await carregar()
           return
         }
+      }
+      if (automacaoAtiva && concluirAntes) {
+        setMensagem('Medição Final enviada. A automação configurada no Kanban de Produção encaminhou as tarefas de conferência.')
+        setRevisando(false)
+        await carregar()
+        window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
+        return
       }
       const token = await tokenAtual()
       if (!token) { setErro('Medição concluída. Sessão expirada: entre novamente para distribuir as tarefas.'); return }

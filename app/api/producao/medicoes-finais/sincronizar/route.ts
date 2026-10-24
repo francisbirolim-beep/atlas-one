@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { medicoesElegiveisParaProducao } from '@/lib/producaoMedicaoElegibilidade'
+import { executarAutomacaoMedidaFinal } from '@/lib/medicaoFinalAutomacaoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -166,8 +167,24 @@ export async function POST(req: NextRequest) {
       criados += 1
     }
 
+    // Dispara somente para a medição enviada explicitamente. Sincronizações
+    // em lote não devem gerar notificações retroativas de obras antigas.
+    let automacao:{ativa:boolean;criadas:number;existentes:number;erro?:string}={
+      ativa:false,criadas:0,existentes:0,
+    }
+    if(medicaoId&&todasMedicoes.some(m=>m.id===medicaoId)&&
+      criados+atualizados+ignorados>0){
+      try{
+       automacao=await executarAutomacaoMedidaFinal(
+        usuario.empresa_id,medicaoId,{id:usuario.id,nome:usuario.nome})
+      }catch(e){
+       console.error('Automação Medida Final: card mantido, atribuições pendentes',e)
+       automacao={ativa:true,criadas:0,existentes:0,erro:'Tarefas pendentes: confira a automação.'}
+      }
+    }
     return NextResponse.json({
       ok: true,
+      automacao,
       colunaEntrada,
       criados,
       atualizados,

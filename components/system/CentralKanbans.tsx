@@ -10,11 +10,12 @@ type Percentuais={compras?:number;mercadoria?:number;producao?:number;instalacao
 type Card={id:string;numero:number;clienteId:string;cliente:string;obra:string;cidade:string;previsao:string|null;
  percentualGeral:number;percentuais:Percentuais;conclusoes?:Record<string,boolean>;contagens:Record<string,number>;
  observacoes:Record<string,{comentarios:number;ultimoComentario:string|null}>}
+type EntradaMedicao={id:string;medicaoId:string;vendaId:string;cliente:string;obra:string;cidade:string;tipologia:string;quantidade:number;conferencia:boolean;href:string}
 type Posicao={setor:string;venda_obra_id:string;coluna_id:string;updated_at:string}
 type Acesso={usuario_id:string;setor:string;nivel:NivelBoard;responsavel:boolean}
 type Usuario={id:string;nome:string;role:string}
 type Dados={usuarioMaster?:boolean;quadros:typeof QUADROS[number][];permissoes:Record<string,NivelBoard>;colunas:Coluna[];
- posicoes:Posicao[];cards:Card[];nativos?:Record<string,{colunas:Coluna[];cards:Array<{id:string;cliente:string;obra:string;numero:number;cidade:string;coluna_id:string|null;href:string}>}>;funcionarios:Usuario[];acessos:Acesso[];atualizadoEm:string}
+ posicoes:Posicao[];cards:Card[];entradasMedicao?:EntradaMedicao[];nativos?:Record<string,{colunas:Coluna[];cards:Array<{id:string;cliente:string;obra:string;numero:number;cidade:string;coluna_id:string|null;href:string}>}>;funcionarios:Usuario[];acessos:Acesso[];atualizadoEm:string}
 type Comentario={id:string;setor:string;texto:string;usuario_nome:string;created_at:string}
 type Movimento={id:string;setor:string;coluna_anterior_nome:string|null;coluna_nova_nome:string|null;motivo:string|null;usuario_nome:string;created_at:string}
 const qTitulo=(id:string)=>QUADROS.find(q=>q.id===id)?.nome||id
@@ -122,6 +123,12 @@ export default function CentralKanbans(){
   return (dados?.cards||[]).filter(c=>(!term||[c.cliente,c.obra,c.cidade,String(c.numero)].join(' ').toLocaleLowerCase('pt-BR').includes(term))
    &&(!cidade||c.cidade===cidade)&&(!atrasados||(!!c.previsao&&new Date(c.previsao+'T23:59:59').getTime()<Date.now()&&c.percentualGeral<100)))
  },[dados,filtro,cidade,atrasados])
+ const entradasVisiveis=useMemo(()=>{
+  const term=filtro.toLocaleLowerCase('pt-BR').trim()
+  return (dados?.entradasMedicao||[]).filter(c=>
+   (!term||[c.cliente,c.obra,c.cidade,c.tipologia].join(' ').toLocaleLowerCase('pt-BR').includes(term))
+   &&(!cidade||c.cidade===cidade)&&!atrasados)
+ },[dados,filtro,cidade,atrasados])
  const cidades=[...new Set((dados?.cards||[]).map(c=>c.cidade).filter(Boolean))].sort()
  // Detalhe do card acompanha a atualização periódica, sem conservar números antigos.
  const detalheAtual=detalhe?(dados?.cards.find(c=>c.id===detalhe.id)||detalhe):null
@@ -192,6 +199,20 @@ export default function CentralKanbans(){
    </div>
   </div>
  }
+ function cardDeMedicao(card:EntradaMedicao){
+  return <Link key={card.id} href={card.href}
+   className="block rounded-xl border border-blue-200 bg-white p-3 text-left shadow-sm hover:border-blue-500 hover:shadow-md">
+   <div className="flex items-start justify-between gap-2">
+    <strong className="text-sm text-slate-900">{card.cliente}</strong>
+    <span className="shrink-0 rounded bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">Medida Final</span>
+   </div>
+   <p className="mt-1 text-xs font-semibold text-slate-600">Obra: {card.obra}</p>
+   <p className="mt-2 text-xs font-semibold leading-5 text-slate-800">{card.tipologia}</p>
+   <p className="mt-1 text-[11px] text-slate-500">Quantidade: {card.quantidade} peça(s)</p>
+   {card.conferencia&&<p className="mt-2 text-[11px] font-bold text-amber-700">Foto registrada · conferir valores numéricos</p>}
+   <p className="mt-2 text-[11px] font-semibold text-blue-700">Abrir Medida Final ↗</p>
+  </Link>
+ }
  function quadroOperacional(s:string,mini=false){
   if(s==='comercial'||s==='assistencia'){
    const n=dados?.nativos?.[s]
@@ -215,23 +236,29 @@ export default function CentralKanbans(){
   if(!cols.length)return <div className="rounded-xl border bg-white p-4 text-sm text-slate-600">Sem colunas configuradas para {qTitulo(s)}.</div>
   return <section key={s} className={'rounded-2xl border border-slate-200 bg-slate-50 p-3 '+(mini?'min-w-[320px] flex-1':'')}>
    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-    <h2 className="text-base font-bold text-slate-900">{qTitulo(s)} <span className="text-xs font-normal text-slate-500">({cardsVisiveis.length} obras)</span></h2>
+    <h2 className="text-base font-bold text-slate-900">{qTitulo(s)} <span className="text-xs font-normal text-slate-500">({s==='producao'?entradasVisiveis.length+cardsVisiveis.filter(c=>origCard(c,s)!==cols[0]?.id).length:cardsVisiveis.length} {s==='producao'?'cards':'obras'})</span></h2>
     <div className="flex gap-2">
      {mini&&<button onClick={()=>selecionarQuadro(s)} className="text-xs font-semibold text-blue-700">Abrir quadro ↗</button>}
      {!mini&&pode(s,'administrar')&&<button className="rounded-lg border bg-white px-2 py-1.5 text-xs" onClick={()=>setConfig(!config)}><Settings2 size={14} className="inline"/> Configurar</button>}
+     {!mini&&dados?.usuarioMaster&&s==='producao'&&<Link href="/kanban/automacao-medida-final" className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-semibold text-indigo-800">Automação Medida Final</Link>}
      {!mini&&dados?.usuarioMaster&&<Link href="/kanban/configuracao-colunas" className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs font-semibold text-blue-800">Personalizar colunas</Link>}
     </div>
    </div>
    <div className={'flex gap-3 overflow-x-auto pb-4 '+(mini?'max-h-[70vh]':'min-h-[370px]')}>
     {colsVisuais.map(col=>{
-     const itens=cardsVisiveis.filter(c=>origCard(c,s)===col.id)
+     const primeiraProducao=s==='producao'&&col.ordem===0
+     const itens=primeiraProducao?[]:cardsVisiveis.filter(c=>origCard(c,s)===col.id)
+     const entrada=primeiraProducao?entradasVisiveis:[]
      return <div key={col.id} onDragOver={e=>{if(pode(s,'movimentar'))e.preventDefault()}}
       onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('text/plain');if(id&&arrastado?.setor===s)void mover(id,s,col.id);setArrastado(null)}}
       className="min-h-32 w-[245px] shrink-0 rounded-xl border border-slate-200 bg-slate-100/80 p-2 md:w-[280px]">
       <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-800">
-       <span>{col.nome_exibicao||col.nome}</span><span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-800">{itens.length}</span>
+       <span>{col.nome_exibicao||col.nome}</span><span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-800">{itens.length+entrada.length}</span>
       </div>
-      <div className="space-y-2">{itens.map(c=>cardVisual(c,s,mini))}</div>
+      <div className="space-y-2">
+       {entrada.map(cardDeMedicao)}
+       {itens.map(c=>cardVisual(c,s,mini))}
+      </div>
      </div>
     })}
     {!mini&&pode(s,'administrar')&&<button onClick={()=>{setConfig(true);setNovaColuna('')}} className="flex w-40 shrink-0 items-start gap-2 rounded-xl border border-dashed border-slate-300 p-4 text-sm font-semibold text-slate-600"><Plus size={16}/> Coluna</button>}
