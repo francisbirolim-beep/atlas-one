@@ -162,6 +162,8 @@ async function headersJson() {
 export default function WhatsAppAtendimentoPage() {
   const [eu, setEu] = useState<Usuario | null>(null)
   const [conversas, setConversas] = useState<Conversa[]>([])
+  const [conversasMonitoradas, setConversasMonitoradas] = useState<Conversa[]>([])
+  const [carregandoMonitoramento, setCarregandoMonitoramento] = useState(false)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [canais, setCanais] = useState<Canal[]>([])
   const [acessos, setAcessos] = useState<AcessoCanal[]>([])
@@ -254,6 +256,7 @@ export default function WhatsAppAtendimentoPage() {
   const carregandoConversasRef = useRef(false)
   const recarregarConversasPendenteRef = useRef(false)
   const refreshConversasTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const conversaNovaWhatsAppRef = useRef<string | null>(null)
   const buscaInternaDireitaRef = useRef<HTMLInputElement | null>(null)
   const conversaInternaRecemCriadaRef = useRef<string | null>(null)
   const arquivoInternoInputRef = useRef<HTMLInputElement | null>(null)
@@ -356,7 +359,15 @@ export default function WhatsAppAtendimentoPage() {
       }
       setAtiva(atual => {
         if (atual) {
-          return conversasRecebidas.find((c: Conversa) => c.id === atual.id) || null
+          const encontrada = conversasRecebidas.find((c: Conversa) => c.id === atual.id)
+          if (encontrada) {
+            if (conversaNovaWhatsAppRef.current === atual.id) conversaNovaWhatsAppRef.current = null
+            return encontrada
+          }
+          // Na supervisão, a conversa selecionada não pertence à caixa pessoal.
+          // Uma conversa iniciada agora só entra na lista após o primeiro envio.
+          if (areaAtendimento === 'monitoramento' || conversaNovaWhatsAppRef.current === atual.id) return atual
+          return null
         }
         if (conversaIdSolicitada) {
           return conversasRecebidas.find((c: Conversa) => c.id === conversaIdSolicitada) || null
@@ -424,8 +435,9 @@ export default function WhatsAppAtendimentoPage() {
       if (c.grupo_responsavel_efetivo_id) return c.grupo_responsavel_efetivo_id === eu?.id
       return c.grupo_pode_atender === true
     }
-    // Supervisão de terceiros só acontece na área Monitoramento.
-    return !c.responsavel_id || c.responsavel_id === eu?.id
+    // A API já limita contatos individuais a mensagens que este usuário
+    // enviou. Não restringir por responsável atual: preservar seu histórico.
+    return true
   }
 
   function selecionarCanal(canalId: string) {
@@ -638,7 +650,12 @@ export default function WhatsAppAtendimentoPage() {
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao abrir conversa.')
       setDiretorioAberto(false)
-      selecionarConversa(json.conversa as Conversa)
+      const conversaNova = json.conversa as Conversa
+      if (conversaNova.whatsapp_chat_tipo !== 'grupo' &&
+          !conversas.some(c=>c.id===conversaNova.id)) {
+        conversaNovaWhatsAppRef.current = conversaNova.id
+      }
+      selecionarConversa(conversaNova)
       agendarRefreshConversas(0)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao abrir conversa.')
@@ -750,6 +767,51 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   useEffect(() => { void carregarConversas() }, [])
+
+  // A visão geral só é carregada quando a pessoa entra em Monitoramento.
+  // O painel pessoal jamais recebe o histórico dos demais no payload.
+  useEffect(() => {
+    if (areaAtendimento !== 'monitoramento' || visaoSupervisao !== 'atendimentos') {
+      setConversasMonitoradas([])
+      setCarregandoMonitoramento(false)
+      return
+    }
+    if (!eu?.id || (eu.role !== 'master' && !acessos.some(a => a.supervisionar || a.dono))) return
+    let ativo = true
+    let executando = false
+    const atualizar = async () => {
+      if (executando) return
+      executando = true
+      try {
+        if (ativo) setCarregandoMonitoramento(true)
+        const headers = await headersJson()
+        const resp = await fetch('/api/integracoes/whatsapp/conversas?visao=monitoramento', {
+          headers, cache: 'no-store',
+        })
+        const json = await resp.json()
+        if (!resp.ok) throw new Error(json.error || 'Falha ao carregar supervisão.')
+        if (ativo) setConversasMonitoradas(json.conversas || [])
+      } catch (erroSupervisao) {
+        if (ativo) {
+          setConversasMonitoradas([])
+          setErro(erroSupervisao instanceof Error ? erroSupervisao.message : 'Falha ao carregar supervisão.')
+        }
+      } finally {
+        executando = false
+        if (ativo) setCarregandoMonitoramento(false)
+      }
+    }
+    void atualizar()
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void atualizar()
+    }, 20000)
+    window.addEventListener('focus', atualizar)
+    return () => {
+      ativo = false
+      clearInterval(timer)
+      window.removeEventListener('focus', atualizar)
+    }
+  }, [areaAtendimento, visaoSupervisao, eu?.id, eu?.role, acessos.length])
 
   useEffect(() => {
     if (!eu?.id) return
@@ -1586,7 +1648,7 @@ export default function WhatsAppAtendimentoPage() {
   ), [conversas, canalFiltro, eu?.id])
 
   const podeMonitorar = eu?.role === 'master' || acessos.some(a => a.supervisionar || a.dono)
-  const conversasMonitoramento = conversas.filter(c => {
+  const conversasMonitoramento = conversasMonitoradas.filter(c => {
     const acesso = acessos.find(a => a.canal_id === c.whatsapp_canal_id)
     if (eu?.role !== 'master' && !acesso?.supervisionar && !acesso?.dono) return false
     if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
@@ -1596,7 +1658,7 @@ export default function WhatsAppAtendimentoPage() {
     c.status === 'aguardando' || (c.status !== 'finalizado' && Number(c.nao_lidas || 0) > 0)
   ).length
   const monitoradosVisiveis = usuarios.filter(u =>
-    conversas.some(c => c.responsavel_id === u.id &&
+    conversasMonitoradas.some(c => c.responsavel_id === u.id &&
       (eu?.role === 'master' || acessos.some(a =>
         a.canal_id === c.whatsapp_canal_id && (a.supervisionar || a.dono)
       )))
@@ -2985,7 +3047,7 @@ export default function WhatsAppAtendimentoPage() {
                     <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-xs">
                       <thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3">Atendente</th><th className="px-4 py-3">Conversas</th><th className="px-4 py-3">Aguardando</th><th className="px-4 py-3">Ação</th></tr></thead>
                       <tbody>{monitoradosVisiveis.map(u=>{
-                        const atribuídas = conversas.filter(c=>c.responsavel_id===u.id &&
+                        const atribuídas = conversasMonitoradas.filter(c=>c.responsavel_id===u.id &&
                           (canalFiltro==='todos'||c.whatsapp_canal_id===canalFiltro) &&
                           (eu?.role==='master'||acessos.some(a=>a.canal_id===c.whatsapp_canal_id&&(a.supervisionar||a.dono))))
                         const pendentes=atribuídas.filter(c=>c.status==='aguardando'||(c.status!=='finalizado'&&Number(c.nao_lidas||0)>0)).length
@@ -3008,7 +3070,8 @@ export default function WhatsAppAtendimentoPage() {
                           <Eye size={16} className="text-blue-600"/>
                         </button>
                       ))}
-                      {conversasMonitoramento.length===0 && <p className="p-6 text-center text-sm text-slate-500">Nenhuma conversa para os filtros selecionados.</p>}
+                      {carregandoMonitoramento && <p className="p-6 text-center text-sm text-slate-500">Carregando supervisão de atendimentos...</p>}
+                      {!carregandoMonitoramento && conversasMonitoramento.length===0 && <p className="p-6 text-center text-sm text-slate-500">Nenhuma conversa para os filtros selecionados.</p>}
                     </div>
                   </div>
                 </div>
