@@ -34,7 +34,7 @@ import {
 } from '@/lib/homeUsuario'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
-import { montarBlocosPermissao, type BlocoPermissaoId, type ItemPermissaoBloco } from '@/lib/permissoesBlocos'
+import { montarBlocosPermissao, type BlocoPermissaoId, type ItemPermissaoBloco, fallbackAcaoPermissao } from '@/lib/permissoesBlocos'
 import { acessoUsuarioPadrao, lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import {
   CADASTROS_360,
@@ -170,11 +170,9 @@ export default function UsuariosSenhasPage() {
     setCadastrosConfig(cadastros)
     const mapaSetores = Object.fromEntries(setores.map(s => [s.id, permissoes[s.id] || 'oculto'])) as Record<string, NivelPermissao>
     setPermissoesSetores(mapaSetores)
-    const acoesComFallback: Record<string, NivelPermissao> = {}
-    blocosPermissoes.forEach(bloco => bloco.itens.forEach(item => item.acoes.forEach(acao => {
-      acoesComFallback[acao.id] = acesso.acoes?.[acao.id] || mapaSetores[item.setorId] || 'oculto'
-    })))
-    setAcessoConfig({ ...acesso, acoes: acoesComFallback })
+    // Não materializar acessos herdados ao carregar: gravar um fallback como
+    // ação explícita pode liberar outro módulo acidentalmente.
+    setAcessoConfig({ ...acesso, acoes: { ...acesso.acoes }, modulos: { ...acesso.modulos } })
     setCarregandoHome(false)
     setCarregandoPermissoes(false)
     } catch { if(sequencia!==selecaoRef.current)return; setMsgPermissoes('Não foi possível carregar os acessos. Selecione o usuário novamente.'); setCarregandoHome(false) }
@@ -262,52 +260,72 @@ export default function UsuariosSenhasPage() {
 
   const pesoNivel: Record<NivelPermissao, number> = { oculto: 0, consulta: 1, edicao: 2 }
 
+  function nivelModulo(item: ItemPermissaoBloco): NivelPermissao {
+    const setor=permissoesSetores[item.setorId]||'oculto'
+    if(setor==='oculto')return 'oculto'
+    const modulo=acessoConfig.modulos?.[item.id]||setor
+    return pesoNivel[modulo]<pesoNivel[setor]?modulo:setor
+  }
+
   function nivelAcao(item: ItemPermissaoBloco, acaoId: string): NivelPermissao {
-    return acessoConfig.acoes?.[acaoId] || permissoesSetores[item.setorId] || 'oculto'
+    const modulo=nivelModulo(item)
+    if(modulo==='oculto')return 'oculto'
+    const n=acessoConfig.acoes?.[acaoId]||fallbackAcaoPermissao(acaoId,modulo)
+    return pesoNivel[n]<pesoNivel[modulo]?n:modulo
   }
 
-  function maiorNivelDoSetor(setorId: string, proximasAcoes: Record<string, NivelPermissao>): NivelPermissao {
-    const acoesDoSetor = blocosPermissoes.flatMap(bloco => bloco.itens)
-      .filter(item => item.setorId === setorId)
-      .flatMap(item => item.acoes)
-    return acoesDoSetor.reduce<NivelPermissao>((atual, acao) => {
-      const n = proximasAcoes[acao.id] || 'oculto'
-      return pesoNivel[n] > pesoNivel[atual] ? n : atual
-    }, 'oculto')
+  // Nível 1: setor fechado vence qualquer módulo ou ação.
+  // Ao abrir setor antes oculto, iniciar seus módulos como ocultos por padrão.
+  // Permissões antigas que já tinham setor aberto continuam herdando a regra.
+  function mudarPermissaoSetor(setorId: string, nivel: NivelPermissao) {
+    const anterior=permissoesSetores[setorId]||'oculto'
+    if(anterior==='oculto'&&nivel!=='oculto'){
+      setAcessoConfig(prev=>{
+        const modulos={...prev.modulos}
+        for(const item of blocosPermissoes.flatMap(b=>b.itens).filter(m=>m.setorId===setorId)){
+          if(!(item.id in modulos))modulos[item.id]='oculto'
+        }
+        return {...prev,modulos}
+      })
+    }
+    setPermissoesSetores(prev=>({...prev,[setorId]:nivel}))
   }
 
-  function mudarPermissaoAcao(item: ItemPermissaoBloco, acaoId: string, nivel: NivelPermissao) {
-    const proximasAcoes = { ...acessoConfig.acoes, [acaoId]: nivel }
-    setAcessoConfig(prev => ({ ...prev, acoes: proximasAcoes }))
-    setPermissoesSetores(prev => ({ ...prev, [item.setorId]: maiorNivelDoSetor(item.setorId, proximasAcoes) }))
-  }
-
+  // Nível 2: liberar módulo não eleva automaticamente o setor nem seus irmãos.
   function aplicarNivelModulo(item: ItemPermissaoBloco, nivel: NivelPermissao) {
-    const alteracoes = Object.fromEntries(item.acoes.map(acao => [acao.id, nivel])) as Record<string, NivelPermissao>
-    const proximasAcoes = { ...acessoConfig.acoes, ...alteracoes }
-    setAcessoConfig(prev => ({ ...prev, acoes: proximasAcoes }))
-    setPermissoesSetores(prev => ({ ...prev, [item.setorId]: maiorNivelDoSetor(item.setorId, proximasAcoes) }))
+    if((permissoesSetores[item.setorId]||'oculto')==='oculto')return
+    setAcessoConfig(prev=>({
+      ...prev, modulos:{...prev.modulos,[item.id]:nivel},
+      acoes:{...prev.acoes,...Object.fromEntries(item.acoes.map(acao=>[acao.id,nivel]))},
+    }))
+  }
+
+  // Nível 3: uma ação individual não modifica teto de setor/módulo.
+  function mudarPermissaoAcao(item: ItemPermissaoBloco, acaoId: string, nivel: NivelPermissao) {
+    if(nivelModulo(item)==='oculto')return
+    setAcessoConfig(prev=>({...prev,acoes:{...prev.acoes,[acaoId]:nivel}}))
   }
 
   function aplicarNivelBloco(blocoId: BlocoPermissaoId, nivel: NivelPermissao) {
     const bloco = blocosPermissoes.find(item => item.id === blocoId)
     if (!bloco) return
-    const alteracoesAcoes = Object.fromEntries(bloco.itens.flatMap(item => item.acoes.map(acao => [acao.id, nivel]))) as Record<string, NivelPermissao>
-    setAcessoConfig(prev => ({ ...prev, acoes: { ...prev.acoes, ...alteracoesAcoes } }))
-    setPermissoesSetores(prev => ({
-      ...prev,
-      ...Object.fromEntries(bloco.itens.map(item => [item.setorId, nivel])),
-    }))
+    // Ação geral é uma escolha explícita do Master.
+    const alteracoesAcoes=Object.fromEntries(bloco.itens.flatMap(item=>item.acoes.map(acao=>[acao.id,nivel]))) as Record<string,NivelPermissao>
+    const modulos=Object.fromEntries(bloco.itens.map(item=>[item.id,nivel])) as Record<string,NivelPermissao>
+    setAcessoConfig(prev=>({...prev,modulos:{...prev.modulos,...modulos},acoes:{...prev.acoes,...alteracoesAcoes}}))
+    setPermissoesSetores(prev=>({...prev,...Object.fromEntries(bloco.itens.map(item=>[item.setorId,nivel]))}))
   }
 
   function aplicarNivelTodos(nivel: NivelPermissao) {
-    setAcessoConfig(prev=>({...prev,cliente360:matrizCompletaCliente360(nivel),acoes:{...prev.acoes,...Object.fromEntries(IDS_IA_RELATORIOS.map(id=>[id,nivel]))}}))
-    const alteracoesAcoes = Object.fromEntries(blocosPermissoes.flatMap(bloco => bloco.itens.flatMap(item => item.acoes.map(acao => [acao.id, nivel])))) as Record<string, NivelPermissao>
-    setAcessoConfig(prev => ({ ...prev, acoes: { ...prev.acoes, ...alteracoesAcoes } }))
-    setPermissoesSetores(prev => ({
-      ...prev,
-      ...Object.fromEntries(blocosPermissoes.flatMap(bloco => bloco.itens.map(item => [item.setorId, nivel]))),
+    const itens=blocosPermissoes.flatMap(b=>b.itens)
+    const modulos=Object.fromEntries(itens.map(item=>[item.id,nivel])) as Record<string,NivelPermissao>
+    const acoes=Object.fromEntries(itens.flatMap(item=>item.acoes.map(acao=>[acao.id,nivel]))) as Record<string,NivelPermissao>
+    setAcessoConfig(prev=>({
+      ...prev, cliente360:matrizCompletaCliente360(nivel),
+      modulos:{...prev.modulos,...modulos},
+      acoes:{...prev.acoes,...acoes,...Object.fromEntries(IDS_IA_RELATORIOS.map(id=>[id,nivel]))},
     }))
+    setPermissoesSetores(prev=>({...prev,...Object.fromEntries(itens.map(item=>[item.setorId,nivel]))}))
   }
 
   function alternarBloco(blocoId: BlocoPermissaoId) {
@@ -325,7 +343,7 @@ export default function UsuariosSenhasPage() {
     if(!escoposOk){setSalvandoPermissoes(false);setMsgPermissoes('Não foi possível salvar os acessos. Nenhum setor foi alterado.');return}
     const resultado=await salvarPermissoesUsuario(usuarioSelecionado.id,permissoesSetores)
     setSalvandoPermissoes(false)
-    setMsgPermissoes(resultado.error ? 'As ações foram salvas, mas os setores não foram atualizados. Recarregue e confira antes de continuar.' : 'Acessos por bloco e Cliente 360 salvos.')
+    setMsgPermissoes(resultado.error ? 'As ações foram salvas, mas os setores não foram atualizados. Recarregue e confira antes de continuar.' : 'Setores, módulos e ações salvos. Acesso oculto prevalece sobre todas as autorizações internas.')
   }
 
   async function salvarSenha(e: React.FormEvent) {
@@ -613,7 +631,7 @@ export default function UsuariosSenhasPage() {
                     <div className="space-y-4">
                       <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
                         <p className="text-xs font-semibold text-blue-900">Aplicar em todos os blocos</p>
-                        <p className="mt-0.5 text-[11px] text-blue-700">Atalho para começar uma configuração; depois você pode ajustar item por item.</p>
+                        <p className="mt-0.5 text-[11px] text-blue-700">Três níveis independentes: 1. setor (visível ou bloqueado); 2. módulo/etapa; 3. ação (consultar, editar ou executar). Os botões abaixo alteram tudo de propósito.</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button type="button" onClick={()=>aplicarNivelTodos('edicao')} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[11px] font-semibold text-white">Editar tudo</button>
                           <button type="button" onClick={()=>aplicarNivelTodos('consulta')} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-blue-700">Consultar tudo</button>
@@ -651,10 +669,29 @@ export default function UsuariosSenhasPage() {
 
                             {aberto && (
                               <div className="space-y-3 border-t border-slate-100 p-3">
+                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                                  <p className="text-xs font-bold text-blue-900">1. Liberar ou ocultar o setor inteiro</p>
+                                  <p className="mt-1 text-[11px] text-blue-800">Sem acesso: nenhum módulo, etapa ou ação deste setor fica disponível. Libere o setor primeiro; depois defina os módulos e ações.</p>
+                                  <div className="mt-2 space-y-2">
+                                    {[...new Set(bloco.itens.map(item=>item.setorId))].map(setorId=>(
+                                      <label key={setorId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2.5 text-xs">
+                                        <span className="font-semibold">{setores.find(setor=>setor.id===setorId)?.nome||setorId}</span>
+                                        <select aria-label={'Acesso ao setor '+setorId} value={permissoesSetores[setorId]||'oculto'}
+                                          onChange={e=>mudarPermissaoSetor(setorId,e.target.value as NivelPermissao)}
+                                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                                          <option value="oculto">Setor oculto — sem acesso</option>
+                                          <option value="consulta">Setor liberado — consulta</option>
+                                          <option value="edicao">Setor liberado — configurar ações</option>
+                                        </select>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
                                 {bloco.itens.map(item => {
+                                  const setorBloqueado=(permissoesSetores[item.setorId]||'oculto')==='oculto'
+                                  const moduloBloqueado=nivelModulo(item)==='oculto'
                                   const niveis = item.acoes.map(acao => nivelAcao(item, acao.id))
-                                  const todosIguais = niveis.every(n => n === niveis[0])
-                                  const geralModulo = todosIguais ? niveis[0] : 'personalizado'
+                                  const geralModulo = acessoConfig.modulos?.[item.id]||permissoesSetores[item.setorId]||'oculto'
                                   return (
                                     <div key={item.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                                       <div className="border-b border-slate-100 bg-white p-3">
@@ -663,9 +700,8 @@ export default function UsuariosSenhasPage() {
                                             <p className="text-xs font-bold text-slate-800">{item.label}</p>
                                             <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{item.descricao}</p>
                                           </div>
-                                          <label className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-slate-400">Geral
-                                            <select value={geralModulo} onChange={e=>aplicarNivelModulo(item,e.target.value as NivelPermissao)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs normal-case tracking-normal text-slate-700">
-                                              {geralModulo === 'personalizado' && <option value="personalizado" disabled>Personalizado</option>}
+                                          <label className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-slate-400">2. Módulo / etapa
+                                            <select disabled={setorBloqueado} value={geralModulo} onChange={e=>aplicarNivelModulo(item,e.target.value as NivelPermissao)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs normal-case tracking-normal text-slate-700 disabled:opacity-50">
                                               <option value="oculto">Sem acesso</option>
                                               <option value="consulta">Consultar</option>
                                               <option value="edicao">Editar/Executar</option>
@@ -691,7 +727,9 @@ export default function UsuariosSenhasPage() {
                                               <p className="text-[11px] font-semibold text-slate-700">{acao.label}</p>
                                               <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{acao.descricao}</p>
                                             </div>
-                                            <select value={nivelAcao(item,acao.id)} onChange={e=>mudarPermissaoAcao(item,acao.id,e.target.value as NivelPermissao)} className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px]">
+                                            <select disabled={setorBloqueado||moduloBloqueado} aria-label={'3. Ação '+acao.label}
+                                              value={nivelAcao(item,acao.id)} onChange={e=>mudarPermissaoAcao(item,acao.id,e.target.value as NivelPermissao)}
+                                              className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] disabled:opacity-40">
                                               <option value="oculto">Sem acesso</option>
                                               <option value="consulta">Consultar</option>
                                               <option value="edicao">Editar/Executar</option>

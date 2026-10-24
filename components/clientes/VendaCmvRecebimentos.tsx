@@ -9,17 +9,20 @@ export type RecebimentoCmv={
  id:string;categoria:string;peso_kg:number|null;preco_kg:number|null;quantidade?:number|null;unidade?:string|null;preco_unitario?:number|null;valor_total:number;fornecedor:string;
  nota_numero?:string|null;romaneio_numero?:string|null;data_recebimento:string;
  anexo_nome?:string|null;anexo_url?:string|null;observacoes?:string|null;
- criado_por_nome?:string|null;versao:number;cancelado_em?:string|null;motivo_cancelamento?:string|null;conferido_em?:string|null;conferido_por_nome?:string|null
+ criado_por_id?:string|null;criado_por_nome?:string|null;versao:number;cancelado_em?:string|null;motivo_cancelamento?:string|null;conferido_em?:string|null;conferido_por_nome?:string|null
 }
 export type HistoricoRecebimento={id:string;recebimento_id:string;alterado_em:string;alterado_por_nome:string|null;antes:Record<string,unknown>;depois:Record<string,unknown>}
 const moedas=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const kg=(n:number)=>n.toLocaleString('pt-BR',{maximumFractionDigits:3})+' kg'
 const num=(s:string)=>{const t=s.trim();if(!t)return 0;return Number(t.includes(',')?t.replace(/\./g,'').replace(',','.'):t)||0}
 function hoje(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
-export default function VendaCmvRecebimentos({vendaId,categoria,registros,historico,disponivel,onAtualizar}:{
+export default function VendaCmvRecebimentos({acessoCmv,vendaId,categoria,registros,historico,disponivel,onAtualizar}:{
+ acessoCmv:{id:string;master:boolean;podeEditar:boolean;delegacoes:Record<string,boolean>}|null;
  vendaId:string;categoria:string;registros:RecebimentoCmv[];historico:HistoricoRecebimento[];
  disponivel:boolean;onAtualizar:()=>Promise<void>
 }){
+ const podeModificar=(r:RecebimentoCmv,acao:string)=>Boolean(acessoCmv&&
+  (acessoCmv.master||Boolean(acessoCmv.podeEditar&&(Boolean(r.criado_por_id&&r.criado_por_id===acessoCmv.id)||acessoCmv.delegacoes[acao]))))
  const [abrir,setAbrir]=useState(false)
  const [editar,setEditar]=useState<string|null>(null)
  const [excluir,setExcluir]=useState<string|null>(null)
@@ -33,7 +36,7 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
  const [selecionados,setSelecionados]=useState<string[]>([])
  const bloqueado=!disponivel
  const registrosCategoria=registros.filter(r=>r.categoria===categoria&&!r.cancelado_em)
- const pendentesConferencia=registrosCategoria.filter(r=>!r.conferido_em&&recebimentoConferivelCmv(r))
+ const pendentesConferencia=registrosCategoria.filter(r=>!r.conferido_em&&recebimentoConferivelCmv(r)&&podeModificar(r,'recebimentos_conferir_terceiros'))
  const todosSelecionados=pendentesConferencia.length>0&&pendentesConferencia.every(r=>selecionados.includes(r.id))
  const onChangePeso=(v:string)=>setPeso(v)
  const onChangePreco=(v:string)=>setPreco(v)
@@ -137,7 +140,7 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
     <button disabled={bloqueado||salvando||num(peso)<=0||num(preco)<=0} className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
      {salvando?'Salvando...':editar?'Salvar correção':'Registrar recebimento'}</button></div>
   </form>}
-  {pendentesConferencia.length>0&&<div className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-2 text-xs">
+  {pendentesConferencia.some(r=>podeModificar(r,'recebimentos_conferir_terceiros'))&&<div className="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 p-2 text-xs">
     <button type="button" disabled={salvando} onClick={()=>setSelecionados(todosSelecionados?[]:pendentesConferencia.map(r=>r.id))} className="rounded-lg border bg-white px-3 py-2 disabled:opacity-50">{todosSelecionados?'Desmarcar todos':'Selecionar todos'}</button>
     <button type="button" disabled={bloqueado||salvando||selecionados.filter(id=>pendentesConferencia.some(r=>r.id===id)).length===0} onClick={()=>void validarRecebidos(selecionados.filter(id=>pendentesConferencia.some(r=>r.id===id)))} className="rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white disabled:opacity-50">Confirmar selecionados ({selecionados.filter(id=>pendentesConferencia.some(r=>r.id===id)).length})</button>
     <span className="text-slate-500">Confirma recebimentos já registrados; não lança novos custos.</span>
@@ -151,16 +154,16 @@ export default function VendaCmvRecebimentos({vendaId,categoria,registros,histor
      {r.anexo_url&&<a href={r.anexo_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-blue-700 underline"><FileText size={12}/>{r.anexo_nome||'Anexo'}</a>}
     </div>
     <div className="flex flex-wrap items-center gap-2">
-     {!r.conferido_em&&recebimentoConferivelCmv(r)&&<label className="inline-flex items-center gap-1 text-slate-600"><input type="checkbox" aria-label="Selecionar recebimento" disabled={salvando} checked={selecionados.includes(r.id)} onChange={e=>setSelecionados(prev=>e.target.checked?[...prev,r.id]:prev.filter(id=>id!==r.id))}/> Selecionar</label>}
+     {podeModificar(r,'recebimentos_conferir_terceiros')&&!r.conferido_em&&recebimentoConferivelCmv(r)&&<label className="inline-flex items-center gap-1 text-slate-600"><input type="checkbox" aria-label="Selecionar recebimento" disabled={salvando} checked={selecionados.includes(r.id)} onChange={e=>setSelecionados(prev=>e.target.checked?[...prev,r.id]:prev.filter(id=>id!==r.id))}/> Selecionar</label>}
      {!r.conferido_em&&!recebimentoConferivelCmv(r)&&<span className="rounded-md bg-amber-50 px-2 py-1 font-semibold text-amber-800">Corrija a unidade e a quantidade antes de confirmar</span>}
      {r.conferido_em&&<span className="rounded-md bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">Recebido confirmado{r.conferido_por_nome?' por '+r.conferido_por_nome:''}</span>}
      <b className="text-sm">{moedas(Number(r.valor_total))}</b>
-     {!r.conferido_em&&recebimentoConferivelCmv(r)&&<button type="button" disabled={salvando||bloqueado} onClick={()=>void validarRecebidos([r.id])} className="rounded-lg border border-emerald-300 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50">Confirmar este</button>}
-     <button type="button" disabled={salvando||bloqueado} onClick={()=>abrirForm(r)} className="rounded-lg border px-2 py-1.5 text-blue-700"><Pencil size={13}/></button>
-     <button type="button" disabled={salvando||bloqueado} onClick={()=>{setExcluir(excluir===r.id?null:r.id);setMotivo('');setAbrir(false)}} className="rounded-lg border px-2 py-1.5 text-red-700"><Trash2 size={13}/></button>
+     {podeModificar(r,'recebimentos_conferir_terceiros')&&!r.conferido_em&&recebimentoConferivelCmv(r)&&<button type="button" disabled={salvando||bloqueado} onClick={()=>void validarRecebidos([r.id])} className="rounded-lg border border-emerald-300 px-2 py-1.5 font-semibold text-emerald-700 disabled:opacity-50">Confirmar este</button>}
+     {podeModificar(r,'recebimentos_editar_terceiros')&&<button type="button" disabled={salvando||bloqueado} onClick={()=>abrirForm(r)} className="rounded-lg border px-2 py-1.5 text-blue-700"><Pencil size={13}/></button>}
+     {podeModificar(r,'recebimentos_cancelar_terceiros')&&<button type="button" disabled={salvando||bloqueado} onClick={()=>{setExcluir(excluir===r.id?null:r.id);setMotivo('');setAbrir(false)}} className="rounded-lg border px-2 py-1.5 text-red-700"><Trash2 size={13}/></button>}
     </div>
    </div>
-   {excluir===r.id&&<div className="mt-3 space-y-2 rounded-lg bg-red-50 p-3">
+   {podeModificar(r,'recebimentos_cancelar_terceiros')&&excluir===r.id&&<div className="mt-3 space-y-2 rounded-lg bg-red-50 p-3">
     <b>Cancelar apenas este recebimento?</b><p>O documento e a auditoria serão preservados. Não altera a compra.</p>
     <input required minLength={5} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Motivo obrigatório (mín. 5 caracteres)" className="w-full rounded-lg border bg-white p-2"/>
     <button type="button" disabled={salvando||motivo.trim().length<5} onClick={()=>void cancelar(r)} className="rounded-lg bg-red-700 px-3 py-2 font-bold text-white disabled:opacity-40">Confirmar cancelamento</button>

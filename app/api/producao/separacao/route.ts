@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { assinaturaListaSeparacao, conferirPacoteDaPeca, pecaAprovadaParaSeparacao, podeConcluirSeparacao } from '@/lib/producaoSeparacaoRegras'
 
 export const runtime = 'nodejs'
@@ -11,15 +12,13 @@ const respostaErro = (error: string, status = 400) => NextResponse.json({ error 
 async function acesso(req: NextRequest, editar: boolean) {
   const usuario = await autenticarTenant(req)
   if (!usuario) return null
-  if (usuario.role === 'master') return usuario
-  const { data: setor } = await supabaseAdmin.from('setores')
-    .select('id').eq('empresa_id', usuario.empresa_id).eq('rota', '/producao').eq('ativo', true).maybeSingle()
-  if (!setor) return null
-  const { data: permissao } = await supabaseAdmin.from('permissoes')
-    .select('nivel').eq('empresa_id', usuario.empresa_id)
-    .eq('usuario_id', usuario.id).eq('setor_id', setor.id).maybeSingle()
-  return permissao && (editar ? permissao.nivel === 'edicao' : ['consulta', 'edicao'].includes(permissao.nivel))
-    ? usuario : null
+  const permitido = await usuarioPodeAcaoServer({
+    usuarioId: usuario.id, role: usuario.role, empresaId: usuario.empresa_id,
+    setorId: 'producao',
+    acaoId: editar ? 'producao.separacao.editar' : 'producao.separacao.consultar',
+    minimo: editar ? 'edicao' : 'consulta',
+  })
+  return permitido ? usuario : null
 }
 
 async function listar(usuario: UsuarioTenant, medicaoId?: string) {

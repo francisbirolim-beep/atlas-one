@@ -9,6 +9,10 @@ const COLUNA_PADRAO = 'A Fazer'
 export async function listarColunasSetor(setorId: string): Promise<SetorKanbanColuna[]> {
   const { data, error } = await supabase.from('setor_kanban_colunas').select('*').eq('setor_id', setorId).order('ordem', { ascending: true })
   if (error || !data) return []
+  // Na Produção, consultar o quadro nunca pode alterar o banco:
+  // a coluna inicial é criada somente pelo fluxo autenticado de sincronização
+  // ou pela ação explícita de gerenciar etapas. Outros setores permanecem iguais.
+  if (data.length === 0 && setorId === 'producao') return []
   if (data.length === 0) return criarColunaPadraoSetor(setorId)
   return data as SetorKanbanColuna[]
 }

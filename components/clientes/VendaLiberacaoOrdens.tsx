@@ -99,7 +99,7 @@ export default function VendaLiberacaoOrdens({vendaId,onAtualizar}:{
           {liberando?<Loader2 size={14} className="animate-spin"/>:<CheckCircle2 size={14}/>}
           Liberar {situacao.ordensElegiveis.length} ordem(ns) verificadas
         </button>}
-        {!situacao.liberacaoPermitida&&<span className="text-xs text-slate-500">Liberação operacional disponível para o Master.</span>}
+        {!situacao.liberacaoPermitida&&<span className="text-xs text-slate-500">Liberação operacional restrita a usuários autorizados pelo Master.</span>}
         {situacao.prontidao&&!situacao.ordensElegiveis.length&&<span className="text-xs text-emerald-700">Não há ordens bloqueadas elegíveis. Nenhum lançamento será duplicado.</span>}
       </div>
       <p className="mt-2 text-[11px] text-slate-500">A verificação consulta os dados atuais no servidor. Ação somente mediante confirmação, sem criar compras, medições ou novas ordens.</p>

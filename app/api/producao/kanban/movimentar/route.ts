@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
+import { usuarioPodeAcaoServer, usuarioTemDelegacaoExplicitaServer } from '@/lib/acessoUsuarioServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 
@@ -12,6 +13,13 @@ const etapas=['aguardando','liberada','em_producao','pendente','concluida','conf
 export async function GET(req:NextRequest){
   const user=await autenticarTenant(req)
   if(!user)return erro('Sessão expirada.',401)
+  try{
+    const podeConsultar=await usuarioPodeAcaoServer({
+      usuarioId:user.id,role:user.role,empresaId:user.empresa_id,
+      setorId:'producao',acaoId:'producao.geral.consultar',minimo:'consulta',
+    })
+    if(!podeConsultar)return erro('Sem permissão para consultar a Produção.',403)
+  }catch{return erro('Não foi possível conferir o acesso à Produção.',503)}
   const vendaId=String(req.nextUrl.searchParams.get('vendaId')||'')
   if(!uuid.test(vendaId))return erro('Venda inválida.')
   const {data:venda}=await supabaseAdmin.from('vendas_obras').select('id,orcamento_id').eq('id',vendaId).eq('empresa_id',user.empresa_id).maybeSingle()
@@ -24,6 +32,15 @@ export async function GET(req:NextRequest){
     .select('id,status_operacional')
     .eq('empresa_id',user.empresa_id).eq('orcamento_id',venda.orcamento_id).eq('tipo_medicao','tipologia')
   if(erroMedicoes)return erro('Não foi possível conferir a Medição Final.',503)
+  // Uma ação concedida expressamente no painel granular também libera
+  // o Kanban inicial; não apaga nem altera a autorização legada.
+  let delegacaoGranular=false
+  try{
+    delegacaoGranular=await usuarioTemDelegacaoExplicitaServer({
+      usuarioId:user.id,role:user.role,empresaId:user.empresa_id,
+      setorId:'producao',acaoId:'producao.geral.mover',
+    })
+  }catch{return erro('Não foi possível verificar a autorização do Kanban.',503)}
   const [configuracao,etapasIniciais,permissaoPropria,usuarios,permissoesEquipe]=await Promise.all([
     supabaseAdmin.from('producao_kanban_config_geral').select('habilitado').eq('empresa_id',user.empresa_id).maybeSingle(),
     supabaseAdmin.from('producao_kanban_etapas_iniciais').select('item_ref,etapa,motivo_pendencia,categoria_pendencia,atualizado_em')
@@ -47,7 +64,7 @@ export async function GET(req:NextRequest){
     modoInicial:modoInicialDisponivel&&configuracao.data?.habilitado!==false,
     modoInicialDisponivel,
     podeConfigurar:user.role==='master',
-    podeMovimentarInicial:modoInicialDisponivel&&(user.role==='master'||Boolean(permissaoPropria.data?.pode_movimentar)),
+    podeMovimentarInicial:modoInicialDisponivel&&(user.role==='master'||delegacaoGranular||Boolean(permissaoPropria.data?.pode_movimentar)),
     usuariosPermissoes:modoInicialDisponivel&&user.role==='master'?(usuarios.data||[]).filter(u=>u.role!=='master'):[],
     permissoesEquipe:modoInicialDisponivel&&user.role==='master'?permissoesEquipe.data||[]:[],
     etapasIniciais:modoInicialDisponivel?etapasIniciais.data||[]:[],diagnostico:{
@@ -93,6 +110,15 @@ export async function POST(req:NextRequest){
     return NextResponse.json({ok:true,modoInicial:body.habilitado})
   }
 
+  // A autorização por ação soma-se às restrições técnicas do Kanban.
+  let autorizado=false
+  try{
+    autorizado=await usuarioPodeAcaoServer({
+      usuarioId:user.id,role:user.role,empresaId:user.empresa_id,
+      setorId:'producao',acaoId:'producao.geral.mover',minimo:'edicao',
+    })
+  }catch{return erro('Não foi possível conferir a permissão de movimentação.',503)}
+  if(!autorizado)return erro('Sem permissão para mover etapas da Produção.',403)
   const ref=String(body.itemRef||''),destino=String(body.destino||'')
   const motivo=String(body.motivo||'').trim(),categoria=String(body.categoria||'outros')
   const resolucao=String(body.resolucao||'').trim()
@@ -119,7 +145,14 @@ export async function POST(req:NextRequest){
   // O modo inicial está habilitado para todas as vendas, inclusive as futuras,
   // enquanto a configuração geral da empresa não for explicitamente desligada.
   let permissaoGlobal=false
+  let delegacaoGranular=false
   if(user.role!=='master'){
+    try{
+      delegacaoGranular=await usuarioTemDelegacaoExplicitaServer({
+        usuarioId:user.id,role:user.role,empresaId:user.empresa_id,
+        setorId:'producao',acaoId:'producao.geral.mover',
+      })
+    }catch{return erro('Não foi possível conferir a autorização individual do Kanban.',503)}
     const {data:permissao,error:erroPermissao}=await supabaseAdmin
       .from('producao_kanban_permissoes_iniciais').select('pode_movimentar')
       .eq('empresa_id',user.empresa_id).eq('usuario_id',user.id).maybeSingle()
@@ -128,7 +161,7 @@ export async function POST(req:NextRequest){
     }else permissaoGlobal=Boolean(permissao?.pode_movimentar)
   }
   if(!erroConfig&&configuracao?.habilitado!==false){
-    if(user.role!=='master'&&!permissaoGlobal)
+    if(user.role!=='master'&&!permissaoGlobal&&!delegacaoGranular)
       return erro('O Master ainda não liberou sua permissão de movimentação neste Kanban.',403)
     if(destino==='conferencia')return erro('No modo inicial, a conferência é registrada no processo técnico oficial.')
     const {data,error}=await supabaseAdmin.rpc('fn_producao_kanban_mover_inicial_v1',{
@@ -139,7 +172,6 @@ export async function POST(req:NextRequest){
     return NextResponse.json(data)
   }
   // Com bloqueio geral ativo, a movimentação técnica continua com seus gates.
-  if(!['master','admin','producao'].includes(user.role))return erro('Sem autorização para movimentar a produção oficial.',403)
   const {data,error}=await supabaseAdmin.rpc('fn_producao_kanban_movimentar_v1',{
     p_empresa:user.empresa_id,p_venda:vendaId,p_ref:ref,p_destino:destino,p_usuario:user.id,
     p_motivo:motivo,p_categoria:categoria,p_resolucao:resolucao,

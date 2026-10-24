@@ -1,4 +1,4 @@
-import type { Setor } from './tipos'
+import type { Setor, NivelPermissao } from './tipos'
 
 export type BlocoPermissaoId =
   | 'comercial'
@@ -10,6 +10,21 @@ export type BlocoPermissaoId =
   | 'administracao'
   | 'conhecimento'
   | 'outros'
+
+// Delegações que alteram documentos de outros colaboradores NÃO herdam
+// o nível amplo do setor. Ausência de escolha = não autorizado.
+export const ACOES_CMV_DELEGACAO_EXPLICITA = [
+ 'financeiro.cmv.editar_terceiros',
+ 'financeiro.cmv.excluir_terceiros',
+ 'financeiro.cmv.restaurar_terceiros',
+ 'financeiro.cmv.recebimentos_editar_terceiros',
+ 'financeiro.cmv.recebimentos_cancelar_terceiros',
+ 'financeiro.cmv.recebimentos_conferir_terceiros',
+] as const
+const DELEGACOES_EXPLICITAS = new Set<string>(ACOES_CMV_DELEGACAO_EXPLICITA)
+export function fallbackAcaoPermissao(id:string,setor:NivelPermissao):NivelPermissao {
+ return DELEGACOES_EXPLICITAS.has(id) ? 'oculto' : setor
+}
 
 export type AcaoPermissao = {
   id: string
@@ -109,6 +124,14 @@ const MODULOS:ItemPermissaoBloco[] = [
   m('financeiro-geral','financeiro','Financeiro geral','Visão financeira consolidada e IA financeira.','financeiro',[
     a('financeiro.geral.consultar','Consulta financeira geral','Ver resumo e posição financeira.'),
     a('financeiro.ia.consultar','Acesso financeiro pela IA Atlas','Permitir que a IA consulte dados financeiros internos.'),
+  ]),
+  m('custos-cmv','financeiro','Custos e CMV por obra','Delegações auditáveis para ajustes e conferências, sem tornar o usuário Master.','financeiro',[
+    a('financeiro.cmv.editar_terceiros','Corrigir custos de outros usuários','Editar lançamento de custo manual de outro colaborador, com versão e histórico.'),
+    a('financeiro.cmv.excluir_terceiros','Cancelar custos de outros usuários','Cancelar custo de outro colaborador com justificativa obrigatória.'),
+    a('financeiro.cmv.restaurar_terceiros','Restaurar custos de outros usuários','Reativar lançamento cancelado de outro colaborador com auditoria.'),
+    a('financeiro.cmv.recebimentos_editar_terceiros','Corrigir recebimentos de outros usuários','Editar um recebimento físico lançado por outra pessoa.'),
+    a('financeiro.cmv.recebimentos_cancelar_terceiros','Cancelar recebimentos de outros usuários','Cancelar recebimentos de materiais de outra pessoa com justificativa.'),
+    a('financeiro.cmv.recebimentos_conferir_terceiros','Conferir recebimentos de outros usuários','Conferir recebimentos físicos de colaboradores diferentes do autor.'),
   ]),
   m('contas-pagar','financeiro','Contas a pagar','Cadastro, manutenção e baixa de despesas.','financeiro',[
     a('financeiro.contas_pagar.consultar','Consultar contas a pagar','Ver fornecedores, documentos, vencimentos e valores.'),
@@ -233,7 +256,12 @@ const MODULOS:ItemPermissaoBloco[] = [
   m('producao','producao','Produção','Kanban, ordens e execução fabril.','producao',[
     a('producao.geral.consultar','Consultar produção','Ver Kanban e ordens.'),
     a('producao.geral.mover','Mover etapas','Alterar status/etapa da produção.'),
-    a('producao.geral.editar','Editar ordem','Alterar informações da ordem.'),
+    a('producao.geral.editar','Editar ordem/card','Alterar informações de ordens e cards.'),
+    a('producao.geral.criar','Criar ordem de produção','Cadastrar produção avulsa ou vinculada a cliente e obra.'),
+    a('producao.geral.etapas','Configurar etapas','Criar e editar colunas do Kanban da Produção.'),
+    a('producao.geral.liberar','Liberar produção','Validar liberação de produção após conferência da Medição Final.'),
+    a('producao.separacao.consultar','Consultar separação de materiais','Ver peças aprovadas e materiais separados.'),
+    a('producao.separacao.editar','Executar separação de materiais','Registrar separação, conferência e pendências.'),
     a('producao.plano_corte.consultar','Consultar plano de corte','Ver lista/plano de corte.'),
     a('producao.plano_corte.gerar','Gerar plano de corte','Gerar/recalcular plano.'),
     a('producao.imprimir','Imprimir documentos','Gerar fichas e listas para fábrica.'),
@@ -394,6 +422,18 @@ export function montarBlocosPermissao(setores:Setor[]):BlocoPermissaoUsuario[] {
 
   const modulos = [...MODULOS.filter(m=>ids.has(m.setorId)),...fallback]
   return BLOCOS.map(bloco=>({...bloco,itens:modulos.filter(m=>m.bloco===bloco.id)})).filter(b=>b.itens.length>0)
+}
+
+// IDs de módulo estáveis: usados igualmente pelo cliente e pelo servidor.
+export function moduloDaAcaoPermissao(acaoId:string):{id:string;setorId:string}|null {
+ const modulo=MODULOS.find(item=>item.acoes.some(acao=>acao.id===acaoId))
+ if(modulo)return {id:modulo.id,setorId:modulo.setorId}
+ // Catálogo de setores adicionais, criado dinamicamente por administradores.
+ const dinamico=acaoId.match(/^outros\.(.+)\.(consultar|editar)$/)
+ return dinamico?{id:'outro-'+dinamico[1],setorId:dinamico[1]}:null
+}
+export function modulosDoSetor(setorId:string):string[]{
+ return MODULOS.filter(modulo=>modulo.setorId===setorId).map(modulo=>modulo.id)
 }
 
 export function todasAcoesPermissao(setores:Setor[]) {

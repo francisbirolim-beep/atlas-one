@@ -27,6 +27,9 @@ import {
   agruparGuias,
 } from '@/lib/guias'
 import { listarPermissoesUsuario, listarSetores, nivelEfetivo } from '@/lib/setores'
+import { podeAcessarRotaCatalogada } from '@/lib/permissoesRota'
+import { lerAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
+import { podeExecutarAcao, permissaoDaRotaProducao } from '@/lib/producaoPermissoes'
 import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
 import { ATALHOS_PESQUISA_ATLAS, correspondePesquisaAtlas } from '@/lib/navegacaoPesquisa'
@@ -63,6 +66,7 @@ export default function MobileNavigationControls() {
   const [tema, setTema] = useState<TemaAtlas>('escuro')
   const [setores, setSetores] = useState<Setor[]>([])
   const [permissoes, setPermissoes] = useState<Record<string, NivelPermissao>>({})
+  const [acessoProducao, setAcessoProducao] = useState<AcessoUsuarioConfig | null>(null)
   const [podeVerCadastros, setPodeVerCadastros] = useState(false)
 
   useEffect(() => {
@@ -84,8 +88,17 @@ export default function MobileNavigationControls() {
       }
 
       if (usuarioLogado && usuarioLogado.role !== 'master') {
-        const mapa = await listarPermissoesUsuario(usuarioLogado.id)
-        if (ativo) setPermissoes(mapa)
+        try {
+          const [mapa, config] = await Promise.all([
+            listarPermissoesUsuario(usuarioLogado.id), lerAcessoUsuarioConfig(usuarioLogado),
+          ])
+          if (ativo) {
+            setPermissoes(mapa)
+            setAcessoProducao(config)
+          }
+        } catch {
+          if (ativo) setAcessoProducao(null)
+        }
       }
     }
 
@@ -146,16 +159,23 @@ export default function MobileNavigationControls() {
   }
 
   const guiasPermitidas = useMemo(() => {
-    if (!usuario) return GUIAS.filter(guia => !guia.masterOnly && guia.href !== '/cadastros')
+    if (!usuario) return GUIAS.filter(guia => !guia.masterOnly && guia.href !== '/cadastros' && !permissaoDaRotaProducao(guia.href))
     if (usuario.role === 'master') return GUIAS
 
     return GUIAS.filter(guia => {
       if (guia.masterOnly || (guia.href === '/cadastros' && !podeVerCadastros)) return false
       if (guia.href === '/') return true
+      const producao = permissaoDaRotaProducao(guia.href)
+      if (producao) return acessoProducao !== null &&
+        podeExecutarAcao(usuario.role, permissoes, acessoProducao, producao.setor, producao.acao)
+      // Mesmo nível do guard da página e do menu desktop.
+      if(!acessoProducao)return false
+      const permitido=podeAcessarRotaCatalogada(guia.href,usuario.role,permissoes,acessoProducao,setores)
+      if(permitido!==null)return permitido
       const setor = setores.find(item => item.rota && rotasRelacionadas(guia.href, item.rota))
       return !setor || nivelEfetivo(usuario, setor.id, permissoes) !== 'oculto'
     })
-  }, [permissoes, setores, usuario, podeVerCadastros])
+  }, [permissoes, setores, usuario, podeVerCadastros, acessoProducao])
 
   const termo = normalizar(busca)
   const gruposVisiveis = useMemo(() => {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { gerarPacoteMedicaoFinalParcial } from '@/lib/materialPlanejamento'
 
 export const runtime = 'nodejs'
@@ -11,17 +12,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export async function POST(req: NextRequest) {
   const usuario = await autenticarTenant(req)
   if (!usuario) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 })
-  if (usuario.role !== 'master') {
-    const { data: setor } = await supabaseAdmin.from('setores').select('id')
-      .eq('empresa_id', usuario.empresa_id).eq('rota', '/producao').eq('ativo', true).maybeSingle()
-    const { data: permissao } = setor
-      ? await supabaseAdmin.from('permissoes').select('nivel').eq('empresa_id', usuario.empresa_id)
-        .eq('usuario_id', usuario.id).eq('setor_id', setor.id).maybeSingle()
-      : { data: null }
-    if (permissao?.nivel !== 'edicao') {
-      return NextResponse.json({ error: 'Requer permissão de edição da Produção.' }, { status: 403 })
-    }
-  }
+  let autorizado=false
+  try{
+    autorizado=await usuarioPodeAcaoServer({
+      usuarioId:usuario.id,role:usuario.role,empresaId:usuario.empresa_id,
+      setorId:'producao',acaoId:'producao.plano_corte.gerar',minimo:'edicao',
+    })
+  }catch{return NextResponse.json({error:'Não foi possível conferir a permissão para gerar pacote técnico.'},{status:503})}
+  if(!autorizado)return NextResponse.json({error:'Sem permissão para gerar pacote técnico.'},{status:403})
   try {
     const body = await req.json().catch(() => ({}))
     const medicaoId = String(body.medicaoId || '')

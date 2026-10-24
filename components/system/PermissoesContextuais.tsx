@@ -9,6 +9,7 @@ import { usuarioAtual } from '@/lib/auth'
 import { lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
 import { montarBlocosPermissao, type ItemPermissaoBloco } from '@/lib/permissoesBlocos'
+import { nivelEfetivoAcao } from '@/lib/producaoPermissoes'
 import { nivelCliente360, type RecursoCliente360 } from '@/lib/cliente360Permissoes'
 import { resolverContextoPermissoes } from '@/lib/permissoesContextuais'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
@@ -29,18 +30,19 @@ const peso: Record<NivelPermissao, number> = { oculto: 0, consulta: 1, edicao: 2
 function copiarEdicao(entrada: AcessoPorUsuario): Edicao {
   return {
     setores: { ...entrada.setores },
-    config: { ...entrada.config, acoes: { ...entrada.config.acoes }, cliente360: { ...entrada.config.cliente360 } },
+    config: { ...entrada.config, acoes: { ...entrada.config.acoes }, modulos: { ...entrada.config.modulos }, cliente360: { ...entrada.config.cliente360 } },
   }
 }
 
 function nivelResumo(entrada: Edicao, modulo: ItemPermissaoBloco | undefined, recurso?: RecursoCliente360): NivelPermissao {
-  if (recurso) return nivelCliente360({ role: 'funcionario', setores: entrada.setores, acoes: entrada.config.acoes, cliente360: entrada.config.cliente360 }, recurso)
+  if (recurso) return nivelCliente360({ role: 'funcionario', setores: entrada.setores, acoes: entrada.config.acoes, modulos:entrada.config.modulos, cliente360: entrada.config.cliente360 }, recurso)
   if (!modulo) return 'oculto'
   const setor = entrada.setores[modulo.setorId] || 'oculto'
   if (setor === 'oculto') return 'oculto'
-  const permitidas = modulo.acoes.map(acao => entrada.config.acoes[acao.id] || setor)
+  const permitidas = modulo.acoes.map(acao => nivelEfetivoAcao(
+    'funcionario',entrada.setores,entrada.config,modulo.setorId,acao.id))
   if (!permitidas.some(nivel => nivel !== 'oculto')) return 'oculto'
-  if (setor === 'edicao' && permitidas.some(nivel => nivel === 'edicao')) return 'edicao'
+  if (permitidas.some(nivel => nivel === 'edicao')) return 'edicao'
   return 'consulta'
 }
 
@@ -62,6 +64,7 @@ export default function PermissoesContextuais() {
   const contexto = useMemo(() => resolverContextoPermissoes(pathname, abaCliente), [pathname, abaCliente])
   const modulos = useMemo(() => montarBlocosPermissao(setores).flatMap(bloco => bloco.itens), [setores])
   const moduloAtual = modulos.find(modulo => modulo.id === moduloId)
+  const modulosDaTela = modulos
   const usuarioSelecionado = usuarios.find(entrada => entrada.usuario.id === usuarioId)
   const alterado = Boolean(usuarioSelecionado && rascunho &&
     JSON.stringify(copiarEdicao(usuarioSelecionado)) !== JSON.stringify(rascunho))
@@ -144,26 +147,42 @@ export default function PermissoesContextuais() {
     setErro('')
   }
 
-  // Ao aumentar o teto de um setor, mantém fixas as permissões anteriores das
-  // outras ações: uma liberação contextual não pode liberar módulos vizinhos.
-  function alterarAcao(idAcao: string, nivel: NivelPermissao) {
+  // Os três níveis são independentes. Não abrir outros módulos ao editar uma
+  // única ação. Um setor ou módulo oculto não é reaberto por ação interna.
+  function alterarSetorContextual(nivel: NivelPermissao) {
     if (!moduloAtual) return
     setRascunho(atual => {
       if (!atual) return atual
-      const setorId = moduloAtual.setorId
-      const nivelSetor = atual.setores[setorId] || 'oculto'
-      const proximasAcoes = { ...atual.config.acoes }
-      const proximosSetores = { ...atual.setores }
-      if (peso[nivel] > peso[nivelSetor]) {
-        for (const modulo of modulos.filter(item => item.setorId === setorId)) {
-          for (const acao of modulo.acoes) {
-            if (!(acao.id in proximasAcoes)) proximasAcoes[acao.id] = nivelSetor
-          }
+      const anterior=atual.setores[moduloAtual.setorId]||'oculto'
+      const modulos={...atual.config.modulos}
+      if(anterior==='oculto'&&nivel!=='oculto'){
+        for(const item of modulosDaTela.filter(item=>item.setorId===moduloAtual.setorId)){
+          if(!(item.id in modulos))modulos[item.id]='oculto'
         }
-        proximosSetores[setorId] = nivel
       }
-      proximasAcoes[idAcao] = nivel
-      return { setores: proximosSetores, config: { ...atual.config, acoes: proximasAcoes } }
+      return { ...atual, setores:{...atual.setores,[moduloAtual.setorId]:nivel},
+        config:{...atual.config,modulos} }
+    })
+    setMensagem('')
+  }
+
+  function alterarModuloContextual(nivel: NivelPermissao) {
+    if (!moduloAtual) return
+    setRascunho(atual => atual ? {
+      ...atual, config:{...atual.config,
+        modulos:{...atual.config.modulos,[moduloAtual.id]:nivel},
+        acoes:{...atual.config.acoes,...Object.fromEntries(moduloAtual.acoes.map(a=>[a.id,nivel]))},
+      },
+    } : atual)
+    setMensagem('')
+  }
+
+  function alterarAcao(idAcao: string, nivel: NivelPermissao) {
+    if(!moduloAtual)return
+    setRascunho(atual => {
+      if(!atual || (atual.setores[moduloAtual.setorId]||'oculto')==='oculto')return atual
+      if((atual.config.modulos?.[moduloAtual.id]||atual.setores[moduloAtual.setorId])==='oculto')return atual
+      return {...atual,config:{...atual.config,acoes:{...atual.config.acoes,[idAcao]:nivel}}}
     })
     setMensagem('')
   }
@@ -289,18 +308,40 @@ export default function PermissoesContextuais() {
                           )}
                           {moduloAtual ? (
                             <div className="rounded-xl border border-slate-200">
-                              <div className="border-b bg-slate-50 px-3 py-3"><p className="text-sm font-semibold">{moduloAtual.label}</p><p className="mt-1 text-xs text-slate-500">Setor: {NIVEIS.find(n => n.valor === (rascunho.setores[moduloAtual.setorId] || 'oculto'))?.label}. As autorizações abaixo são individuais.</p></div>
+                              <div className="space-y-3 border-b bg-slate-50 px-3 py-3">
+                                <p className="text-sm font-semibold">{moduloAtual.label}</p>
+                                <p className="text-xs text-slate-500">1. O setor inteiro precisa estar liberado. 2. Libere o módulo/etapa. 3. Escolha cada ação.</p>
+                                <label className="block text-xs font-semibold">1. Setor
+                                  <select value={rascunho.setores[moduloAtual.setorId]||'oculto'}
+                                    onChange={e=>alterarSetorContextual(e.target.value as NivelPermissao)}
+                                    className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs">
+                                    {NIVEIS.map(n=><option key={n.valor} value={n.valor}>{n.label}</option>)}
+                                  </select>
+                                </label>
+                                <label className="block text-xs font-semibold">2. Módulo / etapa
+                                  <select disabled={(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
+                                    value={rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto'}
+                                    onChange={e=>alterarModuloContextual(e.target.value as NivelPermissao)}
+                                    className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs disabled:opacity-50">
+                                    {NIVEIS.map(n=><option key={n.valor} value={n.valor}>{n.label}</option>)}
+                                  </select>
+                                </label>
+                              </div>
                               {moduloAtual.acoes.map(acao => (
                                 <label key={acao.id} className="flex flex-col gap-2 border-b border-slate-100 px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                                   <span className="min-w-0"><span className="block text-sm font-medium">{acao.label}</span><span className="mt-0.5 block text-xs text-slate-500">{acao.descricao}</span></span>
-                                  <select aria-label={acao.label} value={rascunho.config.acoes[acao.id] || rascunho.setores[moduloAtual.setorId] || 'oculto'} onChange={evento => alterarAcao(acao.id, evento.target.value as NivelPermissao)} className="w-full shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs sm:w-44">
+                                  <select aria-label={'3. Ação '+acao.label}
+                                    disabled={(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'||(rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
+                                    value={nivelEfetivoAcao('funcionario',rascunho.setores,rascunho.config,moduloAtual.setorId,acao.id)}
+                                    onChange={evento => alterarAcao(acao.id, evento.target.value as NivelPermissao)}
+                                    className="w-full shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs disabled:opacity-50 sm:w-44">
                                     {NIVEIS.map(nivel => <option key={nivel.valor} value={nivel.valor}>{nivel.label}</option>)}
                                   </select>
                                 </label>
                               ))}
                             </div>
                           ) : <p className="text-sm text-slate-500">Escolha a área acima para editar as ações.</p>}
-                          <p className="text-xs text-slate-500">As permissões continuam obedecendo às verificações existentes em cada módulo. Aumentar o nível setorial não libera automaticamente outras ações já definidas.</p>
+                          <p className="text-xs text-slate-500">Um setor oculto bloqueia todos os módulos, mesmo se uma ação interna indicar edição. Ativar apenas uma etapa não habilita as outras.</p>
                           {mensagem && <p role="status" className="text-sm font-semibold text-emerald-700">{mensagem}</p>}
                           <button type="button" disabled={!alterado || salvando} onClick={() => void salvar()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-40">
                             {salvando ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>}

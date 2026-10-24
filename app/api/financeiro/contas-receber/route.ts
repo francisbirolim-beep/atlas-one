@@ -7,7 +7,12 @@ export const dynamic='force-dynamic'
 export async function GET(req:NextRequest){
  const u=await autenticarCompras(req)
  if(!u)return NextResponse.json({error:'Sessão expirada ou inválida.'},{status:401})
- if(!(await usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'financeiro',acaoId:'financeiro.contas_receber.consultar'})))return NextResponse.json({error:'Sem permissão para consultar Contas a Receber.'},{status:403})
+ const [caixa,financeiro]=await Promise.all([
+   usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'caixa-balcao',acaoId:'financeiro.contas_receber.consultar'}),
+   usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'financeiro',acaoId:'financeiro.contas_receber.consultar'})
+ ])
+ // Aceita permissões já delegadas tanto ao Contas a Receber do Balcão quanto ao Financeiro legado.
+ if(!caixa&&!financeiro)return NextResponse.json({error:'Sem permissão para consultar Contas a Receber.'},{status:403})
  try{
   const [cr,receb]=await Promise.all([
    supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500),

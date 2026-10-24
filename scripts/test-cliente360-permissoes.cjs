@@ -8,11 +8,17 @@ function carregar(path,imports={}){
   vm.runInNewContext(js,{exports:modulo.exports,module:modulo,require:n=>{if(n in imports)return imports[n];throw Error('Import inesperado: '+n)},process:{env:{NEXT_PUBLIC_SUPABASE_URL:'https://test.invalid',NEXT_PUBLIC_SUPABASE_ANON_KEY:'public-test'}},console})
   return modulo.exports
 }
-const p=carregar('lib/cliente360Permissoes.ts')
+const blocos=carregar('lib/permissoesBlocos.ts')
+const p=carregar('lib/cliente360Permissoes.ts',{'./permissoesBlocos':blocos})
 const basico={role:'funcionario',setores:{},acoes:{}}
 for(const [id] of p.CLIENTE_360_RECURSOS)assert.equal(p.nivelCliente360({...basico,role:'master',cliente360:p.matrizCompletaCliente360('oculto')},id),'edicao')
 assert.equal(p.podeCliente360(basico,'cadastro'),true,'Cadastro legado preservado')
 assert.equal(p.podeCliente360(basico,'financeiro'),false,'Sem setor não consulta financeiro')
+assert.equal(p.podeCliente360({...basico,setores:{'portal-cliente':'oculto'}},'visao'),false,'Portal explicitamente oculto bloqueia visão')
+assert.equal(p.podeCliente360({...basico,setores:{'portal-cliente':'oculto','financeiro':'edicao'}},'financeiro'),false,'Setor Cliente oculto bloqueia financeiro interno')
+assert.equal(p.podeCliente360({...basico,setores:{'portal-cliente':'consulta'}},'cadastro',true),false,'Portal consulta não permite editar')
+assert.equal(p.podeCliente360({...basico,setores:{financeiro:'edicao'},modulos:{'financeiro-geral':'oculto'}},'financeiro'),false,'Financeiro geral oculto não vaza ao Cliente 360')
+
 const vendedor={...basico,setores:{orcamentos:'edicao','assistencia-abrir':'edicao'},cliente360:{...p.matrizCompletaCliente360('oculto'),pedido_orcamento:'edicao',abrir_assistencia:'edicao'}}
 assert.equal(p.podeCliente360(vendedor,'pedido_orcamento',true),true)
 assert.equal(p.podeCliente360(vendedor,'abrir_assistencia',true),true)

@@ -4,6 +4,7 @@ import {recebimentoConferivelCmv} from '@/lib/vendaCmvConferencia'
 // Nunca grava na tabela de custos do orçamento, nos lançamentos comprados ou no Kanban.
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarTenant} from '@/lib/tenantServer'
+import {usuarioTemDelegacaoExplicitaServer} from '@/lib/acessoUsuarioServer'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -138,7 +139,13 @@ export async function PATCH(req:NextRequest){
    .eq('orcamento_id',venda.orcamento_id).is('cancelado_em',null).maybeSingle()
   if(e)throw e
   if(!anterior)return erro('Recebimento não encontrado.',404)
-  if(user.role!=='master'&&anterior.criado_por_id!==user.id)return erro('Só o autor ou Master pode corrigir.',403)
+  if(user.role!=='master'&&anterior.criado_por_id!==user.id){
+   const delegado=await usuarioTemDelegacaoExplicitaServer({
+    usuarioId:user.id,role:user.role,empresaId:user.empresa_id,
+    setorId:'financeiro',acaoId:'financeiro.cmv.recebimentos_editar_terceiros'
+   })
+   if(!delegado)return erro('A correção exige autoria ou delegação específica do Master.',403)
+  }
   if(anterior.versao!==versao)return erro('Registro alterado. Atualize a página.',409)
   let dados:ReturnType<typeof validarCampos>
   try{dados=validarCampos(form)}catch(ex){return erro((ex as Error).message)}
@@ -172,7 +179,13 @@ export async function DELETE(req:NextRequest){
    .eq('orcamento_id',venda.orcamento_id).maybeSingle()
   if(e)throw e
   if(!anterior)return erro('Recebimento não localizado.',404)
-  if(user.role!=='master'&&anterior.criado_por_id!==user.id)return erro('Só autor ou Master pode cancelar.',403)
+  if(user.role!=='master'&&anterior.criado_por_id!==user.id){
+   const delegado=await usuarioTemDelegacaoExplicitaServer({
+    usuarioId:user.id,role:user.role,empresaId:user.empresa_id,
+    setorId:'financeiro',acaoId:'financeiro.cmv.recebimentos_cancelar_terceiros'
+   })
+   if(!delegado)return erro('O cancelamento exige autoria ou delegação específica do Master.',403)
+  }
   if(anterior.cancelado_em||anterior.versao!==versao)return erro('Registro alterado. Atualize.',409)
   const agora=new Date().toISOString()
   const {data,error}=await supabaseAdmin.from(TABELA)
@@ -207,8 +220,13 @@ export async function PUT(req:NextRequest){
   if(buscaErro)throw buscaErro
   if((linhas||[]).length!==unicos.length)return erro('Algum recebimento não foi localizado.',404)
   if((linhas||[]).some(l=>!recebimentoConferivelCmv(l)))return erro('Corrija a unidade e a quantidade dos recebimentos antes de confirmar. Vidros e acessórios antigos em KG não são convertidos automaticamente.',409)
-  if(user.role!=='master'&&(linhas||[]).some(l=>l.criado_por_id!==user.id))
-   return erro('Somente o autor ou Master pode conferir estes recebimentos.',403)
+  if(user.role!=='master'&&(linhas||[]).some(l=>l.criado_por_id!==user.id)){
+   const delegado=await usuarioTemDelegacaoExplicitaServer({
+    usuarioId:user.id,role:user.role,empresaId:user.empresa_id,
+    setorId:'financeiro',acaoId:'financeiro.cmv.recebimentos_conferir_terceiros'
+   })
+   if(!delegado)return erro('A conferência exige autoria ou delegação específica do Master.',403)
+  }
   const {data:validados,error}=await supabaseAdmin.rpc('fn_venda_cmv_validar_recebimentos_v2',{
    p_empresa:user.empresa_id,p_venda:vendaId,p_orcamento:venda.orcamento_id,
    p_ids:unicos,p_usuario_id:user.id,p_usuario_nome:user.nome
