@@ -125,3 +125,19 @@ drop trigger if exists trg_instalacao_apos_producao_execucao_v1 on public.workfl
 create trigger trg_instalacao_apos_producao_execucao_v1
 after insert on public.workflow_execucoes
 for each row execute function private.fn_instalacao_apos_producao_execucao_v1();
+
+-- Ponto de partida: reutilizar a seleção atualmente ativa na automação
+-- de Medida Final (Daiane/Gabrielle na empresa atual), sempre editável pelo Master.
+-- Não retroage tarefas de obras que já passaram pelo evento.
+insert into public.workflow_automacoes
+ (empresa_id,nome,evento_chave,acao_tipo,ativo,criar_tarefa,
+  notificar_usuario_ids,prioridade_tarefa,evitar_duplicidade,notificar_responsavel)
+select
+ m.empresa_id,'Produção concluída → organizar instalação',
+ 'producao_concluida_instalacao_tarefas','reservado',
+ m.ativo and m.criar_tarefa,true,m.notificar_usuario_ids,
+ 'normal',true,false
+from public.workflow_automacoes m
+where m.evento_chave='medicao_final_enviada_conferencia'
+  and cardinality(m.notificar_usuario_ids)>0
+on conflict do nothing;
