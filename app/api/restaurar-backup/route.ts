@@ -4,6 +4,20 @@ import { salvarBackup, restaurarSnapshot } from '@/lib/backupServer'
 
 export async function POST(req: NextRequest) {
     try {
+      // This legacy restore deletes rows globally and is not transactional.
+      // It is never an ordinary tenant-Master action. Keep disabled unless an
+      // operator deliberately opens a short maintenance window for ONE backup.
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      const operatorId = process.env.ATLAS_LEGACY_RESTORE_OPERATOR_ID || ''
+      const permittedBackupId = process.env.ATLAS_LEGACY_RESTORE_BACKUP_ID || ''
+      const until = Date.parse(process.env.ATLAS_LEGACY_RESTORE_UNTIL || '')
+      const remaining = until - Date.now()
+      if (process.env.ATLAS_LEGACY_RESTORE_ENABLED !== 'true' ||
+          !uuid.test(operatorId) || !uuid.test(permittedBackupId) ||
+          !Number.isFinite(remaining) || remaining <= 0 || remaining > 60 * 60 * 1000) {
+        return NextResponse.json({ error: 'Restauracao global indisponivel. Exige manutencao autorizada e recuperacao previamente validada.' }, { status: 503 })
+      }
+
           const authHeader = req.headers.get('authorization') || ''
           const token = authHeader.replace('Bearer ', '').trim()
           if (!token) {
@@ -14,6 +28,10 @@ export async function POST(req: NextRequest) {
           if (userErr || !userData?.user) {
                   return NextResponse.json({ error: 'Sessao invalida' }, { status: 401 })
           }
+
+      if (userData.user.id !== operatorId) {
+        return NextResponse.json({ error: 'Operador nao autorizado para esta manutencao.' }, { status: 403 })
+      }
 
       const { data: perfil } = await supabaseAdmin
             .from('usuarios')
@@ -26,10 +44,14 @@ export async function POST(req: NextRequest) {
       }
 
       const body = await req.json()
-          const backupId = (body.backupId || '').trim()
+          const backupId = typeof body?.backupId === 'string' ? body.backupId.trim() : ''
           if (!backupId) {
                   return NextResponse.json({ error: 'Backup nao informado' }, { status: 400 })
           }
+
+      if (backupId !== permittedBackupId || body.confirmacao !== `RESTAURAR_GLOBAL:${backupId}`) {
+        return NextResponse.json({ error: 'Backup ou confirmacao fora da manutencao autorizada.' }, { status: 403 })
+      }
 
       const { data: backup, error: backupErr } = await supabaseAdmin
             .from('backups')
