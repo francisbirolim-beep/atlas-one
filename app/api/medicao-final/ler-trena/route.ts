@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { consultarOpenCode } from '@/lib/ai/opencode'
+import { consultarTrenaGratisComAlternativa } from '@/lib/ai/trenaVisionGratis'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -72,9 +72,7 @@ export async function POST(req: NextRequest) {
       'medidas_mm pode ter de 0 a 3 números. confianca deve ser entre 0 e 1.',
     ].join('\n')
 
-    const resultado = await consultarOpenCode({
-      accessToken: auth.token,
-      tituloSessao: 'Atlas Medida Final - leitura de trena',
+    const resultado = await consultarTrenaGratisComAlternativa({
       system: 'Você é um leitor visual técnico de medições. Não invente números. Responda apenas no formato solicitado.',
       prompt,
       anexos: [{ nome: 'foto-trena', mediaType, dados }],
@@ -104,7 +102,7 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error('Erro ao ler trena por IA gratuita:', e)
     return NextResponse.json({
-      error: 'Foto salva, mas a leitura automática gratuita não foi concluída: ' + String(e?.message || e),
+      error: 'Foto preservada. A leitura automática está temporariamente indisponível; tente novamente ou registre as medidas manualmente.',
       paidFallbackUsed: false,
     }, { status: 503 })
   }
