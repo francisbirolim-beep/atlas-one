@@ -19,12 +19,14 @@ export async function executarAutomacaoMedidaFinal(empresaId:string,medicaoId:st
  if(erroCfg)throw erroCfg
  if(!cfg?.ativo||!cfg.criar_tarefa)return {ativa:false,criadas:0,existentes:0}
  const ids=[...new Set((cfg.notificar_usuario_ids||[]) as string[])]
- if(!ids.length)return {ativa:true,criadas:0,existentes:0}
+ if(!ids.length)throw new Error('Automação ativa sem destinatários configurados')
  const {data:m,error:erroM}=await db.from('medicoes_finais')
   .select('id,cliente_nome,obra_id,orcamento_id,cliente_id,status_operacional')
   .eq('empresa_id',empresaId).eq('id',medicaoId).maybeSingle()
  if(erroM)throw erroM
- if(!m||!['concluido','aprovado'].includes(m.status_operacional||''))return {ativa:true,criadas:0,existentes:0}
+ // A rota de sincronização já confirmou elegibilidade e card existente.
+ // Medições parciais aprovadas também podem receber revisão operacional.
+ if(!m||!['concluido','aprovado','aguardando_conferencia','em_medicao'].includes(m.status_operacional||''))throw new Error('Status de medição não elegível')
  const {data:usuarios,error:erroU}=await db.from('usuarios')
   .select('id,nome').eq('empresa_id',empresaId).in('id',ids)
  if(erroU)throw erroU
@@ -75,5 +77,5 @@ export async function executarAutomacaoMedidaFinal(empresaId:string,medicaoId:st
   })
   if(erroNotificacao&&erroNotificacao.code!=='23505')throw erroNotificacao
  }
- return {ativa:true,criadas,existentes}
+ return {ativa:true,criadas,existentes,total:ids.length}
 }

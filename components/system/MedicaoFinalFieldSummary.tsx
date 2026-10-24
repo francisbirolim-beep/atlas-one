@@ -193,9 +193,22 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
           await carregar()
           return
         }
+        if (resultado.automacaoPendente) {
+          setErro(resultado.mensagem || 'Medição salva. Tarefas pendentes; use Conferir / reenviar à Produção.')
+          setRevisando(false)
+          await carregar()
+          return
+        }
+        if (automacaoAtiva && resultado.automacaoAtiva === false) {
+          setAutomacaoAtiva(false)
+          setErro('A automação foi desativada após abrir esta tela. Confira os responsáveis e distribua as tarefas sem reenviar a medição.')
+          setRevisando(false)
+          await carregar()
+          return
+        }
       }
       if (automacaoAtiva && concluirAntes) {
-        setMensagem('Medição Final enviada. A automação configurada no Kanban de Produção encaminhou as tarefas de conferência.')
+        setMensagem(mensagemConclusao || 'Medição Final enviada; tarefas de conferência encaminhadas.')
         setRevisando(false)
         await carregar()
         window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
@@ -232,13 +245,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     setErro('')
   }
 
-  async function executar(acao: () => Promise<{ ok: boolean; mensagem?: string }>, sucesso: string) {
+  async function executar(acao: () => Promise<{ ok: boolean; mensagem?: string; automacaoPendente?: boolean }>, sucesso: string) {
     if (processando) return
     limparRetorno()
     setProcessando(true)
     const resultado = await acao()
     setProcessando(false)
-    if (!resultado.ok) setErro(resultado.mensagem || 'Não foi possível concluir a ação.')
+    if (!resultado.ok || resultado.automacaoPendente) setErro(resultado.mensagem || 'Tarefas pendentes: confira a automação e tente novamente.')
     else {
       setMensagem(resultado.mensagem || sucesso)
       void carregar()
