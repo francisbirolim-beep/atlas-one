@@ -194,9 +194,65 @@ export async function GET(req:NextRequest){
    if(cc.error||ca.error)throw (cc.error||ca.error)
    nativos.assistencia={colunas:cc.data||[],cards:(ca.data||[]).map(x=>({id:x.id,cliente:x.cliente_nome||'Cliente',obra:'Assistência técnica',numero:x.numero||0,cidade:x.cidade||'',coluna_id:x.coluna_id,href:'/assistencias'}))}
   }
+  // Entrada da Produção: somente peças de Medição Final já enviadas, com
+  // card próprio na Produção ainda aguardando liberação. Venda não é medição.
+  const entradasMedicao:Array<{id:string;medicaoId:string;vendaId:string;cliente:string;obra:string;cidade:string;tipologia:string;quantidade:number;conferencia:boolean;href:string}>=[]
+  if(permitidos.includes('producao')){
+   const {data:colunasNativas,error:erroColunasNativas}=await db.from('setor_kanban_colunas')
+    .select('id').eq('empresa_id',ctx.u.empresa_id).eq('setor_id','producao')
+   if(erroColunasNativas)throw erroColunasNativas
+   const colIds=(colunasNativas||[]).map(x=>x.id)
+   if(colIds.length){
+    const {data:cardsMedicao,error:erroCardsMedicao}=await db.from('setor_kanban_itens')
+     .select('descricao,orcamento_id,obra_id')
+     .eq('empresa_id',ctx.u.empresa_id).in('coluna_id',colIds)
+     .is('liberado_producao_em',null).ilike('descricao','%[medicao:%')
+     .limit(1500)
+    if(erroCardsMedicao)throw erroCardsMedicao
+    const idSet=new Set<string>()
+    for(const card of cardsMedicao||[]){
+     const id=String(card.descricao||'').match(/\\[medicao:([a-f0-9-]{36})\\]/i)?.[1]
+     if(id)idSet.add(id)
+    }
+    const medicaoIds=[...idSet]
+    if(medicaoIds.length){
+     const {data:medicoesEnviadas,error:erroMedicoesEnviadas}=await db.from('medicoes_finais')
+      .select('id,orcamento_id,obra_id,cliente_id,cliente_nome,status_operacional')
+      .eq('empresa_id',ctx.u.empresa_id).eq('tipo_medicao','tipologia')
+      .in('id',medicaoIds)
+     if(erroMedicoesEnviadas)throw erroMedicoesEnviadas
+     const {data:itensMedidos,error:erroItensMedidos}=await db.from('medicao_itens')
+      .select('id,medicao_id,descricao,tipo_esquadria,quantidade,medido,status_medicao,largura_baixo_mm,largura_meio_mm,largura_cima_mm,altura_direita_mm,altura_meio_mm,altura_esquerda_mm,foto_larguras_url,foto_alturas_url')
+      .eq('empresa_id',ctx.u.empresa_id).in('medicao_id',medicaoIds).limit(3000)
+     if(erroItensMedidos)throw erroItensMedidos
+     for(const medicao of medicoesEnviadas||[]){
+      const enviada=['concluido','aprovado','aguardando_conferencia'].includes(medicao.status_operacional||'')
+      const venda=vendas.find(v=>v.orcamento_id===medicao.orcamento_id&&
+       (!medicao.obra_id||v.obra_id===medicao.obra_id))
+      if(!venda)continue
+      for(const item of (itensMedidos||[]).filter(i=>i.medicao_id===medicao.id&&i.medido&&
+       (enviada||i.status_medicao==='aprovada'))){
+       const medidas=['largura_baixo_mm','largura_meio_mm','largura_cima_mm','altura_direita_mm','altura_meio_mm','altura_esquerda_mm']
+       const completa=medidas.every(k=>Number((item as any)[k])>0)
+       const foto=Boolean(item.foto_larguras_url||item.foto_alturas_url)
+       const obra=nomesObra.get(venda.obra_id)
+       entradasMedicao.push({
+        id:item.id,medicaoId:medicao.id,vendaId:venda.id,
+        cliente:medicao.cliente_nome||nomeCliente.get(venda.cliente_id)||'Cliente',
+        obra:obra?.nome||'Obra',cidade:obra?.cidade||'',
+        tipologia:String(item.descricao||item.tipo_esquadria||'Tipologia').slice(0,220),
+        quantidade:Math.max(1,Number(item.quantidade)||1),
+        conferencia:!completa&&foto,
+        href:'/producao/medicao-final/'+medicao.id,
+       })
+      }
+     }
+    }
+   }
+  }
   const funcionarios=ctx.u.role==='master'?(await db.from('usuarios').select('id,nome,role').eq('empresa_id',ctx.u.empresa_id).order('nome')).data||[]:[]
   return NextResponse.json({usuarioMaster:ctx.u.role==='master',quadros:QUADROS.filter(q=>permitidos.includes(q.id)),permissoes:ctx.mapa,colunas:colunas.filter(c=>permitidos.includes(c.setor)),
-    posicoes, cards, nativos, funcionarios,acessos:acessos.data||[],atualizadoEm:new Date().toISOString()}, {headers:{'Cache-Control':'no-store'}})
+    posicoes, cards, entradasMedicao, nativos, funcionarios,acessos:acessos.data||[],atualizadoEm:new Date().toISOString()}, {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('central kanban GET',e);return erro('Não foi possível carregar a Central de Kanbans.',500)}
 }
 export async function POST(req:NextRequest){
