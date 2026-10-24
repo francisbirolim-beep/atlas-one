@@ -35,15 +35,40 @@ jobs:
   database:
     name: Supabase migration control
     runs-on: ubuntu-latest
-    environment: production
+    # PRs never receive production environment credentials.
+    environment: ${{ github.event_name == 'pull_request' && 'database-test' || 'production' }}
     env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ github.event_name == 'pull_request' && secrets.SUPABASE_TEST_ACCESS_TOKEN || '' }}
+      SUPABASE_DB_PASSWORD: ${{ github.event_name == 'pull_request' && secrets.SUPABASE_TEST_DB_PASSWORD || '' }}
+      SUPABASE_PROJECT_ID: ${{ github.event_name == 'pull_request' && secrets.SUPABASE_TEST_PROJECT_ID || '' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Select production credentials for manual control only
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          PRODUCTION_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PRODUCTION_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PRODUCTION_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          echo "SUPABASE_ACCESS_TOKEN=$PRODUCTION_ACCESS_TOKEN" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PASSWORD=$PRODUCTION_DB_PASSWORD" >> "$GITHUB_ENV"
+          echo "SUPABASE_PROJECT_ID=$PRODUCTION_PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Reject production as the PR test target
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_PROJECT_ID:-}" || { echo "ERRO: configure SUPABASE_TEST_PROJECT_ID no ambiente database-test; sem fallback de producao."; exit 1; }
+          if [ "$SUPABASE_PROJECT_ID" = "urtqbvjpwnrfaayolymt" ]; then
+            echo "ERRO: testes de PR nao podem usar o projeto de producao Atlas."
+            exit 1
+          fi
 
       - name: Validate required secrets
         shell: bash
@@ -127,8 +152,9 @@ jobs:
         shell: bash
         run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run --include-all
 
-      - name: Test Supabase security suite
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply')) }}
+      # SQL suites use fixtures and can write; never execute them against production.
+      - name: Test Supabase security suite (isolated PR database only)
+        if: ${{ github.event_name == 'pull_request' }}
         shell: bash
         run: |
           set -euo pipefail
