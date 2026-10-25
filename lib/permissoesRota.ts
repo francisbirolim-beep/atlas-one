@@ -12,6 +12,8 @@ export function podeAcessarRotaCatalogada(
  config:Pick<AcessoUsuarioConfig,'acoes'|'modulos'>, catalogo:Setor[],
 ):boolean|null {
  if(role==='master')return true
+ // Configurações administrativas (incluindo ACL e integrações) são somente do Master.
+ if(pathname==='/configuracoes'||pathname.startsWith('/configuracoes/'))return false
  if(pathname==='/setores')return true
  if(pathname==='/setor'||pathname.startsWith('/setor/')){
    const id=pathname.split('/')[2]

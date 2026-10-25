@@ -14,6 +14,8 @@ export function nivelEfetivoAcao(
   acaoId: string,
 ): NivelPermissao {
   if (role === 'master') return 'edicao'
+  // A administração e configuração estrutural do Atlas são exclusivas do Master.
+  if(moduloDaAcaoPermissao(acaoId)?.id==='configuracoes')return 'oculto'
   const setor = setores[setorId] || 'oculto'
   if (setor === 'oculto') return 'oculto'
   const modulo=moduloDaAcaoPermissao(acaoId)

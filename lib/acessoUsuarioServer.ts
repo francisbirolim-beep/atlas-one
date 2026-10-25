@@ -39,6 +39,8 @@ export async function nivelAcaoUsuarioServer(params:{
   empresaId?:string
 }):Promise<NivelAcessoServer> {
   if(params.role==='master') return 'edicao'
+  // Nem um setor liberado nem edição de módulo podem delegar configurações globais.
+  if(moduloDaAcaoPermissao(params.acaoId)?.id==='configuracoes')return 'oculto'
 
   let q=supabaseAdmin.from('permissoes').select('nivel').eq('usuario_id',params.usuarioId).eq('setor_id',params.setorId)
   if(params.empresaId) q=q.eq('empresa_id',params.empresaId)
