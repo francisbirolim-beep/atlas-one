@@ -194,7 +194,7 @@ export default function PermissoesContextuais() {
   }
 
   function alterarAcao(idAcao: string, nivel: NivelPermissao) {
-    if(!moduloAtual||ehAcaoExclusivaMaster(id))return
+    if(!moduloAtual||ehAcaoExclusivaMaster(idAcao))return
     setRascunho(atual => {
       if(!atual || (atual.setores[moduloAtual.setorId]||'oculto')==='oculto')return atual
       if((atual.config.modulos?.[moduloAtual.id]||atual.setores[moduloAtual.setorId])==='oculto')return atual
