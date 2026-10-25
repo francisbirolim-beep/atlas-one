@@ -38,7 +38,7 @@ export function ehSetorExclusivoMaster(setorId: string): boolean {
 export function exigeSelecaoIndividual(acaoId: string): boolean {
   return ehAcaoExclusivaMaster(acaoId) || ACOES_CMV_DELEGACAO_EXPLICITA.some(id => id === acaoId) ||
     acaoId === 'financeiro.recebimento_vendas.registrar' ||
-    /(?:^|\\.)(?:aprovar|cancelar|excluir|restaurar|liberar|pagar|receber|reabrir|sangria|faturar|validar)(?:_|\\.|$)/.test(acaoId)
+    acaoId.split('.').some(parte => /^(aprovar|cancelar|excluir|restaurar|liberar|pagar|receber|reabrir|sangria|faturar|validar)(?:_|$)/.test(parte))
 }
 const DELEGACOES_EXPLICITAS = new Set<string>(ACOES_CMV_DELEGACAO_EXPLICITA)
 export function fallbackAcaoPermissao(id:string,setor:NivelPermissao):NivelPermissao {
