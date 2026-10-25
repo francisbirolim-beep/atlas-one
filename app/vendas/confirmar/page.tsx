@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, FileText, Play, UserRound, AlertTriangle, Paperclip, Building2, Plus, Trash2 } from 'lucide-react'
 import { OrcamentoRapido, Usuario } from '@/lib/tipos'
+import SelecaoItensVenda from '@/components/vendas/SelecaoItensVenda'
+import type { SelecionadoVenda, ItemOrcamentoVenda } from '@/lib/vendaSelecaoItens'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { criarObraCliente, listarObrasCliente, type ObraCliente360 } from '@/lib/cliente360'
@@ -48,6 +50,8 @@ function itemEstruturadoValido(item: any) {
 
 export default function ConfirmarVendaPage() {
   const router = useRouter()
+  // Em preview, bloquear qualquer operação que grave no banco de produção.
+  const apenasPrevia = process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview' || (typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app'))
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [orcamentoEntradaId, setOrcamentoEntradaId] = useState('')
   const [origemFluxo, setOrigemFluxo] = useState('')
@@ -64,6 +68,8 @@ export default function ConfirmarVendaPage() {
   const [importandoItens, setImportandoItens] = useState(false)
   const [salvandoItensPreview, setSalvandoItensPreview] = useState(false)
   const [itensPreview, setItensPreview] = useState<any[] | null>(null)
+  const [modoVenda, setModoVenda] = useState<'total'|'parcial'>('total')
+  const [selecaoVenda, setSelecaoVenda] = useState<SelecionadoVenda[]>([])
   const [cadastroSalvo, setCadastroSalvo] = useState(false)
   const [erro, setErro] = useState('')
   const [mensagem, setMensagem] = useState('')
@@ -145,6 +151,8 @@ export default function ConfirmarVendaPage() {
     setSelecionadoId(o.id)
     setCadastroSalvo(false)
     setItensPreview(null)
+    setModoVenda('total')
+    setSelecaoVenda([])
     setErro('')
     setMensagem('')
     setObraId((o as any).obra_id || '')
@@ -157,6 +165,7 @@ export default function ConfirmarVendaPage() {
   }
 
   async function salvarCadastro() {
+    if (apenasPrevia) { setErro('Prévia somente leitura: cadastro não será alterado.'); return }
     if (!cadastro || !selecionado) return
     setErro('')
     setMensagem('')
@@ -173,6 +182,7 @@ export default function ConfirmarVendaPage() {
   }
 
   async function criarNovaObra() {
+    if (apenasPrevia) { setErro('Prévia somente leitura: obra não será criada.'); return }
     if (!clienteId || !novaObraNome.trim()) return
     setCriandoObra(true); setErro('')
     const r = await criarObraCliente(clienteId, { nome: novaObraNome.trim(), status: 'planejamento' })
@@ -184,6 +194,7 @@ export default function ConfirmarVendaPage() {
   }
 
   async function iniciar() {
+    if (apenasPrevia) { setErro('Prévia somente leitura: nenhuma venda ou medição será criada.'); return }
     if (!selecionado) return
     setErro('')
     setMensagem('')
@@ -204,6 +215,10 @@ export default function ConfirmarVendaPage() {
       return
     }
 
+    if (modoVenda === 'parcial') {
+      setErro('A venda parcial está em conferência. Para não lançar peças não vendidas no Financeiro e na Produção, a confirmação parcial permanece bloqueada até a integração segura.')
+      return
+    }
     if (!prontoCadastro) {
       setErro('Salve o cadastro completo do cliente antes de iniciar o processo.')
       return
@@ -300,6 +315,7 @@ export default function ConfirmarVendaPage() {
   }
 
   async function confirmarItensDoPdf() {
+    if (apenasPrevia) { setErro('Prévia somente leitura: os itens originais serão preservados.'); return }
     if (!selecionado || !itensPreview) return
     setErro('')
     setMensagem('')
@@ -342,6 +358,8 @@ export default function ConfirmarVendaPage() {
       const itensSalvos = Array.isArray(json?.itens) ? json.itens : []
       setOrcamentos(prev => prev.map(o => o.id === selecionado.id ? { ...o, itens: itensSalvos } : o))
       setItensPreview(null)
+      setModoVenda('total')
+      setSelecaoVenda([])
       setMensagem(`${itensSalvos.length} item(ns) conferidos e salvos no orçamento.`)
     } catch {
       setErro('Erro ao salvar os itens conferidos. Tente novamente.')
@@ -389,6 +407,7 @@ export default function ConfirmarVendaPage() {
       <header className="bg-white border-b border-slate-200"><div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3"><button onClick={() => router.push('/kanban')} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><ArrowLeft size={18}/></button><div><h1 className="text-lg font-bold text-brand-navy">Confirmar venda</h1><p className="text-xs text-slate-500">A confirmação cria o Financeiro e envia a obra para Conferir Projeto. Os demais fluxos só nascem depois da conferência.</p></div></div></header>
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-5">
+        {apenasPrevia && <p className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">Ambiente de prévia: vendas, cadastro, criação de obra, medição e salvamento de itens estão desativados. Você pode testar a seleção sem modificar dados reais.</p>}
         {erro && (
           <div className="flex gap-2 items-start rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <AlertTriangle size={17} className="mt-0.5 flex-shrink-0" />
@@ -405,14 +424,14 @@ export default function ConfirmarVendaPage() {
         <section className="bg-white border border-slate-200 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4"><UserRound size={18} className="text-brand-navy"/><div><h2 className="font-semibold text-slate-800">1. Cadastro e dados da venda</h2><p className="text-xs text-slate-500">Campos, ordem e obrigatoriedade obedecem às Configurações do Atlas.</p></div></div>
           {cadastro && <div className="grid md:grid-cols-2 gap-3">{camposVenda.map(campo => <label key={campo.id} className={campo.tipo === 'texto_longo' ? 'md:col-span-2' : ''}><span className="block text-xs font-medium text-slate-600 mb-1">{campo.label}{campo.obrigatorioEm.includes('confirmacao_venda') ? ' *' : ''}</span>{campoFormulario(campo)}{campo.ajuda && <span className="block mt-1 text-[11px] text-slate-400">{campo.ajuda}</span>}</label>)}</div>}
-          <div className="mt-4 flex items-center justify-between gap-3 flex-wrap"><div className="text-xs text-slate-500">{faltantes.length > 0 ? `Faltando: ${faltantes.map(f => f.label).join(', ')}` : cadastroSalvo ? 'Cadastro e dados da venda completos e salvos.' : 'Dados completos. Clique em salvar para confirmar.'}</div><button onClick={salvarCadastro} disabled={!cadastro || faltantes.length > 0 || salvandoCadastro} className="px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium disabled:opacity-40">{salvandoCadastro ? 'Salvando...' : 'Salvar dados da venda'}</button></div>
+          <div className="mt-4 flex items-center justify-between gap-3 flex-wrap"><div className="text-xs text-slate-500">{faltantes.length > 0 ? `Faltando: ${faltantes.map(f => f.label).join(', ')}` : cadastroSalvo ? 'Cadastro e dados da venda completos e salvos.' : 'Dados completos. Clique em salvar para confirmar.'}</div><button onClick={salvarCadastro} disabled={apenasPrevia || !cadastro || faltantes.length > 0 || salvandoCadastro} className="px-4 py-2 rounded-xl bg-brand-navy text-white text-sm font-medium disabled:opacity-40">{salvandoCadastro ? 'Salvando...' : 'Salvar dados da venda'}</button></div>
         </section>
 
         <section className="bg-white border border-slate-200 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4"><Building2 size={18} className="text-brand-navy"/><div><h2 className="font-semibold text-slate-800">2. Vincular a uma obra</h2><p className="text-xs text-slate-500">Opcional, mas recomendado. Tudo que nascer depois — Financeiro, Projeto, Compras e Produção — já herda esta obra.</p></div></div>
           {!clienteId ? <p className="text-sm text-slate-400">Salve primeiro o cadastro do cliente.</p> : <div className="grid md:grid-cols-2 gap-3">
             <label><span className="block text-xs font-medium text-slate-600 mb-1">Obra existente</span><select value={obraId} onChange={e => setObraId(e.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"><option value="">Sem obra definida</option>{obras.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
-            <div><span className="block text-xs font-medium text-slate-600 mb-1">Ou criar nova obra</span><div className="flex gap-2"><input value={novaObraNome} onChange={e => setNovaObraNome(e.target.value)} placeholder="Ex.: Residência Maurício Lima" className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm"/><button onClick={criarNovaObra} disabled={!novaObraNome.trim() || criandoObra} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-brand-navy disabled:opacity-40"><Plus size={15}/>{criandoObra ? 'Criando...' : 'Criar'}</button></div></div>
+            <div><span className="block text-xs font-medium text-slate-600 mb-1">Ou criar nova obra</span><div className="flex gap-2"><input value={novaObraNome} onChange={e => setNovaObraNome(e.target.value)} placeholder="Ex.: Residência Maurício Lima" className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm"/><button onClick={criarNovaObra} disabled={apenasPrevia || !novaObraNome.trim() || criandoObra} className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-brand-navy disabled:opacity-40"><Plus size={15}/>{criandoObra ? 'Criando...' : 'Criar'}</button></div></div>
           </div>}
           {obraId && <p className="mt-3 text-xs text-emerald-700">Obra selecionada: <b>{obras.find(o => o.id === obraId)?.nome || 'obra vinculada'}</b>.</p>}
         </section>
@@ -536,7 +555,7 @@ export default function ConfirmarVendaPage() {
                       <button type="button" onClick={() => { setItensPreview(null); setMensagem(''); setErro('') }} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
                         Cancelar conferência
                       </button>
-                      <button type="button" onClick={confirmarItensDoPdf} disabled={salvandoItensPreview || previewInvalidos.length > 0 || itensPreview.length === 0} className="rounded-lg bg-brand-navy px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
+                      <button type="button" onClick={confirmarItensDoPdf} disabled={apenasPrevia || salvandoItensPreview || previewInvalidos.length > 0 || itensPreview.length === 0} className="rounded-lg bg-brand-navy px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
                         {salvandoItensPreview ? 'Salvando...' : `Confirmar e salvar ${itensPreview.length} item(ns)`}
                       </button>
                     </div>
@@ -598,6 +617,18 @@ export default function ConfirmarVendaPage() {
               )}
             </div>
           )}
+          {selecionado && itens.length > 0 && !(origemFluxo === 'medicao-final' && wvetroMedicaoDireta) && (
+            <div className="mt-5">
+              <SelecaoItensVenda
+                itens={itens as unknown as ItemOrcamentoVenda[]}
+                modo={modoVenda}
+                onModo={v=>{setModoVenda(v);setSelecaoVenda([]);setErro('')}}
+                selecao={selecaoVenda}
+                onSelecao={setSelecaoVenda}
+                orcamentoValor={Number(selecionado.valor_estimado||0)}
+              />
+            </div>
+          )}
         </section>
 
         <section className="bg-brand-navy text-white rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
@@ -618,15 +649,15 @@ export default function ConfirmarVendaPage() {
             onClick={iniciar}
             disabled={
               origemFluxo === 'medicao-final' && wvetroMedicaoDireta
-                ? !prontoItens || iniciando || !!itensPreview
-                : !prontoCadastro || !prontoItens || iniciando || !!itensPreview
+                ? apenasPrevia || !prontoItens || iniciando || !!itensPreview
+                : apenasPrevia || !prontoCadastro || !prontoItens || iniciando || !!itensPreview || modoVenda === 'parcial'
             }
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-brand-navy font-semibold text-sm disabled:opacity-40"
           >
             <Play size={16} />
             {iniciando
               ? origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciando...' : 'Confirmando...'
-              : origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciar Medida Final' : 'Confirmar venda'}
+              : origemFluxo === 'medicao-final' && wvetroMedicaoDireta ? 'Iniciar Medida Final' : modoVenda === 'parcial' ? 'Venda parcial — aguardando integração' : 'Confirmar venda'}
           </button>
         </section>
 
