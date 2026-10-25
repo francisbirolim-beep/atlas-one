@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
+import {podeConsultarPainelGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {projetarCardGeral,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
 import type {MaterialResumo,PedidoGeralCard,DetalheMaterialCompra} from '@/lib/visaoGeralDemo'
@@ -30,7 +31,7 @@ export async function GET(req:NextRequest){
  try{
   const u=await autenticarCompras(req)
   if(!u)return respErro('Sessão inválida',401)
-  if(u.role!=='master')return respErro('Painel consolidado restrito ao Master durante a homologação.',403)
+  if(!(await podeConsultarPainelGeral(u,'visao-geral-projetos')))return respErro('Acesso não autorizado à Visão Geral.',403)
   const empresa=u.empresa_id
   const vendasR=await db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,created_at,status')
    .eq('empresa_id',empresa).order('created_at',{ascending:false}).limit(500)
@@ -201,7 +202,7 @@ export async function GET(req:NextRequest){
      detalhesCompra:linhas.map(detalhe)})
    }
   }
-  return NextResponse.json({cards,pedidos,usuarioMaster:true,atualizadoEm:new Date().toISOString(),
+  return NextResponse.json({cards,pedidos,usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
    observacao:'Os percentuais sem quantidades ou unidades conciliadas são exibidos como Não apurado. Agendamentos não foram inferidos a partir da entrega da obra.'},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('visao geral de projetos GET',e);return respErro('Não foi possível consultar a Visão Geral de Projetos.',500)}

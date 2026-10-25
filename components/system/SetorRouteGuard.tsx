@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { LockKeyhole, Loader2 } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { listarPermissoesUsuario, listarSetores } from '@/lib/setores'
 import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import { podeAcessarRotaCatalogada } from '@/lib/permissoesRota'
@@ -13,7 +13,8 @@ import { resolverContextoPermissoes } from '@/lib/permissoesContextuais'
 export default function SetorRouteGuard({children}:{children:React.ReactNode}) {
  const pathname=usePathname()
  const contextual=resolverContextoPermissoes(pathname)
- const precisaChecar=contextual.moduloIds.length>0||pathname.startsWith('/setor/')
+ const painel=pathname==='/visao-geral-projetos'?'visaoGeral':pathname==='/relatorios/instalacoes'?'relatorioInstalacoes':null
+ const precisaChecar=Boolean(painel)||contextual.moduloIds.length>0||pathname.startsWith('/setor/')
  const [estado,setEstado]=useState<{rota:string;nivel:'carregando'|'permitido'|'negado'}>({
   rota:pathname,nivel:precisaChecar?'carregando':'permitido',
  })
@@ -33,6 +34,15 @@ export default function SetorRouteGuard({children}:{children:React.ReactNode}) {
      if(ativo)setEstado({rota:pathname,nivel:'permitido'})
      return
     }
+    if(painel){
+     const token=await tokenAtual()
+     if(!token)throw Error('Sem sessão')
+     const resposta=await fetch('/api/painel-geral-acesso',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
+     if(!resposta.ok)throw Error('Permissão não disponível')
+     const acl=await resposta.json()
+     if(ativo)setEstado({rota:pathname,nivel:acl?.[painel]===true?'permitido':'negado'})
+     return
+    }
     const [catalogo,setores,config]=await Promise.all([
      listarSetores(),listarPermissoesUsuario(user.id),lerAcessoUsuarioConfig(user),
     ])
@@ -44,7 +54,7 @@ export default function SetorRouteGuard({children}:{children:React.ReactNode}) {
    }
   })()
   return()=>{ativo=false}
- },[pathname,precisaChecar])
+ },[pathname,precisaChecar,painel])
  if(!precisaChecar)return <>{children}</>
  if(atual==='carregando')return <div className="grid min-h-[55vh] place-items-center text-slate-400">
   <Loader2 className="animate-spin"/>

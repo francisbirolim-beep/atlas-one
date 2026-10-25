@@ -558,6 +558,14 @@ export default function UsuariosSenhasPage() {
 
               <div>
                 <div className="mb-3 flex items-center gap-2"><LayoutDashboard size={17} className="text-emerald-600"/><div><p className="text-sm font-semibold text-slate-800">Tela inicial</p><p className="text-xs text-slate-500">Marque os módulos que essa pessoa deve enxergar na Home.</p></div></div>
+                <label className="mb-3 block rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">Página ao entrar no Atlas
+                  <select aria-label="Página inicial do novo usuário" value={novaHome.paginaInicial||'padrao'} onChange={e=>setNovaHome({...novaHome,paginaInicial:e.target.value as HomeUsuarioConfig['paginaInicial']})} className="mt-2 block w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800">
+                    <option value="padrao">Home tradicional — tarefas e agenda</option>
+                    <option value="visao-geral-projetos">Visão Geral de Projetos</option>
+                    <option value="relatorios-instalacoes">Relatório de Instalações</option>
+                  </select>
+                  <span className="mt-1 block text-[11px] font-normal">Para funcionários, libere a permissão de consulta ao painel após criar o usuário. Sem permissão, permanece na Home tradicional.</span>
+                </label>
                 <div className="mb-5 rounded-xl border border-violet-200 bg-violet-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Dashboards permitidos</p>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -782,6 +790,19 @@ export default function UsuariosSenhasPage() {
                         )
                       })}
 
+                      <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                        <p className="text-xs font-bold text-blue-900">Painéis consolidados — acesso individual</p>
+                        <p className="mt-1 text-[11px] text-blue-800">Autorizações independentes. As alterações de colunas, metas e programação continuam exclusivas do Master.</p>
+                        {([['painel_visao_geral_projetos','Visão Geral de Projetos'],['painel_relatorio_instalacoes','Relatório de Instalações']] as const).map(([id,rotulo]) => (
+                          <label key={id} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2.5 text-xs">
+                            <span className="font-semibold">{rotulo}</span>
+                            <select aria-label={'Permissão de '+rotulo} value={acessoConfig.acoes?.[id]==='consulta'||acessoConfig.acoes?.[id]==='edicao'?'consulta':'oculto'} onChange={e=>setAcessoConfig(prev=>({...prev,acoes:{...prev.acoes,[id]:e.target.value as NivelPermissao}}))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                              <option value="oculto">Oculto</option>
+                              <option value="consulta">Somente consulta</option>
+                            </select>
+                          </label>
+                        ))}
+                      </div>
                       {msgPermissoes && <p className="text-xs text-slate-600">{msgPermissoes}</p>}
                       <button type="button" onClick={()=>void salvarAcessosSetores()} disabled={salvandoPermissoes} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white disabled:opacity-50">{salvandoPermissoes?<Loader2 size={17} className="animate-spin"/>:<ShieldCheck size={17}/>}Salvar acessos por bloco</button>
                     </div>
@@ -804,6 +825,14 @@ export default function UsuariosSenhasPage() {
                   <div className="mb-4 flex items-start gap-2"><LayoutDashboard size={18} className="mt-0.5 text-emerald-600"/><div><h2 className="font-semibold text-slate-900">Tela inicial de {usuarioSelecionado.nome.split(' ')[0]}</h2><p className="text-xs text-slate-500">Escolha os blocos que vão aparecer quando este usuário entrar no Atlas.</p></div></div>
                   {carregandoHome || !homeConfig ? <div className="grid place-items-center py-8 text-slate-400"><Loader2 size={20} className="animate-spin"/></div> : (
                     <div className="space-y-2">
+                      <label className="block rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">Página ao entrar no Atlas
+                        <select aria-label="Página inicial deste usuário" value={homeConfig.paginaInicial||'padrao'} onChange={e=>setHomeConfig({...homeConfig,paginaInicial:e.target.value as HomeUsuarioConfig['paginaInicial']})} className="mt-2 block w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800">
+                          <option value="padrao">Home tradicional — tarefas e agenda</option>
+                          <option value="visao-geral-projetos">Visão Geral de Projetos</option>
+                          <option value="relatorios-instalacoes">Relatório de Instalações</option>
+                        </select>
+                        <span className="mt-1 block text-[11px] font-normal">A nova página só abrirá quando a permissão de consulta correspondente estiver liberada. Caso contrário, permanece na Home atual.</span>
+                      </label>
                       <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 p-3">
                         <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Dashboards permitidos</p>
                         <div className="mt-2 flex flex-wrap gap-2">{DASHBOARDS.map(item => <label key={item.id} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-2 text-xs"><input type="checkbox" disabled={usuarioSelecionado.role === 'master'} checked={usuarioSelecionado.role === 'master' || (homeConfig.dashboards || []).includes(item.id)} onChange={() => alternarDashboard(homeConfig, setHomeConfig, item.id)}/>{item.label}</label>)}</div>

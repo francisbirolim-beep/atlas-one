@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
+import {podeConsultarPainelGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 export const dynamic='force-dynamic'
 export const runtime='nodejs'
@@ -9,13 +10,13 @@ export async function GET(req:NextRequest){
  try{
   const u=await autenticarCompras(req)
   if(!u)return erro('Sessão inválida',401)
-  if(u.role!=='master')return erro('Este relatório consolidado ainda está restrito ao Master.',403)
+  if(!(await podeConsultarPainelGeral(u,'relatorios-instalacoes')))return erro('Acesso não autorizado ao relatório.',403)
   const [metas,agendamentos]=await Promise.all([
    db.from('instalacao_planejamento_metas').select('mes,meta_valor').eq('empresa_id',u.empresa_id).limit(120),
    db.from('instalacao_planejamento_reservas').select('id,venda_obra_id,data_prevista,valor_programado,estado').eq('empresa_id',u.empresa_id).limit(2000),
   ])
   if(tabelaAusente(metas.error)||tabelaAusente(agendamentos.error))
-   return NextResponse.json({metas:{},reservas:[],aviso:'O banco de planejamento de instalação ainda não foi homologado. Não existem agendamentos confirmados nesta prévia.'},{headers:{'Cache-Control':'no-store'}})
+   return NextResponse.json({metas:{},reservas:[],podeEditar:u.role==='master',aviso:'O banco de planejamento de instalação ainda não foi homologado. Não existem agendamentos confirmados nesta prévia.'},{headers:{'Cache-Control':'no-store'}})
   if(metas.error||agendamentos.error)throw metas.error||agendamentos.error
   const ids=[...new Set((agendamentos.data||[]).map(x=>x.venda_obra_id))]
   const vendas=ids.length?await db.from('vendas_obras').select('id,cliente_id,orcamento_id').eq('empresa_id',u.empresa_id).in('id',ids):{data:[],error:null}
@@ -38,7 +39,7 @@ export async function GET(req:NextRequest){
     estado:r.estado}
   })
   const metaPorMes:Object=Object.fromEntries((metas.data||[]).map(m=>[String(m.mes).slice(0,7),Number(m.meta_valor)]))
-  return NextResponse.json({metas:metaPorMes,reservas,atualizadoEm:new Date().toISOString()},{headers:{'Cache-Control':'no-store'}})
+  return NextResponse.json({metas:metaPorMes,reservas,podeEditar:u.role==='master',atualizadoEm:new Date().toISOString()},{headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('relatorio instalacoes GET',e);return erro('Não foi possível consultar o planejamento de instalação.',500)}
 }
 const formatoMes=(v:unknown)=>typeof v==='string'&&/^\d{4}-(0[1-9]|1[0-2])$/.test(v)
