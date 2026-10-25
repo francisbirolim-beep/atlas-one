@@ -348,7 +348,7 @@ export default function PermissoesContextuais() {
                               </div>
                               {moduloAtual.acoes.map(acao => (
                                 <label key={acao.id} className="flex flex-col gap-2 border-b border-slate-100 px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-                                  <span className="min-w-0"><span className="block text-sm font-medium">{acao.label}</span><span className="mt-0.5 block text-xs text-slate-500">{acao.descricao}</span>{ehAcaoExclusivaMaster(acao.id)&&<span className="text-xs font-semibold text-slate-600">Somente Master</span>}</span>
+                                  <span className="min-w-0"><span className="block text-sm font-medium">{acao.label}</span><span className="mt-0.5 block text-xs text-slate-500">{acao.descricao}</span>{exigeSelecaoIndividual(acao.id)&&!ehAcaoExclusivaMaster(acao.id)&&<span className="block text-xs font-semibold text-amber-700">Ação crítica — liberação individual.</span>}{ehAcaoExclusivaMaster(acao.id)&&<span className="text-xs font-semibold text-slate-600">Somente Master</span>}</span>
                                   <select aria-label={'3. Ação '+acao.label}
                                     disabled={ehAcaoExclusivaMaster(acao.id)||(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'||(rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
                                     value={nivelEfetivoAcao('funcionario',rascunho.setores,rascunho.config,moduloAtual.setorId,acao.id)}
