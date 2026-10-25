@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
+import {podeConsultarPainelGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {COLUNAS_GERAIS_PADRAO,validarColunasGerais,type ColunaVisualProjeto} from '@/lib/visaoGeralProjetos'
 export const dynamic='force-dynamic'
@@ -10,14 +11,14 @@ export async function GET(req:NextRequest){
  try{
   const u=await autenticarCompras(req)
   if(!u)return erro('Sessão inválida',401)
-  if(u.role!=='master')return erro('Configuração reservada ao Master.',403)
+  if(!(await podeConsultarPainelGeral(u,'visao-geral-projetos')))return erro('Acesso não autorizado.',403)
   const r=await db.from('visao_geral_configuracoes').select('colunas,updated_at').eq('empresa_id',u.empresa_id).maybeSingle()
   if(ausente(r.error))return NextResponse.json({colunas:COLUNAS_GERAIS_PADRAO,configuravel:false,aviso:'A migração visual ainda não foi aplicada.'},{headers:{'Cache-Control':'no-store'}})
   if(r.error)throw r.error
   const colunas=r.data?.colunas||COLUNAS_GERAIS_PADRAO
   const falhas=validarColunasGerais(colunas as ColunaVisualProjeto[])
   if(falhas.length)throw Error('Configuração persistida inconsistente.')
-  return NextResponse.json({colunas,configuravel:true,atualizadoEm:r.data?.updated_at||null},{headers:{'Cache-Control':'no-store'}})
+  return NextResponse.json({colunas,configuravel:u.role==='master',atualizadoEm:r.data?.updated_at||null},{headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('visao geral colunas GET',e);return erro('Não foi possível carregar a configuração.',500)}
 }
 export async function POST(req:NextRequest){
