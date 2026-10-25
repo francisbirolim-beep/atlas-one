@@ -673,6 +673,15 @@ export default function OrcamentoRapido() {
         return
       }
 
+      // Não transformar uma falha de upload em pedido "enviado".
+      // Mantém as fotos no rascunho local e informa exatamente qual arquivo falhou.
+      if (resultado.error?.startsWith('Falha ao enviar ')) {
+        setSalvando(false)
+        setErroEhValidacao(true)
+        setErro(`${resultado.error} As fotos permanecem neste formulário; confira a conexão e tente enviar novamente.`)
+        return
+      }
+
       await salvarComoPendente(
         dadosForm,
         resultado.error ? `Servidor: ${resultado.error}` : 'Servidor não confirmou o salvamento',
