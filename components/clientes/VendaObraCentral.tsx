@@ -199,6 +199,9 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [obra,setObra]=useState<Obra|null>(null)
   const [orcamento,setOrcamento]=useState<Orcamento|null>(null)
   const [contas,setContas]=useState<Conta[]>([])
+  const [conciliandoVenda,setConciliandoVenda]=useState(false)
+  const [mensagemConciliacao,setMensagemConciliacao]=useState('')
+
   const [realizadoCmvManual,setRealizadoCmvManual]=useState(0)
   const [previsaoCmvRevisada,setPrevisaoCmvRevisada]=useState<{vendaId:string;valor:number|null}|null>(null)
   const [compras,setCompras]=useState<Compra[]>([])
@@ -283,6 +286,33 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     tentouMaterializarVenda.current=venda.id
     void sincronizarMateriaisWVetro(true)
   },[carregando,venda?.id,pacoteTecnicoId])
+
+  async function conciliarFinanceiroVenda(){
+    if(!venda||conciliandoVenda)return
+    const atual=Number(venda.valor_venda||0)
+    const ativos=contas.filter(c=>c.status!=='cancelado')
+    const total=ativos.reduce((acc,c)=>acc+Number(c.valor||0),0)
+    if(!window.confirm('Atualizar os títulos desta venda para '+moeda(atual)+'?\n\nTotal atual dos títulos: '+moeda(total)+'\nDiferença: '+moeda(atual-total)+'\n\nParcelas com pagamentos ou descontos não serão alteradas.'))return
+    setConciliandoVenda(true);setMensagemConciliacao('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente.')
+      const resp=await fetch('/api/financeiro/conciliar-valor-venda',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({vendaId:venda.id,valorConfirmado:atual}),
+      })
+      const dados=await resp.json().catch(()=>({}))
+      if(!resp.ok)throw new Error(dados.error||'A conciliação não pôde ser concluída.')
+      if(dados.simulado){
+        setMensagemConciliacao(dados.mensagem||'Na prévia, nenhum dado financeiro foi modificado.')
+      }else{
+        await carregar()
+        setMensagemConciliacao('Conciliação concluída. As parcelas abertas foram atualizadas e o histórico do ajuste foi registrado.')
+      }
+    }catch(e){setMensagemConciliacao(e instanceof Error?e.message:'Falha ao conciliar o Financeiro.')}
+    finally{setConciliandoVenda(false)}
+  }
 
   async function atualizarComposicaoTipologia(){
     if(!pacoteTecnicoId)return
@@ -1153,7 +1183,11 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
       </div>
 
-      {valorVendaDifereFinanceiro&&<div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">A venda está em {moeda(valorVenda)}, mas os títulos financeiros ativos somam {moeda(totalTitulosAtivos)}. Confira e concilie o Financeiro; nenhuma parcela ou recebimento foi alterado automaticamente.</div>}
+      {valorVendaDifereFinanceiro&&<div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <span>A venda está em <b>{moeda(valorVenda)}</b>, mas os títulos financeiros ativos somam <b>{moeda(totalTitulosAtivos)}</b>. Diferença: <b>{moeda(valorVenda-totalTitulosAtivos)}</b>. Alterações futuras no preço sincronizam automaticamente apenas títulos sem pagamentos ou descontos; para esta diferença anterior, confirme a conciliação.</span>
+        <button type="button" disabled={conciliandoVenda} onClick={()=>void conciliarFinanceiroVenda()} className="rounded-lg border border-amber-500 bg-white px-3 py-2 font-bold text-amber-900 disabled:opacity-50">{conciliandoVenda?'Conferindo...':'Atualizar valor a receber'}</button>
+      </div>}
+      {mensagemConciliacao&&<p role="status" className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-900">{mensagemConciliacao}</p>}
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Progresso titulo="Venda" valor={100} detalhe="Orçamento confirmado e venda criada" ativo={painelEtapa==='venda'} onClick={()=>setPainelEtapa(painelEtapa==='venda'?null:'venda')}/>
         <Progresso titulo="Financeiro" valor={pct(Math.max(0,valorVenda-aReceber),valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`} ativo={painelEtapa==='financeiro'} onClick={()=>setPainelEtapa(painelEtapa==='financeiro'?null:'financeiro')}/>
