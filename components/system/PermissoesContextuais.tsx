@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
 import { lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
-import { montarBlocosPermissao, type ItemPermissaoBloco } from '@/lib/permissoesBlocos'
+import { montarBlocosPermissao, type ItemPermissaoBloco, ehAcaoExclusivaMaster, ehModuloExclusivoMaster, ehSetorExclusivoMaster, exigeSelecaoIndividual } from '@/lib/permissoesBlocos'
 import { nivelEfetivoAcao } from '@/lib/producaoPermissoes'
 import { nivelCliente360, type RecursoCliente360 } from '@/lib/cliente360Permissoes'
 import { resolverContextoPermissoes } from '@/lib/permissoesContextuais'
@@ -150,7 +150,7 @@ export default function PermissoesContextuais() {
   // Os três níveis são independentes. Não abrir outros módulos ao editar uma
   // única ação. Um setor ou módulo oculto não é reaberto por ação interna.
   function alterarSetorContextual(nivel: NivelPermissao) {
-    if (!moduloAtual) return
+    if (!moduloAtual || ehSetorExclusivoMaster(moduloAtual.setorId)) return
     setRascunho(atual => {
       if (!atual) return atual
       const anterior=atual.setores[moduloAtual.setorId]||'oculto'
@@ -166,19 +166,35 @@ export default function PermissoesContextuais() {
     setMensagem('')
   }
 
+  function removerTetoLegadoConsulta() {
+    if (!moduloAtual || ehSetorExclusivoMaster(moduloAtual.setorId)) return
+    setRascunho(atual=>{
+      if(!atual || atual.setores[moduloAtual.setorId]!=='consulta')return atual
+      const modulos={...atual.config.modulos}
+      for(const item of modulosDaTela.filter(item=>item.setorId===moduloAtual.setorId)){
+        if(modulos[item.id]!=='oculto')modulos[item.id]='consulta'
+      }
+      return {...atual,setores:{...atual.setores,[moduloAtual.setorId]:'edicao' as const},config:{...atual.config,modulos}}
+    })
+  }
+
   function alterarModuloContextual(nivel: NivelPermissao) {
-    if (!moduloAtual) return
+    if (!moduloAtual || ehModuloExclusivoMaster(moduloAtual.id)) return
     setRascunho(atual => atual ? {
       ...atual, config:{...atual.config,
         modulos:{...atual.config.modulos,[moduloAtual.id]:nivel},
-        acoes:{...atual.config.acoes,...Object.fromEntries(moduloAtual.acoes.map(a=>[a.id,nivel]))},
+        acoes:{...atual.config.acoes,...Object.fromEntries(moduloAtual.acoes.map(a=>{
+          if(ehAcaoExclusivaMaster(a.id))return[a.id,'oculto']
+          if(nivel==='edicao'&&exigeSelecaoIndividual(a.id))return[a.id,atual.config.acoes?.[a.id]||'oculto']
+          return[a.id,nivel]
+        }))},
       },
     } : atual)
     setMensagem('')
   }
 
   function alterarAcao(idAcao: string, nivel: NivelPermissao) {
-    if(!moduloAtual)return
+    if(!moduloAtual||ehAcaoExclusivaMaster(id))return
     setRascunho(atual => {
       if(!atual || (atual.setores[moduloAtual.setorId]||'oculto')==='oculto')return atual
       if((atual.config.modulos?.[moduloAtual.id]||atual.setores[moduloAtual.setorId])==='oculto')return atual
@@ -310,17 +326,20 @@ export default function PermissoesContextuais() {
                             <div className="rounded-xl border border-slate-200">
                               <div className="space-y-3 border-b bg-slate-50 px-3 py-3">
                                 <p className="text-sm font-semibold">{moduloAtual.label}</p>
-                                <p className="text-xs text-slate-500">1. O setor inteiro precisa estar liberado. 2. Libere o módulo/etapa. 3. Escolha cada ação.</p>
+                                <p className="text-xs text-slate-500">1. O setor fica oculto ou liberado. 2. Escolha sem acesso, consulta ou edição por módulo. 3. Autorize cada ação crítica individualmente.</p>
                                 <label className="block text-xs font-semibold">1. Setor
-                                  <select value={rascunho.setores[moduloAtual.setorId]||'oculto'}
+                                  <select value={ehSetorExclusivoMaster(moduloAtual.setorId)||(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'?'oculto':'edicao'} disabled={ehSetorExclusivoMaster(moduloAtual.setorId)}
                                     onChange={e=>alterarSetorContextual(e.target.value as NivelPermissao)}
                                     className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs">
-                                    {NIVEIS.map(n=><option key={n.valor} value={n.valor}>{n.label}</option>)}
+                                    <option value="oculto">Setor oculto</option>
+                                    <option value="edicao">Setor liberado — definir módulos</option>
                                   </select>
+                                  {ehSetorExclusivoMaster(moduloAtual.setorId) && <span className="block font-normal text-slate-500">Somente Master pode acessar configurações administrativas.</span>}
+                                  {rascunho.setores[moduloAtual.setorId]==='consulta' && <button type="button" onClick={removerTetoLegadoConsulta} className="mt-1 block font-normal text-indigo-700 underline">Remover limite antigo de consulta sem abrir ações</button>}
                                 </label>
                                 <label className="block text-xs font-semibold">2. Módulo / etapa
-                                  <select disabled={(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
-                                    value={rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto'}
+                                  <select disabled={(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'||ehModuloExclusivoMaster(moduloAtual.id)}
+                                    value={ehModuloExclusivoMaster(moduloAtual.id)?'oculto':rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto'}
                                     onChange={e=>alterarModuloContextual(e.target.value as NivelPermissao)}
                                     className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs disabled:opacity-50">
                                     {NIVEIS.map(n=><option key={n.valor} value={n.valor}>{n.label}</option>)}
@@ -329,9 +348,9 @@ export default function PermissoesContextuais() {
                               </div>
                               {moduloAtual.acoes.map(acao => (
                                 <label key={acao.id} className="flex flex-col gap-2 border-b border-slate-100 px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-                                  <span className="min-w-0"><span className="block text-sm font-medium">{acao.label}</span><span className="mt-0.5 block text-xs text-slate-500">{acao.descricao}</span></span>
+                                  <span className="min-w-0"><span className="block text-sm font-medium">{acao.label}</span><span className="mt-0.5 block text-xs text-slate-500">{acao.descricao}</span>{ehAcaoExclusivaMaster(acao.id)&&<span className="text-xs font-semibold text-slate-600">Somente Master</span>}</span>
                                   <select aria-label={'3. Ação '+acao.label}
-                                    disabled={(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'||(rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
+                                    disabled={ehAcaoExclusivaMaster(acao.id)||(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'||(rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
                                     value={nivelEfetivoAcao('funcionario',rascunho.setores,rascunho.config,moduloAtual.setorId,acao.id)}
                                     onChange={evento => alterarAcao(acao.id, evento.target.value as NivelPermissao)}
                                     className="w-full shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs disabled:opacity-50 sm:w-44">
