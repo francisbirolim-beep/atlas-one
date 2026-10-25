@@ -792,7 +792,7 @@ export default function UsuariosSenhasPage() {
 
                       <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
                         <p className="text-xs font-bold text-blue-900">Painéis consolidados — acesso individual</p>
-                        <p className="mt-1 text-[11px] text-blue-800">Autorizações independentes. As alterações de colunas, metas e programação continuam exclusivas do Master.</p>
+                        <p className="mt-1 text-[11px] text-blue-800">Ao escolher Somente consulta e salvar, o painel aparece na primeira tela, em Visão Geral, somente para este usuário. Autorizações independentes; colunas, metas e programação continuam exclusivas do Master.</p>
                         {([['painel_visao_geral_projetos','Visão Geral de Projetos'],['painel_relatorio_instalacoes','Relatório de Instalações']] as const).map(([id,rotulo]) => (
                           <label key={id} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2.5 text-xs">
                             <span className="font-semibold">{rotulo}</span>

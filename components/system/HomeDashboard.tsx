@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { tokenAtual, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import { DASHBOARDS, homeConfigPadrao, lerHomeUsuarioConfig, temModulo, type DashboardId, type HomeUsuarioConfig } from '@/lib/homeUsuario'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
+import HomePainelGeralAcessos from '@/components/system/HomePainelGeralAcessos'
 import HomeRecentQuotes from '@/components/system/HomeRecentQuotes'
 import HomeManagementOverview from '@/components/system/HomeManagementOverview'
 import HomeKanbanBlock from '@/components/system/HomeKanbanBlock'
@@ -101,6 +102,7 @@ export default function HomeDashboard() {
   return (
     <div className="atlas-home-dashboard w-full max-w-full overflow-x-hidden">
       <HomeExecutiveHero modulos={config.modulos} />
+      <HomePainelGeralAcessos />
 
       {permitidos.length > 1 && (
         <section className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
