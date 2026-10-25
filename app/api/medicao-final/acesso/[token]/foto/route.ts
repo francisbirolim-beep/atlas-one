@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { identificarFotoUpload } from '@/lib/validarFotoUpload'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buscarAcessoValidoMedicao } from '@/lib/medicaoAcessoExternoServer'
@@ -26,8 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   const legenda = String(form.get('legenda') || '').trim().slice(0, 200) || null
 
   if (!(arquivo instanceof File)) return NextResponse.json({ error: 'Foto nao informada.' }, { status: 400 })
-  if (!arquivo.type.startsWith('image/')) return NextResponse.json({ error: 'Envie apenas arquivos de imagem.' }, { status: 400 })
-  if (arquivo.size > MAX_FOTO) return NextResponse.json({ error: 'A foto deve ter no maximo 10 MB.' }, { status: 400 })
+  if (!arquivo.size || arquivo.size > MAX_FOTO) return NextResponse.json({ error: 'A foto deve ter no maximo 10 MB.' }, { status: 400 })
 
   const { data: item } = await supabaseAdmin
     .from('medicao_itens')
@@ -38,13 +38,14 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
 
   if (!item) return NextResponse.json({ error: 'Peca nao encontrada nesta medicao.' }, { status: 404 })
 
-  const ext = (arquivo.name.split('.').pop() || 'jpg').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6) || 'jpg'
-  const caminho = `medicao-externa/${acesso.medicao_id}/${randomUUID()}.${ext}`
   const bytes = Buffer.from(await arquivo.arrayBuffer())
+  const formato = identificarFotoUpload(bytes)
+  if (!formato) return NextResponse.json({ error: 'Envie uma foto JPEG, PNG, WebP, GIF, HEIC ou AVIF válida.' }, { status: 400 })
+  const caminho = `medicao-externa/${acesso.medicao_id}/${randomUUID()}.${formato.extensao}`
 
   const { error: uploadError } = await supabaseAdmin.storage
     .from('fotos')
-    .upload(caminho, bytes, { contentType: arquivo.type, upsert: false })
+    .upload(caminho, bytes, { contentType: formato.mime, upsert: false })
 
   if (uploadError) return NextResponse.json({ error: 'Nao foi possivel enviar a foto.' }, { status: 500 })
 
