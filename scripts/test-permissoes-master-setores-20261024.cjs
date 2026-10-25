@@ -61,7 +61,7 @@ new Function('require','module','exports',compiled)(
  assert.match(users,/Setor liberado — definir módulos e ações/)
  assert.match(users,/retirarLimiteAntigoDeConsulta/)
  assert.match(users,/exigeSelecaoIndividual/)
- assert.match(users,/disabled={setorBloqueado\|\|moduloBloqueado\|\|ehAcaoExclusivaMaster\(acao.id\)}/)
+ assert.ok(users.includes('disabled={setorBloqueado||moduloBloqueado||ehAcaoExclusivaMaster(acao.id)}'))
  assert.match(context,/removerTetoLegadoConsulta/)
  assert.match(context,/ehAcaoExclusivaMaster\(acao.id\)/)
  console.log('PASS: Master exclusivo na UI, rotas e servidor; ações sensíveis individuais e permissões antigas preservadas.')
