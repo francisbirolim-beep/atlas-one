@@ -756,6 +756,7 @@ export default function UsuariosSenhasPage() {
                                             <div className="min-w-0 pr-2">
                                               <p className="text-[11px] font-semibold text-slate-700">{acao.label}</p>
                                               <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{acao.descricao}</p>
+                                              {exigeSelecaoIndividual(acao.id)&&!ehAcaoExclusivaMaster(acao.id)&&<p className="mt-1 text-[10px] font-semibold text-amber-700">Ação crítica: libere individualmente. Acessos antigos podem estar herdados.</p>}
                                             </div>
                                             <select disabled={setorBloqueado||moduloBloqueado||ehAcaoExclusivaMaster(acao.id)} aria-label={'3. Ação '+acao.label}
                                               value={nivelAcao(item,acao.id)} onChange={e=>mudarPermissaoAcao(item,acao.id,e.target.value as NivelPermissao)}
