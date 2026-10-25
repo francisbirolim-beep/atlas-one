@@ -5,7 +5,7 @@ require.extensions['.ts']=(mod,filename)=>{
  const source=fs.readFileSync(filename,'utf8')
  mod._compile(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,filename)
 }
-const {opcoesSetorMaster,acaoExigeEdicao,acaoAutorizadaNoModulo}=require('../lib/permissoesModeloMaster.ts')
+const {opcoesSetorMaster,acaoExigeEdicao,acaoAutorizadaNoModulo,nivelModuloSobSetor}=require('../lib/permissoesModeloMaster.ts')
 const {podeAcessarRotaCatalogada}=require('../lib/permissoesRota.ts')
 const {nivelEfetivoAcao}=require('../lib/producaoPermissoes.ts')
 const {montarBlocosPermissao}=require('../lib/permissoesBlocos.ts')
@@ -28,10 +28,16 @@ assert.ok(financeiro,'Bloco financeiro existe')
 const ids=[...new Set(financeiro.itens.map(m=>m.setorId))]
 assert.ok(ids.includes('financeiro')&&ids.includes('caixa-balcao')&&ids.includes('recebimento-vendas'))
 assert.ok(grupos.length>=9,'Regra precisa valer em todos os blocos')
-assert.deepEqual(opcoesSetorMaster('oculto').map(x=>x.valor),['oculto','edicao'])
-assert.deepEqual(opcoesSetorMaster('edicao').map(x=>x.valor),['oculto','edicao'])
-assert.deepEqual(opcoesSetorMaster('consulta').map(x=>x.valor),['oculto','edicao','consulta'],
- 'Consulta antiga pode ser preservada sem ampliar direito de escrita')
+for(const anterior of ['oculto','consulta','edicao']){
+ assert.deepEqual(opcoesSetorMaster(anterior).map(x=>x.valor),['oculto','consulta','edicao'],
+  'O seletor deve SEMPRE mostrar três opções no setor: '+anterior)
+ assert.deepEqual(opcoesSetorMaster(anterior).map(x=>x.label),
+  ['Oculto — sem acesso','Somente consulta','Consulta e edição'])
+}
+assert.equal(nivelModuloSobSetor('consulta','edicao'),'consulta','Setor somente consulta limita módulo de edição')
+assert.equal(nivelModuloSobSetor('oculto','edicao'),'oculto','Setor oculto bloqueia módulo de edição')
+assert.equal(nivelModuloSobSetor('edicao','consulta'),'consulta','Módulo consultar limita setor editável')
+assert.equal(nivelModuloSobSetor('edicao','edicao'),'edicao')
 const consultar={id:'financeiro.contas_pagar.consultar',label:'Consultar contas a pagar',descricao:''}
 const registrar={id:'financeiro.recebimento_vendas.registrar',label:'Registrar recebimento de venda',descricao:''}
 assert.equal(acaoExigeEdicao(consultar),false)
@@ -59,19 +65,23 @@ const contextual=fs.readFileSync('components/system/PermissoesContextuais.tsx','
 const api=fs.readFileSync('app/api/usuarios/acessos-etapas/route.ts','utf8')
 assert.match(users,/Setor completo/)
 assert.match(users,/mudarVisibilidadeBloco/)
-assert.match(fs.readFileSync('lib/permissoesModeloMaster.ts','utf8'),/Setor liberado — escolher módulos/)
+assert.match(fs.readFileSync('lib/permissoesModeloMaster.ts','utf8'),/Somente consulta/)
+assert.match(users,/value={permissoesSetores\[setorId\]/)
+assert.match(users,/opcoesSetorMaster/)
+assert.match(contextual,/opcoesSetorMaster/)
+assert.match(users,/anterior==='oculto'&&nivel!=='oculto'/)
 assert.match(users,/opcoesSetorMaster/)
 assert.match(users,/acaoAutorizadaNoModulo/)
 assert.match(users,/aria-label=\{'Liberar ação '/)
 assert.match(users,/Exclusivo do Master/)
 assert.doesNotMatch(users,/>Editar tudo</)
 assert.doesNotMatch(users,/>Geral: editar</)
-assert.match(users,/if\(anterior==='oculto'&&nivel!=='oculto'\)/)
-assert.match(users,/if\(anterior==='consulta'&&nivel==='edicao'\)/)
+assert.match(users,/anterior==='oculto'&&nivel!=='oculto'/)
+assert.match(users,/anterior==='consulta'&&nivel==='edicao'/)
 assert.match(users,/modulos\[item.id\]=anterior==='consulta'\?'consulta':'oculto'/)
 assert.match(contextual,/opcoesSetorMaster/)
 assert.match(contextual,/acaoAutorizadaNoModulo/)
 assert.match(contextual,/Exclusivo do Master/)
 assert.match(api,/usuario.role!=='master'/)
 assert.match(fs.readFileSync('lib/acessoUsuarioServer.ts','utf8'),/id==='configuracoes'\)return 'oculto'/)
-console.log('PASS: ocultar bloco completo, liberar setor sem ações automáticas, módulo 3 níveis, ação binária e administração exclusiva Master.')
+console.log('PASS: setores sempre com 3 opções, sem herdar escrita oculta, módulo 3 níveis, ação binária e configuração só Master.')
