@@ -10,6 +10,7 @@ import { lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioCo
 import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
 import { montarBlocosPermissao, type ItemPermissaoBloco } from '@/lib/permissoesBlocos'
 import { nivelEfetivoAcao } from '@/lib/producaoPermissoes'
+import { acaoAutorizadaNoModulo, acaoExigeEdicao, opcoesSetorMaster } from '@/lib/permissoesModeloMaster'
 import { nivelCliente360, type RecursoCliente360 } from '@/lib/cliente360Permissoes'
 import { resolverContextoPermissoes } from '@/lib/permissoesContextuais'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
@@ -155,34 +156,43 @@ export default function PermissoesContextuais() {
       if (!atual) return atual
       const anterior=atual.setores[moduloAtual.setorId]||'oculto'
       const modulos={...atual.config.modulos}
-      if(anterior==='oculto'&&nivel!=='oculto'){
+      const acoes={...atual.config.acoes}
+      if(nivel==='edicao'&&anterior!=='edicao'){
         for(const item of modulosDaTela.filter(item=>item.setorId===moduloAtual.setorId)){
-          if(!(item.id in modulos))modulos[item.id]='oculto'
+          modulos[item.id]=anterior==='consulta'?'consulta':'oculto'
+          if(anterior==='consulta')for(const acao of item.acoes){
+            if(!(acao.id in acoes))acoes[acao.id]='consulta'
+          }
         }
       }
       return { ...atual, setores:{...atual.setores,[moduloAtual.setorId]:nivel},
-        config:{...atual.config,modulos} }
+        config:{...atual.config,modulos,acoes} }
     })
     setMensagem('')
   }
 
   function alterarModuloContextual(nivel: NivelPermissao) {
-    if (!moduloAtual) return
-    setRascunho(atual => atual ? {
-      ...atual, config:{...atual.config,
-        modulos:{...atual.config.modulos,[moduloAtual.id]:nivel},
-        acoes:{...atual.config.acoes,...Object.fromEntries(moduloAtual.acoes.map(a=>[a.id,nivel]))},
-      },
-    } : atual)
+    if (!moduloAtual || moduloAtual.id==='configuracoes') return
+    setRascunho(atual => {
+      if(!atual)return atual
+      const anterior=atual.config.modulos?.[moduloAtual.id]||atual.setores[moduloAtual.setorId]||'oculto'
+      const acoes={...atual.config.acoes}
+      if(anterior==='oculto'&&nivel!=='oculto')for(const acao of moduloAtual.acoes)acoes[acao.id]='oculto'
+      else if(anterior==='consulta'&&nivel==='edicao')for(const acao of moduloAtual.acoes){
+        if(!(acao.id in acoes))acoes[acao.id]='consulta'
+      }
+      return {...atual,config:{...atual.config,
+        modulos:{...atual.config.modulos,[moduloAtual.id]:nivel},acoes}}
+    })
     setMensagem('')
   }
 
-  function alterarAcao(idAcao: string, nivel: NivelPermissao) {
-    if(!moduloAtual)return
+  function alterarAcao(idAcao: string, permitido: boolean) {
+    if(!moduloAtual || moduloAtual.id==='configuracoes')return
     setRascunho(atual => {
       if(!atual || (atual.setores[moduloAtual.setorId]||'oculto')==='oculto')return atual
       if((atual.config.modulos?.[moduloAtual.id]||atual.setores[moduloAtual.setorId])==='oculto')return atual
-      return {...atual,config:{...atual.config,acoes:{...atual.config.acoes,[idAcao]:nivel}}}
+      return {...atual,config:{...atual.config,acoes:{...atual.config.acoes,[idAcao]:permitido?'edicao':'oculto'}}}
     })
     setMensagem('')
   }
@@ -310,33 +320,35 @@ export default function PermissoesContextuais() {
                             <div className="rounded-xl border border-slate-200">
                               <div className="space-y-3 border-b bg-slate-50 px-3 py-3">
                                 <p className="text-sm font-semibold">{moduloAtual.label}</p>
-                                <p className="text-xs text-slate-500">1. O setor inteiro precisa estar liberado. 2. Libere o módulo/etapa. 3. Escolha cada ação.</p>
+                                <p className="text-xs text-slate-500">1. O Master libera o setor. 2. Escolhe consulta ou consulta e edição em cada módulo. 3. Autoriza ou bloqueia cada ação individualmente.</p>
                                 <label className="block text-xs font-semibold">1. Setor
                                   <select value={rascunho.setores[moduloAtual.setorId]||'oculto'}
                                     onChange={e=>alterarSetorContextual(e.target.value as NivelPermissao)}
                                     className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs">
-                                    {NIVEIS.map(n=><option key={n.valor} value={n.valor}>{n.label}</option>)}
+                                    {opcoesSetorMaster(rascunho.setores[moduloAtual.setorId]||'oculto').map(n=><option key={n.valor} value={n.valor}>{n.label}</option>)}
                                   </select>
                                 </label>
                                 <label className="block text-xs font-semibold">2. Módulo / etapa
-                                  <select disabled={(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
-                                    value={rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto'}
+                                  <select disabled={moduloAtual.id==='configuracoes'||(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
+                                    value={moduloAtual.id==='configuracoes'?'oculto':rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto'}
                                     onChange={e=>alterarModuloContextual(e.target.value as NivelPermissao)}
                                     className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs disabled:opacity-50">
                                     {NIVEIS.map(n=><option key={n.valor} value={n.valor}>{n.label}</option>)}
                                   </select>
                                 </label>
                               </div>
+                              {moduloAtual.id==='configuracoes'&&<p className="px-3 py-3 text-xs font-semibold text-violet-800">Exclusivo do Master. Não é possível liberar configurações do Atlas para funcionários.</p>}
                               {moduloAtual.acoes.map(acao => (
                                 <label key={acao.id} className="flex flex-col gap-2 border-b border-slate-100 px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
                                   <span className="min-w-0"><span className="block text-sm font-medium">{acao.label}</span><span className="mt-0.5 block text-xs text-slate-500">{acao.descricao}</span></span>
-                                  <select aria-label={'3. Ação '+acao.label}
-                                    disabled={(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'||(rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
-                                    value={nivelEfetivoAcao('funcionario',rascunho.setores,rascunho.config,moduloAtual.setorId,acao.id)}
-                                    onChange={evento => alterarAcao(acao.id, evento.target.value as NivelPermissao)}
-                                    className="w-full shrink-0 rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs disabled:opacity-50 sm:w-44">
-                                    {NIVEIS.map(nivel => <option key={nivel.valor} value={nivel.valor}>{nivel.label}</option>)}
-                                  </select>
+                                  <label className="flex shrink-0 items-center gap-2 text-xs font-semibold text-slate-600">
+                                    <input type="checkbox" aria-label={'Liberar ação '+acao.label}
+                                      disabled={moduloAtual.id==='configuracoes'||(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'||(rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'||((rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId])==='consulta'&&acaoExigeEdicao(acao))}
+                                      checked={acaoAutorizadaNoModulo(acao,nivelEfetivoAcao('funcionario',rascunho.setores,rascunho.config,moduloAtual.setorId,acao.id))}
+                                      onChange={evento => alterarAcao(acao.id,evento.target.checked)}
+                                      className="h-4 w-4 accent-indigo-700 disabled:opacity-40" />
+                                    {acaoAutorizadaNoModulo(acao,nivelEfetivoAcao('funcionario',rascunho.setores,rascunho.config,moduloAtual.setorId,acao.id))?'Liberada':'Bloqueada'}
+                                  </label>
                                 </label>
                               ))}
                             </div>

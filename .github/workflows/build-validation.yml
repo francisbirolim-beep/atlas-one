@@ -101,5 +101,8 @@ jobs:
       - name: IA and reports authorization regression
         run: npm run test:ia-relatorios
 
+      - name: Master-only sector and module permission policy
+        run: npm run test:permissoes-regra-master
+
       - name: Build
         run: npm run build

@@ -34,6 +34,7 @@
     "postinstall": "node scripts/patch-baileys-pairing.mjs",
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs",
     "test:supabase-terminadores": "node scripts/test-supabase-terminadores-historicos.cjs",
+    "test:permissoes-regra-master": "node scripts/test-permissoes-modelo-master-20261024.cjs && node scripts/test-permissoes-hierarquia-20261024.cjs && node scripts/test-permissoes-contextuais.cjs",
     "test:cliente360-permissoes": "node scripts/test-cliente360-permissoes.cjs",
     "test:ia-relatorios": "node scripts/test-ia-relatorios-permissoes.cjs",
     "test:wvetro-validacao-item": "node scripts/test-wvetro-validacao-item.cjs",

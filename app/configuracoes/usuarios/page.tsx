@@ -48,6 +48,7 @@ import IARelatoriosPermissoesEditor from '@/components/IARelatoriosPermissoesEdi
 import {IDS_IA_RELATORIOS} from '@/lib/iaRelatoriosAcoes'
 import Cliente360PermissoesEditor from '@/components/Cliente360PermissoesEditor'
 import { matrizCompletaCliente360 } from '@/lib/cliente360Permissoes'
+import { acaoAutorizadaNoModulo, acaoExigeEdicao, opcoesSetorMaster } from '@/lib/permissoesModeloMaster'
 import WhatsAppUsuarioPermissoes from '@/components/WhatsAppUsuarioPermissoes'
 import KanbanColunasPermissoesEditor from '@/components/KanbanColunasPermissoesEditor'
 
@@ -261,6 +262,8 @@ export default function UsuariosSenhasPage() {
   const pesoNivel: Record<NivelPermissao, number> = { oculto: 0, consulta: 1, edicao: 2 }
 
   function nivelModulo(item: ItemPermissaoBloco): NivelPermissao {
+    // Configuração estrutural do Atlas é uma autoridade reservada ao Master.
+    if(item.id==='configuracoes')return 'oculto'
     const setor=permissoesSetores[item.setorId]||'oculto'
     if(setor==='oculto')return 'oculto'
     const modulo=acessoConfig.modulos?.[item.id]||setor
@@ -279,13 +282,19 @@ export default function UsuariosSenhasPage() {
   // Permissões antigas que já tinham setor aberto continuam herdando a regra.
   function mudarPermissaoSetor(setorId: string, nivel: NivelPermissao) {
     const anterior=permissoesSetores[setorId]||'oculto'
-    if(anterior==='oculto'&&nivel!=='oculto'){
+    if(nivel==='edicao'&&anterior!=='edicao'){
       setAcessoConfig(prev=>{
-        const modulos={...prev.modulos}
+        const modulos={...prev.modulos}, acoes={...prev.acoes}
         for(const item of blocosPermissoes.flatMap(b=>b.itens).filter(m=>m.setorId===setorId)){
-          if(!(item.id in modulos))modulos[item.id]='oculto'
+          // Abrir setor oculto não restaura direitos antigos silenciosamente.
+          // Ao migrar um setor legado em consulta, preservar esse teto até a
+          // escolha explícita de módulos e ações pelo Master.
+          modulos[item.id]=anterior==='consulta'?'consulta':'oculto'
+          if(anterior==='consulta')for(const acao of item.acoes){
+            if(!(acao.id in acoes))acoes[acao.id]='consulta'
+          }
         }
-        return {...prev,modulos}
+        return {...prev,modulos,acoes}
       })
     }
     setPermissoesSetores(prev=>({...prev,[setorId]:nivel}))
@@ -293,17 +302,36 @@ export default function UsuariosSenhasPage() {
 
   // Nível 2: liberar módulo não eleva automaticamente o setor nem seus irmãos.
   function aplicarNivelModulo(item: ItemPermissaoBloco, nivel: NivelPermissao) {
+    if(item.id==='configuracoes')return
     if((permissoesSetores[item.setorId]||'oculto')==='oculto')return
-    setAcessoConfig(prev=>({
-      ...prev, modulos:{...prev.modulos,[item.id]:nivel},
-      acoes:{...prev.acoes,...Object.fromEntries(item.acoes.map(acao=>[acao.id,nivel]))},
-    }))
+    const anterior=nivelModulo(item)
+    setAcessoConfig(prev=>{
+      const acoes={...prev.acoes}
+      if(anterior==='oculto'&&nivel!=='oculto'){
+        // Módulo recém-aberto começa com ações bloqueadas; Master libera cada
+        // ação individualmente. Não criar permissão de escrita por herança.
+        for(const acao of item.acoes)acoes[acao.id]='oculto'
+      }else if(anterior==='consulta'&&nivel==='edicao'){
+        // Consulta legada não vira edição de todas as ações automaticamente.
+        for(const acao of item.acoes)if(!(acao.id in acoes))acoes[acao.id]='consulta'
+      }
+      return {...prev,modulos:{...prev.modulos,[item.id]:nivel},acoes}
+    })
   }
 
   // Nível 3: uma ação individual não modifica teto de setor/módulo.
-  function mudarPermissaoAcao(item: ItemPermissaoBloco, acaoId: string, nivel: NivelPermissao) {
-    if(nivelModulo(item)==='oculto')return
-    setAcessoConfig(prev=>({...prev,acoes:{...prev.acoes,[acaoId]:nivel}}))
+  function mudarPermissaoAcao(item: ItemPermissaoBloco, acaoId: string, permitido: boolean) {
+    if(item.id==='configuracoes'||nivelModulo(item)==='oculto')return
+    setAcessoConfig(prev=>({...prev,acoes:{...prev.acoes,[acaoId]:permitido?'edicao':'oculto'}}))
+  }
+
+  // Uma área como Financeiro possui vários setores internos no cadastro;
+  // o comando do bloco inteiro deve alterar TODOS eles, sem liberar ações.
+  function mudarVisibilidadeBloco(blocoId: BlocoPermissaoId, liberar: boolean) {
+    const bloco=blocosPermissoes.find(b=>b.id===blocoId)
+    if(!bloco)return
+    const nivel: NivelPermissao=liberar?'edicao':'oculto'
+    for(const setorId of new Set(bloco.itens.map(item=>item.setorId)))mudarPermissaoSetor(setorId,nivel)
   }
 
   function aplicarNivelBloco(blocoId: BlocoPermissaoId, nivel: NivelPermissao) {
@@ -630,12 +658,10 @@ export default function UsuariosSenhasPage() {
                   ) : (
                     <div className="space-y-4">
                       <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
-                        <p className="text-xs font-semibold text-blue-900">Aplicar em todos os blocos</p>
-                        <p className="mt-0.5 text-[11px] text-blue-700">Três níveis independentes: 1. setor (visível ou bloqueado); 2. módulo/etapa; 3. ação (consultar, editar ou executar). Os botões abaixo alteram tudo de propósito.</p>
+                        <p className="text-xs font-semibold text-blue-900">Acesso administrado exclusivamente pelo Master</p>
+                        <p className="mt-0.5 text-[11px] text-blue-700">O Master escolhe quais setores abrir. Cada módulo pode ficar oculto, em consulta ou em consulta e edição. Cada ação é liberada ou bloqueada individualmente; configuração de acessos continua exclusiva do Master.</p>
                         <div className="mt-2 flex flex-wrap gap-2">
-                          <button type="button" onClick={()=>aplicarNivelTodos('edicao')} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[11px] font-semibold text-white">Editar tudo</button>
-                          <button type="button" onClick={()=>aplicarNivelTodos('consulta')} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-blue-700">Consultar tudo</button>
-                          <button type="button" onClick={()=>aplicarNivelTodos('oculto')} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600">Ocultar tudo</button>
+                          <button type="button" onClick={()=>aplicarNivelTodos('oculto')} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600">Ocultar todos os setores e ações</button>
                         </div>
                       </div>
 
@@ -647,6 +673,10 @@ export default function UsuariosSenhasPage() {
                         const edicao = acoesBloco.filter(n => n === 'edicao').length
                         const consulta = acoesBloco.filter(n => n === 'consulta').length
                         const ocultos = acoesBloco.length - edicao - consulta
+                        const setoresBloco=[...new Set(bloco.itens.map(item=>item.setorId))]
+                        const estadosBloco=setoresBloco.map(id=>permissoesSetores[id]||'oculto')
+                        const visibilidadeBloco=estadosBloco.every(n=>n==='oculto')?'oculto':
+                          estadosBloco.every(n=>n==='edicao')?'edicao':'parcial'
                         return (
                           <div key={bloco.id} className="overflow-hidden rounded-xl border border-slate-200">
                             <div className="bg-slate-50 p-3">
@@ -659,19 +689,24 @@ export default function UsuariosSenhasPage() {
                                   <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{bloco.descricao}</p>
                                   <p className="mt-1 text-[10px] text-slate-400">{edicao} editar/executar · {consulta} consultar · {ocultos} sem acesso</p>
                                 </button>
-                                <div className="flex shrink-0 flex-col gap-1">
-                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'edicao')} className="rounded-md bg-blue-700 px-2 py-1 text-[10px] font-semibold text-white">Geral: editar</button>
-                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'consulta')} className="rounded-md border border-blue-200 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700">Geral: consultar</button>
-                                  <button type="button" onClick={()=>aplicarNivelBloco(bloco.id,'oculto')} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold text-slate-500">Geral: ocultar</button>
-                                </div>
+                                <label className="flex shrink-0 flex-col gap-1 text-[10px] font-semibold text-slate-600">
+                                  Setor completo
+                                  <select aria-label={'Setor completo '+bloco.label} value={visibilidadeBloco}
+                                    onChange={e=>mudarVisibilidadeBloco(bloco.id,e.target.value==='edicao')}
+                                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[11px] text-slate-800">
+                                    <option value="oculto">Oculto</option>
+                                    <option value="edicao">Liberado</option>
+                                    {visibilidadeBloco==='parcial'&&<option value="parcial" disabled>Parcial (regra anterior)</option>}
+                                  </select>
+                                </label>
                               </div>
                             </div>
 
                             {aberto && (
                               <div className="space-y-3 border-t border-slate-100 p-3">
                                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-                                  <p className="text-xs font-bold text-blue-900">1. Liberar ou ocultar o setor inteiro</p>
-                                  <p className="mt-1 text-[11px] text-blue-800">Sem acesso: nenhum módulo, etapa ou ação deste setor fica disponível. Libere o setor primeiro; depois defina os módulos e ações.</p>
+                                  <p className="text-xs font-bold text-blue-900">1. Detalhar os setores internos de {bloco.label}</p>
+                                  <p className="mt-1 text-[11px] text-blue-800">Se ocultar o setor, nenhum módulo aparece para o funcionário. Liberar o setor não libera automaticamente módulos nem ações. O Master define cada acesso abaixo.</p>
                                   <div className="mt-2 space-y-2">
                                     {[...new Set(bloco.itens.map(item=>item.setorId))].map(setorId=>(
                                       <label key={setorId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2.5 text-xs">
@@ -679,9 +714,7 @@ export default function UsuariosSenhasPage() {
                                         <select aria-label={'Acesso ao setor '+setorId} value={permissoesSetores[setorId]||'oculto'}
                                           onChange={e=>mudarPermissaoSetor(setorId,e.target.value as NivelPermissao)}
                                           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
-                                          <option value="oculto">Setor oculto — sem acesso</option>
-                                          <option value="consulta">Setor liberado — consulta</option>
-                                          <option value="edicao">Setor liberado — configurar ações</option>
+                                          {opcoesSetorMaster(permissoesSetores[setorId]||'oculto').map(op=><option key={op.valor} value={op.valor}>{op.label}</option>)}
                                         </select>
                                       </label>
                                     ))}
@@ -701,13 +734,14 @@ export default function UsuariosSenhasPage() {
                                             <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{item.descricao}</p>
                                           </div>
                                           <label className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-slate-400">2. Módulo / etapa
-                                            <select disabled={setorBloqueado} value={geralModulo} onChange={e=>aplicarNivelModulo(item,e.target.value as NivelPermissao)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs normal-case tracking-normal text-slate-700 disabled:opacity-50">
+                                            <select disabled={setorBloqueado||item.id==='configuracoes'} value={item.id==='configuracoes'?'oculto':geralModulo} onChange={e=>aplicarNivelModulo(item,e.target.value as NivelPermissao)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs normal-case tracking-normal text-slate-700 disabled:opacity-50">
                                               <option value="oculto">Sem acesso</option>
                                               <option value="consulta">Consultar</option>
                                               <option value="edicao">Editar/Executar</option>
                                             </select>
                                           </label>
                                         </div>
+                                        {item.id==='configuracoes'&&<p className="mt-2 text-[11px] font-semibold text-violet-700">Exclusivo do Master — configurações, integrações e gerenciamento de acessos não podem ser delegados.</p>}
 
                                         {item.escopo === 'crm' && niveis.some(n => n !== 'oculto') && (
                                           <label className="mt-3 block rounded-lg bg-amber-50 p-2.5 text-[11px] font-medium text-amber-900">
@@ -727,13 +761,14 @@ export default function UsuariosSenhasPage() {
                                               <p className="text-[11px] font-semibold text-slate-700">{acao.label}</p>
                                               <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{acao.descricao}</p>
                                             </div>
-                                            <select disabled={setorBloqueado||moduloBloqueado} aria-label={'3. Ação '+acao.label}
-                                              value={nivelAcao(item,acao.id)} onChange={e=>mudarPermissaoAcao(item,acao.id,e.target.value as NivelPermissao)}
-                                              className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] disabled:opacity-40">
-                                              <option value="oculto">Sem acesso</option>
-                                              <option value="consulta">Consultar</option>
-                                              <option value="edicao">Editar/Executar</option>
-                                            </select>
+                                            <label className="flex shrink-0 items-center gap-2 text-[11px] font-semibold text-slate-600">
+                                              <input type="checkbox" aria-label={'Liberar ação '+acao.label}
+                                                checked={acaoAutorizadaNoModulo(acao,nivelAcao(item,acao.id))}
+                                                disabled={setorBloqueado||moduloBloqueado||item.id==='configuracoes'||(nivelModulo(item)==='consulta'&&acaoExigeEdicao(acao))}
+                                                onChange={e=>mudarPermissaoAcao(item,acao.id,e.target.checked)}
+                                                className="h-4 w-4 rounded border-slate-300 accent-blue-700 disabled:opacity-40" />
+                                              {acaoAutorizadaNoModulo(acao,nivelAcao(item,acao.id))?'Liberada':'Bloqueada'}
+                                            </label>
                                           </div>
                                         ))}
                                       </div>
