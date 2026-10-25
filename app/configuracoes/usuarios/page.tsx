@@ -558,6 +558,14 @@ export default function UsuariosSenhasPage() {
 
               <div>
                 <div className="mb-3 flex items-center gap-2"><LayoutDashboard size={17} className="text-emerald-600"/><div><p className="text-sm font-semibold text-slate-800">Tela inicial</p><p className="text-xs text-slate-500">Marque os módulos que essa pessoa deve enxergar na Home.</p></div></div>
+                <label className="mb-3 block rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">Página ao entrar no Atlas
+                  <select aria-label="Página inicial do novo usuário" value={novaHome.paginaInicial||'padrao'} onChange={e=>setNovaHome({...novaHome,paginaInicial:e.target.value as HomeUsuarioConfig['paginaInicial']})} className="mt-2 block w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm text-slate-800">
+                    <option value="padrao">Home tradicional — tarefas e agenda</option>
+                    <option value="visao-geral-projetos">Visão Geral de Projetos</option>
+                    <option value="relatorios-instalacoes">Relatório de Instalações</option>
+                  </select>
+                  <span className="mt-1 block text-[11px] font-normal">Para funcionários, libere a permissão de consulta ao painel após criar o usuário. Sem permissão, permanece na Home tradicional.</span>
+                </label>
                 <div className="mb-5 rounded-xl border border-violet-200 bg-violet-50 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Dashboards permitidos</p>
                   <div className="mt-2 flex flex-wrap gap-2">
