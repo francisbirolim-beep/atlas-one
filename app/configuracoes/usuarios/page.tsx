@@ -34,7 +34,7 @@ import {
 } from '@/lib/homeUsuario'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
-import { montarBlocosPermissao, type BlocoPermissaoId, type ItemPermissaoBloco, fallbackAcaoPermissao } from '@/lib/permissoesBlocos'
+import { montarBlocosPermissao, type BlocoPermissaoId, type ItemPermissaoBloco, fallbackAcaoPermissao, ehAcaoExclusivaMaster, ehModuloExclusivoMaster, ehSetorExclusivoMaster, exigeSelecaoIndividual } from '@/lib/permissoesBlocos'
 import { acessoUsuarioPadrao, lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import {
   CADASTROS_360,
@@ -262,14 +262,14 @@ export default function UsuariosSenhasPage() {
 
   function nivelModulo(item: ItemPermissaoBloco): NivelPermissao {
     const setor=permissoesSetores[item.setorId]||'oculto'
-    if(setor==='oculto')return 'oculto'
+    if(setor==='oculto'||ehModuloExclusivoMaster(item.id))return 'oculto'
     const modulo=acessoConfig.modulos?.[item.id]||setor
     return pesoNivel[modulo]<pesoNivel[setor]?modulo:setor
   }
 
   function nivelAcao(item: ItemPermissaoBloco, acaoId: string): NivelPermissao {
     const modulo=nivelModulo(item)
-    if(modulo==='oculto')return 'oculto'
+    if(modulo==='oculto'||ehAcaoExclusivaMaster(acaoId))return 'oculto'
     const n=acessoConfig.acoes?.[acaoId]||fallbackAcaoPermissao(acaoId,modulo)
     return pesoNivel[n]<pesoNivel[modulo]?n:modulo
   }
@@ -278,6 +278,7 @@ export default function UsuariosSenhasPage() {
   // Ao abrir setor antes oculto, iniciar seus módulos como ocultos por padrão.
   // Permissões antigas que já tinham setor aberto continuam herdando a regra.
   function mudarPermissaoSetor(setorId: string, nivel: NivelPermissao) {
+    if(ehSetorExclusivoMaster(setorId))return
     const anterior=permissoesSetores[setorId]||'oculto'
     if(anterior==='oculto'&&nivel!=='oculto'){
       setAcessoConfig(prev=>{
@@ -291,41 +292,68 @@ export default function UsuariosSenhasPage() {
     setPermissoesSetores(prev=>({...prev,[setorId]:nivel}))
   }
 
+  // Migração segura: setor antigo com teto de consulta mantém todos os módulos
+  // no máximo como consulta até o Master escolher individualmente uma edição.
+  function retirarLimiteAntigoDeConsulta(setorId: string) {
+    if((permissoesSetores[setorId]||'oculto')!=='consulta'||ehSetorExclusivoMaster(setorId))return
+    setAcessoConfig(prev=>{
+      const modulos={...prev.modulos}
+      for(const item of blocosPermissoes.flatMap(b=>b.itens).filter(m=>m.setorId===setorId)){
+        if(modulos[item.id]!=='oculto')modulos[item.id]='consulta'
+      }
+      return {...prev,modulos}
+    })
+    setPermissoesSetores(prev=>({...prev,[setorId]:'edicao'}))
+  }
+
+  // Liberações em lote nunca incluem novas operações críticas ou administrativas.
+  // Ações sensíveis já configuradas individualmente permanecem como estavam.
+  function acoesEmLote(itens:ItemPermissaoBloco[], nivel:NivelPermissao,
+    atuais:Record<string,NivelPermissao>):Record<string,NivelPermissao> {
+    const alteradas={...atuais}
+    for(const item of itens)for(const acao of item.acoes){
+      if(ehAcaoExclusivaMaster(acao.id)){alteradas[acao.id]='oculto';continue}
+      if(nivel==='edicao'&&exigeSelecaoIndividual(acao.id)){
+        if(!(acao.id in atuais))alteradas[acao.id]='oculto'
+        continue
+      }
+      alteradas[acao.id]=nivel
+    }
+    return alteradas
+  }
+
   // Nível 2: liberar módulo não eleva automaticamente o setor nem seus irmãos.
   function aplicarNivelModulo(item: ItemPermissaoBloco, nivel: NivelPermissao) {
-    if((permissoesSetores[item.setorId]||'oculto')==='oculto')return
+    if((permissoesSetores[item.setorId]||'oculto')==='oculto'||ehModuloExclusivoMaster(item.id))return
     setAcessoConfig(prev=>({
       ...prev, modulos:{...prev.modulos,[item.id]:nivel},
-      acoes:{...prev.acoes,...Object.fromEntries(item.acoes.map(acao=>[acao.id,nivel]))},
+      acoes:acoesEmLote([item],nivel,prev.acoes),
     }))
   }
 
   // Nível 3: uma ação individual não modifica teto de setor/módulo.
   function mudarPermissaoAcao(item: ItemPermissaoBloco, acaoId: string, nivel: NivelPermissao) {
-    if(nivelModulo(item)==='oculto')return
+    if(nivelModulo(item)==='oculto'||ehAcaoExclusivaMaster(acaoId))return
     setAcessoConfig(prev=>({...prev,acoes:{...prev.acoes,[acaoId]:nivel}}))
   }
 
   function aplicarNivelBloco(blocoId: BlocoPermissaoId, nivel: NivelPermissao) {
     const bloco = blocosPermissoes.find(item => item.id === blocoId)
     if (!bloco) return
-    // Ação geral é uma escolha explícita do Master.
-    const alteracoesAcoes=Object.fromEntries(bloco.itens.flatMap(item=>item.acoes.map(acao=>[acao.id,nivel]))) as Record<string,NivelPermissao>
-    const modulos=Object.fromEntries(bloco.itens.map(item=>[item.id,nivel])) as Record<string,NivelPermissao>
-    setAcessoConfig(prev=>({...prev,modulos:{...prev.modulos,...modulos},acoes:{...prev.acoes,...alteracoesAcoes}}))
-    setPermissoesSetores(prev=>({...prev,...Object.fromEntries(bloco.itens.map(item=>[item.setorId,nivel]))}))
+    const modulos=Object.fromEntries(bloco.itens.map(item=>[item.id,ehModuloExclusivoMaster(item.id)?'oculto':nivel])) as Record<string,NivelPermissao>
+    setAcessoConfig(prev=>({...prev,modulos:{...prev.modulos,...modulos},acoes:acoesEmLote(bloco.itens,nivel,prev.acoes)}))
+    setPermissoesSetores(prev=>({...prev,...Object.fromEntries(bloco.itens.map(item=>[item.setorId,ehSetorExclusivoMaster(item.setorId)?'oculto':nivel]))}))
   }
 
   function aplicarNivelTodos(nivel: NivelPermissao) {
     const itens=blocosPermissoes.flatMap(b=>b.itens)
-    const modulos=Object.fromEntries(itens.map(item=>[item.id,nivel])) as Record<string,NivelPermissao>
-    const acoes=Object.fromEntries(itens.flatMap(item=>item.acoes.map(acao=>[acao.id,nivel]))) as Record<string,NivelPermissao>
+    const modulos=Object.fromEntries(itens.map(item=>[item.id,ehModuloExclusivoMaster(item.id)?'oculto':nivel])) as Record<string,NivelPermissao>
     setAcessoConfig(prev=>({
       ...prev, cliente360:matrizCompletaCliente360(nivel),
       modulos:{...prev.modulos,...modulos},
-      acoes:{...prev.acoes,...acoes,...Object.fromEntries(IDS_IA_RELATORIOS.map(id=>[id,nivel]))},
+      acoes:{...acoesEmLote(itens,nivel,prev.acoes),...Object.fromEntries(IDS_IA_RELATORIOS.map(id=>[id,nivel]))},
     }))
-    setPermissoesSetores(prev=>({...prev,...Object.fromEntries(itens.map(item=>[item.setorId,nivel]))}))
+    setPermissoesSetores(prev=>({...prev,...Object.fromEntries(itens.map(item=>[item.setorId,ehSetorExclusivoMaster(item.setorId)?'oculto':nivel]))}))
   }
 
   function alternarBloco(blocoId: BlocoPermissaoId) {
@@ -631,7 +659,7 @@ export default function UsuariosSenhasPage() {
                     <div className="space-y-4">
                       <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
                         <p className="text-xs font-semibold text-blue-900">Aplicar em todos os blocos</p>
-                        <p className="mt-0.5 text-[11px] text-blue-700">Três níveis independentes: 1. setor (visível ou bloqueado); 2. módulo/etapa; 3. ação (consultar, editar ou executar). Os botões abaixo alteram tudo de propósito.</p>
+                        <p className="mt-0.5 text-[11px] text-blue-700">Setor oculto ou liberado; em cada módulo: sem acesso, consultar ou consultar e editar. Ações críticas exigem liberação individual, mesmo ao usar os botões de edição geral.</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <button type="button" onClick={()=>aplicarNivelTodos('edicao')} className="rounded-lg bg-blue-700 px-3 py-1.5 text-[11px] font-semibold text-white">Editar tudo</button>
                           <button type="button" onClick={()=>aplicarNivelTodos('consulta')} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-blue-700">Consultar tudo</button>
@@ -676,13 +704,15 @@ export default function UsuariosSenhasPage() {
                                     {[...new Set(bloco.itens.map(item=>item.setorId))].map(setorId=>(
                                       <label key={setorId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2.5 text-xs">
                                         <span className="font-semibold">{setores.find(setor=>setor.id===setorId)?.nome||setorId}</span>
-                                        <select aria-label={'Acesso ao setor '+setorId} value={permissoesSetores[setorId]||'oculto'}
+                                        <select aria-label={'Acesso ao setor '+setorId} value={ehSetorExclusivoMaster(setorId)||!permissoesSetores[setorId]||permissoesSetores[setorId]==='oculto'?'oculto':'edicao'}
+                                          disabled={ehSetorExclusivoMaster(setorId)}
                                           onChange={e=>mudarPermissaoSetor(setorId,e.target.value as NivelPermissao)}
                                           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
                                           <option value="oculto">Setor oculto — sem acesso</option>
-                                          <option value="consulta">Setor liberado — consulta</option>
-                                          <option value="edicao">Setor liberado — configurar ações</option>
+                                          <option value="edicao">Setor liberado — definir módulos e ações</option>
                                         </select>
+                                        {ehSetorExclusivoMaster(setorId) && <span className="text-[10px] text-slate-500">Configurações e automações: exclusivo do Master.</span>}
+                                        {permissoesSetores[setorId]==='consulta' && <button type="button" onClick={()=>retirarLimiteAntigoDeConsulta(setorId)} className="text-[10px] text-blue-700 underline">Remover limite antigo de consulta sem liberar ações</button>}
                                       </label>
                                     ))}
                                   </div>
@@ -701,7 +731,7 @@ export default function UsuariosSenhasPage() {
                                             <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{item.descricao}</p>
                                           </div>
                                           <label className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-slate-400">2. Módulo / etapa
-                                            <select disabled={setorBloqueado} value={geralModulo} onChange={e=>aplicarNivelModulo(item,e.target.value as NivelPermissao)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs normal-case tracking-normal text-slate-700 disabled:opacity-50">
+                                            <select disabled={setorBloqueado||ehModuloExclusivoMaster(item.id)} value={ehModuloExclusivoMaster(item.id)?'oculto':geralModulo} onChange={e=>aplicarNivelModulo(item,e.target.value as NivelPermissao)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs normal-case tracking-normal text-slate-700 disabled:opacity-50">
                                               <option value="oculto">Sem acesso</option>
                                               <option value="consulta">Consultar</option>
                                               <option value="edicao">Editar/Executar</option>
@@ -726,14 +756,16 @@ export default function UsuariosSenhasPage() {
                                             <div className="min-w-0 pr-2">
                                               <p className="text-[11px] font-semibold text-slate-700">{acao.label}</p>
                                               <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{acao.descricao}</p>
+                                              {exigeSelecaoIndividual(acao.id)&&!ehAcaoExclusivaMaster(acao.id)&&<p className="mt-1 text-[10px] font-semibold text-amber-700">Ação crítica: libere individualmente. Acessos antigos podem estar herdados.</p>}
                                             </div>
-                                            <select disabled={setorBloqueado||moduloBloqueado} aria-label={'3. Ação '+acao.label}
+                                            <select disabled={setorBloqueado||moduloBloqueado||ehAcaoExclusivaMaster(acao.id)} aria-label={'3. Ação '+acao.label}
                                               value={nivelAcao(item,acao.id)} onChange={e=>mudarPermissaoAcao(item,acao.id,e.target.value as NivelPermissao)}
                                               className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] disabled:opacity-40">
                                               <option value="oculto">Sem acesso</option>
                                               <option value="consulta">Consultar</option>
                                               <option value="edicao">Editar/Executar</option>
                                             </select>
+                                            {ehAcaoExclusivaMaster(acao.id)&&<span className="text-[10px] font-semibold text-slate-500">Somente Master</span>}
                                           </div>
                                         ))}
                                       </div>

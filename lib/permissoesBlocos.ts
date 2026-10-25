@@ -21,6 +21,25 @@ export const ACOES_CMV_DELEGACAO_EXPLICITA = [
  'financeiro.cmv.recebimentos_cancelar_terceiros',
  'financeiro.cmv.recebimentos_conferir_terceiros',
 ] as const
+// Configuração estrutural e gestão de usuários são exclusivas do Master.
+// Não confundir edição operacional com administração de permissões, etapas ou integrações.
+export function ehAcaoExclusivaMaster(acaoId: string): boolean {
+  return acaoId.startsWith('admin.config.') || acaoId.startsWith('admin.automacoes.') || acaoId === 'producao.geral.etapas'
+}
+export function ehModuloExclusivoMaster(moduloId: string): boolean {
+  return moduloId === 'configuracoes' || moduloId === 'automacoes'
+}
+export function ehSetorExclusivoMaster(setorId: string): boolean {
+  return setorId === 'configuracoes' || setorId === 'workflow-automacoes'
+}
+
+// Ações críticas nunca são abertas automaticamente por comandos de liberação em lote.
+// Autorizações antigas continuam respeitadas até o Master fazer uma escolha explícita.
+export function exigeSelecaoIndividual(acaoId: string): boolean {
+  return ehAcaoExclusivaMaster(acaoId) || ACOES_CMV_DELEGACAO_EXPLICITA.some(id => id === acaoId) ||
+    acaoId === 'financeiro.recebimento_vendas.registrar' ||
+    acaoId.split('.').some(parte => /^(aprovar|cancelar|excluir|restaurar|liberar|pagar|receber|reabrir|sangria|faturar|validar)(?:_|$)/.test(parte))
+}
 const DELEGACOES_EXPLICITAS = new Set<string>(ACOES_CMV_DELEGACAO_EXPLICITA)
 export function fallbackAcaoPermissao(id:string,setor:NivelPermissao):NivelPermissao {
  return DELEGACOES_EXPLICITAS.has(id) ? 'oculto' : setor

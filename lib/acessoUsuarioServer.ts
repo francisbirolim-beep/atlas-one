@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './supabaseAdmin'
-import { moduloDaAcaoPermissao } from './permissoesBlocos'
+import { moduloDaAcaoPermissao, ehAcaoExclusivaMaster } from './permissoesBlocos'
 
 export type NivelAcessoServer = 'oculto' | 'consulta' | 'edicao'
 
@@ -39,6 +39,7 @@ export async function nivelAcaoUsuarioServer(params:{
   empresaId?:string
 }):Promise<NivelAcessoServer> {
   if(params.role==='master') return 'edicao'
+  if(ehAcaoExclusivaMaster(params.acaoId)) return 'oculto'
 
   let q=supabaseAdmin.from('permissoes').select('nivel').eq('usuario_id',params.usuarioId).eq('setor_id',params.setorId)
   if(params.empresaId) q=q.eq('empresa_id',params.empresaId)

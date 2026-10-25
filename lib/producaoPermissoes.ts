@@ -1,6 +1,6 @@
 import type { AcessoUsuarioConfig } from './acessoUsuario'
 import type { NivelPermissao } from './tipos'
-import { moduloDaAcaoPermissao } from './permissoesBlocos'
+import { moduloDaAcaoPermissao, ehAcaoExclusivaMaster } from './permissoesBlocos'
 
 // Um módulo oculto nunca é reaberto pela permissão de uma ação.
 // Regras explícitas da ação prevalecem, respeitando o teto do setor.
@@ -14,6 +14,7 @@ export function nivelEfetivoAcao(
   acaoId: string,
 ): NivelPermissao {
   if (role === 'master') return 'edicao'
+  if (ehAcaoExclusivaMaster(acaoId)) return 'oculto'
   const setor = setores[setorId] || 'oculto'
   if (setor === 'oculto') return 'oculto'
   const modulo=moduloDaAcaoPermissao(acaoId)
