@@ -1,6 +1,6 @@
 import type { NivelPermissao, Setor } from './tipos'
 import type { AcessoUsuarioConfig } from './acessoUsuario'
-import { montarBlocosPermissao } from './permissoesBlocos'
+import { montarBlocosPermissao, ehSetorExclusivoMaster } from './permissoesBlocos'
 import { resolverContextoPermissoes } from './permissoesContextuais'
 import { podeExecutarAcao } from './producaoPermissoes'
 
@@ -15,7 +15,7 @@ export function podeAcessarRotaCatalogada(
  if(pathname==='/setores')return true
  if(pathname==='/setor'||pathname.startsWith('/setor/')){
    const id=pathname.split('/')[2]
-   return id ? Boolean(catalogo.some(s=>s.id===id && (setores[id]||'oculto')!=='oculto')) : null
+   return id ? Boolean(!ehSetorExclusivoMaster(id) && catalogo.some(s=>s.id===id && (setores[id]||'oculto')!=='oculto')) : null
  }
  // Cliente 360 tem proteção por aba própria. O portão genérico protege /clientes
  // e deixa as subrotas para o guard específico já instalado.
