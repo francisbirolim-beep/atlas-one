@@ -1,3 +1,17 @@
+## 2026-10-24/25 — PRÓXIMO: homologar prévia de Visão Geral e instalações (SEM DEPLOY)
+
+1. Abrir no MacBook http://localhost:4017/atlas-visao-geral-preview.html e testar cores, oito colunas, card/painel lateral, pedido de compra por obra e relatório/calendário. Todos os dados exibidos nesta URL são fictícios.
+2. **Antes da migração no banco de produção**, usar Supabase em ambiente de homologação para testar as duas migrations candidatas, permissões, auditoria, concorrência de reservas e limitação financeira.
+3. Conciliar o Cliente 360 com pedidos novos e legados, medidas e tipologias parciais, estoque/reserva e equipes para não mostrar conclusão indevida; testar fotos reais de perfis/acessórios.
+4. Revisar diferenças em relação à main no PR, rodar release check, pedir aprovação visual e funcional de Francis. Só depois de autorização específica para publicar, com snapshot e rollback. Os setores em produção permanecem intactos.
+
+## 2026-10-24 — Visão Geral de Projetos: etapa seguinte
+
+1. Continuar na branch isolada feat/visao-geral-etapas-20261024; validar o modelo e reutilizar lib/vendaFluxoResumo.ts e /api/kanban-central, **sem escrever nos setores operacionais**.
+2. Criar adaptador somente leitura com tenant/permissões e vínculo por venda/obra, seguindo estados reais por tipologia e datas de entrada verificáveis.
+3. Depois, migração ADITIVA de layout configurável por empresa, API Master-only com histórico e testes de conservação ao excluir/reordenar colunas.
+4. Por último, modos Gestão e TV, atualização não bloqueante, conferência dos alertas e regressões; **não publicar sem aprovação explícita**.
+
 ## 2026-10-22 — Homologar cadastro de fornecedor NA COMPRA CMV
 
 1. Testar a tela operacional `Custos / CMV da obra` → `Adicionar compra` e `Corrigir lançamento existente`: digitar FEL, verificar cadastro da Feld, escolher e salvar correção de um lançamento fictício em homologação.
