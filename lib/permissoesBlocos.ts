@@ -29,6 +29,9 @@ export function ehAcaoExclusivaMaster(acaoId: string): boolean {
 export function ehModuloExclusivoMaster(moduloId: string): boolean {
   return moduloId === 'configuracoes' || moduloId === 'automacoes'
 }
+export function ehSetorExclusivoMaster(setorId: string): boolean {
+  return setorId === 'configuracoes' || setorId === 'workflow-automacoes'
+}
 
 // Ações críticas nunca são abertas automaticamente por comandos de liberação em lote.
 // Autorizações antigas continuam respeitadas até o Master fazer uma escolha explícita.
