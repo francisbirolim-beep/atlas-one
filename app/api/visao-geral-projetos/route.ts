@@ -202,7 +202,7 @@ export async function GET(req:NextRequest){
      detalhesCompra:linhas.map(detalhe)})
    }
   }
-  return NextResponse.json({cards,pedidos,usuarioMaster:true,atualizadoEm:new Date().toISOString(),
+  return NextResponse.json({cards,pedidos,usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
    observacao:'Os percentuais sem quantidades ou unidades conciliadas são exibidos como Não apurado. Agendamentos não foram inferidos a partir da entrega da obra.'},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('visao geral de projetos GET',e);return respErro('Não foi possível consultar a Visão Geral de Projetos.',500)}
