@@ -10,7 +10,7 @@ import { lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioCo
 import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
 import { montarBlocosPermissao, type ItemPermissaoBloco } from '@/lib/permissoesBlocos'
 import { nivelEfetivoAcao } from '@/lib/producaoPermissoes'
-import { acaoAutorizadaNoModulo, acaoExigeEdicao, opcoesSetorMaster } from '@/lib/permissoesModeloMaster'
+import { acaoAutorizadaNoModulo, acaoExigeEdicao, nivelModuloSobSetor, opcoesSetorMaster } from '@/lib/permissoesModeloMaster'
 import { nivelCliente360, type RecursoCliente360 } from '@/lib/cliente360Permissoes'
 import { resolverContextoPermissoes } from '@/lib/permissoesContextuais'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
@@ -157,7 +157,7 @@ export default function PermissoesContextuais() {
       const anterior=atual.setores[moduloAtual.setorId]||'oculto'
       const modulos={...atual.config.modulos}
       const acoes={...atual.config.acoes}
-      if(nivel==='edicao'&&anterior!=='edicao'){
+      if((anterior==='oculto'&&nivel!=='oculto')||(anterior==='consulta'&&nivel==='edicao')){
         for(const item of modulosDaTela.filter(item=>item.setorId===moduloAtual.setorId)){
           modulos[item.id]=anterior==='consulta'?'consulta':'oculto'
           if(anterior==='consulta')for(const acao of item.acoes){
@@ -173,6 +173,7 @@ export default function PermissoesContextuais() {
 
   function alterarModuloContextual(nivel: NivelPermissao) {
     if (!moduloAtual || moduloAtual.id==='configuracoes') return
+    if((rascunho?.setores[moduloAtual.setorId]||'oculto')==='consulta'&&nivel==='edicao')return
     setRascunho(atual => {
       if(!atual)return atual
       const anterior=atual.config.modulos?.[moduloAtual.id]||atual.setores[moduloAtual.setorId]||'oculto'
@@ -330,10 +331,15 @@ export default function PermissoesContextuais() {
                                 </label>
                                 <label className="block text-xs font-semibold">2. Módulo / etapa
                                   <select disabled={moduloAtual.id==='configuracoes'||(rascunho.setores[moduloAtual.setorId]||'oculto')==='oculto'}
-                                    value={moduloAtual.id==='configuracoes'?'oculto':rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto'}
+                                    value={moduloAtual.id==='configuracoes'?'oculto':nivelModuloSobSetor(
+                                      rascunho.setores[moduloAtual.setorId]||'oculto',
+                                      rascunho.config.modulos?.[moduloAtual.id]||rascunho.setores[moduloAtual.setorId]||'oculto'
+                                    )}
                                     onChange={e=>alterarModuloContextual(e.target.value as NivelPermissao)}
                                     className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-xs disabled:opacity-50">
-                                    {NIVEIS.map(n=><option key={n.valor} value={n.valor}>{n.label}</option>)}
+                                    <option value="oculto">Sem acesso</option>
+                                    <option value="consulta">Somente consulta</option>
+                                    <option value="edicao" disabled={(rascunho.setores[moduloAtual.setorId]||'oculto')==='consulta'}>Consulta e edição</option>
                                   </select>
                                 </label>
                               </div>

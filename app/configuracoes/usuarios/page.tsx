@@ -282,13 +282,13 @@ export default function UsuariosSenhasPage() {
   // Permissões antigas que já tinham setor aberto continuam herdando a regra.
   function mudarPermissaoSetor(setorId: string, nivel: NivelPermissao) {
     const anterior=permissoesSetores[setorId]||'oculto'
-    if(nivel==='edicao'&&anterior!=='edicao'){
+    if((anterior==='oculto'&&nivel!=='oculto')||(anterior==='consulta'&&nivel==='edicao')){
       setAcessoConfig(prev=>{
         const modulos={...prev.modulos}, acoes={...prev.acoes}
         for(const item of blocosPermissoes.flatMap(b=>b.itens).filter(m=>m.setorId===setorId)){
-          // Abrir setor oculto não restaura direitos antigos silenciosamente.
-          // Ao migrar um setor legado em consulta, preservar esse teto até a
-          // escolha explícita de módulos e ações pelo Master.
+          // Se o setor estava oculto, a mudança para CONSULTA também deve
+          // começar com os módulos fechados, sem reabrir ações antigas.
+          // Consulta -> edição preserva o teto de consulta nos módulos.
           modulos[item.id]=anterior==='consulta'?'consulta':'oculto'
           if(anterior==='consulta')for(const acao of item.acoes){
             if(!(acao.id in acoes))acoes[acao.id]='consulta'
@@ -303,7 +303,8 @@ export default function UsuariosSenhasPage() {
   // Nível 2: liberar módulo não eleva automaticamente o setor nem seus irmãos.
   function aplicarNivelModulo(item: ItemPermissaoBloco, nivel: NivelPermissao) {
     if(item.id==='configuracoes')return
-    if((permissoesSetores[item.setorId]||'oculto')==='oculto')return
+    const tetoSetor=permissoesSetores[item.setorId]||'oculto'
+    if(tetoSetor==='oculto'||(tetoSetor==='consulta'&&nivel==='edicao'))return
     const anterior=nivelModulo(item)
     setAcessoConfig(prev=>{
       const acoes={...prev.acoes}
@@ -696,7 +697,7 @@ export default function UsuariosSenhasPage() {
                                     className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[11px] text-slate-800">
                                     <option value="oculto">Oculto</option>
                                     <option value="edicao">Liberado</option>
-                                    {visibilidadeBloco==='parcial'&&<option value="parcial" disabled>Parcial (regra anterior)</option>}
+                                    {visibilidadeBloco==='parcial'&&<option value="parcial" disabled>Parcial — níveis diferentes</option>}
                                   </select>
                                 </label>
                               </div>
@@ -706,7 +707,7 @@ export default function UsuariosSenhasPage() {
                               <div className="space-y-3 border-t border-slate-100 p-3">
                                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
                                   <p className="text-xs font-bold text-blue-900">1. Detalhar os setores internos de {bloco.label}</p>
-                                  <p className="mt-1 text-[11px] text-blue-800">Se ocultar o setor, nenhum módulo aparece para o funcionário. Liberar o setor não libera automaticamente módulos nem ações. O Master define cada acesso abaixo.</p>
+                                  <p className="mt-1 text-[11px] text-blue-800">Escolha Oculto, Somente consulta ou Consulta e edição para cada setor. Dentro dele, o Master define os módulos e libera cada ação. A consulta nunca autoriza gravar, excluir ou aprovar.</p>
                                   <div className="mt-2 space-y-2">
                                     {[...new Set(bloco.itens.map(item=>item.setorId))].map(setorId=>(
                                       <label key={setorId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2.5 text-xs">
@@ -724,7 +725,7 @@ export default function UsuariosSenhasPage() {
                                   const setorBloqueado=(permissoesSetores[item.setorId]||'oculto')==='oculto'
                                   const moduloBloqueado=nivelModulo(item)==='oculto'
                                   const niveis = item.acoes.map(acao => nivelAcao(item, acao.id))
-                                  const geralModulo = acessoConfig.modulos?.[item.id]||permissoesSetores[item.setorId]||'oculto'
+                                  const geralModulo = nivelModulo(item)
                                   return (
                                     <div key={item.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                                       <div className="border-b border-slate-100 bg-white p-3">
@@ -736,8 +737,8 @@ export default function UsuariosSenhasPage() {
                                           <label className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-slate-400">2. Módulo / etapa
                                             <select disabled={setorBloqueado||item.id==='configuracoes'} value={item.id==='configuracoes'?'oculto':geralModulo} onChange={e=>aplicarNivelModulo(item,e.target.value as NivelPermissao)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs normal-case tracking-normal text-slate-700 disabled:opacity-50">
                                               <option value="oculto">Sem acesso</option>
-                                              <option value="consulta">Consultar</option>
-                                              <option value="edicao">Editar/Executar</option>
+                                              <option value="consulta">Somente consulta</option>
+                                              <option value="edicao" disabled={(permissoesSetores[item.setorId]||'oculto')==='consulta'}>Consulta e edição</option>
                                             </select>
                                           </label>
                                         </div>

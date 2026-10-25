@@ -68,6 +68,14 @@ async function verificar(acao,expect,label,setores,extra={}){
  config.acoes[editar]='edicao'
  config.modulos['custos-cmv']='consulta'
  await verificar(editar,'consulta','module consulta limits edited action',{financeiro:'edicao'})
+ // Todo setor agora oferece Somente consulta. Mesmo um módulo antigo em edição
+ // ou uma ação liberada não podem elevar esse teto para gravar valores.
+ nivelSetor='consulta'
+ config.modulos['custos-cmv']='edicao'
+ await verificar(editar,'consulta','sector read-only caps explicit action edicao',{financeiro:'consulta'})
+ assert.equal(podeExecutarAcao('funcionario',{financeiro:'consulta'},config,'financeiro',editar,'edicao'),false)
+ config.modulos['custos-cmv']='consulta'
+ nivelSetor='edicao'
  // Financeiro geral is separate from Contas a Pagar.
  config={acoes:{'financeiro.contas_pagar.consultar':'consulta','financeiro.geral.consultar':'oculto'},
   modulos:{'financeiro-geral':'oculto','contas-pagar':'consulta','custos-cmv':'oculto'}}
