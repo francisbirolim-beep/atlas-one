@@ -1,3 +1,17 @@
+## 2026-10-24/25 — Prévia do Kanban Geral e planejamento de instalação (somente branch isolada)
+
+- Rotas React com oito colunas, modo TV, painel lateral e pedidos separados sem duplicar projeto; leitura de vendas, compras, produto/imagem, ordens e instalação por API autenticada Master.
+- Relatório de capacidade: calendário, metas financeiras, gráfico, simulação e RPCs de agendamento/alteração de metas auditadas e Master-only.
+- Migrações aditivas 20261025030000 e 20261025031500 geradas mas NÃO aplicadas em qualquer banco. HTML local sem credenciais em http://localhost:4017/atlas-visao-geral-preview.html.
+- Testes scripts/test-visao-geral-etapas.cjs e scripts/test-instalacao-capacidade.cjs passam, TypeScript passa; ainda há validação com banco isolado e usuário antes de qualquer publicação.
+
+## 2026-10-24 — Visão Geral de Projetos: regras e Kanban configurável (isolado)
+
+- Definidas etapas semânticas de venda a encerramento, agrupadas em seis colunas editáveis e sem modificar os sistemas operacionais.
+- Implementado lib/visaoGeralProjetos.ts com projeção de fase, validação de configuração, transferência de critérios ao excluir, prazo em dias corridos por coluna e alertas com falta de prazo explícita.
+- Validação local com testes, TypeScript e release:check concluída usando somente configuração fictícia de build, sem banco real.
+- Adicionados documento docs/visao-geral-projetos-v1.md e regressões scripts/test-visao-geral-etapas.cjs. Somente protótipo de domínio: sem UI, migration, escrita em banco, PR ou deploy.
+
 ## 2026-10-22 — CMV compra/correção com fornecedor oficial
 
 - Integração incremental de `FornecedorCmvCampo` em `components/clientes/VendaCmvPainel.tsx`: duas entradas, `Adicionar compra` e `Corrigir lançamento existente`. Não muda APIs, payload de CMV, valores, documentos, anexos ou histórico.

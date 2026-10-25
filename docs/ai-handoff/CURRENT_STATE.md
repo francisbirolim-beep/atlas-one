@@ -1,3 +1,20 @@
+## 2026-10-24/25 — Kanban Geral e Capacidade de Instalação (NOVO PREVIEW, NÃO PUBLICADO)
+
+- Branch isolada feat/visao-geral-etapas-20261024, com páginas /visao-geral-projetos e /relatorios/instalacoes, APIs exclusivas de consulta e configuração Master e prévia HTML interativa sem banco em public/atlas-visao-geral-preview.html.
+- Oito colunas aprovadas; card por venda/obra e mini-card por pedido de compra/obra, sem alterar os Kanbans de cada setor. Nome do cliente e número do orçamento em destaque, valor oculto na TV, painel lateral com perfis/vidros/acessórios, fornecedor e fotos reais do catálogo quando disponíveis.
+- Meta de valor mensal, calendário, gráfico, alerta ao ultrapassar limite e SQL/RPC candidatos para persistir com segurança e auditoria. Integração de valores e agenda fica aguardando aplicação e testes das migrações em homologação, jamais aplicadas diretamente em produção.
+- Executados com sucesso: testes de classificação de etapas, testes de capacidade financeira, TypeScript e análise sintática JS da prévia; build e release check serão relatados separadamente após execução.
+- **Limites conhecidos:** Cliente 360 e estoque não foram homologados contra uma base real; medições com cabeçalho não são consideradas integralmente aprovadas; percentuais não confiáveis aparecem como Não apurado; meta em R$ não comprova capacidade física. Nenhum deploy.
+- Ver docs/visao-geral-projetos-v1.md para o escopo, arquivos, riscos e testes pendentes.
+
+## 2026-10-24 — Visão Geral de Projetos, modelagem de etapas (LOCAL, não publicado)
+
+- Branch isolada feat/visao-geral-etapas-20261024 com regras puras de projeção por venda/obra em lib/visaoGeralProjetos.ts.
+- Seis colunas visuais padrão, eventos reais separados do layout, operações seguras de criar/renomear/reordenar/excluir com transferência obrigatória de critérios e alertas de prazo.
+- Documento docs/visao-geral-projetos-v1.md; testes scripts/test-visao-geral-etapas.cjs. Nenhuma rota, tabela, gatilho, permissão, compra, ordem, medição, instalação ou produção alterada. Nenhum deploy.
+- Testes do classificador passaram, TypeScript passou e npm run release:check terminou em PREFLIGHT_OK usando somente URL/chaves fictícias de build isolado. Não houve conexão ao Supabase real.
+- **Ainda não há UI ou integração de dados reais**: modelagem da primeira etapa apenas. Próximo incremento exige adaptador autenticado de leitura, persistência por empresa e tela TV.
+
 ## 2026-10-22 — Complemento: fornecedor no cadastro CORRETO do CMV (prévia local, NÃO publicado)
 
 - Print do usuário confirmou que a tela operacional é `Custos / CMV da obra` → `Adicionar compra` ou `Corrigir lançamento existente` (e não a prévia do quadro de recebimentos).
