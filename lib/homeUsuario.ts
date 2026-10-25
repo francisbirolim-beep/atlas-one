@@ -14,6 +14,7 @@ export const HOME_MODULOS = [
 
 export type HomeModuloId = typeof HOME_MODULOS[number]['id']
 export type EscopoAssistencias = 'proprias' | 'todas'
+export type PaginaInicialAtlas = 'padrao' | 'visao-geral-projetos' | 'relatorios-instalacoes'
 export type DashboardId = 'geral' | 'comercial' | 'orcamentos' | 'engenharia' | 'producao' | 'instalacao' | 'financeiro' | 'pessoal' | 'assistencias'
 
 export const DASHBOARDS = [
@@ -33,6 +34,7 @@ export interface HomeUsuarioConfig {
   assistenciasEscopo: EscopoAssistencias
   dashboards?: DashboardId[]
   dashboardPrincipal?: DashboardId
+  paginaInicial?: PaginaInicialAtlas
 }
 
 const MODULOS_VALIDOS = new Set<HomeModuloId>(HOME_MODULOS.map(m => m.id))
@@ -56,6 +58,7 @@ export function homeConfigPadrao(role: Usuario['role'] = 'funcionario'): HomeUsu
     assistenciasEscopo: role === 'master' ? 'todas' : 'proprias',
     dashboards: role === 'master' ? DASHBOARDS.map(d => d.id) : ['comercial', 'pessoal'],
     dashboardPrincipal: role === 'master' ? 'geral' : 'comercial',
+    paginaInicial: 'padrao',
   }
 }
 
@@ -78,6 +81,7 @@ function normalizarConfig(valor: unknown, role: Usuario['role']): HomeUsuarioCon
     assistenciasEscopo: role === 'master' ? 'todas' : assistenciasEscopo,
     dashboards: role === 'master' ? DASHBOARDS.map(d => d.id) : dashboards,
     dashboardPrincipal: role === 'master' && !dashboardPrincipal ? 'geral' : dashboardPrincipal,
+    paginaInicial: bruto.paginaInicial === 'visao-geral-projetos' || bruto.paginaInicial === 'relatorios-instalacoes' ? bruto.paginaInicial : 'padrao',
   }
 }
 
@@ -119,6 +123,7 @@ export async function salvarHomeUsuarioConfig(usuarioId: string, config: HomeUsu
     assistenciasEscopo: config.assistenciasEscopo === 'todas' ? 'todas' : 'proprias',
     dashboards: config.dashboards || ['comercial', 'pessoal'],
     dashboardPrincipal: config.dashboardPrincipal || config.dashboards?.[0] || 'comercial',
+    paginaInicial: config.paginaInicial === 'visao-geral-projetos' || config.paginaInicial === 'relatorios-instalacoes' ? config.paginaInicial : 'padrao',
   }
 
   const { error } = await supabase
