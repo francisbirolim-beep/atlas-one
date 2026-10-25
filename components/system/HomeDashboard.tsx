@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
+import { useRouter } from 'next/navigation'
+import { tokenAtual, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import { DASHBOARDS, homeConfigPadrao, lerHomeUsuarioConfig, temModulo, type DashboardId, type HomeUsuarioConfig } from '@/lib/homeUsuario'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
 import HomeRecentQuotes from '@/components/system/HomeRecentQuotes'
@@ -15,6 +16,7 @@ import HomeSectorOverview from '@/components/system/HomeSectorOverview'
 import HomeQuotesOverview from '@/components/system/HomeQuotesOverview'
 
 export default function HomeDashboard() {
+  const router = useRouter()
   const usuarioInicial = usuarioCacheLocal()
   const configInicial = homeConfigPadrao(usuarioInicial?.role || 'funcionario')
   const [config, setConfig] = useState<HomeUsuarioConfig>(configInicial)
@@ -66,6 +68,27 @@ export default function HomeDashboard() {
       if (timer) clearTimeout(timer)
     }
   }, [])
+
+  // Redirecionar só depois de confirmar a permissão no backend.
+  useEffect(() => {
+    if (!config.paginaInicial || config.paginaInicial === 'padrao') return
+    let ativo = true
+    void (async () => {
+      const token = await tokenAtual()
+      if (!ativo || !token) return
+      const resposta = await fetch('/api/painel-geral-acesso', {
+        headers: { Authorization: 'Bearer ' + token }, cache: 'no-store',
+      }).catch(() => null)
+      if (!ativo || !resposta?.ok) return
+      const acesso = await resposta.json().catch(() => null)
+      if (!ativo) return
+      if (config.paginaInicial === 'visao-geral-projetos' && acesso?.visaoGeral === true)
+        router.replace('/visao-geral-projetos')
+      if (config.paginaInicial === 'relatorios-instalacoes' && acesso?.relatorioInstalacoes === true)
+        router.replace('/relatorios/instalacoes')
+    })()
+    return () => { ativo = false }
+  }, [config.paginaInicial, router])
 
   const atual = dashboard || (config.dashboards?.includes('pessoal') ? 'pessoal' : config.dashboardPrincipal) || 'geral'
   const permitidos = config.dashboards?.length ? config.dashboards : ['geral'] as DashboardId[]
