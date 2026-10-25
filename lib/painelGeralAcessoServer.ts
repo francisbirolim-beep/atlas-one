@@ -1,11 +1,5 @@
 import { lerAcessoConfigServer } from '@/lib/acessoUsuarioServer'
-
-export type PainelConsolidado = 'visao-geral-projetos' | 'relatorios-instalacoes'
-
-const CHAVES: Record<PainelConsolidado,string> = {
-  'visao-geral-projetos': 'painel_visao_geral_projetos',
-  'relatorios-instalacoes': 'painel_relatorio_instalacoes',
-}
+import { permissaoExplicitaPainelGeral, type PainelConsolidado } from '@/lib/painelGeralAcesso'
 
 // Sem herança de permissões de outros módulos: é uma autorização explícita do Master.
 // Falhas ao ler ACL nunca liberam dados; são propagadas aos handlers.
@@ -15,6 +9,5 @@ export async function podeConsultarPainelGeral(
 ): Promise<boolean> {
   if (usuario.role === 'master') return true
   const config = await lerAcessoConfigServer(usuario.id,usuario.empresa_id)
-  const nivel = config?.acoes?.[CHAVES[painel]]
-  return nivel === 'consulta' || nivel === 'edicao'
+  return permissaoExplicitaPainelGeral(usuario.role, config, painel)
 }
