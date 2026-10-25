@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { Setor, Permissao, NivelPermissao, Usuario } from './tipos'
+import { ehSetorExclusivoMaster } from './permissoesBlocos'
 
 export const GRUPOS_ORDEM = [
   'Comercial',
@@ -65,6 +66,7 @@ export function nivelEfetivo(
   permissoes: Record<string, NivelPermissao>
 ): NivelPermissao {
   if (usuario?.role === 'master') return 'edicao'
+  if(ehSetorExclusivoMaster(setorId))return 'oculto'
   return permissoes[setorId] || 'oculto'
 }
 
