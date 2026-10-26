@@ -2080,7 +2080,10 @@ async function conversationForInbound(
           keepExistingOwner === ownerId ? ownerName : await userName(keepExistingOwner)
         ));
     const { data, error } = await db.from("atendimento_conversas").update({
-      contato_nome: displayName || existing.contato_nome || null,
+      // Preserva o nome do Cliente 360 mesmo quando o WhatsApp envia outro nome.
+      contato_nome: !isGroup && existing.cliente_id
+        ? (customer?.nome || existing.contato_nome || displayName)
+        : (displayName || existing.contato_nome || null),
       cliente_id: isGroup ? null : (customer?.id || existing.cliente_id || null),
       whatsapp_canal_id: channel.id,
       whatsapp_numero: channel.numero_declarado,
