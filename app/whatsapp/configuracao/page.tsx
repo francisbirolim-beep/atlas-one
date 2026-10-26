@@ -78,8 +78,56 @@ export default function ConfiguracaoWhatsAppPage() {
   const [erro,setErro]=useState('')
   const [salvando,setSalvando]=useState(false)
   const [salvo,setSalvo]=useState(false)
+  const [distribAtivo,setDistribAtivo]=useState(false)
+  const [principalDistribId,setPrincipalDistribId]=useState('')
+  const [secundariosIds,setSecundariosIds]=useState<string[]>([])
+  const [prazoMinutos,setPrazoMinutos]=useState(10)
+  const [salvandoDistrib,setSalvandoDistrib]=useState(false)
+  const [mensagemDistrib,setMensagemDistrib]=useState('')
 
-  useEffect(()=>{void carregar()},[])
+  useEffect(()=>{void carregar();void carregarDistribuicao()},[])
+
+  async function carregarDistribuicao() {
+    try {
+      const resp = await fetch('/api/integracoes/whatsapp/distribuicao', { headers: await authHeaders() })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao carregar distribuição.')
+      const d = json.distribuicao
+      if (d) {
+        setDistribAtivo(d.ativo === true)
+        setPrincipalDistribId(d.usuario_principal_id || '')
+        setSecundariosIds(Array.isArray(d.secundarios_ids) ? d.secundarios_ids : [])
+        setPrazoMinutos(d.prazo_minutos || 10)
+      }
+    } catch (e) {
+      setMensagemDistrib(e instanceof Error ? e.message : 'Falha ao carregar distribuição.')
+    }
+  }
+
+  async function salvarDistribuicao() {
+    setSalvandoDistrib(true)
+    setMensagemDistrib('')
+    try {
+      const resp = await fetch('/api/integracoes/whatsapp/distribuicao', {
+        method: 'PUT',
+        headers: await authHeaders(),
+        body: JSON.stringify({
+          ativo: distribAtivo,
+          principalId: principalDistribId,
+          secundariosIds,
+          prazoMinutos,
+        }),
+      })
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao salvar distribuição.')
+      setMensagemDistrib('Distribuição salva. O prazo vale para novas mensagens não respondidas.')
+      await carregarDistribuicao()
+    } catch (e) {
+      setMensagemDistrib(e instanceof Error ? e.message : 'Falha ao salvar distribuição.')
+    } finally {
+      setSalvandoDistrib(false)
+    }
+  }
 
   async function carregar(){
     setErro('')
@@ -371,6 +419,63 @@ export default function ConfiguracaoWhatsAppPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
+          <div className="mb-4">
+            <h2 className="font-bold text-slate-900">Primeiro atendimento e repasse por demora</h2>
+            <p className="mt-1 text-xs text-slate-600">
+              Para conversas individuais do número principal. O Master vistoria todas pela aba Monitoramento, sem misturar com sua caixa pessoal.
+              Grupos, canais pessoais e regras especiais de roteamento são preservados.
+            </p>
+          </div>
+          <label className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <input type="checkbox" checked={distribAtivo} onChange={e=>setDistribAtivo(e.target.checked)} />
+            Ativar atribuição ao principal e disponibilizar aos secundários após o prazo
+          </label>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="text-sm font-semibold text-slate-700">
+              Responsável pelo primeiro atendimento
+              <select value={principalDistribId} onChange={e=>{
+                const id=e.target.value
+                setPrincipalDistribId(id)
+                setSecundariosIds(ids=>ids.filter(item=>item!==id))
+              }} className="mt-1 w-full rounded-xl border bg-white px-3 py-2 font-normal">
+                <option value="">Selecione o atendente principal</option>
+                {usuarios.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}
+              </select>
+            </label>
+            <label className="text-sm font-semibold text-slate-700">
+              Aguardar sem resposta (minutos)
+              <input type="number" min={1} max={1440} step={1} value={prazoMinutos}
+                onChange={e=>setPrazoMinutos(Number(e.target.value))}
+                className="mt-1 w-full rounded-xl border bg-white px-3 py-2 font-normal" />
+            </label>
+          </div>
+          <div className="mt-4">
+            <p className="text-sm font-semibold text-slate-700">Atendentes secundários que podem assumir depois do prazo</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              {usuarios.filter(u=>u.id!==principalDistribId).map(u=>(
+                <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={secundariosIds.includes(u.id)} onChange={e=>
+                    setSecundariosIds(ids=>e.target.checked?[...ids,u.id]:ids.filter(id=>id!==u.id))
+                  } />
+                  {u.nome}{u.role==='master'?' (Master)':''}
+                </label>
+              ))}
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-600">
+            Após o prazo, a conversa não é enviada automaticamente nem duplicada: aparece como disponível aos secundários.
+            O primeiro que assumir fica responsável; o principal deixa de ser o responsável. Sem resposta significa uma mensagem recebida sem envio posterior.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button type="button" disabled={salvandoDistrib} onClick={()=>void salvarDistribuicao()}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+              <Save size={16}/>{salvandoDistrib?'Salvando...':'Salvar distribuição'}
+            </button>
+            {mensagemDistrib&&<p role="status" className="text-xs font-semibold text-slate-700">{mensagemDistrib}</p>}
           </div>
         </section>
 

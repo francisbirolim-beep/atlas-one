@@ -53,6 +53,7 @@ type Conversa = {
   ultima_mensagem_em?: string | null
   transferida_em?: string | null
   acompanhando?: boolean
+  escalonado_para_mim?: boolean
   grupo_id?: string | null
   grupo_nivel_acesso?: 'sem_acesso' | 'acompanhar' | 'atender' | 'gerenciar' | 'herdado' | null
   grupo_pode_atender?: boolean | null
@@ -435,8 +436,8 @@ export default function WhatsAppAtendimentoPage() {
       if (c.grupo_responsavel_efetivo_id) return c.grupo_responsavel_efetivo_id === eu?.id
       return c.grupo_pode_atender === true
     }
-    // A API já limita contatos individuais a mensagens que este usuário
-    // enviou. Não restringir por responsável atual: preservar seu histórico.
+    // A API envia somente atribuídas, filas liberadas e históricos particulares.
+    // A supervisão geral usa uma consulta separada, acessível apenas ao Master.
     return true
   }
 
@@ -1155,7 +1156,7 @@ export default function WhatsAppAtendimentoPage() {
       if (!c.ultima_mensagem_em && areaAtendimento !== 'grupos') return false
       if (canalFiltro !== 'todos' && c.whatsapp_canal_id !== canalFiltro) return false
       if (filtro === 'aguardando') {
-        const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || eu?.role === 'master'
+        const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || c.escalonado_para_mim === true
         const aguardandoAceite = c.status === 'aguardando' && podeSerMeu
         const aguardandoMensagem = Number(c.nao_lidas || 0) > 0 && podeSerMeu && c.status !== 'finalizado'
         if (!aguardandoAceite && !aguardandoMensagem) return false
@@ -1628,7 +1629,7 @@ export default function WhatsAppAtendimentoPage() {
       internas: conversasInternas.length,
       abertas: chats.filter(c => c.status !== 'finalizado').length,
       aguardando: chats.filter(c => {
-        const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || eu?.role === 'master'
+        const podeSerMeu = !c.responsavel_id || c.responsavel_id === eu?.id || c.escalonado_para_mim === true
         return c.status !== 'finalizado' && podeSerMeu &&
           (c.status === 'aguardando' || Number(c.nao_lidas || 0) > 0)
       }).length,
@@ -1647,7 +1648,7 @@ export default function WhatsAppAtendimentoPage() {
     conversas, canalFiltro, conversaDaMinhaCaixa,
   ), [conversas, canalFiltro, eu?.id])
 
-  const podeMonitorar = eu?.role === 'master' || acessos.some(a => a.supervisionar || a.dono)
+  const podeMonitorar = eu?.role === 'master'
   const conversasMonitoramento = conversasMonitoradas.filter(c => {
     const acesso = acessos.find(a => a.canal_id === c.whatsapp_canal_id)
     if (eu?.role !== 'master' && !acesso?.supervisionar && !acesso?.dono) return false
@@ -1679,7 +1680,8 @@ export default function WhatsAppAtendimentoPage() {
     (
       !ativa.responsavel_id ||
       (ativa.responsavel_id === eu?.id && ativa.status === 'aguardando') ||
-      (eu?.role === 'master' && ativa.responsavel_id !== eu?.id)
+      (eu?.role === 'master' && ativa.responsavel_id !== eu?.id) ||
+      ativa.escalonado_para_mim === true
     )
   )
   const atendimentoMeu = Boolean(
