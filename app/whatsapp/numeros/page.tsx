@@ -243,7 +243,7 @@ export default function NumerosWhatsAppPage() {
           podeAtender:proxima.pode_atender,
           podeTransferir:proxima.pode_transferir,
           podeSupervisionar:proxima.pode_supervisionar,
-          podeGerenciarConexao:proxima.pode_gerenciar_conexao,
+          podeGerenciarConexao:false,
         }),
       })
       const json=await resp.json()
@@ -458,7 +458,6 @@ export default function NumerosWhatsAppPage() {
                                     ['pode_atender','Atender'],
                                     ['pode_transferir','Transferir'],
                                     ['pode_supervisionar','Supervisionar'],
-                                    ['pode_gerenciar_conexao','Conectar / desconectar'],
                                   ] as const).map(([campo,rotulo])=>(
                                     <label key={campo} className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1.5">
                                       <input type="checkbox" checked={Boolean(p[campo])}

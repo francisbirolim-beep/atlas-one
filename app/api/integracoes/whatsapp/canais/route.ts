@@ -18,20 +18,10 @@ async function podeGerenciarCanal(
   return canal.criado_por === usuario.id
 }
 
-async function podeOperarConexao(
-  usuario: Awaited<ReturnType<typeof autenticarTenant>>,
-  canalId: string,
-) {
-  if (!usuario) return false
-  if (usuario.role === 'master') return true
-  const { data, error } = await supabaseAdmin
-    .from('atendimento_whatsapp_permissoes')
-    .select('pode_gerenciar_conexao')
-    .eq('empresa_id', usuario.empresa_id)
-    .eq('usuario_id', usuario.id)
-    .eq('canal_id', canalId)
-    .maybeSingle()
-  return !error && data?.pode_gerenciar_conexao === true
+// Pareamento e controle do aparelho sao exclusivos do Master.
+// Permissoes de leitura/atendimento nao podem ampliar este privilegio.
+function podeOperarConexao(usuario: Awaited<ReturnType<typeof autenticarTenant>>) {
+  return usuario?.role === 'master'
 }
 
 export async function GET(req: NextRequest) {
@@ -59,22 +49,12 @@ export async function GET(req: NextRequest) {
   const erro = canaisResp.error || usuariosResp.error
   if (erro) return NextResponse.json({ error: erro.message }, { status: 500 })
 
-  const { data: delegacoes, error: delegacoesError } = usuario.role === 'master'
-    ? { data: [] as any[], error: null }
-    : await supabaseAdmin.from('atendimento_whatsapp_permissoes')
-        .select('canal_id,pode_gerenciar_conexao')
-        .eq('empresa_id', usuario.empresa_id)
-        .eq('usuario_id', usuario.id)
-        .eq('pode_gerenciar_conexao', true)
-  if (delegacoesError) return NextResponse.json({ error: delegacoesError.message }, { status: 500 })
-  const autorizados = new Set((delegacoes || []).map((p: any) => p.canal_id))
   const canais = (canaisResp.data || [])
     .filter((canal: any) =>
       usuario.role === 'master' || canal.principal ||
-      canal.usuario_id === usuario.id || canal.criado_por === usuario.id ||
-      autorizados.has(canal.id))
+      canal.usuario_id === usuario.id || canal.criado_por === usuario.id)
     .map((canal: any) => {
-      const podeConectar = usuario.role === 'master' || autorizados.has(canal.id)
+      const podeConectar = usuario.role === 'master'
       return {
         ...canal,
         pode_gerenciar_conexao: podeConectar,
@@ -179,8 +159,8 @@ export async function PATCH(req: NextRequest) {
     if (!canal) return NextResponse.json({ error: 'Canal nao encontrado.' }, { status: 404 })
 
     if (['conectar','reconectar','desconectar'].includes(acao)) {
-      if (!(await podeOperarConexao(usuario, canal.id))) {
-        return NextResponse.json({ error: 'Somente Master ou usuário autorizado pode conectar/desconectar este WhatsApp.' }, { status: 403 })
+      if (!(await podeOperarConexao(usuario))) {
+        return NextResponse.json({ error: 'Somente Master pode conectar, reconectar ou desconectar o WhatsApp.' }, { status: 403 })
       }
       // Registrar comando explícito sem trocar session_slug e sem descartar o histórico.
       // Se o gateway estiver indisponível, a solicitação permanece registrada.
