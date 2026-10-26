@@ -181,6 +181,7 @@ export default function WhatsAppAtendimentoPage() {
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
   const [busca, setBusca] = useState('')
   const [areaAtendimento, setAreaAtendimento] = useState<'individuais' | 'grupos' | 'monitoramento' | 'internas'>('individuais')
+  const [conversaDiretaId, setConversaDiretaId] = useState<string | null>(null)
   const [atendenteMonitorado, setAtendenteMonitorado] = useState('todos')
   const [visaoSupervisao, setVisaoSupervisao] = useState<'atendimentos' | 'internas'>('atendimentos')
   const [usuarioSupervisionado, setUsuarioSupervisionado] = useState('todos')
@@ -322,7 +323,6 @@ export default function WhatsAppAtendimentoPage() {
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar conversas.')
       setEu(json.usuario)
-      setConversas(json.conversas || [])
       setUsuarios(json.usuarios || [])
       const canaisRecebidos = (json.canais || []) as Canal[]
       const conversasRecebidas = (json.conversas || []) as Conversa[]
@@ -343,37 +343,52 @@ export default function WhatsAppAtendimentoPage() {
         setCanalFiltro(fallback)
         try { localStorage.setItem('atlas-whatsapp-canal-filtro', fallback) } catch {}
       }
-      const conversaIdSolicitada = selecionar && typeof window !== 'undefined'
+      // Um link vindo do orçamento pode apontar a um grupo que não pertence à
+      // caixa pessoal do Master. Busca apenas esse grupo com ACL do servidor,
+      // sem carregar a supervisão geral na caixa de entrada.
+      const conversaIdSolicitada = typeof window !== 'undefined'
         ? new URLSearchParams(window.location.search).get('conversaId')
         : null
-      if (conversaIdSolicitada) {
-        const solicitada = conversasRecebidas.find(c=>c.id===conversaIdSolicitada)
-        if (solicitada) {
-          const conversaAlheia = solicitada.responsavel_id &&
-            solicitada.responsavel_id!==json.usuario?.id
-          if (conversaAlheia &&
-              (json.usuario?.role==='master' ||
-               (json.acessos||[]).some((a:AcessoCanal)=>a.canal_id===solicitada.whatsapp_canal_id&&(a.supervisionar||a.dono)))) {
-            setAreaAtendimento('monitoramento')
-          } else {
-            setAreaAtendimento(solicitada.whatsapp_chat_tipo==='grupo'?'grupos':'individuais')
-          }
+      let solicitada = conversaIdSolicitada
+        ? conversasRecebidas.find(c => c.id === conversaIdSolicitada) || null
+        : null
+      if (conversaIdSolicitada && !solicitada) {
+        const respDireta = await fetch(
+          '/api/integracoes/whatsapp/conversa-direta?conversaId=' + encodeURIComponent(conversaIdSolicitada),
+          { headers, cache: 'no-store' },
+        )
+        const jsonDireta = await respDireta.json()
+        if (respDireta.ok && jsonDireta.conversa?.id === conversaIdSolicitada) {
+          solicitada = jsonDireta.conversa as Conversa
+          conversasRecebidas.push(solicitada)
+        } else if (selecionar) {
+          setErro(jsonDireta.error || 'O grupo não está disponível para sua conta.')
         }
       }
+      if (solicitada && conversaIdSolicitada) {
+        setConversaDiretaId(solicitada.id)
+        if (selecionar) {
+          setAreaAtendimento(solicitada.whatsapp_chat_tipo === 'grupo' ? 'grupos' : 'individuais')
+          setFiltro('todas')
+          setBusca('')
+          const canal = canaisRecebidos.some(c => c.id === solicitada!.whatsapp_canal_id)
+            ? (solicitada.whatsapp_canal_id || 'todos') : 'todos'
+          setCanalFiltro(canal)
+        }
+      } else if (conversaIdSolicitada) {
+        setConversaDiretaId(null)
+      }
+      setConversas(conversasRecebidas)
       setAtiva(atual => {
+        if (solicitada && selecionar) return solicitada
         if (atual) {
-          const encontrada = conversasRecebidas.find((c: Conversa) => c.id === atual.id)
+          const encontrada = conversasRecebidas.find(c => c.id === atual.id)
           if (encontrada) {
             if (conversaNovaWhatsAppRef.current === atual.id) conversaNovaWhatsAppRef.current = null
             return encontrada
           }
-          // Na supervisão, a conversa selecionada não pertence à caixa pessoal.
-          // Uma conversa iniciada agora só entra na lista após o primeiro envio.
           if (areaAtendimento === 'monitoramento' || conversaNovaWhatsAppRef.current === atual.id) return atual
           return null
-        }
-        if (conversaIdSolicitada) {
-          return conversasRecebidas.find((c: Conversa) => c.id === conversaIdSolicitada) || null
         }
         return atual
       })
@@ -433,6 +448,8 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   function conversaDaMinhaCaixa(c: Conversa) {
+    // Um único grupo com acesso verificado pode ser aberto por link direto.
+    if (c.id === conversaDiretaId && c.whatsapp_chat_tipo === 'grupo') return true
     if (c.whatsapp_chat_tipo === 'grupo') {
       if (c.responsavel_id) return c.responsavel_id === eu?.id
       if (c.grupo_responsavel_efetivo_id) return c.grupo_responsavel_efetivo_id === eu?.id
@@ -1174,7 +1191,7 @@ export default function WhatsAppAtendimentoPage() {
       return `${c.contato_nome || ''} ${c.grupo_nome || ''} ${c.telefone} ${c.responsavel_nome || ''} ${c.setor || ''}`
         .toLocaleLowerCase('pt-BR').includes(q)
     })
-  }, [conversas, busca, filtro, canalFiltro, areaAtendimento, eu?.id, eu?.role])
+  }, [conversas, busca, filtro, canalFiltro, areaAtendimento, eu?.id, eu?.role, conversaDiretaId])
 
   const usuariosInternosBusca = useMemo(() => {
     // Pesquisa de clientes/grupos do WhatsApp não deve misturar pessoas internas.
