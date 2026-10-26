@@ -1,0 +1,23 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const vm = require('node:vm')
+const ts = require('typescript')
+const root = path.resolve(__dirname, '..')
+const helper = fs.readFileSync(path.join(root, 'lib/nomeClienteComApelido.ts'), 'utf8')
+const js = ts.transpileModule(helper, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
+const mod = { exports: {} }
+vm.runInNewContext(js, { module: mod, exports: mod.exports })
+const { nomeClienteComApelido } = mod.exports
+assert.equal(nomeClienteComApelido('João da Silva', 'Zé da Fazenda'), 'João da Silva (Zé da Fazenda)')
+assert.equal(nomeClienteComApelido('João da Silva', ''), 'João da Silva')
+assert.equal(nomeClienteComApelido('João da Silva', ' João da Silva '), 'João da Silva')
+assert.equal(nomeClienteComApelido(null, 'Zé da Fazenda'), 'CLIENTE (Zé da Fazenda)')
+const topbar = fs.readFileSync(path.join(root, 'components/system/AppTopbar.tsx'), 'utf8')
+const cadastro = fs.readFileSync(path.join(root, 'app/clientes/page.tsx'), 'utf8')
+assert.match(topbar, /\.ilike\('apelido', `%\$\{q\}%`\)/, 'Busca por apelido no servidor, inclusive cadastros antigos')
+assert.match(topbar, /new Set<string>\(\)/, 'Não repete clientes das duas consultas')
+assert.match(topbar, /nomeClienteComApelido\(c\.nome, c\.apelido\)/, 'Busca global exibe Nome (Apelido)')
+assert.match(cadastro, /correspondeBuscaAtlas\(busca, c\.nome, c\.apelido/, 'Busca cadastral aceita apelidos')
+assert.match(cadastro, /nomeClienteComApelido\(c\.nome, c\.apelido\)/, 'Cadastro exibe Nome (Apelido)')
+console.log('PASSOU: pesquisa por apelido e exibição Nome (Apelido)')
