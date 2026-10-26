@@ -5,7 +5,7 @@ import { ehEmAndamento, nomeEtapa } from '@/lib/wvetroEtapaComercial'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, CheckCircle2, Search, Wrench, RefreshCw, Loader2 } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, MessageCircle, CheckCircle2, Search, Wrench, RefreshCw, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { listarTipologias } from '@/lib/tipologias'
@@ -1596,6 +1596,23 @@ style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
 </div>
 )}
 {!card.eh_assistencia && !card.obra_id && card.cidade && <p className="mb-1 text-[11px]" style={{color:est ? est.texto : '#64748b'}}><MapPin size={11} className="mr-1 inline"/>{card.cidade}</p>}
+{!card.eh_assistencia && card.modo_entrada === 'whatsapp' && (
+<div data-whatsapp-resumo-card="true" className="mb-2 rounded-lg border border-white/35 bg-white/15 p-2" style={{ color: est ? est.texto : '#334155' }}>
+  <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
+    <MessageCircle size={13} className="shrink-0" />
+    <span>Via WhatsApp · notas do pedido</span>
+    {Array.isArray(card.ia_fontes?.anexos) && card.ia_fontes.anexos.length > 0 && (
+      <span className="rounded-full bg-white/30 px-1.5 py-0.5 text-[10px]">{card.ia_fontes.anexos.length} anexo(s)</span>
+    )}
+  </div>
+  <p className="line-clamp-3 whitespace-pre-line break-words text-[11px] leading-4" style={{ opacity: 0.92 }}>
+    {String(card.ia_fontes?.conteudo_bruto || card.descricao_livre || '').trim() || 'Pedido recebido do WhatsApp. Confira os detalhes.'}
+  </p>
+  <p className="mt-1.5 text-[10px] font-semibold underline underline-offset-2" style={{ opacity: 0.92 }}>
+    Abrir card para ver mensagens, fotos, áudios, vídeos e arquivos
+  </p>
+</div>
+)}
 {card.ia_criado && card.ia_validacao_status === 'aguardando' && !card.eh_assistencia && (
 <span
 className="inline-block text-[10px] px-1.5 py-0.5 rounded-full font-semibold mb-1 bg-violet-100 text-violet-700"
@@ -1625,7 +1642,7 @@ Assistência
 ? `${(card as any).itens.length} esquadrias`
 : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}`}
 </p>
-{card.descricao_livre && (
+{card.descricao_livre && card.modo_entrada !== 'whatsapp' && (
 <p className="text-xs line-clamp-2" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.8 : 1 }}>
 {card.descricao_livre}
 </p>
@@ -1695,7 +1712,7 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
 <div>
 <h3 className="font-bold text-slate-800">Orçamento · detalhes e histórico</h3>
-{cardSelecionado.modo_entrada === "whatsapp" && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">WhatsApp · Orçamento / Assistência</span>}
+{cardSelecionado.modo_entrada === "whatsapp" && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">Via WhatsApp · notas e mídias</span>}
 <p className="text-[11px] text-slate-400">Abertura, alterações e saídas ficam registradas.</p>
 </div>
 <button onClick={tentarFechar} className="p-1 text-slate-400 hover:text-slate-600">
