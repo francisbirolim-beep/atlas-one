@@ -13,6 +13,7 @@ export type ProjetoGeralCard = {
  producao:{total:number;concluidas:number};instalacao:{total:number;concluidas:number};
  medicao?:{registros:number};instalacaoMes?:string|null;dataInstalacao?:string|null;valorInstalacao?:number|null;detalhesCompra?:DetalheMaterialCompra[];
  fotoProjetoUrl?:string|null;dataVenda?:string|null;observacoes?:string|null;
+ controleMaster?:string|null;motivoControle?:string|null;etapaOrigem?:string|null;
 }
 export type PedidoGeralCard = {
  id:string;cliente:string;clienteId:string|null;vendaId:string|null;numeroOrcamento:string|null;

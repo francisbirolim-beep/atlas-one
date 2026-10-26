@@ -140,6 +140,9 @@ export default function VisaoGeralProjetos(){
  const [demo,setDemo]=useState<boolean|null>(null),[colunas,setColunas]=useState<ColunaVisualProjeto[]>(COLUNAS_GERAIS_PADRAO)
  const [configuravel,setConfiguravel]=useState(false),[avisoConfiguracao,setAvisoConfiguracao]=useState('')
  const [cards,setCards]=useState<ProjetoGeralCard[]>([]),[pedidos,setPedidos]=useState<PedidoGeralCard[]>([])
+ const [usuarioMaster,setUsuarioMaster]=useState(false)
+ const [ocultos,setOcultos]=useState<{vendaId:string;cliente:string;numeroOrcamento:string;motivoControle:string|null}[]>([])
+ const [mostrarOcultos,setMostrarOcultos]=useState(false),[arrastando,setArrastando]=useState<string|null>(null),[salvandoCard,setSalvandoCard]=useState(false)
  const [selecionado,setSelecionado]=useState<string|null>(null),[aba,setAba]=useState<Aba>('resumo')
  const [erro,setErro]=useState(''),[carregando,setCarregando]=useState(true),[atualizado,setAtualizado]=useState('')
  const [modoTv,setModoTv]=useState(false),[compacto,setCompacto]=useState(false),[config,setConfig]=useState(false),[novoNome,setNovoNome]=useState('')
@@ -154,7 +157,9 @@ export default function VisaoGeralProjetos(){
    const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>({...c,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]})))
-   setPedidos(j.pedidos||[]);setAtualizado(j.atualizadoEm||new Date().toISOString());setErro('')
+   setPedidos(j.pedidos||[]);setUsuarioMaster(j.usuarioMaster===true)
+   setOcultos(j.usuarioMaster===true?j.ocultos||[]:[])
+   setAtualizado(j.atualizadoEm||new Date().toISOString());setErro('')
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar a empresa.')}
   finally{setCarregando(false)}
  },[demo])
@@ -177,6 +182,35 @@ export default function VisaoGeralProjetos(){
   if(window.innerWidth>=1280)setSelecionado(cards[0].vendaId)
  },[cards,fechou])
  const podeEditarColunas=demo===true||configuravel
+ async function operarMaster(vendaId:string,acao:'finalizar'|'ocultar'|'restaurar'){
+  if(!usuarioMaster||demo||salvandoCard){setErro('Apenas o Master pode organizar estes cards reais.');return}
+  const titulo=acao==='finalizar'
+   ?'Mover para Finalizado somente na Visão Geral (não encerra operações do Cliente 360).'
+   :acao==='ocultar'
+   ?'Retirar este card do Kanban Geral, sem excluir venda, cliente, documentos ou histórico.'
+   :'Restaurar o card para a posição calculada a partir do Cliente 360.'
+  const sugestao=acao==='finalizar'
+   ?'Projeto já encerrado; organização manual do Kanban pelo Master.'
+   :acao==='restaurar'
+   ?'Projeto restaurado na Visão Geral pelo Master.'
+   :'Card antigo retirado da Visão Geral pelo Master.'
+  const motivo=window.prompt(titulo+'\n\nConfirme registrando o motivo (mínimo 8 caracteres):',sugestao)
+  if(!motivo)return
+  if(motivo.trim().length<8){setErro('Motivo obrigatório com pelo menos 8 caracteres.');return}
+  if(!window.confirm(titulo+'\n\nMotivo: '+motivo.trim()+'\n\nDeseja confirmar?'))return
+  setSalvandoCard(true);setErro('')
+  try{
+   const token=await tokenAtual();if(!token)throw Error('Sessão expirada. Entre novamente.')
+   const r=await fetch('/api/visao-geral-projetos/controle',{
+    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({vendaId,acao,motivo:motivo.trim()})})
+   const json=await r.json().catch(()=>({}))
+   if(!r.ok||!json.ok)throw Error(json.erro||'A ação não foi salva')
+   if(acao==='ocultar')setSelecionado(null)
+   await carregar()
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao alterar o card.')}
+  finally{setSalvandoCard(false);setArrastando(null)}
+ }
  const cardAtual=useMemo(()=>cards.find(c=>c.vendaId===selecionado)||null,[cards,selecionado])
  const pedidoAtual=useMemo(()=>pedidos.find(p=>p.id===selecionado)||null,[pedidos,selecionado])
  const fechar=()=>{setSelecionado(null);setFechou(true)}
@@ -293,6 +327,7 @@ export default function VisaoGeralProjetos(){
      {demo&&<span className="mt-2 inline-flex rounded bg-amber-400 px-2 py-1 text-xs font-bold text-amber-950">PRÉVIA FICTÍCIA</span>}
     </div>
     <div className="flex flex-wrap items-center gap-2">
+     {usuarioMaster&&!demo&&<button type="button" onClick={()=>setMostrarOcultos(v=>!v)} aria-expanded={mostrarOcultos} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Package size={15}/> Cards retirados ({ocultos.length})</button>}
      <button onClick={()=>setFiltros(v=>!v)} aria-expanded={filtros} className={'inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#243c59] '+(filtros?'bg-[#284968]':'bg-[#10253e]')}><Filter size={15}/> Filtros</button>
      {podeEditarColunas&&<button onClick={()=>setConfig(v=>!v)} aria-expanded={config} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Settings2 size={15}/> Personalizar Kanban</button>}
      <button onClick={()=>setCompacto(v=>!v)} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] text-white"><Columns3 size={15}/>{compacto?'Cards maiores':'Cards menores'}</button>
@@ -300,6 +335,15 @@ export default function VisaoGeralProjetos(){
      <Link href="/clientes/identificar" title="Criar ou identificar cliente para abrir uma obra no fluxo oficial" className="inline-flex items-center gap-1.5 rounded-md bg-[#0061d5] px-3 py-2 text-[11px] font-bold text-white hover:bg-blue-600"><Plus size={15}/> Novo Projeto</Link>
     </div>
    </div>
+   {mostrarOcultos&&usuarioMaster&&!demo&&<section className="mb-4 space-y-2 rounded-lg border border-[#29415d] bg-[#12283e] p-3">
+    <h2 className="text-sm font-bold text-white">Cards retirados da Visão Geral</h2>
+    <p className="text-xs text-[#b0c6df]">Nenhum registro foi excluído do Cliente 360. Somente o Master pode restaurar.</p>
+    {ocultos.length===0?<p className="text-xs text-[#b0c6df]">Nenhum card retirado.</p>:
+     ocultos.map(c=><div key={c.vendaId} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[#3a526d] bg-[#0d2138] px-3 py-2 text-xs">
+      <div><b>{c.cliente}</b><p className="text-[11px] text-[#a7bfd9]">Orçamento {c.numeroOrcamento} · {c.motivoControle}</p></div>
+      <button disabled={salvandoCard} onClick={()=>void operarMaster(c.vendaId,'restaurar')} className="rounded bg-blue-700 px-3 py-1.5 font-bold text-white disabled:opacity-40">Restaurar card</button>
+     </div>)}
+   </section>}
    {filtros&&<section className="mb-4 flex flex-wrap gap-3 rounded-lg border border-[#29415d] bg-[#12283e] p-3">
     <label className="min-w-[180px] flex-1 text-[11px] text-slate-300">Buscar projeto ou orçamento
      <input className="mt-1 block w-full rounded-md border border-[#395473] bg-[#091b30] px-3 py-2 text-sm text-white outline-none focus:border-blue-400" value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Cliente, obra ou orçamento"/>
@@ -343,7 +387,11 @@ export default function VisaoGeralProjetos(){
       const pedidosCol=pedidosVisiveis.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
       const paleta=COLUNA_CORES[etapaIndice(col)]||COLUNA_CORES[i%COLUNA_CORES.length]
       const Icon=paleta.icone
-      return <section key={col.id} className="flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)]" style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
+      const destinoFinalizado=col.criterios.includes('finalizado')
+      return <section key={col.id}
+       onDragOver={e=>{if(usuarioMaster&&destinoFinalizado&&arrastando&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
+       onDrop={e=>{if(!usuarioMaster||!destinoFinalizado||!arrastando||salvandoCard)return;e.preventDefault();const id=arrastando;setArrastando(null);void operarMaster(id,'finalizar')}}
+       className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoFinalizado&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
        <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:paleta.cabecalho}}>
         <div className="flex items-center gap-1">
          <Icon size={15} className="shrink-0"/>
@@ -353,7 +401,13 @@ export default function VisaoGeralProjetos(){
        </div>
        <Link href="/clientes/identificar" title="Abrir o fluxo oficial de cliente e obra; a etapa será atualizada pelo Cliente 360" className="block border-t border-white/10 py-1.5 text-center text-[11px] font-semibold text-white hover:brightness-110" style={{background:paleta.botao}}>+ Adicionar</Link>
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
-        {vis.map(c=><CardProjeto key={c.vendaId} card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>)}
+        {usuarioMaster&&destinoFinalizado&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">Arraste um projeto para cá para finalizar no painel</p>}
+        {vis.map(c=><div key={c.vendaId} draggable={usuarioMaster&&!demo&&c.etapaOperacional!=='finalizado'&&!salvandoCard}
+         onDragStart={e=>{if(!usuarioMaster||demo)return;e.dataTransfer.setData('text/plain',c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
+         onDragEnd={()=>setArrastando(null)}
+         className={usuarioMaster&&c.etapaOperacional!=='finalizado'?'cursor-grab active:cursor-grabbing':''}>
+          <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
+         </div>)}
         {pedidosCol.map(p=><CardPedido key={p.id} pedido={p} abrir={()=>abrir(p.id)}/>)}
         {!vis.length&&!pedidosCol.length&&<p className="rounded-lg border border-dashed border-white/15 bg-white/5 px-2 py-5 text-center text-[11px] text-slate-400">Nenhum card nesta etapa</p>}
        </div>
@@ -420,6 +474,11 @@ export default function VisaoGeralProjetos(){
        <p className="mt-2 text-[10px] text-slate-600">Itens instalados: {cardAtual.instalacao.concluidas} de {cardAtual.instalacao.total}</p>
        {cardAtual.valorInstalacao!==null&&cardAtual.valorInstalacao!==undefined&&<p className="text-[10px] font-medium text-slate-700">Valor planejado: {moeda(cardAtual.valorInstalacao)}</p>}
       </section>}
+      {cardAtual.controleMaster==='finalizado'&&<div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-[11px] text-blue-900">
+       <b>Finalizado visualmente pelo Master</b>
+       <p>Esta organização não altera a situação real no Cliente 360. Etapa operacional anterior: {cardAtual.etapaOrigem||'Não identificada'}.</p>
+       {cardAtual.motivoControle&&<p className="mt-1">Motivo: {cardAtual.motivoControle}</p>}
+      </div>}
       {(aba==='resumo'||aba==='historico')&&<section className="rounded-lg border border-slate-200 bg-white p-3">
        <h3 className="flex items-center gap-1.5 text-xs font-extrabold text-[#1d335b]"><ClipboardCheck size={14}/> Observações e pendências</h3>
        {cardAtual.observacoes?<p className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-4 text-slate-600">{cardAtual.observacoes}</p>:<p className="mt-2 text-[11px] text-slate-500">Nenhuma observação cadastrada.</p>}
@@ -436,6 +495,16 @@ export default function VisaoGeralProjetos(){
        <ItensCompra itens={cardAtual.detalhesCompra||[]}/>
       </section>}
       {aba==='producao'&&<section className="rounded-lg border border-slate-200 bg-white p-3"><h3 className="text-xs font-bold">Produção</h3><p className="my-2 text-[11px]">{cardAtual.producao.concluidas} de {cardAtual.producao.total} ordens concluídas</p><Progresso nome="Produção" valor={percentual(cardAtual.producao.concluidas,cardAtual.producao.total)}/></section>}
+      {usuarioMaster&&!demo&&<section className="space-y-2 rounded-lg border border-[#d5e1f2] bg-white p-3">
+       <h3 className="text-xs font-extrabold text-[#15294f]">Organização do Master</h3>
+       <p className="text-[10px] leading-4 text-slate-500">Somente o Master pode finalizar ou retirar cards. Nenhuma ação aqui apaga venda, obra, materiais ou documentos.</p>
+       <div className="flex flex-wrap gap-2">
+        {cardAtual.controleMaster==='finalizado'?
+         <button disabled={salvandoCard} onClick={()=>void operarMaster(cardAtual.vendaId,'restaurar')} className="rounded bg-blue-600 px-2 py-2 text-[11px] font-bold text-white disabled:opacity-40">Voltar à etapa do Cliente 360</button>:
+         <button disabled={salvandoCard} onClick={()=>void operarMaster(cardAtual.vendaId,'finalizar')} className="rounded bg-emerald-600 px-2 py-2 text-[11px] font-bold text-white disabled:opacity-40">Mover para Finalizado</button>}
+        <button disabled={salvandoCard} onClick={()=>void operarMaster(cardAtual.vendaId,'ocultar')} className="rounded border border-rose-200 bg-rose-50 px-2 py-2 text-[11px] font-bold text-rose-800 disabled:opacity-40">Excluir card do painel</button>
+       </div>
+      </section>}
       {!demo&&<div className="flex gap-2">
        <Link href={'/clientes/'+cardAtual.clienteId+'/vendas/'+cardAtual.vendaId} className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-blue-700 px-2 py-2 text-[11px] font-bold text-white">Abrir Cliente 360 <ArrowUpRight size={13}/></Link>
        <Link href="/compras/solicitacoes" className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold">Compras</Link>

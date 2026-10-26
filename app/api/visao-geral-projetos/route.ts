@@ -193,6 +193,22 @@ export async function GET(req:NextRequest){
     valorInstalacao:agenda.get(v.id)?Number(agenda.get(v.id)?.valor_programado):null,
     detalhesCompra:detalhesAtuais}
   }).filter(c=>c.vendaId)
+  // Ajustes visuais do Master, sem alterar Cliente 360 ou status operacionais.
+  const controlesR=await db.from('visao_geral_cards_controle')
+    .select('venda_id,estado,motivo,updated_at').eq('empresa_id',empresa).limit(1000)
+  if(controlesR.error)throw controlesR.error
+  const controles=new Map((controlesR.data||[]).map(c=>[c.venda_id,c]))
+  const normalizados=cards.map(c=>{
+    const controle=controles.get(c.vendaId)
+    return controle?.estado==='finalizado'
+      ?{...c,etapaOrigem:c.etapaOperacional,etapaOperacional:'finalizado',colunaId:'finalizado',cor:'azul' as const,controleMaster:'finalizado',motivoControle:controle.motivo}
+      :{...c,controleMaster:controle?.estado||null,motivoControle:controle?.motivo||null}
+  })
+  const ativos=normalizados.filter(c=>c.controleMaster!=='oculto')
+  const ocultos=u.role==='master'
+    ?normalizados.filter(c=>c.controleMaster==='oculto')
+      .map(c=>({vendaId:c.vendaId,cliente:c.cliente,numeroOrcamento:c.numeroOrcamento,motivoControle:c.motivoControle}))
+    :[]
   const pedidos:PedidoGeralCard[]=[]
   for(const s of pedidosAbertos){
    const lista=itensPedido.filter(i=>i.solicitacao_id===s.id&&i.destino==='obra'&&!['cancelado','cancelamento_solicitado'].includes(txt(i.status)))
@@ -203,6 +219,7 @@ export async function GET(req:NextRequest){
     const vendasDaObra=vendas.filter(v=>v.obra_id===obraId&&(!clienteId||v.cliente_id===clienteId))
     const venda=vendasDaObra.length===1?vendasDaObra[0]:null
     const situacao=['comprado','pedido_emitido','aguardando_entrega','recebido_parcial'].includes(txt(s.status))?'aguardando':'compras'
+    if(venda && controles.get(venda.id)?.estado==='oculto')continue
     pedidos.push({id:s.id+':'+obraId,cliente:clienteId?nomeCliente.get(clienteId)||'Cliente sem cadastro':'Cliente não vinculado',
      clienteId,vendaId:venda?.id||null,numeroOrcamento:venda?porOrc.get(venda.orcamento_id)||null:null,
      status:situacao,descricao:linhas.length===1?String(linhas[0].descricao||'Material solicitado'):'Solicitação com '+linhas.length+' itens',
@@ -210,7 +227,7 @@ export async function GET(req:NextRequest){
      detalhesCompra:linhas.map(detalhe)})
    }
   }
-  return NextResponse.json({cards,pedidos,usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
+  return NextResponse.json({cards:ativos,ocultos,pedidos,usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
    observacao:'Os percentuais sem quantidades ou unidades conciliadas são exibidos como Não apurado. Agendamentos não foram inferidos a partir da entrega da obra.'},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('visao geral de projetos GET',e);return respErro('Não foi possível consultar a Visão Geral de Projetos.',500)}
