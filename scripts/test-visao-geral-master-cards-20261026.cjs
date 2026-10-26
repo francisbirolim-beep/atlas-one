@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict')
 const fs=require('node:fs')
-const sql=fs.readFileSync('supabase/migrations/20261026142000_visao_geral_controle_master_cards_v1.sql','utf8')
+const sql=fs.readFileSync('supabase/migrations/20261026173759_visao_geral_controle_master_cards_20261026.sql','utf8')
 const get=fs.readFileSync('app/api/visao-geral-projetos/route.ts','utf8')
 const ctl=fs.readFileSync('app/api/visao-geral-projetos/controle/route.ts','utf8')
 const ui=fs.readFileSync('app/visao-geral-projetos/page.tsx','utf8')
