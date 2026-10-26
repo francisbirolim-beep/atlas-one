@@ -7,6 +7,7 @@ import { ChevronDown, Command, FileText, LogOut, MapPin, Plus, Search, Settings,
 import { logout, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import { bateBusca } from '@/lib/texto'
+import { nomeClienteComApelido } from '@/lib/nomeClienteComApelido'
 import type { Usuario } from '@/lib/tipos'
 import HomeNotificationBell from '@/components/system/HomeNotificationBell'
 
@@ -124,20 +125,27 @@ export default function AppTopbar() {
       setBuscando(true)
       setErroBusca('')
       try {
-        const [clientesResp, orcamentosResp, medicoesResp] = await Promise.all([
+        const [clientesResp, clientesPorApelidoResp, orcamentosResp, medicoesResp] = await Promise.all([
           supabase.from('clientes').select('*').order('created_at', { ascending: false }).limit(300),
+          // Localiza apelidos também de clientes antigos, fora dos 300 cadastros recentes.
+          supabase.from('clientes').select('id,nome,apelido,cidade,bairro,cep,endereco,cpf_cnpj,whatsapp,telefone,email').ilike('apelido', `%${q}%`).limit(50),
           supabase.from('orcamentos').select('*').order('created_at', { ascending: false }).limit(300),
           supabase.from('medicoes_finais').select('*').order('created_at', { ascending: false }).limit(200),
         ])
         if (cancelado) return
-        const erros = [clientesResp.error, orcamentosResp.error, medicoesResp.error].filter(Boolean)
-        if (erros.length === 3) {
+        const erros = [clientesResp.error, clientesPorApelidoResp.error, orcamentosResp.error, medicoesResp.error].filter(Boolean)
+        if (erros.length === 4) {
           setErroBusca('Não foi possível consultar os dados agora. Tente novamente em instantes.')
           setResultados([])
           return
         }
         const encontrados: ResultadoBusca[] = []
-        for (const c of (clientesResp.data || []) as any[]) if (bateBusca(q, c.nome, c.apelido, c.cidade, c.bairro, c.cep, c.endereco, c.cpf_cnpj, c.whatsapp, c.telefone, c.email)) encontrados.push({ id: `cliente-${c.id}`, tipo: 'cliente', titulo: c.apelido ? `${c.nome || 'CLIENTE'} (${c.apelido})` : (c.nome || 'CLIENTE'), subtitulo: [c.cidade, c.whatsapp || c.telefone].filter(Boolean).join(' · ') || 'Cliente', href: `/clientes/${c.id}` })
+        const clientesEncontrados = new Set<string>()
+        for (const c of [...(clientesPorApelidoResp.data || []), ...(clientesResp.data || [])] as any[]) {
+          if (clientesEncontrados.has(c.id) || !bateBusca(q, c.nome, c.apelido, c.cidade, c.bairro, c.cep, c.endereco, c.cpf_cnpj, c.whatsapp, c.telefone, c.email)) continue
+          clientesEncontrados.add(c.id)
+          encontrados.push({ id: `cliente-${c.id}`, tipo: 'cliente', titulo: nomeClienteComApelido(c.nome, c.apelido), subtitulo: [c.cidade, c.whatsapp || c.telefone].filter(Boolean).join(' · ') || 'Cliente', href: `/clientes/${c.id}` })
+        }
         for (const o of (orcamentosResp.data || []) as any[]) if (bateBusca(q, o.numero, o.cliente_nome, o.cidade, o.cliente_whatsapp, o.criado_por_nome)) encontrados.push({ id: `orcamento-${o.id}`, tipo: 'orcamento', titulo: `ORÇAMENTO ${o.numero ? `#${o.numero}` : ''} — ${o.cliente_nome || 'SEM CLIENTE'}`.trim(), subtitulo: [o.cidade, o.valor_estimado != null ? `R$ ${Number(o.valor_estimado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : null].filter(Boolean).join(' · '), href: `/kanban/comercial?orcamento=${o.id}` })
         for (const m of (medicoesResp.data || []) as any[]) if (bateBusca(q, m.cliente_nome, m.cidade, m.bairro, m.endereco, m.cep)) encontrados.push({ id: `medicao-${m.id}`, tipo: 'medicao', titulo: `MEDIÇÃO — ${m.cliente_nome || 'SEM CLIENTE'}`, subtitulo: [m.endereco, m.cidade].filter(Boolean).join(' · '), href: `/producao/medicao-final/${m.id}` })
         const paginasEncontradas: ResultadoBusca[] = PAGINAS.filter(p => bateBusca(q, p.titulo, p.href, ...p.termos)).map(p => ({ id: p.id, tipo: 'pagina' as const, titulo: p.titulo, subtitulo: p.subtitulo, href: p.href }))
