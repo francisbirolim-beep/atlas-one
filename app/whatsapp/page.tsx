@@ -22,6 +22,7 @@ import {
 } from '@/lib/chatInterno'
 import { ativarPushNesteDispositivo, statusPushNesteDispositivo } from '@/lib/notificacoes'
 import { calcularIndicadoresWhatsApp } from '@/lib/whatsappIndicadores'
+import { FichaContatoWhatsApp } from '@/components/whatsapp/FichaContatoWhatsApp'
 
 type Usuario = { id: string; nome: string; role?: string; cargo?: string | null }
 type Canal = {
@@ -89,6 +90,7 @@ type ClienteResumo = {
   endereco?: string | null
   bairro?: string | null
   observacoes?: string | null
+  email?: string | null
 }
 type ObraResumo = { id: string; nome?: string | null; status?: string | null }
 type AcessoCanal = {
@@ -1057,7 +1059,7 @@ export default function WhatsAppAtendimentoPage() {
     setCarregandoCliente(true)
     Promise.all([
       supabase.from('clientes')
-        .select('id,nome,whatsapp,telefone,cidade,endereco,bairro,observacoes')
+        .select('id,nome,whatsapp,telefone,email,cidade,endereco,bairro,observacoes')
         .eq('id', ativa.cliente_id).maybeSingle(),
       supabase.from('obras')
         .select('id,nome,status')
@@ -2266,13 +2268,30 @@ export default function WhatsAppAtendimentoPage() {
                 <div><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl border-2 border-blue-200 bg-blue-50 text-blue-500"><MessageCircle size={30}/></div><p className="font-semibold text-slate-600">Selecione uma conversa para começar</p></div>
               </div>
             ) : <>
+              {ativa.whatsapp_chat_tipo !== 'grupo' && (
+                <FichaContatoWhatsApp
+                  key={ativa.id}
+                  conversa={ativa}
+                  nomeCanal={canalAtivo?.nome}
+                  cliente={cliente}
+                  aoCadastrar={novo=>{
+                    setAtiva(atual=>atual?.id===ativa.id
+                      ? {...atual, cliente_id:novo.id, contato_nome:novo.nome} : atual)
+                    setConversas(lista=>lista.map(c=>c.id===ativa.id
+                      ? {...c, cliente_id:novo.id, contato_nome:novo.nome} : c))
+                    setConversasMonitoradas(lista=>lista.map(c=>c.id===ativa.id
+                      ? {...c, cliente_id:novo.id, contato_nome:novo.nome} : c))
+                    void carregarConversas(false)
+                  }}
+                />
+              )}
               <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-white px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
                 <button type="button" onClick={()=>setAtiva(null)}
                   className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border bg-white text-slate-700 md:hidden"
                   aria-label="Voltar para conversas" title="Voltar para conversas">
                   <ArrowLeft size={18}/>
                 </button>
-                <div className="min-w-0 flex-1">
+                {ativa.whatsapp_chat_tipo === 'grupo' && <div className="min-w-0 flex-1">
                   <b className="block truncate">
                     {ativa.whatsapp_chat_tipo === 'grupo'
                       ? (ativa.grupo_nome || ativa.contato_nome || 'Grupo WhatsApp')
@@ -2304,7 +2323,7 @@ export default function WhatsAppAtendimentoPage() {
                       ))}
                     </div>
                   )}
-                </div>
+                </div>}
                 {ativa.cliente_id && (
                   <Link href={`/clientes/${ativa.cliente_id}`} className="rounded-lg border px-3 py-2 text-xs font-semibold">
                     Cliente 360

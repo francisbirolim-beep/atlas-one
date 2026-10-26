@@ -714,7 +714,7 @@ async function criarOuAtualizarConversa(params: {
     const responsavelId = regra?.usuario_id || params.config.usuario_padrao_id || null
     const responsavelNome = await nomeUsuario(responsavelId)
     const { data } = await supabaseAdmin.from('atendimento_conversas').update({
-      contato_nome: params.contatoNome || (cliente as any)?.nome || atual.contato_nome || null,
+      contato_nome: (atual.cliente_id ? (cliente as any)?.nome || atual.contato_nome : params.contatoNome || (cliente as any)?.nome || atual.contato_nome) || null,
       cliente_id: (cliente as any)?.id || atual.cliente_id || null,
       responsavel_id: responsavelId,
       responsavel_nome: responsavelNome,
