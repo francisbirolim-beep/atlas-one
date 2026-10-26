@@ -1,4 +1,3 @@
--- Configuração isolada; não altera a fila nem permissões de canais atuais.
 create table if not exists public.atendimento_whatsapp_distribuicao (
   empresa_id uuid primary key references public.empresas(id) on delete cascade,
   usuario_principal_id uuid references public.usuarios(id) on delete set null,

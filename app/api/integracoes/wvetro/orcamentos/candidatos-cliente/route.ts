@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { colunaRecebimentoWVetro, MOTIVO_PADRAO_WVETRO } from '@/lib/wvetroEtapaComercial'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarUsuarioWVetro } from '@/lib/wvetroAcessoServer'
 import { consultarRecursoOperacionalWVetro } from '@/lib/wvetroOperacionalConsultaServer'
@@ -351,8 +352,9 @@ async function garantirOrcamentoFallback(usuario: any, cliente: any, h: Historic
   const { data: colunas } = await supabaseAdmin
     .from('kanban_colunas')
     .select('id,nome,ordem')
+    .eq('empresa_id', usuario.empresa_id)
     .order('ordem')
-  const coluna = (colunas || []).find((x: any) => normalizarNomeClienteWVetro(x.nome) === 'FAZER ORCAMENTO') || (colunas || [])[0] || null
+  const coluna = colunaRecebimentoWVetro(colunas || [])
   const dataRef = dataHistorico(h)
 
   const { error } = await supabaseAdmin.from('orcamentos').insert({
@@ -378,7 +380,8 @@ async function garantirOrcamentoFallback(usuario: any, cliente: any, h: Historic
     anexos: [],
     tipo_medida: 'comum',
     revisao_grupo_id: id,
-    coluna_id: coluna?.id || null,
+    coluna_id: coluna.id,
+    kanban_motivo_andamento: MOTIVO_PADRAO_WVETRO,
     coluna_atualizada_em: new Date().toISOString(),
     orcamento_iniciado_em: dataRef ? `${dataRef}T12:00:00Z` : null,
     criado_por_id: usuario.id,

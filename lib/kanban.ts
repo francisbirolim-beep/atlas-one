@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { ehEmAndamento, ehOrcamentoFeito, nomeEtapa, podeIrParaOrcamentoFeitoWVetro } from './wvetroEtapaComercial'
 import { KanbanColuna } from './tipos'
 import { executarAutomacoesColuna } from './automacoes'
 import { executarAutomacoesSetor } from './automacoesSetor'
@@ -60,11 +61,15 @@ export async function criarColuna(nome: string): Promise<KanbanColuna | null> {
 }
 
 export async function renomearColuna(id: string, nome: string): Promise<boolean> {
+  const { data } = await supabase.from('kanban_colunas').select('nome').eq('id',id).maybeSingle()
+  if (ehEmAndamento(data?.nome)) return false // Etapa operacional usada pela integração W.Vetro.
   const { error } = await supabase.from('kanban_colunas').update({ nome }).eq('id', id)
   return !error
 }
 
 export async function excluirColuna(id: string, colunaDestinoId: string): Promise<boolean> {
+  const { data } = await supabase.from('kanban_colunas').select('nome').eq('id',id).maybeSingle()
+  if (ehEmAndamento(data?.nome)) return false // Evita quebrar a importação automática.
   const { error: moveError } = await supabase
     .from('orcamentos')
     .update({ coluna_id: colunaDestinoId })
@@ -82,14 +87,15 @@ export async function excluirColuna(id: string, colunaDestinoId: string): Promis
 export async function moverCard(
   orcamentoId: string,
   colunaId: string,
-  decisoesAutomacaoSetor?: Record<string, 'substituir' | 'duplicar'>
+  decisoesAutomacaoSetor?: Record<string, 'substituir' | 'duplicar'>,
+  motivoAndamento?: string
 ): Promise<boolean> {
   // A coluna marcada com gera_medicao_final é o gatilho visual de "Vendido".
   // Ela NÃO pode ser persistida antes da confirmação da venda, senão o card
   // fica parecendo vendido sem existir venda, conta a receber ou projeto.
   const { data: colunaDestino, error: erroColuna } = await supabase
     .from('kanban_colunas')
-    .select('gera_medicao_final')
+    .select('gera_medicao_final,nome')
     .eq('id', colunaId)
     .maybeSingle()
 
@@ -97,6 +103,16 @@ export async function moverCard(
     console.error('Erro ao verificar configuracao da coluna:', erroColuna)
     return false
   }
+
+  const paraAndamento = ehEmAndamento(colunaDestino?.nome)
+  if (paraAndamento && (motivoAndamento || '').trim().length < 8) return false
+  const { data: atual, error: erroAtual } = await supabase.from('orcamentos')
+    .select('wvetro_fluxo,itens').eq('id', orcamentoId).maybeSingle()
+  if (erroAtual || !atual) return false
+  const fluxo = (atual.wvetro_fluxo || {}) as Record<string, any>
+  const importado = String(fluxo.origem || '').toLowerCase().includes('wvetro')
+  if (importado && !podeIrParaOrcamentoFeitoWVetro(atual) &&
+    !paraAndamento && nomeEtapa(colunaDestino?.nome) !== 'fazer orcamento') return false
 
   if (colunaDestino?.gera_medicao_final) {
     if (typeof window !== 'undefined') {
@@ -107,7 +123,11 @@ export async function moverCard(
 
   const { data, error } = await supabase
     .from('orcamentos')
-    .update({ coluna_id: colunaId, coluna_atualizada_em: new Date().toISOString() })
+    .update({
+      coluna_id: colunaId,
+      coluna_atualizada_em: new Date().toISOString(),
+      ...(paraAndamento ? { kanban_motivo_andamento: motivoAndamento!.trim() } : {}),
+    })
     .eq('id', orcamentoId)
     .select('cliente_nome, criado_por_id')
     .single()

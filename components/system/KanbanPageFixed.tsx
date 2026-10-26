@@ -1,6 +1,7 @@
 'use client'
 
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+import { ehEmAndamento, nomeEtapa } from '@/lib/wvetroEtapaComercial'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -439,17 +440,30 @@ const cardId = e.dataTransfer.getData('text/plain')
 if (!cardId) return
 const card = cards.find(c => c.id === cardId)
 if (card?.eh_assistencia) return
-if (wvetroAguardandoValidacao(card)) {
-  alert('Este orçamento veio do W.Vetro e precisa ser conferido e validado antes de avançar no Kanban.')
-  return
-}
 const colunaAnterior = colunas.find(c => c.id === (card?.coluna_id || colunas[0]?.id))
 const colunaNova = colunas.find(c => c.id === colunaId)
 if (!card || !colunaNova || colunaAnterior?.id===colunaNova.id) return
+if (wvetroAguardandoValidacao(card) &&
+    !ehEmAndamento(colunaNova.nome) && nomeEtapa(colunaNova.nome) !== 'fazer orcamento') {
+  alert('O W.Vetro precisa ser validado antes de ir para Orçamento feito ou avançar. Mantenha em Em andamento.')
+  return
+}
 if (!confirmarMovimentoKanban({card:card.cliente_nome||'Orçamento',origem:colunaAnterior?.nome||'Etapa anterior',destino:colunaNova.nome,retrocesso:colunas.findIndex(c=>c.id===colunaNova.id)<colunas.findIndex(c=>c.id===colunaAnterior?.id),aviso:'Automações anteriores precisam de revisão quando retornar de etapa.'})) return
+let motivoAndamento = ''
+if (ehEmAndamento(colunaNova.nome)) {
+  const resposta = window.prompt('Por que o orçamento está em andamento? Informe o que falta (mínimo 8 caracteres):', card.kanban_motivo_andamento || (ehOrcamentoWVetro(card) ? 'Aguardando validação do W.Vetro.' : ''))
+  if (!resposta || resposta.trim().length < 8) {
+    alert('O motivo é obrigatório para a coluna Em andamento. O card não foi movido.')
+    return
+  }
+  motivoAndamento = resposta.trim()
+}
 const agoraIso = new Date().toISOString()
 const cardsAntesDoArrasto = cards
-setCards(prev => prev.map(c => (c.id === cardId ? { ...c, coluna_id: colunaId, coluna_atualizada_em: agoraIso } : c)))
+setCards(prev => prev.map(c => (c.id === cardId ? {
+  ...c, coluna_id: colunaId, coluna_atualizada_em: agoraIso,
+  ...(motivoAndamento ? { kanban_motivo_andamento: motivoAndamento } : {})
+} : c)))
 let decisoesAutomacao: Record<string, 'substituir' | 'duplicar'> | undefined
   const duplicatasSetor = await verificarDuplicatasAutomacaoSetor(colunaId, cardId)
   if (duplicatasSetor.length > 0) {
@@ -459,14 +473,14 @@ let decisoesAutomacao: Record<string, 'substituir' | 'duplicar'> | undefined
       decisoesAutomacao[d.setorId] = substituir ? 'substituir' : 'duplicar'
     }
   }
-  const movido = await moverCard(cardId, colunaId, decisoesAutomacao)
+  const movido = await moverCard(cardId, colunaId, decisoesAutomacao, motivoAndamento)
   if (!movido) {
     setCards(cardsAntesDoArrasto)
     alert('Não foi possível mover este card. A etapa anterior foi restaurada.')
     return
   }
 if (colunaAnterior?.id !== colunaNova?.id) {
-registrarHistorico(cardId, usuario, 'Moveu no painel', `${colunaAnterior?.nome || '—'} → ${colunaNova?.nome || '—'}`)
+registrarHistorico(cardId, usuario, 'Moveu no painel', `${colunaAnterior?.nome || '—'} → ${colunaNova?.nome || '—'}${motivoAndamento ? ' · Motivo: ' + motivoAndamento : ''}`)
 }
 }
 
@@ -1007,6 +1021,10 @@ listarHistorico(cardSelecionado.id).then(setHistorico)
 
 async function finalizarOrcamento() {
 if (!cardSelecionado || !editando) return
+if (ehOrcamentoWVetro(cardSelecionado) && wvetroAguardandoValidacao(cardSelecionado)) {
+  alert('Valide todas as esquadrias W.Vetro antes de finalizar o orçamento.')
+  return
+}
 if (editando.valor_estimado == null) {
 alert('Informe o valor total do orçamento antes de finalizar.')
 return
@@ -1320,10 +1338,25 @@ return
 const rascunhoWVetro = ehOrcamentoWVetro(cardSelecionado)
 ? prepararRascunhoWVetro(cardSelecionado.itens || [], editando.itens || [], fluxoWVetro(cardSelecionado))
 : null
-setSalvando(true)
 
 const colunaAnterior = cardSelecionado.coluna_id
 const mudouColuna = colunaAnterior !== editando.coluna_id
+const destinoEditado = colunas.find(c => c.id === editando.coluna_id)
+if (mudouColuna && wvetroAguardandoValidacao(cardSelecionado) &&
+    !ehEmAndamento(destinoEditado?.nome) && nomeEtapa(destinoEditado?.nome) !== 'fazer orcamento') {
+  alert('É obrigatório validar o orçamento W.Vetro antes de avançar de Em andamento.')
+  return
+}
+let motivoAndamento = cardSelecionado.kanban_motivo_andamento || ''
+if (mudouColuna && ehEmAndamento(destinoEditado?.nome)) {
+  const resposta = window.prompt('Qual informação ou validação está pendente? (mínimo 8 caracteres):', motivoAndamento || 'Aguardando validação do orçamento.')
+  if (!resposta || resposta.trim().length < 8) {
+    alert('Informe o motivo antes de colocar o orçamento em andamento.')
+    return
+  }
+  motivoAndamento = resposta.trim()
+}
+setSalvando(true)
 
 let gravacao = supabase
 .from('orcamentos')
@@ -1348,6 +1381,8 @@ largura_mm: editando.itens?.[0]?.largura_mm ?? editando.largura_mm,
 altura_mm: editando.itens?.[0]?.altura_mm ?? editando.altura_mm,
 quantidade: editando.itens?.[0]?.quantidade ?? editando.quantidade,
 coluna_id: editando.coluna_id,
+...(mudouColuna && ehEmAndamento(destinoEditado?.nome)
+  ? { kanban_motivo_andamento: motivoAndamento } : {}),
 coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
 })
 .eq('id', cardSelecionado.id)
@@ -1373,12 +1408,14 @@ criado_por_id: editando.criado_por_id,
 }
 const atualizado = {
 ...editando,
+...(mudouColuna && ehEmAndamento(destinoEditado?.nome)
+  ? { kanban_motivo_andamento: motivoAndamento } : {}),
 ...(rascunhoWVetro ? { itens: rascunhoWVetro.itens, wvetro_fluxo: rascunhoWVetro.fluxo } : {}),
 coluna_atualizada_em: mudouColuna ? new Date().toISOString() : cardSelecionado.coluna_atualizada_em,
 }
 setCards(prev => prev.map(c => (c.id === cardSelecionado.id ? atualizado : c)))
 const resumo = resumoMudancas(cardSelecionado, editando)
-await registrarHistorico(cardSelecionado.id, usuario, 'Editou o orçamento', resumo)
+await registrarHistorico(cardSelecionado.id, usuario, 'Editou o orçamento', resumo + (mudouColuna && ehEmAndamento(destinoEditado?.nome) ? ' · Motivo: ' + motivoAndamento : ''))
 setCardSelecionado(null)
 setEditando(null)
 }
@@ -1523,7 +1560,7 @@ const est = estiloCard(card, col)
 return (
 <div
 key={card.id}
-draggable={!card.eh_assistencia && !wvetroAguardandoValidacao(card)}
+draggable={!card.eh_assistencia}
 onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
 onClick={() => abrirCardOuAssistencia(card)}
 style={est ? { backgroundColor: est.fundo, borderColor: est.fundo } : undefined}
@@ -1629,6 +1666,11 @@ style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}
 {!card.eh_assistencia && card.valor_estimado != null && (
 <p className="text-xs font-semibold mt-1" style={{ color: est ? est.texto : '#059669' }}>
 {formatarMoedaBRL(card.valor_estimado)}
+</p>
+)}
+{!card.eh_assistencia && ehEmAndamento(col.nome) && (
+<p className="mt-1 rounded-md bg-white/50 px-2 py-1 text-[11px] font-medium" style={{color:est ? est.texto : '#92400e'}} title={card.kanban_motivo_andamento || ''}>
+⏳ {card.kanban_motivo_andamento || 'Motivo pendente de registro'}
 </p>
 )}
 {!card.eh_assistencia && ehOrcamentoWVetro(card) && (
