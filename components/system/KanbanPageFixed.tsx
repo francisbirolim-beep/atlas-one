@@ -1662,7 +1662,7 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 </div>
 
 <div className="p-5 space-y-4">
-{cardSelecionado.modo_entrada === "whatsapp" && <WhatsAppOrcamentoNotas card={cardSelecionado}/>}
+{cardSelecionado.modo_entrada === "whatsapp" && <WhatsAppOrcamentoNotas key={cardSelecionado.id} card={cardSelecionado}/>}
 <div id="atlas-campos-orcamento" />
 <section data-orcamento-localizacao="true" className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm">
   <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-blue-700">Cliente e local da obra</p>

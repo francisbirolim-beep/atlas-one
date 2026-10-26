@@ -22,18 +22,30 @@ export async function GET(req: NextRequest) {
     const id = req.nextUrl.searchParams.get('orcamentoId') || ''
     if (!/^[a-f\d-]{36}$/i.test(id)) return NextResponse.json({ error: 'Orçamento inválido.' }, { status: 400 })
     const { data: orcamento, error: erroOrcamento } = await supabaseAdmin.from('orcamentos')
-      .select('id,modo_entrada,ia_fontes').eq('id', id).eq('empresa_id', usuario.empresa_id).maybeSingle()
+      .select('id,modo_entrada,ia_fontes,ia_resultado_original,descricao_livre,created_at').eq('id', id).eq('empresa_id', usuario.empresa_id).maybeSingle()
     if (erroOrcamento) throw erroOrcamento
     if (!orcamento || orcamento.modo_entrada !== 'whatsapp') return NextResponse.json({ error: 'Notas não encontradas.' }, { status: 404 })
     const { data: intake, error: erroIntake } = await supabaseAdmin.from('atendimento_whatsapp_intakes')
       .select('id,conversa_id,participante_nome,conteudo_bruto,mensagens_ids,anexos,primeira_mensagem_em,ultima_mensagem_em,gatilho_fechamento,ai_resultado,atendimento_whatsapp_grupos(nome)')
       .eq('orcamento_id', id).eq('empresa_id', usuario.empresa_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
     if (erroIntake) throw erroIntake
-    const grupo = (intake?.atendimento_whatsapp_grupos as unknown as { nome?: string } | null)?.nome || ''
-    if (!intake || normalizar(grupo) !== 'orcamento / assistencia') {
-      return NextResponse.json({ error: 'O card não possui pacote do grupo de orçamentos.' }, { status: 404 })
+    // Registros anteriores à regra atual podem ter perdido o vínculo de intake,
+    // mas preservam uma cópia imutável das mensagens e mídias em ia_fontes.
+    // Recuperamos SOMENTE leitura do histórico: isso nunca cria novos cards.
+    const fontes = (orcamento.ia_fontes || {}) as {
+      conteudo_bruto?: string
+      anexos?: Array<Record<string, unknown>>
     }
-    const anexos = Array.isArray(intake.anexos) ? intake.anexos : []
+    const dadosIntake = intake || null
+    const grupoRegistrado = (dadosIntake?.atendimento_whatsapp_grupos as unknown as { nome?: string } | null)?.nome || ''
+    const grupoConferido = normalizar(grupoRegistrado) === 'orcamento / assistencia'
+    const historico = !dadosIntake || !grupoConferido
+    const grupo = grupoRegistrado || 'Grupo não registrado no histórico'
+    const anexos = Array.isArray(dadosIntake?.anexos) ? dadosIntake.anexos
+      : Array.isArray(fontes.anexos) ? fontes.anexos : []
+    const textoOriginal = String(dadosIntake?.conteudo_bruto || fontes.conteudo_bruto || orcamento.descricao_livre || '')
+    if (!dadosIntake && !textoOriginal && !anexos.length)
+      return NextResponse.json({ error: 'Este card antigo não possui conteúdo recuperável do WhatsApp.' }, { status: 404 })
     const paths = [...new Set(anexos.map((a: any) => String(a?.media_path || ''))
       .filter((v: string) => v.startsWith(usuario.empresa_id + '/') && !v.includes('..')))]
     const urlsAssinadas = new Map<string, string>()
@@ -44,14 +56,16 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({
       grupo,
-      conversaId: intake.conversa_id,
-      participanteNome: intake.participante_nome,
-      primeiraMensagemEm: intake.primeira_mensagem_em,
-      ultimaMensagemEm: intake.ultima_mensagem_em,
-      totalMensagens: Array.isArray(intake.mensagens_ids) ? intake.mensagens_ids.length : 0,
-      gatilho: intake.gatilho_fechamento,
-      textoOriginal: intake.conteudo_bruto || (orcamento.ia_fontes as any)?.conteudo_bruto || '',
-      resumoIA: intake.ai_resultado?.resumo || null,
+      grupoConferido,
+      historico,
+      conversaId: dadosIntake?.conversa_id || null,
+      participanteNome: dadosIntake?.participante_nome || null,
+      primeiraMensagemEm: dadosIntake?.primeira_mensagem_em || orcamento.created_at,
+      ultimaMensagemEm: dadosIntake?.ultima_mensagem_em || orcamento.created_at,
+      totalMensagens: Array.isArray(dadosIntake?.mensagens_ids) ? dadosIntake.mensagens_ids.length : null,
+      gatilho: dadosIntake?.gatilho_fechamento || null,
+      textoOriginal,
+      resumoIA: dadosIntake?.ai_resultado?.resumo || (orcamento.ia_resultado_original as any)?.resumo || null,
       anexos: anexos.map((a: any) => ({
         id: String(a.mensagem_id || a.whatsapp_message_id || ''),
         tipo: String(a.tipo || ''),

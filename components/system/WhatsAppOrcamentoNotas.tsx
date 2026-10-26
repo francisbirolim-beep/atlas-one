@@ -6,9 +6,27 @@ import { tokenAtual } from '@/lib/auth'
 import type { OrcamentoRapido } from '@/lib/tipos'
 
 type Anexo = { id: string; tipo: string; nome: string; mimeType: string; tamanho: number; url: string | null }
-type Notas = { grupo: string; conversaId: string | null; participanteNome: string | null;
-  primeiraMensagemEm: string; ultimaMensagemEm: string; totalMensagens: number; gatilho: string | null;
-  textoOriginal: string; resumoIA: string | null; anexos: Anexo[] }
+type Notas = { grupo: string; grupoConferido: boolean; historico: boolean;
+  conversaId: string | null; participanteNome: string | null;
+  primeiraMensagemEm: string | null; ultimaMensagemEm: string | null; totalMensagens: number | null;
+  gatilho: string | null; textoOriginal: string; resumoIA: string | null; anexos: Anexo[] }
+
+function instantaneoDoCard(card: OrcamentoRapido): Notas | null {
+  const fontes = card.ia_fontes
+  if (card.modo_entrada !== 'whatsapp' || !fontes || typeof fontes !== 'object') return null
+  const anexos = (Array.isArray(fontes.anexos) ? fontes.anexos : []).map((a: any, i: number) => ({
+    id: String(a?.mensagem_id || a?.whatsapp_message_id || i),
+    tipo: String(a?.tipo || ''), nome: String(a?.nome || 'Anexo do WhatsApp'),
+    mimeType: String(a?.mime_type || ''), tamanho: Number(a?.tamanho || 0), url: null,
+  }))
+  return {
+    grupo: 'Grupo a confirmar no histórico', grupoConferido: false, historico: true,
+    conversaId: null, participanteNome: null, primeiraMensagemEm: card.created_at || null,
+    ultimaMensagemEm: card.created_at || null, totalMensagens: null, gatilho: null,
+    textoOriginal: String(fontes.conteudo_bruto || card.descricao_livre || ''),
+    resumoIA: String(card.ia_resultado_original?.resumo || '') || null, anexos,
+  }
+}
 const tipo = (a: Anexo) => a.mimeType.startsWith('image/') || a.tipo === 'imagem' ? 'imagem' :
   a.mimeType.startsWith('audio/') || a.tipo === 'audio' ? 'audio' :
   a.mimeType.startsWith('video/') || a.tipo === 'video' ? 'video' : 'arquivo'
@@ -16,12 +34,12 @@ const valor = (v: unknown) => v == null || v === '' ? 'A confirmar' : String(v)
 const metros = (v: unknown) => Number(v) > 0 ? (Number(v) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + ' m' : 'A confirmar'
 
 export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido }) {
-  const [notas, setNotas] = useState<Notas | null>(null)
+  const [notas, setNotas] = useState<Notas | null>(() => instantaneoDoCard(card))
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
   useEffect(() => {
     const abort = new AbortController()
-    setNotas(null)
+    setNotas(instantaneoDoCard(card))
     setErro('')
     setCarregando(true)
     void (async () => {
@@ -66,19 +84,20 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
         <div className="flex items-start gap-2">
           <MessageCircle size={23} className="shrink-0 text-emerald-600"/>
           <div><h4 className="text-sm font-bold text-slate-900">Bloco de notas importado do WhatsApp</h4>
-            <p className="text-[11px] text-slate-600">Origem: {notas?.grupo || 'Orçamento / Assistência'} · Um único card por solicitação</p></div>
+            <p className="text-[11px] text-slate-600">Origem: {notas?.grupo || 'Grupo em verificação'} · Um único card por pacote</p></div>
         </div>
         {notas?.conversaId && <Link href={'/whatsapp?conversaId=' + encodeURIComponent(notas.conversaId)}
           className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-bold text-emerald-800">Ver conversa completa</Link>}
       </div>
-      {carregando && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-slate-600"><Loader2 size={14} className="animate-spin"/> Carregando notas e mídias do WhatsApp…</p>}
+      {notas?.historico && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-800">Histórico anterior à regra atual: grupo não confirmado como Orçamento / Assistência. Estes dados são apenas para consulta e não geram novos cards.</p>}
+      {carregando && <p role="status"  className="mt-3 flex items-center gap-2 text-xs text-slate-600"><Loader2 size={14} className="animate-spin"/> Carregando notas e mídias do WhatsApp…</p>}
       {erro && <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{erro}. O orçamento e a descrição existente foram preservados.</p>}
       {notas && <>
         <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-600">
-          <span className="rounded-full bg-white px-2 py-1">Remetente: {valor(notas.participanteNome)}</span>
-          <span className="rounded-full bg-white px-2 py-1">{notas.totalMensagens} mensagens no pacote</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1"><Clock size={12}/>{notas.gatilho === 'pronto' ? 'Finalizado por comando' : 'Encerrado após silêncio'}</span>
-          <span className="rounded-full bg-white px-2 py-1">{new Date(notas.ultimaMensagemEm).toLocaleString('pt-BR')}</span>
+          {notas.participanteNome && <span className="rounded-full bg-white px-2 py-1">Remetente: {notas.participanteNome}</span>}
+          {notas.totalMensagens != null && <span className="rounded-full bg-white px-2 py-1">{notas.totalMensagens} mensagens no pacote</span>}
+          {notas.gatilho && <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1"><Clock size={12}/>{notas.gatilho === 'pronto' ? 'Finalizado por comando' : 'Encerrado após silêncio'}</span>}
+          {notas.ultimaMensagemEm && <span className="rounded-full bg-white px-2 py-1">{new Date(notas.ultimaMensagemEm).toLocaleString('pt-BR')}</span>}
         </div>
         {notas.resumoIA && <div className="mt-3 rounded-lg bg-white p-3 text-xs leading-5 text-slate-800">
           <p className="mb-1 font-bold text-emerald-700">Resumo sugerido pela IA</p>{notas.resumoIA}
