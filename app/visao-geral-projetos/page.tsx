@@ -7,6 +7,7 @@ import {
  ChevronLeft,ChevronRight,ClipboardCheck,Clock3,Columns3,Factory,Filter,
  Layers3,Maximize2,Package,Plus,RefreshCw,Settings2,ShieldCheck,
  ShoppingCart,Truck,Warehouse,X,AlertTriangle,History,ImageOff,Info,
+ Users,Wallet,Search,Bell,
 } from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import {
@@ -239,7 +240,45 @@ export default function VisaoGeralProjetos(){
  const percentuais=cardAtual?cardAtual.materiais.map(m=>percentual(m.comprados,m.total)).filter((n):n is number=>n!==null):[]
  const progressoGeral=percentuais.length?Math.round(percentuais.reduce((s,n)=>s+n,0)/percentuais.length):null
 
- return <main className="relative min-h-[calc(100vh-68px)] overflow-hidden bg-[#07182b] text-slate-100">
+ return <main className="atlas-visual-geral relative min-h-screen overflow-hidden bg-[#07182b] text-slate-100">
+  <style>{`
+    @media(min-width:768px) {
+      .atlas-app-shell:has(.atlas-visual-geral) .atlas-sidebar-shell,
+      .atlas-app-shell:has(.atlas-visual-geral) .atlas-topbar,
+      .atlas-app-shell:has(.atlas-visual-geral) .atlas-app-content > div:has(>button[aria-label="Voltar à tela anterior"]) {
+        display:none!important;
+      }
+      .atlas-app-shell:has(.atlas-visual-geral) .atlas-app-content {max-width:100%!important;width:100%!important;}
+    }
+    .atlas-app-shell:has(.atlas-visual-geral) .atlas-app-main {background:#07182b!important;}
+  `}</style>
+  <nav aria-label="Navegação principal do Atlas One" className="relative z-[2] flex min-h-[52px] items-center gap-3 overflow-x-auto border-b border-[#243d5b] bg-[#0a1a30] px-3 py-2 text-white md:px-5">
+    <Link href="/" className="flex shrink-0 items-center gap-1.5 text-[14px] font-bold tracking-tight text-white" title="Abrir início do Atlas One">
+      <span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-600"><Layers3 size={17}/></span>
+      <span>ATLAS <small className="text-[9px]">ONE</small></span>
+    </Link>
+    <div className="flex shrink-0 items-center gap-1 text-[11px]">
+      {([
+        ['Visão Geral','/visao-geral-projetos',Layers3],
+        ['Clientes','/clientes',Users],
+        ['Vendas','/vendas/confirmar',ShoppingCart],
+        ['Produção','/producao',Factory],
+        ['Instalação','/relatorios/instalacoes',Truck],
+        ['Financeiro','/financeiro/contas-receber',Wallet],
+        ['Compras','/compras',Warehouse],
+        ['Relatórios','/relatorios',BarChart3],
+      ] as const).map(([rotulo,href,Icone])=>
+        <Link key={href} href={href} className={'flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 transition hover:bg-[#26405e] '+(href==='/visao-geral-projetos'?'bg-[#115cbe] font-bold':'text-[#cbdaed]')}>
+         <Icone size={14}/>{rotulo}
+        </Link>
+      )}
+    </div>
+    <div className="hidden min-w-[120px] flex-1 items-center gap-1.5 rounded-md border border-[#34516f] bg-[#172a42] px-2 py-1.5 xl:flex">
+      <Search size={14} className="shrink-0 text-slate-300"/>
+      <input aria-label="Buscar cliente ou orçamento na Visão Geral" value={busca} onChange={e=>setBusca(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[11px] text-white outline-none placeholder:text-[#9aadc5]" placeholder="Buscar cliente ou orçamento..."/>
+    </div>
+    {configuravel&&<Link href="/configuracoes/usuarios" aria-label="Configurações de usuários" className="shrink-0 rounded-md p-1.5 text-slate-300 hover:bg-[#274465]"><Settings2 size={17}/></Link>}
+  </nav>
   {modoTv&&<style>{'.atlas-sidebar-shell,.atlas-topbar,.atlas-mobile-navigation,.atlas-app-content > header,.atlas-app-content > nav{display:none!important}.atlas-app-shell{display:block!important}.atlas-app-main{padding:0!important;min-height:100vh!important}.atlas-app-content{height:100vh!important;overflow:auto!important}'}</style>}
   <div className="pointer-events-none absolute inset-0 opacity-70" style={{background:'radial-gradient(ellipse at 25% 0%,#102e54 0%,transparent 35%),radial-gradient(ellipse at 90% 85%,#10223f 0%,transparent 38%)'}}/>
   <div className={'relative z-[1] min-w-0 p-3 pb-8 md:p-5 '+(selecionado&&!modoTv?'xl:pr-[370px]':'')}>
@@ -324,7 +363,7 @@ export default function VisaoGeralProjetos(){
    </div>
   </div>
   {(cardAtual||pedidoAtual)&&<div className="fixed inset-0 z-[70] bg-black/50 xl:pointer-events-none xl:bg-transparent" onClick={fechar}>
-   <aside role="dialog" aria-modal="true" aria-label="Detalhes do projeto" onClick={e=>e.stopPropagation()} className="pointer-events-auto absolute inset-y-0 right-0 flex w-full max-w-[370px] flex-col overflow-y-auto bg-[#f7f9fd] text-slate-900 shadow-[-6px_0_24px_rgba(0,0,0,.24)]">
+   <aside role="dialog" aria-modal="true" aria-label="Detalhes do projeto" onClick={e=>e.stopPropagation()} className="pointer-events-auto absolute inset-y-0 right-0 flex w-full max-w-[370px] flex-col overflow-y-auto bg-[#f7f9fd] text-slate-900 shadow-[-6px_0_24px_rgba(0,0,0,.24)] md:top-[52px]">
     <div className="sticky top-0 z-10 border-b border-slate-200 bg-white p-3">
      <div className="flex items-start justify-between gap-2">
       <div className="min-w-0">

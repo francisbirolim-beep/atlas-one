@@ -30,4 +30,7 @@ assert.ok(api.includes("'id,numero,fotos_urls,observacoes'"),'Fotos reais de or�
 assert.ok(api.includes("buscar('produtos','id,nome,codigo,foto_url'"),'Produtos usam fotos oficiais')
 assert.ok(tela.includes("configuravel")&&api.includes("usuarioMaster:u.role==='master'"),'Personalização segue Master')
 assert.ok(shell.includes('atlas-sidebar-shell'),'Menu existente não deve ser removido')
+assert.ok(tela.includes('atlas-visual-geral')&&tela.includes('atlas-app-shell:has(.atlas-visual-geral)'), 'A imersão visual deve ficar isolada nesta tela, sem alterar AppShell')
+assert.ok(tela.includes('Navegação principal do Atlas One')&&tela.includes('bg-[#0a1a30]'), 'Cabeçalho escuro igual à referência visual')
+assert.ok(tela.includes('md:top-[52px]'),'Painel lateral abre abaixo da navegação escura')
 console.log('PASS: paleta premium, 8 etapas, cinco KPIs, fotos reais/fallback, Cliente 360, filtros, calendário e isolamento tenant')
