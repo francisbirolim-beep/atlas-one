@@ -988,6 +988,9 @@ function ehComandoPronto(value: unknown) {
     "pronto",
     "finalizei",
     "finalizado",
+    "pode enviar",
+    "pode finalizar",
+    "finalizado pode enviar",
     "pode criar",
     "pode gerar",
     "pode fazer",
@@ -1803,6 +1806,11 @@ async function processGroupBudgetIntake(
     .eq("ativo", true)
     .maybeSingle()
   if (!group) return null
+  // Segurança: somente este grupo pode gerar orçamentos no Kanban Comercial.
+  const nomeGrupoOrcamento = String(group.nome || "").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR")
+    .replace(/\s+/g, " ").trim();
+  if (nomeGrupoOrcamento !== "orcamento / assistencia") return null;
 
   let { data: automation } = await db.from("atendimento_whatsapp_grupo_automacoes")
     .select("*")
