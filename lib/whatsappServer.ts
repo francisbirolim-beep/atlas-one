@@ -1395,6 +1395,41 @@ export async function listarConversasAtendimento(
 
   const ids = permitidas.map(conversa => conversa.id)
   if (!ids.length) return permitidas
+
+  // O gateway pode ter salvo "Grupo WhatsApp" na conversa enquanto o nome real
+  // já existe no cadastro sincronizado. Para exibição, prevalece o nome
+  // confirmado pelo mesmo canal + JID do grupo. Não atualiza a conversa,
+  // não muda responsáveis e não amplia o acesso a outros grupos.
+  const conversasDeGrupo = permitidas.filter(c =>
+    c.whatsapp_chat_tipo === 'grupo' && c.whatsapp_canal_id && c.whatsapp_chat_jid,
+  )
+  const grupoNomes = new Map<string, string>()
+  if (conversasDeGrupo.length) {
+    const jids = [...new Set(conversasDeGrupo.map(c => c.whatsapp_chat_jid!))]
+    const canais = [...new Set(conversasDeGrupo.map(c => c.whatsapp_canal_id!))]
+    const { data: nomesGrupos, error: erroNomesGrupos } = await supabaseAdmin
+      .from('atendimento_whatsapp_grupos')
+      .select('whatsapp_canal_id,grupo_jid,nome')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('ativo', true)
+      .in('whatsapp_canal_id', canais)
+      .in('grupo_jid', jids)
+    if (erroNomesGrupos) {
+      console.warn('[whatsapp] Nome oficial do grupo indisponível:', erroNomesGrupos.message)
+    } else {
+      const divergentes = new Set<string>()
+      for (const item of nomesGrupos || []) {
+        const chave = `${item.whatsapp_canal_id}:${item.grupo_jid}`
+        const nome = String(item.nome || '').trim()
+        if (!nome || nome === 'Grupo WhatsApp') continue
+        if (grupoNomes.has(chave) && grupoNomes.get(chave) !== nome) divergentes.add(chave)
+        else grupoNomes.set(chave, nome)
+      }
+      // Não presumir origem se houver dois cadastros conflitantes para o JID.
+      for (const chave of divergentes) grupoNomes.delete(chave)
+    }
+  }
+
   const [transferenciasResp, acompanhamentosResp] = await Promise.all([
     supabaseAdmin
       .from('atendimento_eventos')
@@ -1427,8 +1462,12 @@ export async function listarConversasAtendimento(
   )
   return permitidas.map(conversa => {
     const grupo = grupoPorConversa.get(conversa.id)
+    const nomeRealGrupo = conversa.whatsapp_chat_tipo === 'grupo'
+      ? grupoNomes.get(`${conversa.whatsapp_canal_id}:${conversa.whatsapp_chat_jid}`)
+      : null
     return {
       ...conversa,
+      ...(nomeRealGrupo ? { grupo_nome: nomeRealGrupo, contato_nome: nomeRealGrupo } : {}),
       transferida_em: ultimaTransferencia.get(conversa.id) || null,
       acompanhando: acompanhadas.has(conversa.id),
       escalonado_para_mim: opcoes.modo !== 'monitoramento' && elegivelAoSecundario(
