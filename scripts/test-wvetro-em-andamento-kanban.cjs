@@ -52,7 +52,7 @@ assert.ok(src.includes('moverPendenteParaConferencia'),'Mesma referência penden
 assert.ok(src.includes(".eq('empresa_id', empresaId).order('ordem')"),'Colunas limitadas à empresa')
 const historico=fs.readFileSync('app/api/integracoes/wvetro/orcamentos/candidatos-cliente/route.ts','utf8')
 assert.ok(historico.includes('colunaRecebimentoWVetro(colunas || [])'),'Histórico W.Vetro usa Em andamento')
-const migration=fs.readFileSync('supabase/migrations/20261026115000_wvetro_orcamento_em_andamento_v1.sql','utf8')
+const migration=fs.readFileSync('supabase/migrations/20261026135606_wvetro_orcamento_em_andamento_20261026.sql','utf8')
 assert.ok(migration.includes("lower(btrim(feito.nome))='orçamento feito'"))
 assert.ok(migration.includes("lower(coalesce(o.wvetro_fluxo->>'validacao_status',''))<>'validado'"))
 assert.ok(migration.includes('raise exception'), 'Bloqueio no banco')
