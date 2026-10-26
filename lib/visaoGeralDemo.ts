@@ -11,7 +11,8 @@ export type ProjetoGeralCard = {
  pendencias:string[];previsaoEntrega:string|null;vencimentoEtapa?:string|null;diasAtraso:number;
  materiais:MaterialResumo[];compras:{total:number;comprados:number;recebidos:number};
  producao:{total:number;concluidas:number};instalacao:{total:number;concluidas:number};
- medicao?:{registros:number};instalacaoMes?:string|null;valorInstalacao?:number|null;detalhesCompra?:DetalheMaterialCompra[]
+ medicao?:{registros:number};instalacaoMes?:string|null;dataInstalacao?:string|null;valorInstalacao?:number|null;detalhesCompra?:DetalheMaterialCompra[];
+ fotoProjetoUrl?:string|null;dataVenda?:string|null;observacoes?:string|null;
 }
 export type PedidoGeralCard = {
  id:string;cliente:string;clienteId:string|null;vendaId:string|null;numeroOrcamento:string|null;
