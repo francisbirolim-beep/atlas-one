@@ -40,6 +40,9 @@ type Conversa = {
   telefone: string
   contato_nome?: string | null
   cliente_id?: string | null
+  contato_whatsapp_salvo?: boolean
+  cliente_candidato_id?: string | null
+  cliente_candidato_nome?: string | null
   whatsapp_canal_id?: string | null
   whatsapp_numero?: string | null
   whatsapp_chat_tipo?: 'contato' | 'grupo' | null
