@@ -38,11 +38,54 @@ export async function GET(req: NextRequest) {
     }
     const dadosIntake = intake || null
     const grupoRegistrado = (dadosIntake?.atendimento_whatsapp_grupos as unknown as { nome?: string } | null)?.nome || ''
-    const grupoConferido = normalizar(grupoRegistrado) === 'orcamento / assistencia'
-    const historico = !dadosIntake || !grupoConferido
-    const grupo = grupoRegistrado || 'Grupo não registrado no histórico'
     const anexos = Array.isArray(dadosIntake?.anexos) ? dadosIntake.anexos
       : Array.isArray(fontes.anexos) ? fontes.anexos : []
+
+    // Na importação antiga, o intake pode não existir mais. As mídias mantêm
+    // o id da mensagem: ele aponta à conversa e ao JID originais, sem inferir
+    // o grupo pelo nome do cliente ou pelo conteúdo das mensagens.
+    let conversaId: string | null = dadosIntake?.conversa_id || null
+    let grupo = grupoRegistrado
+    if (!dadosIntake && anexos.length) {
+      const refs = [...new Set(anexos.map((a: any) => String(a?.mensagem_id || ''))
+        .filter((v: string) => /^[a-f0-9-]{36}$/i.test(v)))].slice(0, 200)
+      if (refs.length && refs.length === anexos.length) {
+        const { data: mensagens, error: erroMensagens } = await supabaseAdmin
+          .from('atendimento_mensagens').select('id,conversa_id')
+          .eq('empresa_id', usuario.empresa_id).in('id', refs)
+        if (erroMensagens) throw erroMensagens
+        const origens = [...new Set((mensagens || []).map(m => m.conversa_id).filter(Boolean))]
+        if ((mensagens || []).length === refs.length && origens.length === 1) conversaId = origens[0]
+      }
+    }
+    if (conversaId) {
+      const { data: conversa, error: erroConversa } = await supabaseAdmin
+        .from('atendimento_conversas')
+        .select('id,whatsapp_chat_tipo,whatsapp_chat_jid,whatsapp_canal_id,grupo_nome')
+        .eq('empresa_id', usuario.empresa_id).eq('id', conversaId).maybeSingle()
+      if (erroConversa) throw erroConversa
+      if (conversa?.whatsapp_chat_tipo === 'grupo' && conversa.whatsapp_canal_id && conversa.whatsapp_chat_jid) {
+        const { data: grupos, error: erroGrupo } = await supabaseAdmin
+          .from('atendimento_whatsapp_grupos').select('nome')
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('whatsapp_canal_id', conversa.whatsapp_canal_id)
+          .eq('grupo_jid', conversa.whatsapp_chat_jid)
+        if (erroGrupo) throw erroGrupo
+        const nomes = [...new Set((grupos || []).map(g => String(g.nome || '').trim()).filter(Boolean))]
+        if (nomes.length === 1) {
+          grupo = nomes[0]
+        } else if (!grupo && conversa.grupo_nome && normalizar(conversa.grupo_nome) !== 'grupo whatsapp') {
+          grupo = conversa.grupo_nome
+        }
+      } else {
+        // Não oferecemos um link para uma conversa que não seja de grupo.
+        conversaId = null
+      }
+    }
+    const grupoConferido = normalizar(grupo) === 'orcamento / assistencia'
+    const origemStatus = !grupo ? 'nao_identificada' : grupoConferido ? 'correta' : 'outro_grupo'
+    const historico = !dadosIntake
+    if (!grupo) grupo = 'Não foi possível identificar o grupo original'
     const textoOriginal = String(dadosIntake?.conteudo_bruto || fontes.conteudo_bruto || orcamento.descricao_livre || '')
     if (!dadosIntake && !textoOriginal && !anexos.length)
       return NextResponse.json({ error: 'Este card antigo não possui conteúdo recuperável do WhatsApp.' }, { status: 404 })
@@ -57,8 +100,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       grupo,
       grupoConferido,
+      origemStatus,
       historico,
-      conversaId: dadosIntake?.conversa_id || null,
+      conversaId,
       participanteNome: dadosIntake?.participante_nome || null,
       primeiraMensagemEm: dadosIntake?.primeira_mensagem_em || orcamento.created_at,
       ultimaMensagemEm: dadosIntake?.ultima_mensagem_em || orcamento.created_at,

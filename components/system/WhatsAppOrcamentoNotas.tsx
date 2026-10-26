@@ -6,7 +6,7 @@ import { tokenAtual } from '@/lib/auth'
 import type { OrcamentoRapido } from '@/lib/tipos'
 
 type Anexo = { id: string; tipo: string; nome: string; mimeType: string; tamanho: number; url: string | null }
-type Notas = { grupo: string; grupoConferido: boolean; historico: boolean;
+type Notas = { grupo: string; grupoConferido: boolean; origemStatus: 'correta' | 'outro_grupo' | 'nao_identificada'; historico: boolean;
   conversaId: string | null; participanteNome: string | null;
   primeiraMensagemEm: string | null; ultimaMensagemEm: string | null; totalMensagens: number | null;
   gatilho: string | null; textoOriginal: string; resumoIA: string | null; anexos: Anexo[] }
@@ -20,7 +20,7 @@ function instantaneoDoCard(card: OrcamentoRapido): Notas | null {
     mimeType: String(a?.mime_type || ''), tamanho: Number(a?.tamanho || 0), url: null,
   }))
   return {
-    grupo: 'Grupo a confirmar no histórico', grupoConferido: false, historico: true,
+    grupo: 'Consultando a origem...', grupoConferido: false, origemStatus: 'nao_identificada', historico: true,
     conversaId: null, participanteNome: null, primeiraMensagemEm: card.created_at || null,
     ultimaMensagemEm: card.created_at || null, totalMensagens: null, gatilho: null,
     textoOriginal: String(fontes.conteudo_bruto || card.descricao_livre || ''),
@@ -84,12 +84,15 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
         <div className="flex items-start gap-2">
           <MessageCircle size={23} className="shrink-0 text-emerald-600"/>
           <div><h4 className="text-sm font-bold text-slate-900">Bloco de notas importado do WhatsApp</h4>
-            <p className="text-[11px] text-slate-600">Origem: {notas?.grupo || 'Grupo em verificação'} · Um único card por pacote</p></div>
+            <p className="text-[11px] text-slate-600">Grupo de origem: <strong>{notas?.grupo || 'Consultando...'}</strong> · Um único card por pacote</p></div>
         </div>
         {notas?.conversaId && <Link href={'/whatsapp?conversaId=' + encodeURIComponent(notas.conversaId)}
-          className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-bold text-emerald-800">Ver conversa completa</Link>}
+          className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-bold text-emerald-800">Abrir este grupo no WhatsApp Atlas</Link>}
       </div>
-      {notas?.historico && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-800">Histórico anterior à regra atual: grupo não confirmado como Orçamento / Assistência. Estes dados são apenas para consulta e não geram novos cards.</p>}
+      {!notas?.conversaId && !carregando && <p className="mt-2 text-[11px] text-slate-500">Conversa original indisponível para acesso direto neste histórico.</p>}
+      {notas?.origemStatus === 'outro_grupo' && !carregando && <p role="status" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-bold text-red-800">Atenção: este card histórico veio de outro grupo, e não do grupo de Orçamentos. Foi preservado apenas para consulta. A automação atual não deve importar esse grupo.</p>}
+      {notas?.origemStatus === 'nao_identificada' && !carregando && <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-800">Não há evidência suficiente para confirmar o grupo de origem deste registro antigo. Não será classificado como Orçamento / Assistência sem comprovação.</p>}
+      {notas?.origemStatus === 'correta' && !carregando && <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs font-semibold text-emerald-800">Grupo Orçamento / Assistência confirmado pelos registros de origem.</p>}
       {carregando && <p role="status"  className="mt-3 flex items-center gap-2 text-xs text-slate-600"><Loader2 size={14} className="animate-spin"/> Carregando notas e mídias do WhatsApp…</p>}
       {erro && <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{erro}. O orçamento e a descrição existente foram preservados.</p>}
       {notas && <>
