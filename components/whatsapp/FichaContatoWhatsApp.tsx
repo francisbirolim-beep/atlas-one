@@ -9,6 +9,9 @@ export type ConversaContatoFicha = {
   telefone: string
   contato_nome?: string | null
   cliente_id?: string | null
+  contato_whatsapp_salvo?: boolean
+  cliente_candidato_id?: string | null
+  cliente_candidato_nome?: string | null
   status: string
   responsavel_nome?: string | null
   setor?: string | null
@@ -74,6 +77,7 @@ export function FichaContatoWhatsApp({
   const [aberto, setAberto] = useState(false)
   const [campos, setCampos] = useState<CamposContato>(camposVazios)
   const [salvando, setSalvando] = useState(false)
+  const [vinculando, setVinculando] = useState(false)
   const [erro, setErro] = useState('')
   const [duplicado, setDuplicado] = useState<{id:string; nome:string}|null>(null)
 
@@ -125,7 +129,35 @@ export function FichaContatoWhatsApp({
   }
 
   const salvo = Boolean(conversa.cliente_id)
-  const nome = cliente?.nome || conversa.contato_nome || 'Contato sem nome'
+  const candidato = !salvo && conversa.cliente_candidato_id ? {
+    id: conversa.cliente_candidato_id,
+    nome: conversa.cliente_candidato_nome || 'Cliente existente',
+  } : null
+
+  async function vincularCandidato() {
+    if (!candidato || vinculando || salvando) return
+    if (!window.confirm('Vincular esta conversa ao Cliente 360 "' + candidato.nome + '"? Nenhum cadastro novo será criado.')) return
+    setVinculando(true)
+    setErro('')
+    try {
+      const token = await tokenAtual()
+      const resp = await fetch('/api/integracoes/whatsapp/vincular-cliente', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', Authorization: 'Bearer ' + (token || '')},
+        body: JSON.stringify({conversaId: conversa.id, clienteId: candidato.id}),
+      })
+      const json = await resp.json()
+      if (!resp.ok || !json.cliente?.id) throw new Error(json.error || 'Não foi possível vincular o cliente.')
+      setAberto(false)
+      aoCadastrar(json.cliente)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao vincular o cliente.')
+    } finally {
+      setVinculando(false)
+    }
+  }
+
+  const nome = (conversa.contato_whatsapp_salvo ? conversa.contato_nome : null) || cliente?.nome || conversa.contato_nome || 'Contato sem nome'
   const empresa = cliente?.observacoes?.split('\n')
     .find(linha=>linha.startsWith('Empresa/organização: '))?.replace('Empresa/organização: ','')
   const situacao = conversa.status === 'finalizado' ? 'Encerrado'
@@ -142,8 +174,8 @@ export function FichaContatoWhatsApp({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 className="max-w-full truncate text-base font-bold text-slate-900" title={nome}>{nome}</h2>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${salvo?'bg-blue-50 text-blue-700':'bg-amber-50 text-amber-800'}`}>
-                {salvo ? 'Cliente cadastrado' : 'Contato não salvo'}
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${salvo?'bg-blue-50 text-blue-700':conversa.contato_whatsapp_salvo?'bg-emerald-50 text-emerald-800':candidato?'bg-blue-50 text-blue-800':'bg-amber-50 text-amber-800'}`}>
+                {salvo ? 'Cliente cadastrado' : conversa.contato_whatsapp_salvo ? 'Salvo no WhatsApp' : candidato ? 'Cliente 360 encontrado' : 'Contato não salvo'}
               </span>
             </div>
             <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
@@ -156,16 +188,27 @@ export function FichaContatoWhatsApp({
               {nomeCanal && <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">Via {nomeCanal}</span>}
             </div>
           </div>
-          {!salvo && (
+          {!salvo && candidato ? (
+            <button type="button" onClick={()=>void vincularCandidato()} disabled={vinculando}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+              <UserRoundPlus size={15}/> {vinculando ? 'Vinculando...' : 'Vincular Cliente 360'}
+            </button>
+          ) : !salvo && (
             <button type="button" onClick={()=>setAberto(v=>!v)}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
               aria-expanded={aberto}>
               {aberto ? <X size={14}/> : <UserRoundPlus size={15}/>}
-              {aberto ? 'Fechar cadastro' : 'Cadastrar contato'}
+              {aberto ? 'Fechar cadastro' : 'Cadastrar no Cliente 360'}
             </button>
           )}
         </div>
 
+        {!aberto && candidato && (
+          <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-[11px] text-blue-800">
+            Este número já está no Cliente 360 como <b>{candidato.nome}</b>. Você pode vincular o cadastro existente, sem criar outro.
+          </p>
+        )}
+        {erro && !aberto && <p role="alert" className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{erro}</p>}
         {!aberto && (
           <div className="mt-3 grid gap-x-5 gap-y-2 rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-xs sm:grid-cols-2">
             <div className="flex min-w-0 items-center gap-2"><UserRound size={16} className="shrink-0 text-blue-600"/>

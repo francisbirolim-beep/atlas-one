@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { elegivelAoSecundario, obterDistribuicaoWhatsApp } from '@/lib/whatsappEscalonamento'
+import { identificarConversasWhatsApp } from '@/lib/whatsappIdentidadeContato'
 import { notificarGrupoWhatsAppPendente } from '@/lib/whatsappAlertasGrupo'
 import type { UsuarioTenant } from '@/lib/tenantServer'
 
@@ -1430,6 +1431,47 @@ export async function listarConversasAtendimento(
     }
   }
 
+  // Identificação apenas das conversas previamente autorizadas nesta caixa.
+  const canaisComContato = [...new Set(permitidas.filter(c => c.whatsapp_chat_tipo !== 'grupo')
+    .map(c => c.whatsapp_canal_id).filter((id): id is string => Boolean(id)))]
+  const [diretorio, clientes] = await Promise.all([
+    (async () => {
+      const registros: Array<{
+        whatsapp_canal_id: string; telefone: string | null; contato_jid: string | null;
+        nome: string | null; nome_verificado: string | null
+      }> = []
+      if (!canaisComContato.length) return registros
+      for (let inicio = 0;;inicio += 1000) {
+        const { data: pagina, error: erroContatos } = await supabaseAdmin
+          .from('atendimento_whatsapp_contatos')
+          .select('whatsapp_canal_id,telefone,contato_jid,nome,nome_verificado')
+          .eq('empresa_id', usuario.empresa_id)
+          .eq('ativo', true)
+          .in('whatsapp_canal_id', canaisComContato)
+          .order('id')
+          .range(inicio, inicio + 999)
+        if (erroContatos) throw erroContatos
+        registros.push(...(pagina || []))
+        if (!pagina || pagina.length < 1000) break
+      }
+      return registros
+    })(),
+    (async () => {
+      const registros: Array<{id: string; nome: string; whatsapp: string | null; telefone: string | null}> = []
+      for (let inicio = 0;;inicio += 1000) {
+        const { data: pagina, error: erroClientes } = await supabaseAdmin
+          .from('clientes').select('id,nome,whatsapp,telefone')
+          .eq('empresa_id', usuario.empresa_id).order('id').range(inicio, inicio + 999)
+        if (erroClientes) throw erroClientes
+        registros.push(...(pagina || []))
+        if (!pagina || pagina.length < 1000) break
+      }
+      return registros
+    })(),
+  ])
+  const identificadas = identificarConversasWhatsApp(permitidas, diretorio, clientes)
+  const porId = new Map(identificadas.map(c => [c.id, c]))
+
   const [transferenciasResp, acompanhamentosResp] = await Promise.all([
     supabaseAdmin
       .from('atendimento_eventos')
@@ -1467,6 +1509,7 @@ export async function listarConversasAtendimento(
       : null
     return {
       ...conversa,
+      ...(porId.get(conversa.id) || {}),
       ...(nomeRealGrupo ? { grupo_nome: nomeRealGrupo, contato_nome: nomeRealGrupo } : {}),
       transferida_em: ultimaTransferencia.get(conversa.id) || null,
       acompanhando: acompanhadas.has(conversa.id),
