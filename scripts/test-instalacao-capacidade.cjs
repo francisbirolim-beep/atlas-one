@@ -33,7 +33,7 @@ assert.equal(avaliarReserva('2026-11',100000,itens,{vendaId:'a',valor:40000}).ul
 assert.throws(()=>capacidadeMensal('2026-99',100000,itens))
 assert.throws(()=>capacidadeMensal('2026-11',0,itens))
 assert.throws(()=>avaliarReserva('2026-11',100000,itens,{vendaId:'a',valor:-1}))
-const sql=fs.readFileSync('supabase/migrations/20261025030000_instalacao_planejamento_visao_geral_v1.sql','utf8')
+const sql=fs.readFileSync('supabase/migrations/20261025034003_instalacao_planejamento_visao_geral_20261025.sql','utf8')
 for(const termo of ['pg_advisory_xact_lock','registrar_meta_instalacao_v1','programar_instalacao_financeira_v1',
  'instalacao_planejamento_auditoria','enable row level security','revoke all','grant execute','role=\'master\''])
  assert(sql.includes(termo),'Proteção ausente: '+termo)
