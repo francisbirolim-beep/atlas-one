@@ -1,0 +1,32 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const ts = require('typescript')
+const root = path.join(__dirname, '..')
+const source = fs.readFileSync(path.join(root, 'lib/whatsappEscalonamento.ts'), 'utf8')
+const transformed = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
+const moduleObj = { exports: {} }
+new Function('module', 'exports', 'require', transformed)(moduleObj, moduleObj.exports, () => ({ supabaseAdmin: null }))
+const { elegivelAoSecundario } = moduleObj.exports
+const now = Date.parse('2026-10-26T13:00:00.000Z')
+const config = { empresa_id:'empresa1', usuario_principal_id:'principal', secundarios_ids:['sec1','sec2'], prazo_minutos:5, ativo:true }
+const c = { responsavel_id:'principal', whatsapp_chat_tipo:'contato', status:'aguardando', ultima_entrada_em:'2026-10-26T12:54:00.000Z', ultima_saida_em:null }
+assert.equal(elegivelAoSecundario(c,config,'sec1',true,now),true)
+assert.equal(elegivelAoSecundario(c,config,'sec2',true,now),true)
+assert.equal(elegivelAoSecundario(c,config,'outro',true,now),false)
+assert.equal(elegivelAoSecundario(c,config,'sec1',false,now),false)
+assert.equal(elegivelAoSecundario({...c,ultima_entrada_em:'2026-10-26T12:56:00.000Z'},config,'sec1',true,now),false)
+assert.equal(elegivelAoSecundario({...c,ultima_saida_em:'2026-10-26T12:55:00.000Z'},config,'sec1',true,now),false)
+assert.equal(elegivelAoSecundario({...c,status:'em_atendimento'},config,'sec1',true,now),false)
+assert.equal(elegivelAoSecundario({...c,responsavel_id:'outro'},config,'sec1',true,now),false)
+assert.equal(elegivelAoSecundario({...c,whatsapp_chat_tipo:'grupo'},config,'sec1',true,now),false)
+assert.equal(elegivelAoSecundario(c,{...config,ativo:false},'sec1',true,now),false)
+assert.equal(elegivelAoSecundario(c,{...config,prazo_minutos:7},'sec1',true,now),false)
+const server=fs.readFileSync(path.join(root,'lib/whatsappServer.ts'),'utf8')
+const api=fs.readFileSync(path.join(root,'app/api/integracoes/whatsapp/conversas/route.ts'),'utf8')
+const gateway=fs.readFileSync(path.join(root,'supabase/functions/whatsapp-gateway/index.ts'),'utf8')
+assert.ok(server.includes("escalonado_para_mim:"))
+assert.ok(server.includes("Este atendimento já foi assumido por outra pessoa."))
+assert.ok(api.includes("if (supervisionar && usuario.role !== 'master')"))
+assert.ok(gateway.includes("distribuicao?.ativo && distribuicao.usuario_principal_id"))
+console.log('OK: 11 cenários de espera, privacidade e prioridade + integração estática')
