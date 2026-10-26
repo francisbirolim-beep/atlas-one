@@ -38,7 +38,8 @@
     "test:cliente360-permissoes": "node scripts/test-cliente360-permissoes.cjs",
     "test:ia-relatorios": "node scripts/test-ia-relatorios-permissoes.cjs",
     "test:wvetro-validacao-item": "node scripts/test-wvetro-validacao-item.cjs",
-    "test:wvetro-valor-venda": "node scripts/test-wvetro-valor-venda.cjs"
+    "test:wvetro-valor-venda": "node scripts/test-wvetro-valor-venda.cjs",
+    "test:wvetro-em-andamento": "node scripts/test-wvetro-em-andamento-kanban.cjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

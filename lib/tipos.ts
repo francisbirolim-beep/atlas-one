@@ -195,6 +195,7 @@ export interface OrcamentoRapido {
       coluna_id?: string | null
       kanban_entrada_em?: string | null
       coluna_atualizada_em?: string | null
+      kanban_motivo_andamento?: string | null
       observacoes?: string
       arquiteto_nome?: string | null
       arquiteto_contato?: string | null

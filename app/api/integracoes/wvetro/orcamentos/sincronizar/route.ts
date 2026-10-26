@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { colunaRecebimentoWVetro, MOTIVO_PADRAO_WVETRO } from '@/lib/wvetroEtapaComercial'
 import { anexosComPdfWVetro } from '@/lib/wvetroPdfAnexo'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarMasterWVetro, autenticarUsuarioWVetro, type UsuarioWVetro } from '@/lib/wvetroAcessoServer'
@@ -167,7 +168,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('wvetro_referencias_linhas').select('linha_raw,linha_tecnica_id'),
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
-    supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').order('ordem'),
+    supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').eq('empresa_id', empresaId).order('ordem'),
     supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,updated_at,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
@@ -191,21 +192,18 @@ async function carregarContexto(empresaId: string) {
     if (n) porNome.set(n, [...(porNome.get(n) || []), c])
   }
   const colunas = (colunasR.data || []) as any[]
-  // Orçamento vindo do W.Vetro já está elaborado: entra diretamente em
-  // "Orçamento feito" e aguarda somente a conferência/validação comercial.
-  const coluna =
-    colunas.find(c => norm(c.nome) === 'ORCAMENTO FEITO') ||
-    colunas.find(c => norm(c.nome).includes('ORCAMENTO') && norm(c.nome).includes('FEITO')) ||
-    colunas[0] ||
-    null
+  // Importação nunca é "Orçamento feito" antes de conferência humana.
+  // Se a migração da etapa não foi publicada, parar em vez de classificar errado.
+  const coluna = colunaRecebimentoWVetro(colunas)
   const colunaFazer = colunas.find(c => norm(c.nome) === 'FAZER ORCAMENTO') || null
+  const colunaFeito = colunas.find(c => norm(c.nome) === 'ORCAMENTO FEITO') || null
   const existentes = new Map<string, any>()
   for (const o of orcR.data || []) {
     const fluxo = obj(o.wvetro_fluxo)
     const numero = txt(fluxo?.numero, fluxo?.numero_wvetro)
     if (numero) existentes.set(numero, o)
   }
-  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, colunaFazer, existentes }
+  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, colunaFazer, colunaFeito, existentes }
 }
 
 function enderecoClienteWVetro(p: Record<string, any>) {
@@ -566,7 +564,15 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           Number(anterior?.mapeamento_versao || 0) < 2 ||
           valorAtual <= 0 ||
           valorComEscalaIncorreta
-        if (mesmoPayload && clienteJaVinculado && !precisaReprocessarMapeamento && !precisaAtualizarPdf && !forcar) {
+        const moverPendenteParaConferencia = Boolean(
+          ctx.coluna?.id && (
+            !existente.coluna_id ||
+            (ctx.colunaFazer?.id && existente.coluna_id === ctx.colunaFazer.id) ||
+            (ctx.colunaFeito?.id && existente.coluna_id === ctx.colunaFeito.id &&
+              String(fluxoAtualizado.validacao_status || '').toLowerCase() !== 'validado')
+          )
+        )
+        if (mesmoPayload && clienteJaVinculado && !precisaReprocessarMapeamento && !precisaAtualizarPdf && !moverPendenteParaConferencia && !forcar) {
           semAlteracao += 1
           resultados.push({ id: existente.id, numeroWvetro: numeroW, acao: 'sem_alteracao', cliente: nome, itens: itens.length })
           continue
@@ -593,12 +599,11 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           updated_at: new Date().toISOString(),
           wvetro_fluxo: fluxoAtualizado,
           anexos: anexosAtualizados,
-          ...(
-            ctx.coluna?.id &&
-            (!existente.coluna_id || (ctx.colunaFazer?.id && existente.coluna_id === ctx.colunaFazer.id))
-              ? { coluna_id: ctx.coluna.id, coluna_atualizada_em: new Date().toISOString() }
-              : {}
-          ),
+          ...(moverPendenteParaConferencia ? {
+            coluna_id: ctx.coluna.id,
+            coluna_atualizada_em: new Date().toISOString(),
+            kanban_motivo_andamento: MOTIVO_PADRAO_WVETRO,
+          } : {}),
           ...(String(existente.margem_padrao_origem || 'sistema') !== 'manual' ? {
             margem_padrao_pct: regraMargem.margem,
             margem_padrao_origem: regraMargem.origem,
@@ -645,7 +650,8 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           anexos: anexosComPdfWVetro([], p, numeroW),
           tipo_medida: 'comum',
           revisao_grupo_id: id,
-          coluna_id: ctx.coluna?.id || null,
+          coluna_id: ctx.coluna.id,
+          kanban_motivo_andamento: MOTIVO_PADRAO_WVETRO,
           coluna_atualizada_em: new Date().toISOString(),
           orcamento_iniciado_em: registro.dataReferencia ? `${registro.dataReferencia}T12:00:00Z` : null,
           criado_por_id: usuario.id,
