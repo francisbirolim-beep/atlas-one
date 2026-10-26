@@ -2037,10 +2037,21 @@ async function conversationForInbound(
       ownerId = principal.id;
       ownerName = principal.nome || null;
     }
-  } else if (!ownerId && channel.principal) {
-    const rule = await routingRule(config.empresa_id, texto);
-    ownerId = rule?.usuario_id || config.usuario_padrao_id || null;
-    sector = rule?.setor || config.setor_padrao || null;
+  } else if (channel.principal) {
+    // Regras antigas continuam inalteradas enquanto a distribuição estiver desligada.
+    const { data: distribuicao } = await db
+      .from("atendimento_whatsapp_distribuicao")
+      .select("usuario_principal_id,ativo")
+      .eq("empresa_id", config.empresa_id).maybeSingle();
+    if (distribuicao?.ativo && distribuicao.usuario_principal_id) {
+      const rule = await routingRule(config.empresa_id, texto);
+      ownerId = rule?.usuario_id || distribuicao.usuario_principal_id;
+      sector = rule?.setor || config.setor_padrao || null;
+    } else if (!ownerId) {
+      const rule = await routingRule(config.empresa_id, texto);
+      ownerId = rule?.usuario_id || config.usuario_padrao_id || null;
+      sector = rule?.setor || config.setor_padrao || null;
+    }
   }
   if (!ownerName) ownerName = await userName(ownerId);
   const displayName = isGroup ? (grupoNome || nome || "Grupo WhatsApp") : (nome || customer?.nome || null);

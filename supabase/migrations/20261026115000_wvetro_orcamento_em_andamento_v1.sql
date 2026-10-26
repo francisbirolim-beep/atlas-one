@@ -28,6 +28,30 @@ begin
  end loop;
 end $$;
 
+-- Ponto de restauração: registrar os cartões elegíveis antes de qualquer movimento.
+-- Tabela privada, nunca exposta aos usuários; não inclui PDFs, dados pessoais ou valores.
+create table if not exists private.atlas_wvetro_em_andamento_backup_20261026 (
+  orcamento_id uuid primary key,
+  empresa_id uuid not null,
+  coluna_id uuid,
+  coluna_atualizada_em timestamptz,
+  kanban_motivo_andamento text,
+  registrado_em timestamptz not null default now()
+);
+revoke all on private.atlas_wvetro_em_andamento_backup_20261026 from public, anon, authenticated;
+grant select on private.atlas_wvetro_em_andamento_backup_20261026 to service_role;
+
+insert into private.atlas_wvetro_em_andamento_backup_20261026
+  (orcamento_id,empresa_id,coluna_id,coluna_atualizada_em,kanban_motivo_andamento)
+select o.id,o.empresa_id,o.coluna_id,o.coluna_atualizada_em,o.kanban_motivo_andamento
+  from public.orcamentos o
+  join public.kanban_colunas feito on feito.id=o.coluna_id and feito.empresa_id=o.empresa_id
+ where lower(btrim(feito.nome))='orçamento feito'
+   and coalesce(o.wvetro_fluxo->>'origem','')='wvetro_api'
+   and lower(coalesce(o.wvetro_fluxo->>'validacao_status',''))<>'validado'
+   and coalesce(o.modo_entrada,'')<>'wvetro_api_vinculado'
+on conflict (orcamento_id) do nothing;
+
 create or replace function public.validar_etapa_andamento_orcamento_v1()
 returns trigger language plpgsql security invoker set search_path='' as $$
 declare nome_destino text; eh_wvetro boolean; item jsonb; validacao jsonb; parte record;

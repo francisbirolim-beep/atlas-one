@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { pertenceAoHistoricoPessoal } from '@/lib/whatsappCaixaPessoal'
+import { elegivelAoSecundario, obterDistribuicaoWhatsApp } from '@/lib/whatsappEscalonamento'
 import { notificarGrupoWhatsAppPendente } from '@/lib/whatsappAlertasGrupo'
 import type { UsuarioTenant } from '@/lib/tenantServer'
 
@@ -24,6 +24,8 @@ export type AtendimentoConversa = {
   ultimo_preview?: string | null
   nao_lidas?: number | null
   ultima_mensagem_em?: string | null
+  ultima_entrada_em?: string | null
+  ultima_saida_em?: string | null
   transferida_em?: string | null
   acompanhando?: boolean
   created_at: string
@@ -305,6 +307,20 @@ async function acessoGrupoWhatsApp(
   }
 }
 
+async function secundarioAtribuidoPodeResponder(
+  conversa: AtendimentoConversa,
+  usuario: UsuarioTenant,
+) {
+  if (conversa.whatsapp_chat_tipo === 'grupo' || conversa.responsavel_id !== usuario.id ||
+      !conversa.whatsapp_canal_id) return false
+  const { data: canal } = await supabaseAdmin.from('atendimento_whatsapp_canais')
+    .select('principal').eq('id', conversa.whatsapp_canal_id)
+    .eq('empresa_id', usuario.empresa_id).maybeSingle()
+  if (!canal?.principal) return false
+  const distribuicao = await obterDistribuicaoWhatsApp(usuario.empresa_id)
+  return distribuicao?.ativo === true && distribuicao.secundarios_ids.includes(usuario.id)
+}
+
 async function usuarioPodeAtenderCanal(
   empresaId: string,
   canalId: string | null | undefined,
@@ -322,6 +338,10 @@ async function usuarioPodeAtenderCanal(
     .maybeSingle()
   if (!canal) return false
   if (canal.usuario_id === usuarioId) return true
+  if (canal.principal) {
+    const distribuicao = await obterDistribuicaoWhatsApp(empresaId)
+    if (distribuicao?.ativo && distribuicao.secundarios_ids.includes(usuarioId)) return true
+  }
   const { data: permissao } = await supabaseAdmin
     .from('atendimento_whatsapp_permissoes')
     .select('pode_atender')
@@ -1104,15 +1124,32 @@ export async function conversaAcessivel(conversaId: string, usuario: UsuarioTena
     if (!grupo.visualizar) return null
     return data as AtendimentoConversa
   }
-  if (!acesso.visualizar) return null
-  if (data.status === 'finalizado') return data as AtendimentoConversa
   if (data.responsavel_id === usuario.id) return data as AtendimentoConversa
-  if (acesso.supervisionar) return data as AtendimentoConversa
+  // O secundário pode acessar apenas a conversa que já venceu o prazo,
+  // e não o restante do histórico do número corporativo.
+  if (incluirFila) {
+    const [{ data: canal }, distribuicao] = await Promise.all([
+      supabaseAdmin.from('atendimento_whatsapp_canais').select('principal')
+        .eq('id', data.whatsapp_canal_id).eq('empresa_id', usuario.empresa_id).maybeSingle(),
+      obterDistribuicaoWhatsApp(usuario.empresa_id),
+    ])
+    if (elegivelAoSecundario(data, distribuicao, usuario.id, canal?.principal === true))
+      return data as AtendimentoConversa
+  }
+  if (!acesso.visualizar) return null
   if (incluirFila && !data.responsavel_id && acesso.atender) return data as AtendimentoConversa
+  // O histórico concluído é privado: somente quem enviou mensagem nele acessa.
+  if (data.status === 'finalizado') {
+    const { data: participou } = await supabaseAdmin.from('atendimento_mensagens')
+      .select('id').eq('empresa_id', usuario.empresa_id).eq('conversa_id', conversaId)
+      .eq('usuario_id', usuario.id).eq('direcao', 'saida').limit(1).maybeSingle()
+    return participou ? data as AtendimentoConversa : null
+  }
   return null
 }
 
 export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
+  const distribuicao = await obterDistribuicaoWhatsApp(usuario.empresa_id)
   const agora = new Date().toISOString()
   const [
     { data: canais, error: canaisError },
@@ -1184,9 +1221,12 @@ export async function listarAcessosCanaisAtendimento(usuario: UsuarioTenant) {
     const principal = canal.principal === true
     const master = usuario.role === 'master'
     const acessoPorGrupo = canaisGrupo.has(canal.id)
+    const secundarioDoPrincipal = Boolean(
+      canal.principal && distribuicao?.ativo && distribuicao.secundarios_ids.includes(usuario.id)
+    )
     return {
       canal_id: canal.id as string,
-      visualizar: master || dono || acessoPorGrupo || Boolean(
+      visualizar: master || dono || acessoPorGrupo || secundarioDoPrincipal || Boolean(
         permissao?.pode_visualizar || permissao?.pode_atender ||
         permissao?.pode_transferir || permissao?.pode_supervisionar
       ),
@@ -1225,7 +1265,9 @@ export async function listarConversasAtendimento(
   usuario: UsuarioTenant,
   opcoes: { modo?: 'minhas' | 'monitoramento' } = {},
 ) {
-  const acessos = await listarAcessosCanaisAtendimento(usuario)
+  const [acessos, distribuicao] = await Promise.all([
+    listarAcessosCanaisAtendimento(usuario), obterDistribuicaoWhatsApp(usuario.empresa_id),
+  ])
   const canaisConectados = acessos.map(acesso => acesso.canal_id)
   if (!canaisConectados.length) return []
 
@@ -1310,15 +1352,14 @@ export async function listarConversasAtendimento(
       return { conversa, permitido: true, grupo }
     }
 
-    if (usuario.role === 'master') return { conversa, permitido: true, grupo: null }
-    if (acesso?.dono || acesso?.supervisionar) return { conversa, permitido: true, grupo: null }
     if (conversa.responsavel_id === usuario.id) return { conversa, permitido: true, grupo: null }
-    // "Ver canal" inclui o histórico já finalizado do número.
-    // Conversa ativa de outro atendente continua protegida pela permissão "Supervisionar".
-    if (conversa.status === 'finalizado' && acesso?.visualizar) {
+    if (opcoes.modo === 'monitoramento' && (acesso?.dono || acesso?.supervisionar))
       return { conversa, permitido: true, grupo: null }
-    }
-    return { conversa, permitido: !conversa.responsavel_id && Boolean(acesso?.atender), grupo: null }
+    if (conversa.status === 'finalizado') return { conversa, permitido: true, grupo: null }
+    const atrasada = elegivelAoSecundario(
+      conversa, distribuicao, usuario.id, acesso?.principal === true,
+    )
+    return { conversa, permitido: atrasada || (!conversa.responsavel_id && Boolean(acesso?.atender)), grupo: null }
   }))
   const autorizadas = avaliadas.filter(item => item.permitido)
   // A supervisão é solicitada por rota separada, nunca embutida na caixa
@@ -1331,7 +1372,25 @@ export async function listarConversasAtendimento(
     : await conversasComRespostaDoUsuario(usuario, idsContatos)
   const permitidasComGrupo = opcoes.modo === 'monitoramento'
     ? autorizadas
-    : autorizadas.filter(item => pertenceAoHistoricoPessoal(item.conversa, respondidas))
+    : autorizadas.filter(item => {
+        const conversa = item.conversa
+        if (conversa.whatsapp_chat_tipo === 'grupo') {
+          // Caixa pessoal do Master não é a listagem geral dos grupos.
+          if (usuario.role === 'master') return conversa.responsavel_id === usuario.id
+          return conversa.responsavel_id === usuario.id ||
+            (!conversa.responsavel_id && item.grupo?.atender === true)
+        }
+        if (conversa.responsavel_id === usuario.id) return true
+        if (conversa.status === 'finalizado') return respondidas.has(conversa.id)
+        if (!conversa.responsavel_id) {
+          // A fila geral não se mistura à caixa particular do Master.
+          // Com distribuição ativa, a fila do número principal fica privada.
+          const acesso = acessoPorCanal.get(conversa.whatsapp_canal_id || '')
+          return usuario.role !== 'master' && !(distribuicao?.ativo && acesso?.principal)
+        }
+        const acesso = acessoPorCanal.get(conversa.whatsapp_canal_id || '')
+        return elegivelAoSecundario(conversa, distribuicao, usuario.id, acesso?.principal === true)
+      })
   const permitidas = permitidasComGrupo.map(item => item.conversa)
 
   const ids = permitidas.map(conversa => conversa.id)
@@ -1372,6 +1431,9 @@ export async function listarConversasAtendimento(
       ...conversa,
       transferida_em: ultimaTransferencia.get(conversa.id) || null,
       acompanhando: acompanhadas.has(conversa.id),
+      escalonado_para_mim: opcoes.modo !== 'monitoramento' && elegivelAoSecundario(
+        conversa, distribuicao, usuario.id, acessoPorCanal.get(conversa.whatsapp_canal_id || '')?.principal === true,
+      ),
       grupo_id: grupo?.grupoId || null,
       grupo_nivel_acesso: grupo?.nivel || null,
       grupo_pode_atender: grupo?.atender ?? null,
@@ -1860,7 +1922,7 @@ export async function prepararUploadMidiaAtendimento(
   const acesso = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
   const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
     ? (await acessoGrupoWhatsApp(conversa, usuario, acesso)).atender
-    : acesso.atender
+    : acesso.atender || await secundarioAtribuidoPodeResponder(conversa, usuario)
   if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para responder.')
   if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
     throw new Error('Assuma o atendimento antes de enviar arquivos.')
@@ -1914,7 +1976,7 @@ export async function enviarMidiaWhatsApp(
   const acesso = await acessoCanalWhatsApp(usuario, canalId)
   const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
     ? (await acessoGrupoWhatsApp(conversa, usuario, acesso)).atender
-    : acesso.atender
+    : acesso.atender || await secundarioAtribuidoPodeResponder(conversa, usuario)
   if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para responder.')
   if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
     throw new Error('Assuma o atendimento antes de responder.')
@@ -2055,7 +2117,7 @@ export async function enviarTextoWhatsApp(
     const acessoCanal = await acessoCanalWhatsApp(usuario, canalId)
     const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
       ? (await acessoGrupoWhatsApp(conversa, usuario, acessoCanal)).atender
-      : acessoCanal.atender
+      : acessoCanal.atender || await secundarioAtribuidoPodeResponder(conversa, usuario)
     if (!podeAtender) {
       throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para responder.')
     }
@@ -2220,7 +2282,7 @@ export async function reagirMensagemWhatsApp(
   const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
   const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
     ? (await acessoGrupoWhatsApp(conversa, usuario, acessoCanal)).atender
-    : acessoCanal.atender
+    : acessoCanal.atender || await secundarioAtribuidoPodeResponder(conversa, usuario)
   if (!podeAtender) throw new Error('Você pode acompanhar esta conversa, mas não pode reagir às mensagens.')
   if (conversa.responsavel_id !== usuario.id || conversa.status !== 'em_atendimento') {
     throw new Error('Assuma o atendimento antes de reagir.')
@@ -2513,24 +2575,39 @@ export async function assumirConversa(conversaId: string, usuario: UsuarioTenant
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) throw new Error('Conversa não disponível.')
   const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
+  const [{ data: canal }, distribuicao] = await Promise.all([
+    supabaseAdmin.from('atendimento_whatsapp_canais').select('principal')
+      .eq('empresa_id', usuario.empresa_id).eq('id', conversa.whatsapp_canal_id).maybeSingle(),
+    obterDistribuicaoWhatsApp(usuario.empresa_id),
+  ])
+  const escalonado = elegivelAoSecundario(
+    conversa, distribuicao, usuario.id, canal?.principal === true,
+  )
   const podeAtender = conversa.whatsapp_chat_tipo === 'grupo'
     ? (await acessoGrupoWhatsApp(conversa, usuario, acessoCanal)).atender
-    : acessoCanal.atender
+    : acessoCanal.atender || escalonado
   if (!podeAtender) {
     throw new Error('Você pode acompanhar esta conversa, mas não possui permissão para atender.')
   }
   const reabrindo = conversa.status === 'finalizado'
-  if (!reabrindo && conversa.responsavel_id && conversa.responsavel_id !== usuario.id && usuario.role !== 'master') {
+  if (!reabrindo && conversa.responsavel_id && conversa.responsavel_id !== usuario.id && usuario.role !== 'master' && !escalonado) {
     throw new Error('Esta conversa já está com outro atendente.')
   }
   const agora = new Date().toISOString()
-  await supabaseAdmin.from('atendimento_conversas').update({
+  // Concorrência: o primeiro que assumir leva, sem sobrescrever nova atribuição.
+  let atualizacao = supabaseAdmin.from('atendimento_conversas').update({
     responsavel_id: usuario.id,
     responsavel_nome: usuario.nome,
     status: 'em_atendimento',
     nao_lidas: 0,
     updated_at: agora,
-  }).eq('id', conversaId)
+  }).eq('id', conversaId).eq('status', conversa.status)
+  atualizacao = conversa.responsavel_id
+    ? atualizacao.eq('responsavel_id', conversa.responsavel_id)
+    : atualizacao.is('responsavel_id', null)
+  const { data: assumida, error: erroAssumir } = await atualizacao.select('id').maybeSingle()
+  if (erroAssumir) throw erroAssumir
+  if (!assumida) throw new Error('Este atendimento já foi assumido por outra pessoa.')
   const sessao = await garantirSessao({ ...conversa, responsavel_id: usuario.id, responsavel_nome: usuario.nome, status: 'em_atendimento' })
   if (sessao?.id) {
     await supabaseAdmin.from('atendimento_sessoes').update({

@@ -26,8 +26,7 @@ export async function GET(req: NextRequest) {
     const supervisionar = req.nextUrl.searchParams.get('visao') === 'monitoramento'
     // O master não recebe conversas alheias na caixa padrão. O acesso à
     // supervisão é explícito e conferido no servidor para todos os perfis.
-    if (supervisionar && usuario.role !== 'master' &&
-        !acessos.some(a => a.supervisionar || a.dono)) {
+    if (supervisionar && usuario.role !== 'master') {
       return NextResponse.json({ error: 'Acesso à supervisão não autorizado.' }, { status: 403 })
     }
     const resultado = await listarConversasAtendimento(usuario, {
