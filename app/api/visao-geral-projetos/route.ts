@@ -58,8 +58,8 @@ export async function GET(req:NextRequest){
   const pedidoIds=pedidosAbertos.map(s=>s.id)
   const [clientes,obras,orcs,compras,ops,instalacoes,medicoes,itensPedido]=await Promise.all([
    buscar('clientes','id,nome','id',clienteIds),
-   buscar('obras','id,nome,previsao_entrega,status','id',obraIds),
-   buscar('orcamentos','id,numero','id',orcIds),
+   buscar('obras','id,nome,previsao_entrega,status,observacoes','id',obraIds),
+   buscar('orcamentos','id,numero,fotos_urls,observacoes','id',orcIds),
    buscar('compras_necessidades','id,obra_id,status,recebido_em,categoria,quantidade,unidade','obra_id',obraIds),
    buscar('ordens_producao','id,venda_obra_id,status,bloqueada','venda_obra_id',vendaIds),
    buscar('venda_instalacao_itens','id,venda_obra_id,status,quantidade,quantidade_instalada,pendencia,checklist','venda_obra_id',vendaIds),
@@ -99,7 +99,7 @@ export async function GET(req:NextRequest){
   const clientesExtras=ids(itensPedido.map(x=>x.cliente_id)).filter(id=>!clienteIds.includes(id))
   const obrasExtras=ids(itensPedido.map(x=>x.obra_id)).filter(id=>!obraIds.includes(id))
   if(clientesExtras.length)clientes.push(...await buscar('clientes','id,nome','id',clientesExtras))
-  if(obrasExtras.length)obras.push(...await buscar('obras','id,nome,previsao_entrega,status','id',obrasExtras))
+  if(obrasExtras.length)obras.push(...await buscar('obras','id,nome,previsao_entrega,status,observacoes','id',obrasExtras))
   // Agenda financeira é separada de previsão comercial e de instalação física.
   const agendaR=vendaIds.length?await db.from('instalacao_planejamento_reservas')
     .select('venda_obra_id,data_prevista,valor_programado,estado').eq('empresa_id',empresa)
@@ -109,6 +109,9 @@ export async function GET(req:NextRequest){
   const nomeCliente=new Map(clientes.map(c=>[c.id,c.nome]))
   const porObra=new Map(obras.map(o=>[o.id,o]))
   const porOrc=new Map(orcs.map(o=>[o.id,'#'+o.numero]))
+  const dadosOrc=new Map(orcs.map(o=>[o.id,o]))
+  const fotoReal=(url:unknown):string|null=>
+    typeof url==='string' && /^https?:\/\//i.test(url) && !/\.(pdf|zip|docx?)(\?|$)/i.test(url) ? url : null
   const hoje=new Date().toISOString().slice(0,10)
   // O fluxo de Compras por solicitações/carrinhos é a fonte preferencial quando
   // há itens novos vinculados sem ambiguidade a uma única venda da obra.
@@ -124,6 +127,8 @@ export async function GET(req:NextRequest){
   }
   const cards=vendas.map(v=>{
    const obra=porObra.get(v.obra_id)
+   const orcamento=dadosOrc.get(v.orcamento_id)
+   const fotoProjetoUrl=(Array.isArray(orcamento?.fotos_urls)?orcamento.fotos_urls:[]).map(fotoReal).find(Boolean)||null
    const necessidades=(compras as Necessidade[]).filter(c=>Boolean(v.obra_id)&&c.obra_id===v.obra_id&&txt(c.status)!=='cancelado')
    const ordens=ops.filter(o=>o.venda_obra_id===v.id)
    const itens=instalacoes.filter(o=>o.venda_obra_id===v.id)
@@ -181,10 +186,29 @@ export async function GET(req:NextRequest){
     materiais:itensAtuais.length?resumoItensAtuais(itensAtuais):categorias(necessidades),
     compras:itensAtuais.length?{total:itensAtuais.length,comprados:compradosAtuais.length,recebidos:recebidosAtuais.length}:{total:necessidades.length,comprados:comPedido,recebidos:recebidas},
     producao:{total:ordens.length,concluidas},instalacao:{total:itens.length,concluidas:instaladas},
-    medicao:{registros:med.length},instalacaoMes:agenda.get(v.id)?.data_prevista?.slice(0,7)||null,
+    medicao:{registros:med.length},
+    fotoProjetoUrl,dataVenda:v.created_at||null,observacoes:obra?.observacoes||orcamento?.observacoes||null,
+    dataInstalacao:agenda.get(v.id)?.data_prevista||null,
+    instalacaoMes:agenda.get(v.id)?.data_prevista?.slice(0,7)||null,
     valorInstalacao:agenda.get(v.id)?Number(agenda.get(v.id)?.valor_programado):null,
     detalhesCompra:detalhesAtuais}
   }).filter(c=>c.vendaId)
+  // Ajustes visuais do Master, sem alterar Cliente 360 ou status operacionais.
+  const controlesR=await db.from('visao_geral_cards_controle')
+    .select('venda_id,estado,motivo,updated_at').eq('empresa_id',empresa).limit(1000)
+  if(controlesR.error)throw controlesR.error
+  const controles=new Map((controlesR.data||[]).map(c=>[c.venda_id,c]))
+  const normalizados=cards.map(c=>{
+    const controle=controles.get(c.vendaId)
+    return controle?.estado==='finalizado'
+      ?{...c,etapaOrigem:c.etapaOperacional,etapaOperacional:'finalizado',colunaId:'finalizado',cor:'azul' as const,controleMaster:'finalizado',motivoControle:controle.motivo}
+      :{...c,controleMaster:controle?.estado||null,motivoControle:controle?.motivo||null}
+  })
+  const ativos=normalizados.filter(c=>c.controleMaster!=='oculto')
+  const ocultos=u.role==='master'
+    ?normalizados.filter(c=>c.controleMaster==='oculto')
+      .map(c=>({vendaId:c.vendaId,cliente:c.cliente,numeroOrcamento:c.numeroOrcamento,motivoControle:c.motivoControle}))
+    :[]
   const pedidos:PedidoGeralCard[]=[]
   for(const s of pedidosAbertos){
    const lista=itensPedido.filter(i=>i.solicitacao_id===s.id&&i.destino==='obra'&&!['cancelado','cancelamento_solicitado'].includes(txt(i.status)))
@@ -195,6 +219,7 @@ export async function GET(req:NextRequest){
     const vendasDaObra=vendas.filter(v=>v.obra_id===obraId&&(!clienteId||v.cliente_id===clienteId))
     const venda=vendasDaObra.length===1?vendasDaObra[0]:null
     const situacao=['comprado','pedido_emitido','aguardando_entrega','recebido_parcial'].includes(txt(s.status))?'aguardando':'compras'
+    if(venda && controles.get(venda.id)?.estado==='oculto')continue
     pedidos.push({id:s.id+':'+obraId,cliente:clienteId?nomeCliente.get(clienteId)||'Cliente sem cadastro':'Cliente não vinculado',
      clienteId,vendaId:venda?.id||null,numeroOrcamento:venda?porOrc.get(venda.orcamento_id)||null:null,
      status:situacao,descricao:linhas.length===1?String(linhas[0].descricao||'Material solicitado'):'Solicitação com '+linhas.length+' itens',
@@ -202,7 +227,7 @@ export async function GET(req:NextRequest){
      detalhesCompra:linhas.map(detalhe)})
    }
   }
-  return NextResponse.json({cards,pedidos,usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
+  return NextResponse.json({cards:ativos,ocultos,pedidos,usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
    observacao:'Os percentuais sem quantidades ou unidades conciliadas são exibidos como Não apurado. Agendamentos não foram inferidos a partir da entrega da obra.'},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('visao geral de projetos GET',e);return respErro('Não foi possível consultar a Visão Geral de Projetos.',500)}
