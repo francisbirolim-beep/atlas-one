@@ -25,6 +25,7 @@ import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wv
 import {centavosVendaWVetro,valorOrigemVendaWVetro} from '@/lib/wvetroValorVendaValidacao'
 import { prepararRascunhoWVetro } from '@/lib/wvetroRascunhoOrcamento'
 import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
+import WhatsAppOrcamentoNotas from '@/components/system/WhatsAppOrcamentoNotas'
 import { linkRotaObra, localizacaoRegistradaNaObra, enderecoCompletoObra } from '@/lib/enderecoObra'
 
 type ObraKanbanLocal = {
@@ -1648,10 +1649,11 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 
 {cardSelecionado && editando && (
 <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-<div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full max-h-[92vh] sm:max-h-[85vh] overflow-y-auto">
+<div className={"bg-white rounded-t-2xl sm:rounded-2xl w-full max-h-[92vh] sm:max-h-[85vh] overflow-y-auto " + (cardSelecionado.modo_entrada === "whatsapp" ? "max-w-4xl" : "max-w-md")}>
 <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
 <div>
 <h3 className="font-bold text-slate-800">Orçamento · detalhes e histórico</h3>
+{cardSelecionado.modo_entrada === "whatsapp" && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">WhatsApp · Orçamento / Assistência</span>}
 <p className="text-[11px] text-slate-400">Abertura, alterações e saídas ficam registradas.</p>
 </div>
 <button onClick={tentarFechar} className="p-1 text-slate-400 hover:text-slate-600">
@@ -1660,6 +1662,8 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 </div>
 
 <div className="p-5 space-y-4">
+{cardSelecionado.modo_entrada === "whatsapp" && <WhatsAppOrcamentoNotas card={cardSelecionado}/>}
+<div id="atlas-campos-orcamento" />
 <section data-orcamento-localizacao="true" className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm">
   <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-blue-700">Cliente e local da obra</p>
   <p className="flex items-start gap-2 font-bold text-slate-800"><User size={16} className="mt-0.5 shrink-0"/>{cardSelecionado.cliente_nome}</p>
