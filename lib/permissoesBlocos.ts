@@ -182,6 +182,13 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('clientes.portal.documentos','Consultar documentos','Ver documentos disponíveis no portal.'),
     a('clientes.portal.editar','Editar cadastro','Alterar dados do cliente.'),
   ]),
+  m('kanban-obra','portal-cliente','Kanban individual por obra','Acompanhar cada venda e gerenciar cartões manuais auditados.','clientes',[
+    a('clientes.kanban_obra.consultar','Consultar Kanban da obra','Visualizar o progresso de uma venda específica.'),
+    a('clientes.kanban_obra.criar','Criar card de acompanhamento','Novo cartão visual sem criar uma compra ou alterar operações.'),
+    a('clientes.kanban_obra.mover','Movimentar card manual','Alterar etapa de acompanhamento, sem alterar produção ou estoque.'),
+    a('clientes.kanban_obra.retirar','Retirar card manual','Ocultar cartão com motivo e histórico.'),
+    a('clientes.kanban_obra.restaurar','Restaurar card manual','Recuperar cartão retirado com motivo e histórico.'),
+  ]),
   m('portal-parceiros','portal-parceiros','Portal de parceiros','Arquitetos, engenheiros, construtoras e parceiros.','clientes',[
     a('clientes.parceiros.basico','Consultar nome e contato','Ver cadastro básico do parceiro.'),
     a('clientes.parceiros.editar','Cadastrar/editar parceiro','Alterar dados do parceiro.'),

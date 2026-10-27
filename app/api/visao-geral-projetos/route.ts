@@ -3,6 +3,7 @@ import {autenticarCompras} from '@/lib/comprasServer'
 import {podeConsultarPainelGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {projetarCardGeral,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
+import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
 import type {MaterialResumo,PedidoGeralCard,DetalheMaterialCompra} from '@/lib/visaoGeralDemo'
 export const dynamic='force-dynamic'
 export const runtime='nodejs'
@@ -31,15 +32,29 @@ export async function GET(req:NextRequest){
  try{
   const u=await autenticarCompras(req)
   if(!u)return respErro('Sessão inválida',401)
-  if(!(await podeConsultarPainelGeral(u,'visao-geral-projetos')))return respErro('Acesso não autorizado à Visão Geral.',403)
+  const vendaSelecionada=req.nextUrl.searchParams.get('vendaId')
+  if(vendaSelecionada && !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(vendaSelecionada))
+    return respErro('ID de venda inválido.',400)
+  const permissaoObra=vendaSelecionada?await permissoesKanbanObra(u):null
+  if(!(await podeConsultarPainelGeral(u,'visao-geral-projetos'))&&!permissaoObra?.consultar)
+    return respErro('Acesso não autorizado à Visão Geral ou à obra.',403)
   const empresa=u.empresa_id
-  const vendasR=await db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,created_at,status')
-   .eq('empresa_id',empresa).order('created_at',{ascending:false}).limit(500)
+  let consultaVendas=db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,created_at,status')
+   .eq('empresa_id',empresa)
+  if(vendaSelecionada)consultaVendas=consultaVendas.eq('id',vendaSelecionada)
+  const vendasR=await consultaVendas.order('created_at',{ascending:false}).limit(500)
   if(vendasR.error)throw vendasR.error
   const vendas=(vendasR.data||[]).filter(v=>!['cancelada','cancelado'].includes(txt(v.status)))
   const ids=(values:(string|null|undefined)[])=>[...new Set(values.filter((v):v is string=>Boolean(v)))]
   const vendaIds=ids(vendas.map(v=>v.id)),obraIds=ids(vendas.map(v=>v.obra_id))
   const clienteIds=ids(vendas.map(v=>v.cliente_id)),orcIds=ids(vendas.map(v=>v.orcamento_id))
+  // Na visão filtrada de uma venda, outra venda pode usar a mesma obra.
+  // Não atribuir pedidos compartilhados ao orçamento selecionado por engano.
+  const todasVendasDaObra=obraIds.length?await db.from('vendas_obras')
+    .select('id,cliente_id,obra_id').eq('empresa_id',empresa).in('obra_id',obraIds).limit(5000):{data:[],error:null}
+  if(todasVendasDaObra.error)throw todasVendasDaObra.error
+  const qtdVendasObra=(obraId:string)=>((todasVendasDaObra.data||[]) as {id:string;obra_id:string}[])
+    .filter(v=>v.obra_id===obraId).length
   const buscar=async(tabela:string,campos:string,campo:string,valores:string[])=>{
    if(!valores.length)return [] as any[]
    const resultado:any[]=[]
@@ -134,7 +149,7 @@ export async function GET(req:NextRequest){
    const itens=instalacoes.filter(o=>o.venda_obra_id===v.id)
    const med=medicoes.filter(o=>o.orcamento_id===v.orcamento_id&&(!o.obra_id||o.obra_id===v.obra_id))
    const itensAtuais=itensPedido.filter(i=>i.destino==='obra'&&i.obra_id===v.obra_id
-     &&Boolean(v.obra_id)&&vendas.filter(x=>x.obra_id===v.obra_id).length===1
+     &&Boolean(v.obra_id)&&qtdVendasObra(v.obra_id)===1
      &&txt(i.status)!=='cancelado')
    const detalhesAtuais=itensAtuais.map(detalhe)
    const semReceberAtuais=detalhesAtuais.filter(i=>i.quantidade!==null&&i.recebido!==null
@@ -205,7 +220,7 @@ export async function GET(req:NextRequest){
       :{...c,controleMaster:controle?.estado||null,motivoControle:controle?.motivo||null}
   })
   const ativos=normalizados.filter(c=>c.controleMaster!=='oculto')
-  const ocultos=u.role==='master'
+  const ocultos=(u.role==='master'||permissaoObra?.restaurar)
     ?normalizados.filter(c=>c.controleMaster==='oculto')
       .map(c=>({vendaId:c.vendaId,cliente:c.cliente,numeroOrcamento:c.numeroOrcamento,motivoControle:c.motivoControle}))
     :[]
@@ -217,7 +232,9 @@ export async function GET(req:NextRequest){
    for(const [obraId,linhas] of porDestino){
     const clienteId=linhas[0]?.cliente_id||s.cliente_id||null
     const vendasDaObra=vendas.filter(v=>v.obra_id===obraId&&(!clienteId||v.cliente_id===clienteId))
-    const venda=vendasDaObra.length===1?vendasDaObra[0]:null
+    const venda=vendasDaObra.length===1&&qtdVendasObra(obraId)===1?vendasDaObra[0]:null
+    // Pedido de estoque ou sem venda confirmada fica somente no Compras 360.
+    if(!venda)continue
     const situacao=['comprado','pedido_emitido','aguardando_entrega','recebido_parcial'].includes(txt(s.status))?'aguardando':'compras'
     if(venda && controles.get(venda.id)?.estado==='oculto')continue
     pedidos.push({id:s.id+':'+obraId,cliente:clienteId?nomeCliente.get(clienteId)||'Cliente sem cadastro':'Cliente não vinculado',
@@ -227,7 +244,32 @@ export async function GET(req:NextRequest){
      detalhesCompra:linhas.map(detalhe)})
    }
   }
-  return NextResponse.json({cards:ativos,ocultos,pedidos,usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
+  // Cards manuais são visuais e auditados. Nunca representam pedidos emitidos.
+  let kanbanObraConfigurado=true
+  let manuais:any[]=[]
+  let manuaisQuery=db.from('kanban_obra_cards_manuais')
+   .select('id,venda_id,titulo,descricao,etapa,retirado_em,created_at,updated_at')
+   .eq('empresa_id',empresa).order('created_at',{ascending:false}).limit(2000)
+  if(vendaSelecionada)manuaisQuery=manuaisQuery.eq('venda_id',vendaSelecionada)
+  const manuaisR=await manuaisQuery
+  if(manuaisR.error){
+   if(['42P01','PGRST205'].includes(String(manuaisR.error.code||'')))kanbanObraConfigurado=false
+   else throw manuaisR.error
+  }else manuais=manuaisR.data||[]
+  const vendasPorId=new Map(vendas.map(v=>[v.id,v]))
+  const acompanhamentos=manuais.filter(m=>!m.retirado_em&&vendasPorId.has(m.venda_id)).map(m=>{
+   const venda=vendasPorId.get(m.venda_id)!
+   return {id:m.id,vendaId:m.venda_id,clienteId:venda.cliente_id,
+    cliente:nomeCliente.get(venda.cliente_id)||'Cliente',numeroOrcamento:porOrc.get(venda.orcamento_id)||null,
+    titulo:m.titulo,descricao:m.descricao,etapa:m.etapa,createdAt:m.created_at}
+  })
+  const retiradosManuais=(u.role==='master'||permissaoObra?.restaurar)
+   ?manuais.filter(m=>m.retirado_em&&vendasPorId.has(m.venda_id)).map(m=>({
+     id:m.id,vendaId:m.venda_id,titulo:m.titulo,etapa:m.etapa,retiradoEm:m.retirado_em
+    })):[]
+  return NextResponse.json({cards:ativos,ocultos,pedidos,acompanhamentos,retiradosManuais,
+   permissoesObra:permissaoObra,kanbanObraConfigurado,
+   usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
    observacao:'Os percentuais sem quantidades ou unidades conciliadas são exibidos como Não apurado. Agendamentos não foram inferidos a partir da entrega da obra.'},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('visao geral de projetos GET',e);return respErro('Não foi possível consultar a Visão Geral de Projetos.',500)}
