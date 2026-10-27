@@ -253,7 +253,11 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     const preco_total = preco_unit != null ? preco_unit * quantidadeNum : null
     const tipoMedidaItem = it.tipoMedida || tipoMedida || 'comum'
     const itemTipo = it.itemTipo || 'sob_medida'
-    const nomeProdutoItem = itemTipo === 'kit_porta_pronta' ? (it.produtoNome || it.tipoOutroTexto?.trim() || (it.descricao?.trim() ? 'Kit porta pronta' : null)) : it.produtoNome || null
+    const nomeProdutoItem = itemTipo === 'kit_porta_pronta'
+      ? (it.produtoNome || it.tipoOutroTexto?.trim() || (it.descricao?.trim() ? 'Kit porta pronta' : null))
+      : itemTipo === 'medida_padrao'
+        ? (it.produtoNome?.trim() || it.tipoOutroTexto?.trim() || it.descricao?.trim() || null)
+        : it.produtoNome || null
     const camposKit = itemTipo === 'kit_porta_pronta' ? {
       // Os números antigos são preservados, sem multiplicar por 10.
       largura_batente_mm: numeroOpcional(it.larguraBatenteMm || it.larguraBatenteCm || ''),
