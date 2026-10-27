@@ -81,7 +81,14 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
    const u=await usuarioAtual()
    if(!u)return
    const master=u.role==='master'
-   if(ativo)setPodeRevisarVenda(master)
+   const tokenConferencia=await tokenAtual()
+   if(tokenConferencia){
+    const acessoResp=await fetch('/api/vendas/conferencia-importacao/permissao',{
+     headers:{Authorization:'Bearer '+tokenConferencia},cache:'no-store',
+    })
+    const acessoJson=await acessoResp.json().catch(()=>({permitido:false}))
+    if(ativo)setPodeRevisarVenda(acessoResp.ok&&acessoJson.permitido===true)
+   }
    if(master){if(ativo)setAcessoCmv({id:u.id,master:true,podeEditar:true,delegacoes:{}});return}
    const [setores,config]=await Promise.all([listarPermissoesUsuario(u.id),lerAcessoUsuarioConfig(u)])
    const nomes=[

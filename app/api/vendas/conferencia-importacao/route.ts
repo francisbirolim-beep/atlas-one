@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { autenticarTenant } from '@/lib/tenantServer'
+import { permitidoConferirVenda } from '@/lib/conferenciaFinanceiraPermissaoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime='nodejs'
@@ -18,7 +19,7 @@ const numerico=(v:unknown):number|null=>{
 async function autorizar(req:NextRequest){
  const u=await autenticarTenant(req)
  if(!u)return {error:falha('Sessão expirada.',401)} as const
- if(String(u.role).toLowerCase()!=='master')return {error:falha('Conferência financeira disponível apenas para Master.',403)} as const
+ try{if(!await permitidoConferirVenda(req,u))return {error:falha('Sem autorização de edição para Vendas e Financeiro.',403)} as const}catch{return {error:falha('Falha ao verificar permissões.',503)} as const}
  const vendaId=req.method==='GET'?(req.nextUrl.searchParams.get('vendaId')||''):''
  return {u,vendaId}
 }

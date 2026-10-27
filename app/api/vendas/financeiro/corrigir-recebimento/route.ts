@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { autenticarTenant } from '@/lib/tenantServer'
+import { permitidoConferirVenda } from '@/lib/conferenciaFinanceiraPermissaoServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const runtime = 'nodejs'
@@ -16,7 +17,7 @@ function dinheiro(v:unknown):number|null{
 export async function GET(req:NextRequest){
  const u=await autenticarTenant(req)
  if(!u)return falha('Sessão expirada.',401)
- if(String(u.role).toLowerCase()!=='master')return falha('Somente Master pode consultar correções.',403)
+ try{if(!await permitidoConferirVenda(req,u))return falha('Sem autorização de edição para Vendas e Financeiro.',403)}catch{return falha('Falha ao conferir permissões.',503)}
  const vendaId=req.nextUrl.searchParams.get('vendaId')||''
  if(!UUID.test(vendaId))return falha('Venda inválida.')
  const {data:venda}=await supabaseAdmin.from('vendas_obras').select('id')
@@ -33,7 +34,7 @@ export async function GET(req:NextRequest){
 export async function POST(req:NextRequest){
  const u=await autenticarTenant(req)
  if(!u)return falha('Sessão expirada.',401)
- if(String(u.role).toLowerCase()!=='master')return falha('Somente Master pode corrigir pagamentos.',403)
+ try{if(!await permitidoConferirVenda(req,u))return falha('Sem autorização de edição para Vendas e Financeiro.',403)}catch{return falha('Falha ao conferir permissões.',503)}
  // A prévia usa o mesmo projeto Supabase da produção: ela nunca grava recebimentos.
  if(process.env.VERCEL_ENV==='preview')return falha('Em prévia, nenhuma baixa financeira é alterada.',409)
  try{

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { autenticarTenant } from '@/lib/tenantServer'
+import { permitidoConferirVenda } from '@/lib/conferenciaFinanceiraPermissaoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -18,7 +19,7 @@ function moeda(valor:unknown):number|null{
 export async function POST(req:NextRequest){
  const usuario=await autenticarTenant(req)
  if(!usuario)return erro('Sessão inválida.',401)
- if(String(usuario.role).toLowerCase()!=='master')return erro('Somente Master pode validar ou corrigir o valor de venda.',403)
+ try{if(!await permitidoConferirVenda(req,usuario))return erro('Seu perfil não tem permissão de edição financeira desta venda.',403)}catch{return erro('Falha ao conferir permissões.',503)}
  try{
   const body=await req.json()
   const vendaId=String(body.vendaId??'')

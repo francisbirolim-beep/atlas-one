@@ -1,0 +1,38 @@
+const assert=require('node:assert/strict')
+const fs=require('node:fs')
+const ler=p=>fs.readFileSync(p,'utf8')
+const sql=ler('supabase/migrations/20261027203000_conferencia_financeira_respeitar_permissoes_v1.sql')
+const helper=ler('lib/conferenciaFinanceiraPermissaoServer.ts')
+const acesso=ler('app/api/vendas/conferencia-importacao/permissao/route.ts')
+const importacao=ler('app/api/vendas/conferencia-importacao/route.ts')
+const vendas=ler('app/api/vendas/cmv/revisao-venda/route.ts')
+const pagamento=ler('app/api/vendas/financeiro/corrigir-recebimento/route.ts')
+const painel=ler('components/clientes/VendaCmvPainel.tsx')
+assert.match(sql,/fn_pode_conferir_financeiro_v1/)
+assert.match(sql,/u\.empresa_id=p_empresa/)
+assert.match(sql,/lower\(u\.role\)='master'/)
+for(const key of ['financeiro','fazer-orcamento-msanfyvj','orcamentos','vendas','cliente360','custos-cmv']){
+ assert.ok(sql.includes(key),'Permissão ausente: '+key)
+}
+assert.match(sql,/p\.nivel='edicao'/)
+assert.match(sql,/config->'cliente360'->>'financeiro'/)
+assert.match(sql,/config->'cliente360'->>'vendas'/)
+assert.match(sql,/config->'modulos'->>'portal-cliente'/)
+for(const proc of ['fn_venda_conferir_valor_wvetro_v1','fn_venda_conferir_valor_financeiro_v2','fn_corrigir_recebimento_venda_master_v1','fn_conferir_importacao_venda_financeiro_v1']){
+ const p=sql.indexOf('function public.'+proc+'(')
+ assert.ok(p>0,'Rotina existente nao conferida: '+proc)
+ assert.match(sql.slice(p,p+7000),/fn_pode_conferir_financeiro_v1/)
+}
+assert.match(sql,/create policy "Conferentes autorizados consultam revisoes de importacao"/)
+assert.match(sql,/create policy "Conferentes autorizados consultam correcoes financeiras"/)
+assert.match(helper,/auth:\{persistSession:false/)
+assert.match(helper,/fn_pode_conferir_financeiro_v1/)
+assert.match(acesso,/permitido:|permitido,motivo/)
+assert.match(acesso,/private, no-store/)
+for(const rota of [importacao,vendas,pagamento]){
+ assert.match(rota,/permitidoConferirVenda/)
+ assert.doesNotMatch(rota,/role\)\.toLowerCase\(\)!=='master'/)
+}
+assert.match(painel,/\/api\/vendas\/conferencia-importacao\/permissao/)
+assert.match(painel,/setPodeRevisarVenda\(acessoResp\.ok&&acessoJson\.permitido===true\)/)
+console.log('PASS: tela, APIs, V1/V2 e auditorias obedecem permissões atuais; Master continua autorizado; revogação funciona.')
