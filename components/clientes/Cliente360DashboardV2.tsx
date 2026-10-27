@@ -17,6 +17,7 @@ import { listarPermissoesUsuario } from '@/lib/setores'
 import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import { gerarBasePrecificacao } from '@/lib/orcamentoPrecificacao'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
+import { intervalosHistoricosClienteWVetro } from '@/lib/wvetroBuscaHistoricaCliente'
 import type { Usuario } from '@/lib/tipos'
 import VendasCliente360 from '@/components/clientes/VendasCliente360'
 import ComprasClienteCards from '@/components/compras/ComprasClienteCards'
@@ -245,50 +246,72 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     await carregar()
   }
 
-  async function sincronizarWVetroAgora(){
-    if(!podeSincronizarWVetro)return
+  async function sincronizarWVetroAgora(diasHistorico: 90 | 365 = 90){
+    if(!podeSincronizarWVetro || sincronizandoWVetro)return
     setSincronizandoWVetro(true);setMensagemSyncWVetro('');setErro('')
     try{
       const token=await tokenAtual()
       if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
-      setMensagemSyncWVetro(`Conferindo W.Vetro somente para ${cliente?.nome||'este cliente'}...`)
-
-      const resp=await fetch('/api/integracoes/wvetro/orcamentos/sincronizar-cliente',{
-        method:'POST',
-        cache:'no-store',
-        headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({clienteId}),
-      })
-      const json=await resp.json().catch(()=>({}))
-      if(!resp.ok)throw new Error(json?.error||`Falha ao sincronizar W.Vetro (${resp.status}).`)
-
-      const lidos=Number(json.sincronizados||0)
-      const criados=Number(json.criados||0)
-      const atualizados=Number(json.atualizados||0)
-      const ignorados=Number(json.ignoradosClienteDivergente||0)+Number(json.historicosIgnoradosNomeDivergente||0)
-      const numerosWvetro=(Array.isArray(json.numerosWvetro)?json.numerosWvetro:[]).map((n:unknown)=>String(n)).filter(Boolean)
+      // A API W.Vetro limita a consulta a 7 dias. Pesquisa-se o passado em
+      // chamadas pequenas, sem prender uma única função por meses de histórico.
+      const janelas: Array<{inicio:string;fim:string}|null> = [null, ...intervalosHistoricosClienteWVetro(diasHistorico)]
+      let lidos=0, criados=0, atualizados=0, semAlteracao=0, outrosClientes=0, bloqueados=0, pendentesRevisao=0
+      const numerosWvetro=new Set<string>()
+      const falhasPesquisa:string[]=[]
+      for(let i=0;i<janelas.length;i+=1){
+        const periodo=janelas[i]
+        setMensagemSyncWVetro(`Pesquisando W.Vetro para ${cliente?.nome||'este cliente'}: ${i+1}/${janelas.length} período(s) (${periodo ? `${periodo.inicio} a ${periodo.fim}` : 'últimos 7 dias'})...`)
+        try{
+          const resp=await fetch('/api/integracoes/wvetro/orcamentos/sincronizar-cliente',{
+            method:'POST',cache:'no-store',
+            headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+            body:JSON.stringify({clienteId,...(periodo||{})}),
+          })
+          const json=await resp.json().catch(()=>({}))
+          if(!resp.ok)throw new Error(json?.error||`Falha HTTP ${resp.status}`)
+          lidos+=Number(json.sincronizados||0)
+          criados+=Number(json.criados||0)
+          atualizados+=Number(json.atualizados||0)
+          semAlteracao+=Number(json.semAlteracao||0)
+          outrosClientes+=Number(json.ignoradosClienteDivergente||0)
+          bloqueados+=Number(json.bloqueadosOutroCliente||0)
+          pendentesRevisao+=Number(json.revisoesHumanasPendentes||0)
+          for(const numero of Array.isArray(json.numerosWvetro)?json.numerosWvetro:[]) {
+            if(numero!==null && numero!==undefined && String(numero).trim())numerosWvetro.add(String(numero).trim())
+          }
+          if(json.ok===false){
+            falhasPesquisa.push(`${periodo?.inicio||'Recentes'}: ${Array.isArray(json.falhas)?json.falhas.map((f:{erro?:string})=>f.erro||'erro').join(', '):'consulta incompleta'}`)
+          }
+        }catch(e){
+          falhasPesquisa.push(`${periodo?.inicio||'Recentes'}: ${e instanceof Error?e.message:'falha de consulta'}`)
+        }
+      }
 
       const listaResp=await fetch(`/api/integracoes/wvetro/orcamentos/sincronizar?clienteId=${encodeURIComponent(clienteId)}`,{
-        method:'GET',
-        cache:'no-store',
-        headers:{Authorization:`Bearer ${token}`},
+        method:'GET',cache:'no-store',headers:{Authorization:`Bearer ${token}`},
       })
       const listaJson=await listaResp.json().catch(()=>({}))
       if(!listaResp.ok)throw new Error(listaJson?.error||'Falha ao listar os orçamentos W.Vetro deste cliente.')
-
       const alvos=Array.isArray(listaJson.orcamentos)?listaJson.orcamentos:[]
-      let corrigidos=0, falhas=0
+      let corrigidos=0, falhasRecalculo=0
       for(let i=0;i<alvos.length;i+=1){
         setMensagemSyncWVetro(`Recalculando orçamento W.Vetro deste cliente: ${i+1}/${alvos.length}...`)
         const resultado=await gerarBasePrecificacao(String(alvos[i].id),{perdaCorteMm:0,minimoSobraReaproveitavelMm:300})
         if(resultado.ok)corrigidos+=1
-        else falhas+=1
+        else falhasRecalculo+=1
       }
-
       await carregar()
-      const numerosTexto=numerosWvetro.length?` · Orçamentos W.Vetro: ${numerosWvetro.map((n:string)=>`#${n}`).join(', ')}`:''
-      const ignoradosTexto=ignorados?` · ${ignorados} registro(s) ignorado(s) por nome incompatível.`:''
-      setMensagemSyncWVetro(`Conferência de ${cliente?.nome||'cliente'} concluída: ${lidos} lido(s), ${criados} novo(s), ${atualizados} atualizado(s) · ${corrigidos} recalculado(s), ${falhas} com pendência${numerosTexto}${ignoradosTexto}`)
+      const nums=Array.from(numerosWvetro)
+      const numerosTexto=nums.length?` Orçamentos W.Vetro: ${nums.map(n=>`#${n}`).join(', ')}.`:''
+      const pesquisaParcial=falhasPesquisa.length>0
+      const resumo=`${lidos} registro(s) consultado(s), ${criados} importado(s), ${atualizados} atualizado(s), ${semAlteracao} já atualizado(s), ${corrigidos} recalculado(s).`
+      const outrosTexto=outrosClientes?` ${outrosClientes} registro(s) eram de outros clientes e NÃO foram vinculados.`:''
+      const ausente=!nums.length?` Nenhum orçamento deste cliente foi localizado nos últimos ${diasHistorico} dias. ${diasHistorico===90?'Use "Buscar últimos 12 meses" se o orçamento for mais antigo.':'Confira se o nome no W.Vetro está igual ao do cadastro ou se existe outro período.'}`:''
+      const falhasTexto=pesquisaParcial?` ${falhasPesquisa.length} período(s) com falha: ${falhasPesquisa.slice(0,3).join(' | ')}. Tente novamente.`:''
+      const bloqueioTexto=bloqueados?` ${bloqueados} orçamento(s) JÁ estão vinculados a outro Cliente 360 e precisam de conferência manual.`:''
+      const revisaoTexto=pendentesRevisao?` ${pendentesRevisao} orçamento(s) exigem revisão humana, sem sobrescrever a validação existente.`:''
+      const recalcTexto=falhasRecalculo?` ${falhasRecalculo} orçamento(s) com erro de recálculo.`:''
+      setMensagemSyncWVetro(`${pesquisaParcial?'Pesquisa parcial':'Pesquisa concluída'} para ${cliente?.nome||'cliente'} (${diasHistorico} dias): ${resumo}${numerosTexto}${outrosTexto}${ausente}${bloqueioTexto}${revisaoTexto}${falhasTexto}${recalcTexto}`)
     }catch(e){setErro(e instanceof Error?e.message:'Não foi possível sincronizar o W.Vetro.')}
     finally{setSincronizandoWVetro(false)}
   }
@@ -414,9 +437,9 @@ export default function Cliente360DashboardV2({clienteId}:Props){
         </div>}
 
         {aba==='orcamentos'&&pode('orcamentos')&&<div className="space-y-5">
-          <Box titulo="Orçamentos" acao={<div className="flex flex-wrap gap-2">{podeSincronizarWVetro&&<button onClick={()=>void sincronizarWVetroAgora()} disabled={sincronizandoWVetro} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50">{sincronizandoWVetro?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoWVetro?'Sincronizando e corrigindo...':'Sincronizar e corrigir W.Vetro'}</button>}{pode('orcamentos')&&<Link href={`/clientes/${cliente.id}/orcamentos-revisoes`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Versões V1/V2/V3</Link>}</div>}>
-            <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs text-violet-800"><b>Sincronização por cliente.</b> O nome do cliente no W.Vetro é a chave principal. Todos os números de orçamento compatíveis ficam anexados neste mesmo Cliente 360; registros com nome diferente são ignorados.</div>
-            {mensagemSyncWVetro&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{mensagemSyncWVetro}</div>}
+          <Box titulo="Orçamentos" acao={<div className="flex flex-wrap gap-2">{podeSincronizarWVetro&&<button onClick={()=>void sincronizarWVetroAgora()} disabled={sincronizandoWVetro} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50">{sincronizandoWVetro?<Loader2 size={13} className="animate-spin"/>:<RefreshCw size={13}/>} {sincronizandoWVetro?'Sincronizando e corrigindo...':'Sincronizar e corrigir W.Vetro'}</button>}{podeSincronizarWVetro&&<button onClick={()=>void sincronizarWVetroAgora(365)} disabled={sincronizandoWVetro} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-50">Buscar últimos 12 meses</button>}{pode('orcamentos')&&<Link href={`/clientes/${cliente.id}/orcamentos-revisoes`} className="rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white">Versões V1/V2/V3</Link>}</div>}>
+            <div className="mb-4 rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-xs text-violet-800"><b>Sincronização por cliente.</b> O Atlas pesquisa o W.Vetro em períodos de sete dias (90 dias por padrão, ou 12 meses sob solicitação). Somente orçamentos com nome compatível entram neste Cliente 360; registros de outros clientes nunca são vinculados automaticamente.</div>
+            {mensagemSyncWVetro&&<div className={`mb-4 rounded-xl border px-3 py-2 text-xs ${mensagemSyncWVetro.includes('Nenhum orçamento')||mensagemSyncWVetro.startsWith('Pesquisa parcial')||mensagemSyncWVetro.includes('exigem revisão')||mensagemSyncWVetro.includes('outro Cliente 360')?'border-amber-200 bg-amber-50 text-amber-900':'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>{mensagemSyncWVetro}</div>}
             <div className="space-y-2">{orcamentos.map(o=>{const w=ehWVetro(o);const descricao=descricaoOrcamento(o);const itens=Array.isArray(o.itens)?o.itens.length:0;return <Link href={`/orcamento/${o.id}/composicao`} key={o.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4 transition hover:border-brand-navy hover:shadow-sm ${o.revisao_atual===false?'bg-slate-50 opacity-70':'bg-white'}`}><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-900">Orçamento #{numeroOrcamento(o)}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${w?'bg-violet-100 text-violet-700':'bg-blue-100 text-blue-700'}`}>{w?'W.VETRO':'ATLAS'}</span>{!w&&o.revisao_atual!==false&&<span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">ATUAL</span>}</div>{descricao&&<p className="mt-1 truncate text-sm text-slate-600">{descricao}</p>}<p className="mt-1 text-xs text-slate-400">{dataBR(o.created_at)} · {w?(o.wvetro_fluxo?.situacao?status(o.wvetro_fluxo.situacao):status(o.status)):(o.revisao_tipo?status(o.revisao_tipo):status(o.status))}{itens? ` · ${itens} item(ns)`:''}{w&&o.wvetro_fluxo?.vendedor?` · ${o.wvetro_fluxo.vendedor}`:''}</p></div><div className="flex items-center gap-3"><b className="whitespace-nowrap text-slate-900">{moeda(valorOrcamento(o))}</b><ExternalLink size={15} className="text-slate-400"/></div></Link>})}{!orcamentos.length&&<p className="py-6 text-center text-sm text-slate-400">Nenhum orçamento vinculado a este cliente.</p>}</div>
           </Box>
           <Box titulo="Histórico W.Vetro anterior"><div className="mb-3 rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs text-cyan-800">Histórico comercial antigo permanece separado para consulta. Os novos orçamentos sincronizados aparecem acima como orçamentos normais do Atlas, preservando a origem W.Vetro.</div><div className="space-y-2">{wvetroHistorico.map(o=>{const venda=o.tipo_registro!=='orcamento_historico';const itens=Array.isArray(o.itens)?o.itens:[];return <div key={o.id} className="rounded-xl border bg-white p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-bold">W.Vetro #{o.numero_wvetro||'—'}</p><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${venda?'bg-emerald-100 text-emerald-700':'bg-cyan-100 text-cyan-700'}`}>{venda?'VENDA HISTÓRICA':'ORÇAMENTO HISTÓRICO'}</span></div><p className="mt-1 text-xs text-slate-500">{dataBR(o.data_venda||o.data_emissao)}{o.situacao_wvetro?` · Situação ${o.situacao_wvetro}`:''}</p><p className="mt-1 text-xs text-slate-400">{itens.length} item(ns) · vínculo seguro por {o.metodo_identidade==='documento'?'documento':o.metodo_identidade==='codigo_nome'?'código + nome':'reconciliação'}</p></div><b>{moeda(o.valor_total)}</b></div></div>})}{!wvetroHistorico.length&&<p className="text-sm text-slate-400">Nenhum histórico anterior do W.Vetro vinculado a este cliente.</p>}</div></Box>
