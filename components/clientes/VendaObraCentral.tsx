@@ -1332,7 +1332,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <VendaFinanceiroHaver clienteId={clienteId} vendaId={venda.id} obraId={obra?.id||null} aReceber={aReceber} onAtualizar={atualizarComposicaoTipologia}/>
         </Box>}
 
-        {aba==='custos'&&<VendaCmvPainel vendaId={venda.id} abrirEdicaoVenda={abrirEdicaoValorVenda} onEdicaoVendaAberta={()=>setAbrirEdicaoValorVenda(false)} recebimentosRegistrados={recebimentosVenda} totalPago={recebido} valorTitulos={totalTitulosAtivos} numeroTitulos={contas.filter(c=>c.status!=='cancelado').length} onRegistrarRecebimento={()=>setModalRecebimento(true)} comprasExistentes={{
+        {aba==='custos'&&<VendaCmvPainel vendaId={venda.id} abrirEdicaoVenda={abrirEdicaoValorVenda} onEdicaoVendaAberta={()=>setAbrirEdicaoValorVenda(false)} recebimentosRegistrados={recebimentosVenda} totalPago={recebido} valorTitulos={totalTitulosAtivos} numeroTitulos={contas.filter(c=>c.status!=='cancelado').length} comprasExistentes={{
           perfil:custosPorCategoria.perfil.realizado,
           acessorio:custosPorCategoria.acessorios.realizado,
           vidro:custosPorCategoria.vidro.realizado,
