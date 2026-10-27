@@ -1,3 +1,4 @@
+import { descricaoMedidaPadrao } from './orcamentoRapidoProdutoLivre'
 import { coordenadasEmTexto, decomporEnderecoObra, registrarFeedbackLocalizacao } from '@/lib/enderecoObra'
 import { supabase } from './supabase'
 import { obterOuCriarCliente } from './clientes'
@@ -253,7 +254,13 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
     const preco_total = preco_unit != null ? preco_unit * quantidadeNum : null
     const tipoMedidaItem = it.tipoMedida || tipoMedida || 'comum'
     const itemTipo = it.itemTipo || 'sob_medida'
-    const nomeProdutoItem = itemTipo === 'kit_porta_pronta' ? (it.produtoNome || it.tipoOutroTexto?.trim() || (it.descricao?.trim() ? 'Kit porta pronta' : null)) : it.produtoNome || null
+    const nomeProdutoItem = itemTipo === 'kit_porta_pronta'
+      ? (it.produtoNome || it.tipoOutroTexto?.trim() || (it.descricao?.trim() ? 'Kit porta pronta' : null))
+      : itemTipo === 'medida_padrao'
+        ? (descricaoMedidaPadrao(it) || null)
+        : it.produtoNome || null
+    // Sem cadastro: preservar nome legível e não inventar valor de venda/custo.
+    const descricaoItem = it.descricao?.trim() || (itemTipo === 'medida_padrao' && !produto_id ? (nomeProdutoItem || undefined) : undefined)
     const camposKit = itemTipo === 'kit_porta_pronta' ? {
       // Os números antigos são preservados, sem multiplicar por 10.
       largura_batente_mm: numeroOpcional(it.larguraBatenteMm || it.larguraBatenteCm || ''),
@@ -329,7 +336,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
         foto_larguras_url, foto_alturas_url, quantidade: quantidadeNum,
         foto_url: itemFotoUrls[0] || foto_larguras_url || foto_alturas_url || null,
         foto_urls: todasFotosItem.length ? todasFotosItem : null,
-        descricao: it.descricao || undefined, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
+        descricao: descricaoItem, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
         ...snapshotConfiguracao, ...camposKit,
       })
     } else {
@@ -339,7 +346,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
         tipo_medida: tipoMedidaItem,
         largura_mm: numeroOpcional(it.largura) || 0, altura_mm: numeroOpcional(it.altura) || 0, quantidade: quantidadeNum,
         foto_url: itemFotoUrls[0] || null, foto_urls: itemFotoUrls.length ? itemFotoUrls : null,
-        descricao: it.descricao || undefined, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
+        descricao: descricaoItem, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
         ...snapshotConfiguracao, ...camposKit,
       })
     }
