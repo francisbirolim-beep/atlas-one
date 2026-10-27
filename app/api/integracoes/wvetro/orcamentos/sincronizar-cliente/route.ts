@@ -3,6 +3,7 @@ import { autenticarUsuarioWVetro } from '@/lib/wvetroAcessoServer'
 import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
+import { validarPeriodoWVetro } from '@/lib/wvetroOperacionalConsultaServer'
 import { sincronizar } from '../sincronizar/route'
 
 export const runtime = 'nodejs'
@@ -41,6 +42,21 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const clienteId = String(body.clienteId || '').trim()
   if (!clienteId) return NextResponse.json({ error: 'Cliente não informado.' }, { status: 400 })
+
+  // Pesquisa histórica paginada: cada chamada só lê uma janela segura de até sete dias.
+  const inicioSolicitado = String(body.inicio || '').trim()
+  const fimSolicitado = String(body.fim || '').trim()
+  if (!!inicioSolicitado !== !!fimSolicitado) {
+    return NextResponse.json({ error: 'Informe início e fim para pesquisar o histórico.' }, { status: 400 })
+  }
+  if (inicioSolicitado) {
+    try {
+      validarPeriodoWVetro(inicioSolicitado, fimSolicitado, 7)
+      if (fimSolicitado > dataYmd(new Date())) throw new Error('Não é permitido pesquisar datas futuras.')
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'Período W.Vetro inválido.' }, { status: 400 })
+    }
+  }
 
   const { data: cliente, error: clienteError } = await supabaseAdmin
     .from('clientes')
@@ -87,11 +103,15 @@ export async function POST(req: NextRequest) {
     porData.get(data)!.add(numero)
   }
 
-  const chamadas: Array<{ inicio: string; fim: string; numerosWvetro?: string[]; rotulo: string }> = [
-    { inicio: inicioRecenteYmd, fim: fimRecenteYmd, rotulo: 'recentes' },
-  ]
-  for (const [data, numeros] of Array.from(porData.entries()).slice(0, 100)) {
-    chamadas.push({ inicio: data, fim: data, numerosWvetro: Array.from(numeros), rotulo: data })
+  const chamadas: Array<{ inicio: string; fim: string; numerosWvetro?: string[]; rotulo: string }> = inicioSolicitado
+    ? [{ inicio: inicioSolicitado, fim: fimSolicitado, rotulo: `${inicioSolicitado} a ${fimSolicitado}` }]
+    : [{ inicio: inicioRecenteYmd, fim: fimRecenteYmd, rotulo: 'recentes' }]
+  // No fluxo normal preserva a conferência das datas antigas já vinculadas.
+  // Na pesquisa histórica consulta somente a janela solicitada, sem repetir semanas anteriores.
+  if (!inicioSolicitado) {
+    for (const [data, numeros] of Array.from(porData.entries()).slice(0, 100)) {
+      chamadas.push({ inicio: data, fim: data, numerosWvetro: Array.from(numeros), rotulo: data })
+    }
   }
 
   let lidos = 0
@@ -99,6 +119,8 @@ export async function POST(req: NextRequest) {
   let atualizados = 0
   let semAlteracao = 0
   let ignoradosClienteDivergente = 0
+  let bloqueadosOutroCliente = 0
+  let revisoesHumanasPendentes = 0
   const falhas: Array<{ periodo: string; erro: string }> = []
 
   for (const chamada of chamadas) {
@@ -125,6 +147,8 @@ export async function POST(req: NextRequest) {
     atualizados += Number(json.atualizados || 0)
     semAlteracao += Number(json.semAlteracao || 0)
     ignoradosClienteDivergente += Number(json.ignoradosClienteDivergente || 0)
+    bloqueadosOutroCliente += (Array.isArray(json.resultados) ? json.resultados : []).filter((x: any) => x?.acao === 'bloqueado_outro_cliente').length
+    revisoesHumanasPendentes += (Array.isArray(json.resultados) ? json.resultados : []).filter((x: any) => x?.acao === 'revisao_humana_necessaria').length
   }
 
   const { data: orcamentos, error: orcamentosError } = await supabaseAdmin
@@ -147,6 +171,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: falhas.length === 0,
     clienteId,
+    periodoPesquisado: inicioSolicitado ? { inicio: inicioSolicitado, fim: fimSolicitado } : null,
     cliente: cliente.nome,
     historicos: historicosCompativeis.length,
     historicosIgnoradosNomeDivergente: historicosIgnorados,
@@ -155,6 +180,8 @@ export async function POST(req: NextRequest) {
     atualizados,
     semAlteracao,
     ignoradosClienteDivergente,
+    bloqueadosOutroCliente,
+    revisoesHumanasPendentes,
     orcamentosDisponiveis: (orcamentos || []).length,
     numerosWvetro,
     falhas,
