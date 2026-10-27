@@ -11,6 +11,7 @@ import {UNIDADES_CMV,unidadePadraoCmv,rotuloUnidadeCmv,mostrarQuantidadeCmv} fro
 import { separarEtapasCmv } from '@/lib/vendaCmvEtapas'
 import VendaCmvRecebimentos, { type RecebimentoCmv, type HistoricoRecebimento } from '@/components/clientes/VendaCmvRecebimentos'
 import FornecedorCmvCampo from '@/components/clientes/FornecedorCmvCampo'
+import VendaConferenciaImportacao from '@/components/clientes/VendaConferenciaImportacao'
 type Categoria='perfil'|'acessorio'|'vidro'|'perda'|'mao_obra'|'instalacao'|'frete'|'outros'
 type Previsao={categorias:{perfil:number|null;acessorio:number|null;vidro:number|null;sobra:number|null;perda:number|null};total:number|null;fonte:string;aviso:string|null;perfil_previsao?:number|null;perfil_previsao_fonte?:'despesas_extras_wvetro'|'uso_mais_sobra_wvetro'|null;total_uso?:number|null;total_com_sobra?:number|null;perfil_centro_custo?:number|null;perda_fonte?:'wvetro'|'conciliacao_wvetro'|null}
 type Lancamento={id:string;categoria:Categoria;origem:string;etapa_cmv?:'comprado'|'recebido';descricao:string;valor:number;data_lancamento:string;fornecedor?:string|null;documento?:string|null;quantidade?:number|null;unidade?:string|null;observacoes?:string|null;anexo_nome?:string|null;anexo_url?:string|null;criado_por_id?:string|null;criado_por_nome?:string|null;versao?:number;atualizado_em?:string|null;atualizado_por_nome?:string|null;cancelado_em?:string|null;cancelado_por_nome?:string|null;motivo_cancelamento?:string|null}
@@ -28,7 +29,7 @@ function Card({titulo,valor,detalhe,nota}:{titulo:string;valor:string;detalhe?:s
  return <div className="rounded-xl border bg-white p-4"><div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{titulo}</div><div className="mt-1 text-xl font-bold text-slate-900">{valor}</div>{detalhe&&<div className="mt-2 text-sm font-semibold text-slate-800">{detalhe}</div>}{nota&&<p className="mt-1 text-xs text-slate-500">{nota}</p>}</div>
 }
 type RecebimentoVendaResumo={id:string;valor?:number|null;data_recebimento?:string|null;forma?:string|null;status?:string|null}
-export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVendaAtualizada,abrirEdicaoVenda,onEdicaoVendaAberta,recebimentosRegistrados=[],totalPago=0,valorTitulos=0,numeroTitulos=0,onRegistrarRecebimento}:{vendaId:string;comprasExistentes:Partial<Record<Categoria,number>>;onMudanca?:(total:number,previstoRevisado:number|null)=>void;onVendaAtualizada?:()=>void;abrirEdicaoVenda?:boolean;onEdicaoVendaAberta?:()=>void;recebimentosRegistrados?:RecebimentoVendaResumo[];totalPago?:number;valorTitulos?:number;numeroTitulos?:number;onRegistrarRecebimento?:()=>void}){
+export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVendaAtualizada,abrirEdicaoVenda,onEdicaoVendaAberta,recebimentosRegistrados=[],totalPago=0,valorTitulos=0,numeroTitulos=0}:{vendaId:string;comprasExistentes:Partial<Record<Categoria,number>>;onMudanca?:(total:number,previstoRevisado:number|null)=>void;onVendaAtualizada?:()=>void;abrirEdicaoVenda?:boolean;onEdicaoVendaAberta?:()=>void;recebimentosRegistrados?:RecebimentoVendaResumo[];totalPago?:number;valorTitulos?:number;numeroTitulos?:number;}){
  const [dados,setDados]=useState<Dados|null>(null)
  const [recebimentos,setRecebimentos]=useState<RecebimentoCmv[]>([])
  const [historicoRecebimentos,setHistoricoRecebimentos]=useState<HistoricoRecebimento[]>([])
@@ -128,17 +129,6 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
   }catch{/* Histórico opcional: não bloqueia o CMV */}})()
   return()=>{vivo=false}
  },[vendaId,podeRevisarVenda,recebimentosRegistrados.length])
- // Atalho do cartão Valor da venda: reutiliza a conferência auditada existente.
- useEffect(()=>{
-  if(!abrirEdicaoVenda||carregando||!dados||!acessoCmv)return
-  if(acessoCmv.master){
-   setCorrigirVenda(true)
-   setValorVendaConferido(String(dados.vendaValorWvetro??dados.vendaValorAtual??'').replace('.',','))
-   setMotivoVenda('')
-  }
-  requestAnimationFrame(()=>document.getElementById('conferencia-valor-venda')?.scrollIntoView({behavior:'smooth',block:'start'}))
-  onEdicaoVendaAberta?.()
- },[abrirEdicaoVenda,carregando,dados,acessoCmv,onEdicaoVendaAberta])
  // Uma linha manual pertence a uma ÚNICA etapa. A movimentação não cria
  // segunda linha, não duplica os R$ da obra e mantém o ID e o anexo.
  const etapas=useMemo(()=>separarEtapasCmv(dados?.lancamentos||[]),[dados])
@@ -370,54 +360,13 @@ export default function VendaCmvPainel({vendaId,comprasExistentes,onMudanca,onVe
     <Card titulo="Lançamentos" valor={String(dados.lancamentos.length)} nota="Registros de custos desta venda"/>
 
    </div>
-   <section id="conferencia-valor-venda" aria-label="Conferência do valor de venda" className="scroll-mt-20 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-     <div><h4 className="text-sm font-bold text-slate-900">Conferência do valor de venda · W.Vetro</h4><p className="mt-1 text-xs text-slate-600">A validação confirma o total importado do W.Vetro. A correção permite informar outro valor, com histórico. Não altera os itens ou os recebíveis já lançados.</p></div>
-     {podeRevisarVenda&&<div className="flex flex-wrap gap-2">
-      <button type="button" disabled={salvandoVenda||dados.vendaValorWvetro==null} onClick={()=>{if(window.confirm('Validar o valor de venda W.Vetro ('+previstoFmt(dados.vendaValorWvetro??null)+') e atualizar a venda no Atlas? O financeiro ja lancado nao sera alterado automaticamente.'))void revisarVenda('validado')}} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 disabled:opacity-50"><CheckCircle2 size={14}/>Validar valor de venda W.Vetro</button>
-      <button type="button" disabled={salvandoVenda} onClick={()=>{setCorrigirVenda(!corrigirVenda);setValorVendaConferido(String(dados.vendaValorWvetro??dados.vendaValorAtual??'').replace('.',','));setMotivoVenda('')}} className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-800"><Pencil size={14}/>Corrigir valor de venda</button>
-     </div>}
-    </div>
-    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-     <Card titulo="Venda importada do W.Vetro" valor={previstoFmt(dados.vendaValorWvetro??null)} nota="Referência histórica da origem"/>
-     <Card titulo="Venda atual no Atlas" valor={previstoFmt(dados.vendaValorAtual??null)} nota="Valor gravado na venda; usado no cálculo de margem"/>
-     <Card titulo="Diferença · W.Vetro − Atlas" valor={dados.vendaValorWvetro==null||dados.vendaValorAtual==null?'A conferir':moedas(dados.vendaValorWvetro-dados.vendaValorAtual)} nota="Somente a aprovação altera o valor da venda"/>
-    </div>
-    {corrigirVenda&&podeRevisarVenda&&<form onSubmit={e=>{e.preventDefault();void revisarVenda('corrigido')}} className="mt-3 flex flex-wrap items-end gap-3 rounded-lg border border-blue-200 bg-white p-3">
-     <label className="text-xs font-semibold">Valor correto de venda (R$)<input required inputMode="decimal" pattern="[0-9.,]+" value={valorVendaConferido} onChange={e=>setValorVendaConferido(e.target.value)} className="mt-1 block w-40 rounded-lg border p-2" placeholder="Ex.: 9.450,00"/></label>
-     <label className="min-w-[220px] flex-1 text-xs font-semibold">Justificativa obrigatória<input required minLength={8} maxLength={500} value={motivoVenda} onChange={e=>setMotivoVenda(e.target.value)} className="mt-1 block w-full rounded-lg border p-2" placeholder="Ex.: Valor contratado diverge do importado"/></label>
-     {numeroTitulos>0&&<label className="flex w-full items-center gap-2 text-xs font-semibold text-slate-700"><input type="checkbox" checked={ajustarParcela} onChange={e=>setAjustarParcela(e.target.checked)}/>Atualizar também a parcela em aberto, preservando pagamentos e parcelas já quitadas (transação única)</label>}
-     <button disabled={salvandoVenda} type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">{salvandoVenda?'Salvando...':'Salvar correção de venda'}</button>
-     <button type="button" onClick={()=>setCorrigirVenda(false)} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button>
-    </form>}
-    {!podeRevisarVenda&&<p className="mt-2 text-xs text-slate-500">Conferência do valor de venda disponível para o perfil Master.</p>}
-    <p className="mt-2 text-[11px] text-amber-800">Se marcar a conciliação, apenas uma parcela em aberto poderá ser recalculada; parcelas pagas, pagamentos e descontos existentes permanecem preservados. Confira o Financeiro após a correção.</p>
-    {Boolean(dados.historicoValorVenda?.length)&&<details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer font-semibold">Histórico de alterações do valor de venda ({dados.historicoValorVenda?.length})</summary>
-     <div className="mt-2 space-y-2">{dados.historicoValorVenda?.map((h,i)=><div key={i} className="rounded-lg border bg-white p-2"><b>{h.acao==='validado'?'Validado':'Corrigido'}</b> · {h.usuario} · {new Date(h.em).toLocaleString('pt-BR')} · {moedas(h.anterior)} → {moedas(h.novo)}<div className="text-slate-500">{h.justificativa}</div></div>)}</div>
-    </details>}
-   </section>
-   <section aria-label="Recebimentos da venda" className="rounded-xl border border-slate-200 bg-white p-4">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-     <div><h4 className="text-sm font-bold text-slate-900">Pagamentos desta venda</h4>
-      <p className="mt-1 text-xs text-slate-500">Valor de parcelas: {moedas(valorTitulos)} · Já recebido: {moedas(totalPago)} · {numeroTitulos} parcela(s) financeira(s)</p>
-     </div>
-     {onRegistrarRecebimento&&<button type="button" onClick={onRegistrarRecebimento} className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800"><Plus size={13} className="mr-1 inline"/>Registrar valor já pago</button>}
-    </div>
-    {recebimentosRegistrados.length?recebimentosRegistrados.map(r=><div key={r.id} className="mt-3 rounded-lg border p-3 text-sm">
-     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><b>{moedas(Number(r.valor||0))}</b> · {r.data_recebimento?new Date(r.data_recebimento+'T12:00:00').toLocaleDateString('pt-BR'):'Data não informada'} · {r.forma||'Forma não informada'}</div>
-      {podeRevisarVenda&&<button type="button" className="inline-flex items-center gap-1 text-xs font-bold text-blue-700" onClick={()=>{setEditandoRecebimento(editandoRecebimento===r.id?null:r.id);setValorPagoCorreto(String(r.valor??'').replace('.',','));setMotivoPagamento('')}}><Pencil size={13}/>Corrigir pagamento</button>}
-     </div>
-     {editandoRecebimento===r.id&&podeRevisarVenda&&<form onSubmit={e=>void corrigirPagamento(e,r)} className="mt-3 flex flex-wrap items-end gap-3 rounded-lg bg-slate-50 p-3">
-      <label className="text-xs font-semibold">Valor efetivamente pago (R$)<input required inputMode="decimal" pattern="[0-9.,]+" className="mt-1 block w-44 rounded-lg border bg-white p-2" value={valorPagoCorreto} onChange={e=>setValorPagoCorreto(e.target.value)}/></label>
-      <label className="min-w-[200px] flex-1 text-xs font-semibold">Motivo da correção<input required minLength={8} maxLength={500} className="mt-1 block w-full rounded-lg border bg-white p-2" value={motivoPagamento} onChange={e=>setMotivoPagamento(e.target.value)}/></label>
-      <button disabled={salvandoPagamento} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Salvar correção auditada</button>
-      <button type="button" onClick={()=>setEditandoRecebimento(null)} className="rounded-lg border px-3 py-2 text-xs">Cancelar</button>
-     </form>}
-    </div>):<p className="mt-3 text-xs text-slate-500">{totalPago>0?'Existe pagamento no resumo financeiro sem recibo individual associado. Confira o Financeiro antes de corrigir.':'Nenhum pagamento registrado nesta venda.'}</p>}
-    {historicoPagamentos.length>0&&<details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold">Histórico de correções de pagamentos ({historicoPagamentos.length})</summary><div className="mt-2 space-y-1">{historicoPagamentos.map(h=><p key={h.id} className="rounded border bg-slate-50 p-2">{moedas(Number(h.valor_anterior))} → {moedas(Number(h.valor_novo))} · {h.criado_por_nome} · {new Date(h.created_at).toLocaleString('pt-BR')} · {h.justificativa}</p>)}</div></details>}
-    <p className="mt-2 text-[11px] text-amber-800">Corrigir um pagamento não altera automaticamente o valor contratado. Recebimentos com múltiplas alocações ou descontos exigem conciliação financeira específica.</p>
-   </section>
+   <VendaConferenciaImportacao
+    vendaId={vendaId} valorWvetroInicial={dados.vendaValorWvetro??null}
+    valorAtlasInicial={dados.vendaValorAtual??null} podeEditar={podeRevisarVenda}
+    numeroTitulos={numeroTitulos} valorTitulos={valorTitulos} totalPago={totalPago}
+    recebimentosAtlas={recebimentosRegistrados} abrirEdicaoVenda={abrirEdicaoVenda}
+    onEdicaoVendaAberta={onEdicaoVendaAberta} onVendaAtualizada={onVendaAtualizada}
+   />
    <section aria-label="Resultado original da obra W.Vetro" className="rounded-xl border border-slate-200 p-3">
     <h4 className="mb-2 text-sm font-bold text-slate-800">Resultado do orçamento no W.Vetro · valores originais</h4>
     <div className="grid gap-3 sm:grid-cols-3">
