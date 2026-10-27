@@ -477,6 +477,20 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         continue
       }
 
+      // Antes de hidratar o cadastro, bloqueia orçamentos que já pertencem
+      // a outro Cliente 360. Nem telefone nem endereço podem ser copiados nesse caso.
+      const existenteEmOutroCliente = clienteAlvo ? ctx.existentes.get(numeroW) : null
+      if (clienteAlvo && existenteEmOutroCliente?.cliente_id && existenteEmOutroCliente.cliente_id !== clienteAlvo.id) {
+        resultados.push({
+          id: existenteEmOutroCliente.id,
+          numeroWvetro: numeroW,
+          acao: 'bloqueado_outro_cliente',
+          clienteWvetro: nome,
+          clienteAlvo: clienteAlvo.nome,
+        })
+        continue
+      }
+
       // Exceção controlada: um nome abreviado/homônimo só pode ultrapassar a trava
       // quando veio de uma validação humana e a chamada está limitada a números
       // W.Vetro explícitos. Nunca liberamos uma janela inteira por esse caminho.
