@@ -113,7 +113,8 @@ drop policy if exists "master consulta correcoes do tenant" on public.financeiro
 create policy "master consulta correcoes do tenant"
 on public.financeiro_recebimentos_correcoes_master for select to authenticated
 using (exists (select 1 from public.usuarios u where u.id=(select auth.uid())
-  and u.empresa_id=empresa_id and lower(u.role)='master'));
+  and u.empresa_id=financeiro_recebimentos_correcoes_master.empresa_id
+  and lower(u.role)='master'));
 
 -- So corrigir recibos isolados de uma venda, com uma alocacao de dinheiro.
 -- Recebimentos compostos, descontos, pagamentos em outras obras, ou cancelados
