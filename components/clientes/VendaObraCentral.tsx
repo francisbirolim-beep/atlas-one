@@ -12,7 +12,7 @@ import VendaMedidaStatus from '@/components/clientes/VendaMedidaStatus'
 import {gruposItensEmEtapa, urlPdfCardCotacao, progressoLotesCotacao, ETAPAS_COTACAO, type EtapaCotacao} from '@/lib/cotacaoEtapas'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Building2, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Factory,
@@ -175,11 +175,12 @@ function ItemCompraVisual({codigo,descricao,imagem,imagemObrigatoria}:{codigo?:s
   </div>
 }
 
-function Kpi({titulo,valor,detalhe,destaque}:{titulo:string;valor:string;detalhe?:string;destaque?:boolean}){
+function Kpi({titulo,valor,detalhe,destaque,acao}:{titulo:string;valor:string;detalhe?:string;destaque?:boolean;acao?:ReactNode}){
   return <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
     <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{titulo}</p>
     <p className={`mt-1 text-xl font-bold ${destaque?'text-brand-teal':'text-slate-900'}`}>{valor}</p>
     {detalhe&&<p className="mt-1 text-xs text-slate-500">{detalhe}</p>}
+    {acao&&<div className="mt-2">{acao}</div>}
   </div>
 }
 function Progresso({titulo,valor,detalhe,ativo,onClick}:{titulo:string;valor:number;detalhe:string;ativo?:boolean;onClick:()=>void}){
@@ -235,6 +236,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const listaMateriaisRef=useRef<HTMLDivElement>(null)
   const tentouMaterializarVenda=useRef<string|null>(null)
   const [aba,setAba]=useState<Aba>('visao')
+  const [abrirEdicaoValorVenda,setAbrirEdicaoValorVenda]=useState(false)
   useEffect(()=>{
     if(new URLSearchParams(window.location.search).get('aba')==='medida-final')setAba('medida-final')
   },[vendaId])
@@ -1144,7 +1146,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       {!venda.obra_id&&<VendaVincularObra vendaId={venda.id} clienteNome={cliente.nome} cidadeCliente={cliente.cidade} onVinculada={carregar}/>}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <Kpi titulo="Valor da venda" valor={moeda(valorVenda)}/>
+        <Kpi titulo="Valor da venda" valor={moeda(valorVenda)} acao={<button type="button" onClick={()=>{setAbrirEdicaoValorVenda(true);setAba('custos')}} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"><Pencil size={13}/>Conferir / corrigir valor</button>}/>
         <Kpi titulo="Recebido" valor={moeda(recebido)} detalhe={`${pct(recebido,valorVenda).toFixed(0)}% recebido`}/>
         <Kpi titulo="A receber" valor={moeda(aReceber)} destaque/>
         <Kpi titulo="Custo previsto c/ sobra" valor={custoPrevistoBase>0||previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?moeda(custoPrevistoBase):'—'} detalhe={previsaoCmvRevisada?.vendaId===vendaId&&previsaoCmvRevisada.valor!==null?'Conferido na aba Custos / CMV':undefined}/>
@@ -1330,7 +1332,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <VendaFinanceiroHaver clienteId={clienteId} vendaId={venda.id} obraId={obra?.id||null} aReceber={aReceber} onAtualizar={atualizarComposicaoTipologia}/>
         </Box>}
 
-        {aba==='custos'&&<VendaCmvPainel vendaId={venda.id} comprasExistentes={{
+        {aba==='custos'&&<VendaCmvPainel vendaId={venda.id} abrirEdicaoVenda={abrirEdicaoValorVenda} onEdicaoVendaAberta={()=>setAbrirEdicaoValorVenda(false)} recebimentosRegistrados={recebimentosVenda} totalPago={recebido} valorTitulos={totalTitulosAtivos} numeroTitulos={contas.filter(c=>c.status!=='cancelado').length} onRegistrarRecebimento={()=>setModalRecebimento(true)} comprasExistentes={{
           perfil:custosPorCategoria.perfil.realizado,
           acessorio:custosPorCategoria.acessorios.realizado,
           vidro:custosPorCategoria.vidro.realizado,
