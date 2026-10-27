@@ -27,6 +27,7 @@ import VendaProducaoDetalhada from '@/components/clientes/VendaProducaoDetalhada
 import VendaProducaoKanbanPreview from '@/components/clientes/VendaProducaoKanbanPreview'
 import VendaLiberacaoOrdens from '@/components/clientes/VendaLiberacaoOrdens'
 import VendaVincularObra from '@/components/clientes/VendaVincularObra'
+import VendaKanbanObra from '@/components/clientes/VendaKanbanObra'
 import VendaInstalacaoDetalhada from '@/components/clientes/VendaInstalacaoDetalhada'
 import VendaFinanceiroHaver from '@/components/clientes/VendaFinanceiroHaver'
 import VendaNotasRecibos from '@/components/clientes/VendaNotasRecibos'
@@ -1281,6 +1282,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
       <div className="mt-5 space-y-5">
         {aba==='visao'&&<>
+          <VendaKanbanObra clienteId={clienteId} vendaId={vendaId}/>
           <div className="grid gap-5 lg:grid-cols-2">
             <Box titulo="Andamento da venda">
               <div className="mb-3 flex items-center justify-between gap-2">

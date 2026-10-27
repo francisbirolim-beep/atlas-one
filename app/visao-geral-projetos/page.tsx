@@ -95,6 +95,21 @@ function CardProjeto({card,compacto,abrir,ativo}:{card:ProjetoGeralCard;compacto
   </div>
  </button>
 }
+type AcompanhamentoGeral={
+ id:string;vendaId:string;clienteId:string;cliente:string;numeroOrcamento:string|null;
+ titulo:string;descricao:string;etapa:string;createdAt:string
+}
+function CardAcompanhamento({card}:{card:AcompanhamentoGeral}){
+ return <Link href={`/clientes/${card.clienteId}/vendas/${card.vendaId}`}
+  className="block w-full rounded-lg border-l-4 border-l-sky-500 bg-white p-2.5 text-left shadow-md hover:ring-2 hover:ring-sky-400">
+  <p className="text-[11px] font-extrabold text-[#162b50]">{card.cliente}</p>
+  <p className="text-[10px] text-slate-500">Orçamento: {card.numeroOrcamento||'Não identificado'}</p>
+  <p className="mt-2 rounded bg-sky-50 px-1.5 py-1 text-[10px] font-bold text-sky-800">Acompanhamento manual da obra</p>
+  <p className="mt-2 text-[11px] font-bold text-slate-800">{card.titulo}</p>
+  {card.descricao&&<p className="mt-1 line-clamp-3 text-[10px] text-slate-600">{card.descricao}</p>}
+  <p className="mt-2 text-[10px] font-semibold text-blue-700">Abrir Kanban desta obra →</p>
+ </Link>
+}
 function CardPedido({pedido,abrir}:{pedido:PedidoGeralCard;abrir:()=>void}){
  const foto=pedido.detalhesCompra?.find(i=>fotoSegura(i.fotoUrl))?.fotoUrl
  return <button onClick={abrir} type="button" className="w-full rounded-lg border-l-[3px] border-l-violet-500 bg-white p-2.5 text-left shadow-md hover:ring-2 hover:ring-violet-400">
@@ -140,6 +155,7 @@ export default function VisaoGeralProjetos(){
  const [demo,setDemo]=useState<boolean|null>(null),[colunas,setColunas]=useState<ColunaVisualProjeto[]>(COLUNAS_GERAIS_PADRAO)
  const [configuravel,setConfiguravel]=useState(false),[avisoConfiguracao,setAvisoConfiguracao]=useState('')
  const [cards,setCards]=useState<ProjetoGeralCard[]>([]),[pedidos,setPedidos]=useState<PedidoGeralCard[]>([])
+ const [acompanhamentos,setAcompanhamentos]=useState<AcompanhamentoGeral[]>([])
  const [usuarioMaster,setUsuarioMaster]=useState(false)
  const [ocultos,setOcultos]=useState<{vendaId:string;cliente:string;numeroOrcamento:string;motivoControle:string|null}[]>([])
  const [mostrarOcultos,setMostrarOcultos]=useState(false),[arrastando,setArrastando]=useState<string|null>(null),[salvandoCard,setSalvandoCard]=useState(false)
@@ -152,12 +168,12 @@ export default function VisaoGeralProjetos(){
  const selecionadoInicial=useRef(false)
  const carregar=useCallback(async()=>{
   if(demo===null)return
-  if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setCarregando(false);setAtualizado(new Date().toISOString());return}
+  if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setCarregando(false);setAtualizado(new Date().toISOString());return}
   try{const token=await tokenAtual();if(!token)throw Error('Faça login para consultar a visão geral.')
    const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>({...c,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]})))
-   setPedidos(j.pedidos||[]);setUsuarioMaster(j.usuarioMaster===true)
+   setPedidos(j.pedidos||[]);setAcompanhamentos(j.acompanhamentos||[]);setUsuarioMaster(j.usuarioMaster===true)
    setOcultos(j.usuarioMaster===true?j.ocultos||[]:[])
    setAtualizado(j.atualizadoEm||new Date().toISOString());setErro('')
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar a empresa.')}
@@ -175,7 +191,7 @@ export default function VisaoGeralProjetos(){
   }catch{}})()
   return()=>{ativo=false}
  },[demo])
- useEffect(()=>{if(demo===null)return;void carregar();const timer=window.setInterval(()=>void carregar(),60_000);return()=>clearInterval(timer)},[demo,carregar])
+ useEffect(()=>{if(demo===null)return;void carregar();const timer=window.setInterval(()=>void carregar(),15_000);return()=>clearInterval(timer)},[demo,carregar])
  useEffect(()=>{
   if(!cards.length||selecionadoInicial.current||fechou||typeof window==='undefined')return
   selecionadoInicial.current=true
@@ -228,6 +244,11 @@ export default function VisaoGeralProjetos(){
   const q=busca.trim().toLocaleLowerCase('pt-BR')
   return !q||[p.cliente,p.numeroOrcamento||'',p.descricao].some(s=>s.toLocaleLowerCase('pt-BR').includes(q))
  }),[pedidos,busca,condicao])
+ const acompanhamentoVisivel=useMemo(()=>acompanhamentos.filter(c=>{
+  if(condicao!=='todos')return false
+  const q=busca.trim().toLocaleLowerCase('pt-BR')
+  return !q||[c.cliente,c.numeroOrcamento||'',c.titulo,c.descricao].some(s=>s.toLocaleLowerCase('pt-BR').includes(q))
+ }),[acompanhamentos,busca,condicao])
  const colunasOrdenadas=useMemo(()=>[...colunas].sort((a,b)=>a.ordem-b.ordem),[colunas])
  const agrupado=useMemo(()=>new Map(colunas.map(c=>[c.id,visiveis.filter(p=>c.criterios.includes(p.etapaOperacional as EtapaOperacional))])),[colunas,visiveis])
  const ativos=cards.filter(c=>c.etapaOperacional!=='finalizado')
@@ -385,6 +406,7 @@ export default function VisaoGeralProjetos(){
      {colunasOrdenadas.map((col,i)=>{
       const vis=agrupado.get(col.id)||[]
       const pedidosCol=pedidosVisiveis.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
+      const manuaisCol=acompanhamentoVisivel.filter(c=>col.criterios.includes(c.etapa as EtapaOperacional))
       const paleta=COLUNA_CORES[etapaIndice(col)]||COLUNA_CORES[i%COLUNA_CORES.length]
       const Icon=paleta.icone
       const destinoFinalizado=col.criterios.includes('finalizado')
@@ -396,7 +418,7 @@ export default function VisaoGeralProjetos(){
         <div className="flex items-center gap-1">
          <Icon size={15} className="shrink-0"/>
          <h2 className="min-w-0 flex-1 text-[11px] font-extrabold leading-tight">{col.nome}</h2>
-         <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold">{vis.length}{pedidosCol.length?' + '+pedidosCol.length:''}</span>
+         <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold">{vis.length}{pedidosCol.length?' + '+pedidosCol.length:''}{manuaisCol.length?' + '+manuaisCol.length:''}</span>
         </div>
        </div>
        <Link href="/clientes/identificar" title="Abrir o fluxo oficial de cliente e obra; a etapa será atualizada pelo Cliente 360" className="block border-t border-white/10 py-1.5 text-center text-[11px] font-semibold text-white hover:brightness-110" style={{background:paleta.botao}}>+ Adicionar</Link>
@@ -409,7 +431,8 @@ export default function VisaoGeralProjetos(){
           <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
          </div>)}
         {pedidosCol.map(p=><CardPedido key={p.id} pedido={p} abrir={()=>abrir(p.id)}/>)}
-        {!vis.length&&!pedidosCol.length&&<p className="rounded-lg border border-dashed border-white/15 bg-white/5 px-2 py-5 text-center text-[11px] text-slate-400">Nenhum card nesta etapa</p>}
+        {manuaisCol.map(c=><CardAcompanhamento key={c.id} card={c}/>)}
+        {!vis.length&&!pedidosCol.length&&!manuaisCol.length&&<p className="rounded-lg border border-dashed border-white/15 bg-white/5 px-2 py-5 text-center text-[11px] text-slate-400">Nenhum card nesta etapa</p>}
        </div>
       </section>
      })}
