@@ -26,21 +26,25 @@ export async function POST(req:NextRequest){
   const justificativa=String(body.justificativa??'').trim().slice(0,500)
   const valorAnterior=moeda(body.valorAnterior)
   const valor=acao==='corrigido'?moeda(body.valor):null
+  const ajustarParcela=body.ajustarParcela===true
   if(!UUID.test(vendaId))return erro('Venda inválida.')
   if(!['validado','corrigido'].includes(acao))return erro('Ação inválida.')
   if(valorAnterior===null||valorAnterior<0)return erro('Valor atual da venda inválido.')
   if(acao==='corrigido'&&(valor===null||valor<=0||valor>999999999))return erro('Informe um valor de venda válido.')
   if(acao==='corrigido'&&justificativa.length<8)return erro('Justificativa obrigatória (mínimo 8 caracteres).')
-  // Transação única no banco: auditoria e atualização da venda.
-  // Nunca altera orçamento, materiais ou contas a receber existentes.
+  // V2 encapsula a conferência V1 e atualiza o preço do orçamento Atlas.
+  // A parcela financeira só é alterada mediante opção explícita, atomicamente.
+  if(process.env.VERCEL_ENV==='preview')return erro('Prévia: nenhuma venda ou parcela financeira é alterada.',409)
   const token=(req.headers.get('authorization')||'').replace(/^Bearer\s+/i,'').trim()
   const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{
     auth:{autoRefreshToken:false,persistSession:false},
     global:{headers:{Authorization:'Bearer '+token}},
    })
-  const {data,error}=await db.rpc('fn_venda_conferir_valor_wvetro_v1',{
-   p_venda_id:vendaId,p_acao:acao,p_valor:valor,p_valor_anterior:valorAnterior,p_justificativa:justificativa,
+  const argumentos={p_venda_id:vendaId,p_acao:acao,p_valor:valor,p_valor_anterior:valorAnterior,p_justificativa:justificativa}
+  // V2 atualiza venda e orçamento Atlas na mesma transação; o financeiro é opcional.
+  const {data,error}=await db.rpc('fn_venda_conferir_valor_financeiro_v2',{
+   ...argumentos,p_ajustar_parcela:ajustarParcela,
   })
   if(error){
    if(error.code==='PGRST202'||error.code==='42883')return erro('Conferência ainda não habilitada no banco. Nenhum valor foi alterado.',409)
