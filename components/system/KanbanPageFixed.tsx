@@ -67,6 +67,12 @@ if (h === 0) return `${m}min`
 return `${h}h${m > 0 ? ` ${m}min` : ''}`
 }
 
+function temNotasWhatsAppNoCard(card: OrcamentoRapido): boolean {
+  return card.modo_entrada === 'whatsapp' ||
+    (String(card.modo_entrada) === 'wvetro_api' &&
+      /^[a-f\d-]{36}$/i.test(String(card.ia_fontes?.origem_whatsapp_card_id || '')))
+}
+
 function mensagemPadraoVendedor(card: OrcamentoRapido): string {
 return `Olá! O orçamento de ${card.cliente_nome || 'cliente'} está pronto. Segue em anexo.`
 }
@@ -1768,7 +1774,7 @@ style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
 </div>
 )}
 {!card.eh_assistencia && !card.obra_id && card.cidade && <p className="mb-1 text-[11px]" style={{color:est ? est.texto : '#64748b'}}><MapPin size={11} className="mr-1 inline"/>{card.cidade}</p>}
-{!card.eh_assistencia && card.modo_entrada === 'whatsapp' && (
+{!card.eh_assistencia && temNotasWhatsAppNoCard(card) && (
 <div data-whatsapp-resumo-card="true" className="mb-2 rounded-lg border border-white/35 bg-white/15 p-2" style={{ color: est ? est.texto : '#334155' }}>
   <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
     <MessageCircle size={13} className="shrink-0" />
@@ -1784,6 +1790,11 @@ style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
     Abrir card para ver mensagens, fotos, áudios, vídeos e arquivos
   </p>
 </div>
+)}
+{card.ia_fontes?.conferencia_folhas_pendente && (
+<span role="status" className="inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 mb-1">
+  Conferir: 1 ou 2 folhas
+</span>
 )}
 {card.ia_criado && card.ia_validacao_status === 'aguardando' && !card.eh_assistencia && (
 <span
@@ -1814,7 +1825,7 @@ Assistência
 ? `${(card as any).itens.length} esquadrias`
 : `${tipoLabels[card.tipo_esquadria] || card.tipo_esquadria}${card.largura_mm ? ` — ${card.largura_mm}×${card.altura_mm}mm` : ''}`}
 </p>
-{card.descricao_livre && card.modo_entrada !== 'whatsapp' && (
+{card.descricao_livre && !temNotasWhatsAppNoCard(card) && (
 <p className="text-xs line-clamp-2" style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.8 : 1 }}>
 {card.descricao_livre}
 </p>
@@ -1880,11 +1891,11 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 
 {cardSelecionado && editando && (
 <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-<div className={"bg-white rounded-t-2xl sm:rounded-2xl w-full max-h-[92vh] sm:max-h-[85vh] overflow-y-auto " + (cardSelecionado.modo_entrada === "whatsapp" ? "max-w-4xl" : "max-w-md")}>
+<div className={"bg-white rounded-t-2xl sm:rounded-2xl w-full max-h-[92vh] sm:max-h-[85vh] overflow-y-auto " + (temNotasWhatsAppNoCard(cardSelecionado) ? "max-w-4xl" : "max-w-md")}>
 <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
 <div>
 <h3 className="font-bold text-slate-800">Orçamento · detalhes e histórico</h3>
-{cardSelecionado.modo_entrada === "whatsapp" && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">Via WhatsApp · notas e mídias</span>}
+{temNotasWhatsAppNoCard(cardSelecionado) && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">Via WhatsApp · notas e mídias</span>}
 <p className="text-[11px] text-slate-400">Abertura, alterações e saídas ficam registradas.</p>
 </div>
 <button onClick={tentarFechar} className="p-1 text-slate-400 hover:text-slate-600">
@@ -1893,7 +1904,7 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 </div>
 
 <div className="p-5 space-y-4">
-{cardSelecionado.modo_entrada === "whatsapp" && <WhatsAppOrcamentoNotas key={cardSelecionado.id} card={cardSelecionado}/>}
+{temNotasWhatsAppNoCard(cardSelecionado) && <WhatsAppOrcamentoNotas key={cardSelecionado.id} card={cardSelecionado}/>}
 <div id="atlas-campos-orcamento" />
 <section data-orcamento-localizacao="true" className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm">
   <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-blue-700">Cliente e local da obra</p>

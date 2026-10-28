@@ -13,7 +13,10 @@ type Notas = { grupo: string; grupoConferido: boolean; origemStatus: 'correta' |
 
 function instantaneoDoCard(card: OrcamentoRapido): Notas | null {
   const fontes = card.ia_fontes
-  if (card.modo_entrada !== 'whatsapp' || !fontes || typeof fontes !== 'object') return null
+  const notasVinculadasAoWVetro = String(card.modo_entrada) === 'wvetro_api' &&
+    Boolean(fontes?.origem_whatsapp_card_id)
+  if ((card.modo_entrada !== 'whatsapp' && !notasVinculadasAoWVetro) ||
+    !fontes || typeof fontes !== 'object') return null
   const anexos = (Array.isArray(fontes.anexos) ? fontes.anexos : []).map((a: any, i: number) => ({
     id: String(a?.mensagem_id || a?.whatsapp_message_id || i),
     tipo: String(a?.tipo || ''), nome: String(a?.nome || 'Anexo do WhatsApp'),
@@ -89,6 +92,7 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
         {notas?.conversaId && <Link href={'/whatsapp?conversaId=' + encodeURIComponent(notas.conversaId)}
           className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-bold text-emerald-800">Abrir este grupo no WhatsApp Atlas</Link>}
       </div>
+      {card.ia_fontes?.conferencia_folhas_pendente && <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">Conferência técnica pendente: o WhatsApp descreve 1 folha, enquanto o modelo W-Vetro identifica 2 folhas. Confirmar antes de validar ou fabricar. Não alteramos os itens técnicos.</p>}
       {!notas?.conversaId && !carregando && <p className="mt-2 text-[11px] text-slate-500">Conversa original indisponível para acesso direto neste histórico.</p>}
       {notas?.origemStatus === 'outro_grupo' && !carregando && <p role="status" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-bold text-red-800">Atenção: este card histórico veio de outro grupo, e não do grupo de Orçamentos. Foi preservado apenas para consulta. A automação atual não deve importar esse grupo.</p>}
       {notas?.origemStatus === 'nao_identificada' && !carregando && <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-800">Não há evidência suficiente para confirmar o grupo de origem deste registro antigo. Não será classificado como Orçamento / Assistência sem comprovação.</p>}

@@ -1,3 +1,4 @@
+import { selecionarCardMesmoOrcamento } from "./identidadeOrcamento.mjs";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const db = createClient(
@@ -1072,6 +1073,77 @@ async function criarCardIntakeOrcamento(intake: any, structured: any, aiErro: st
   const normaliza = (v: unknown) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim()
   const fazerOrcamento = (colunas || []).find((c: any) => normaliza(c.nome) === "fazer orcamento") || (colunas || [])[0] || null
 
+  // O intervalo de 60 segundos agrupa o pacote, mas nao define a identidade
+  // do orcamento. Pacotes posteriores da MESMA obra devem enriquecer o card.
+  // Sem correspondencia inequivoca, mantemos um registro separado para revisao.
+  if (!intake.orcamento_id && clienteNome) {
+    const { data: cards, error: buscaCardsErro } = await db.from("orcamentos")
+      .select("id,cliente_id,cliente_nome,obra_id,obra_nome,obra_endereco,cidade,itens,modo_entrada,revisao_atual,ia_fontes,descricao_livre,updated_at")
+      .eq("empresa_id", intake.empresa_id)
+      .eq("modo_entrada", "whatsapp")
+      .ilike("cliente_nome", `${clienteNome.trim().split(/\s+/)[0]}%`)
+      .order("updated_at", { ascending: false })
+      .limit(100)
+    if (buscaCardsErro) throw buscaCardsErro
+    const ids = (cards || []).map((c: any) => c.id)
+    let anteriores: any[] = []
+    if (ids.length) {
+      const { data, error } = await db.from("atendimento_whatsapp_intakes")
+        .select("orcamento_id,automacao_id,participante_jid,ultima_mensagem_em,tarefa_id")
+        .eq("empresa_id", intake.empresa_id)
+        .in("orcamento_id", ids)
+        .order("ultima_mensagem_em", { ascending: false })
+        .limit(200)
+      if (error) throw error
+      anteriores = data || []
+    }
+    const card = selecionarCardMesmoOrcamento({
+      clienteNome, clienteId, cidade, obraNome, obraEndereco, itens,
+      obraId: null,
+      participanteJid: intake.participante_jid,
+      automacaoId: intake.automacao_id,
+      ultimaMensagemEm: intake.ultima_mensagem_em,
+      orcamentoId: intake.orcamento_id,
+    }, cards || [], anteriores)
+    if (card) {
+      const fonte = card.ia_fontes && typeof card.ia_fontes === "object" ? card.ia_fontes : {}
+      const idsFonte = Array.isArray(fonte.intake_ids) ? fonte.intake_ids :
+        (fonte.intake_id ? [fonte.intake_id] : [])
+      const anexosAntes = Array.isArray(fonte.anexos) ? fonte.anexos : []
+      const anexosNovos = Array.isArray(intake.anexos) ? intake.anexos : []
+      const anexosJuntos = [...anexosAntes, ...anexosNovos].filter((a, i, todos) => {
+        const chave = String(a?.whatsapp_message_id || a?.mensagem_id || "")
+        return !chave || todos.findIndex((x: any) =>
+          String(x?.whatsapp_message_id || x?.mensagem_id || "") === chave) === i
+      })
+      const anterior = String(card.descricao_livre || "")
+      const novo = String(intake.conteudo_bruto || "")
+      const descricao = !novo || anterior.includes(novo) ? anterior :
+        [anterior, novo].filter(Boolean).join("\n\n")
+      // Atualizacao otimista: nunca substitui dados editados pelo usuario em paralelo.
+      let grava = db.from("orcamentos").update({
+        descricao_livre: descricao,
+        ia_fontes: {
+          ...fonte,
+          intake_ids: [...new Set([...idsFonte, intake.id])],
+          conteudo_bruto: descricao,
+          anexos: anexosJuntos,
+        },
+        updated_at: new Date().toISOString(),
+      }).eq("id", card.id).eq("empresa_id", intake.empresa_id)
+      grava = card.updated_at ? grava.eq("updated_at", card.updated_at) : grava.is("updated_at", null)
+      const { data: salvo, error: gravaErro } = await grava.select("id").maybeSingle()
+      if (gravaErro) throw gravaErro
+      if (!salvo) throw new Error("Orcamento alterado durante a vinculacao; reprocessar sem criar outro card.")
+      const tarefaId = anteriores.find((a: any) => a.orcamento_id === card.id && a.tarefa_id)?.tarefa_id || null
+      const { error: vinculoErro } = await db.from("atendimento_whatsapp_intakes")
+        .update({ orcamento_id: card.id, tarefa_id: tarefaId, status: "processado", updated_at: new Date().toISOString() })
+        .eq("id", intake.id).eq("empresa_id", intake.empresa_id)
+      if (vinculoErro) throw vinculoErro
+      return { quoteId: card.id, taskId: tarefaId }
+    }
+  }
+
   const quoteId = intake.orcamento_id || crypto.randomUUID()
   const quotePayload: Record<string, unknown> = {
     empresa_id: intake.empresa_id,
@@ -1216,9 +1288,9 @@ async function estruturarIntakeComIA(
   if (lockError) throw lockError
   if (!locked) return null
 
-  // O card nasce antes da IA. Assim, "pronto" ou o minuto de silêncio
-  // nunca ficam dependentes do tempo de resposta do modelo.
-  await criarCardIntakeOrcamento(intake, null, null)
+  // O pacote permanece persistido no intake enquanto a IA identifica
+  // cliente e obra. Criar card antes da identidade produzia duplicados.
+  // Se a IA falhar, a criacao final mantem o conteudo bruto para revisao.
 
   let structured: any = null
   let sessionId: string | null = null

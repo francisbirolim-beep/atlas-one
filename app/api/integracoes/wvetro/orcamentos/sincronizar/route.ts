@@ -12,6 +12,7 @@ import { nomeCadastroIncompleto, registrarPendenciaCadastro } from '@/lib/cadast
 import { normalizarCidadeMargem, resolverMargemOrcamentoPorCidade } from '@/lib/orcamentoMargensCidadeServer'
 import { nomesClientesCompativeis, normalizarNomeClienteWVetro } from '@/lib/wvetroClienteIdentidade'
 import { reconciliarSincronizacaoWVetro } from '@/lib/wvetroPreservacaoSincronizacao'
+import { normalizarNumeroWVetro, selecionarVinculoWVetro, mesclarItensWVetroSemApagarCampo } from '@/lib/wvetroKanbanVinculoSeguro'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -169,7 +170,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').eq('empresa_id', empresaId).order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,updated_at,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
+    supabaseAdmin.from('orcamentos').select('id,created_at,cliente_id,cliente_nome,obra_id,obra_nome,obra_endereco,cidade,valor_estimado,itens,anexos,wvetro_fluxo,updated_at,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id,descricao_livre,revisao_atual,kanban_retirado_em').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
 
@@ -198,12 +199,18 @@ async function carregarContexto(empresaId: string) {
   const colunaFazer = colunas.find(c => norm(c.nome) === 'FAZER ORCAMENTO') || null
   const colunaFeito = colunas.find(c => norm(c.nome) === 'ORCAMENTO FEITO') || null
   const existentes = new Map<string, any>()
+  const duplicadosNumero = new Set<string>()
   for (const o of orcR.data || []) {
     const fluxo = obj(o.wvetro_fluxo)
-    const numero = txt(fluxo?.numero, fluxo?.numero_wvetro)
-    if (numero) existentes.set(numero, o)
+    const numero = normalizarNumeroWVetro(txt(fluxo?.numero, fluxo?.numero_wvetro))
+    if (numero) {
+      if (existentes.has(numero)) duplicadosNumero.add(numero)
+      else existentes.set(numero, o)
+    }
   }
-  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, colunaFazer, colunaFeito, existentes }
+  const candidatosWhatsapp = (orcR.data || []).filter((o: any) => o.modo_entrada === 'whatsapp')
+  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna,
+    colunaFazer, colunaFeito, existentes, duplicadosNumero, candidatosWhatsapp }
 }
 
 function enderecoClienteWVetro(p: Record<string, any>) {
@@ -435,17 +442,17 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
     // Pedido tem precedência porque representa o estado comercial mais recente.
     const porNumero = new Map<string, { registro: any; fonteRegistro: 'orcamento' | 'pedido' }>()
     for (const registro of stagingOrcamentos.registros) {
-      const numero = txt(registro.payload?.Nro, registro.payload?.OrcamentoId, registro.payload?.Orcamentoid)
+      const numero = normalizarNumeroWVetro(txt(registro.payload?.Nro, registro.payload?.OrcamentoId, registro.payload?.Orcamentoid))
       if (numero) porNumero.set(numero, { registro, fonteRegistro: 'orcamento' })
     }
     for (const registro of stagingPedidos.registros) {
-      const numero = txt(registro.payload?.Nro, registro.payload?.OrcamentoId, registro.payload?.Orcamentoid)
+      const numero = normalizarNumeroWVetro(txt(registro.payload?.Nro, registro.payload?.OrcamentoId, registro.payload?.Orcamentoid))
       if (numero) porNumero.set(numero, { registro, fonteRegistro: 'pedido' })
     }
 
     const numerosSolicitados = new Set(
       (Array.isArray(body.numerosWvetro) ? body.numerosWvetro : [])
-        .map((v: unknown) => String(v ?? '').trim())
+        .map((v: unknown) => normalizarNumeroWVetro(v))
         .filter(Boolean),
     )
     const registros = Array.from(porNumero.entries())
@@ -466,6 +473,12 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       const numeroW = txt(p.Nro, p.OrcamentoId, p.Orcamentoid)
       if (!numeroW) continue
       const nome = nomeCliente(p)
+      if (ctx.duplicadosNumero.has(normalizarNumeroWVetro(numeroW))) {
+        resultados.push({ numeroWvetro: numeroW, acao: 'revisao_duplicidade_wvetro',
+          cliente: nome, mensagem: 'Ja ha mais de um card com este numero. Nenhum deles foi alterado.' })
+        semAlteracao += 1
+        continue
+      }
       if (clienteAlvo && !nomesClientesCompativeis(nome, clienteAlvo.nome) && !vinculoManualValidado) {
         ignoradosClienteDivergente += 1
         resultados.push({
@@ -479,7 +492,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
 
       // Antes de hidratar o cadastro, bloqueia orçamentos que já pertencem
       // a outro Cliente 360. Nem telefone nem endereço podem ser copiados nesse caso.
-      const existenteEmOutroCliente = clienteAlvo ? ctx.existentes.get(numeroW) : null
+      const existenteEmOutroCliente = clienteAlvo ? ctx.existentes.get(normalizarNumeroWVetro(numeroW)) : null
       if (clienteAlvo && existenteEmOutroCliente?.cliente_id && existenteEmOutroCliente.cliente_id !== clienteAlvo.id) {
         resultados.push({
           id: existenteEmOutroCliente.id,
@@ -539,7 +552,49 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
         validado_por_id: null,
         validado_por_nome: null,
       }
-      const existente = ctx.existentes.get(numeroW)
+      const existente = ctx.existentes.get(normalizarNumeroWVetro(numeroW))
+      if (!existente && cliente?.id) {
+        const alvoWhatsapp = selecionarVinculoWVetro({
+          clienteId: cliente.id, clienteNome: nome, cidade: cidadeOrcamento,
+          numeroWvetro: numeroW, itens, dataReferencia: registro.dataReferencia,
+        }, ctx.candidatosWhatsapp)
+        if (alvoWhatsapp) {
+          const itensMesclados = mesclarItensWVetroSemApagarCampo(alvoWhatsapp.itens, itens)
+          const divergencia = itensMesclados === alvoWhatsapp.itens
+          const patch: any = {
+            wvetro_fluxo: { ...fluxo, vinculado_automaticamente_em: new Date().toISOString(),
+              vinculo_automatico_motivo: 'cliente_e_itens_ou_numero_explicito',
+              itens_preservados_por_divergencia: divergencia || undefined },
+            itens: itensMesclados,
+            anexos: anexosComPdfWVetro(alvoWhatsapp.anexos, p, numeroW),
+            valor_estimado: num(alvoWhatsapp.valor_estimado) > 0
+              ? alvoWhatsapp.valor_estimado : (valor > 0 ? valor : null),
+            updated_at: new Date().toISOString(),
+          }
+          // Mantem a etapa, fotos, historico, observacoes, medidas de campo
+          // e dados preenchidos manualmente no card original do WhatsApp.
+          let update = supabaseAdmin.from('orcamentos').update(patch)
+            .eq('empresa_id', usuario.empresa_id).eq('id', alvoWhatsapp.id)
+          update = alvoWhatsapp.updated_at
+            ? update.eq('updated_at', alvoWhatsapp.updated_at) : update.is('updated_at', null)
+          const { data: salvo, error: vinculoErro } = await update.select('id').maybeSingle()
+          if (vinculoErro) throw vinculoErro
+          if (!salvo) {
+            resultados.push({ id: alvoWhatsapp.id, numeroWvetro: numeroW,
+              acao: 'alterado_durante_vinculo', cliente: nome })
+            semAlteracao += 1
+            continue
+          }
+          ctx.existentes.set(normalizarNumeroWVetro(numeroW), {
+            ...alvoWhatsapp, ...patch,
+          })
+          atualizados += 1
+          resultados.push({ id: alvoWhatsapp.id, numeroWvetro: numeroW,
+            acao: 'vinculado_card_whatsapp', cliente: nome, itens: itens.length,
+            itensPreservadosPorDivergencia: divergencia })
+          continue
+        }
+      }
       if (existente) {
         if (clienteAlvo?.id && existente.cliente_id && existente.cliente_id !== clienteAlvo.id) {
           resultados.push({
@@ -673,7 +728,7 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
           wvetro_fluxo: fluxo,
         })
         if (error) throw error
-        ctx.existentes.set(numeroW, { id, cliente_id: cliente?.id || null, obra_id: null, anexos: anexosComPdfWVetro([], p, numeroW), wvetro_fluxo: fluxo })
+        ctx.existentes.set(normalizarNumeroWVetro(numeroW), { id, cliente_id: cliente?.id || null, obra_id: null, anexos: anexosComPdfWVetro([], p, numeroW), wvetro_fluxo: fluxo })
         criados += 1
         resultados.push({ id, numeroWvetro: numeroW, acao: 'criado', cliente: nome, itens: itens.length })
       }
