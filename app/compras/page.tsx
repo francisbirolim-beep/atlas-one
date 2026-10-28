@@ -25,6 +25,8 @@ import { tokenAtual } from "@/lib/auth";
 import type { ComprasAcessos } from "@/lib/comprasPermissoesServer";
 import BuscaAtlasInput from "@/components/system/BuscaAtlasInput";
 import { correspondeBuscaAtlas } from "@/lib/buscaAtlas";
+import OpcaoProdutoCompra from "@/components/compras/OpcaoProdutoCompra";
+import ProdutoCompraDetalhes from "@/components/compras/ProdutoCompraDetalhes";
 
 type StatusCompra =
   | "necessidade"
@@ -93,6 +95,8 @@ type Produto = {
   categoria: string | null;
   unidade: string | null;
   custo: number | null;
+  foto_url: string | null;
+  ativo: boolean;
 };
 type Fornecedor = {
   id: string;
@@ -361,16 +365,25 @@ export default function ComprasPage() {
   }, [dados, busca]);
   const selecionada =
     dados?.necessidades.find((n) => n.id === selecionadaId) || null;
-  const produtosFiltrados = useMemo(
-    () =>
-      (dados?.produtos || []).filter(
-        (p) =>
-          (filtroCategoriaProduto === "todos" ||
-            grupoCategoriaProduto(p.categoria) === filtroCategoriaProduto) &&
-          correspondeBuscaAtlas(buscaProdutoCatalogo, p.nome, p.codigo, p.categoria),
-      ),
-    [dados?.produtos, filtroCategoriaProduto, buscaProdutoCatalogo],
-  );
+  const produtosFiltrados = useMemo(() => {
+    const consultaCodigo = buscaProdutoCatalogo.replace(/[^a-z0-9]/gi, "").toUpperCase();
+    const codigoCompleto = /[A-Z]/.test(consultaCodigo) && /[0-9]/.test(consultaCodigo);
+    const lista = (dados?.produtos || []).filter((p) =>
+      p.ativo !== false &&
+      (filtroCategoriaProduto === "todos" ||
+        grupoCategoriaProduto(p.categoria) === filtroCategoriaProduto) &&
+      (codigoCompleto
+        ? (p.codigo || "").replace(/[^a-z0-9]/gi, "").toUpperCase().startsWith(consultaCodigo)
+        : correspondeBuscaAtlas(buscaProdutoCatalogo, p.nome, p.codigo, p.categoria))
+    );
+    if (codigoCompleto) {
+      lista.sort((a, b) => {
+        const exato = (p: Produto) => (p.codigo || "").replace(/[^a-z0-9]/gi, "").toUpperCase() === consultaCodigo;
+        return Number(exato(b)) - Number(exato(a)) || a.nome.localeCompare(b.nome, "pt-BR");
+      });
+    }
+    return lista;
+  }, [dados?.produtos, filtroCategoriaProduto, buscaProdutoCatalogo]);
   const cotacoesSelecionadas = (dados?.cotacoes || [])
     .filter((c) => c.necessidade_id === selecionadaId)
     .sort((a, b) => {
@@ -427,6 +440,21 @@ export default function ComprasPage() {
       categoria: p?.categoria || "",
       unidade: p?.unidade || "UN",
     }));
+  }
+  function atualizarFotoCatalogo(id: string, fotoUrl: string) {
+    setDados((anterior) => anterior ? {
+      ...anterior,
+      produtos: anterior.produtos.map((p) => p.id === id ? { ...p, foto_url: fotoUrl } : p),
+    } : anterior);
+  }
+  function inativarNoCatalogo(id: string) {
+    setDados((anterior) => anterior ? {
+      ...anterior,
+      produtos: anterior.produtos.filter((p) => p.id !== id),
+    } : anterior);
+    setForm((anterior) => anterior.produto_id === id
+      ? { ...anterior, produto_id: "" }
+      : anterior);
   }
   function escolherDestino(destino: "obra" | "estoque") {
     setForm((v) => ({
@@ -955,6 +983,7 @@ export default function ComprasPage() {
       {novaAberta && dados?.acessos?.solicitar && (
         <Modal
           titulo="Adicionar à lista de faltas"
+          largo
           onFechar={() => {
             setNovaAberta(false);
             setFiltroCategoriaProduto("todos");
@@ -1011,11 +1040,12 @@ export default function ComprasPage() {
                   : "produtos encontrados"}
               </p>
             </div>
+            <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
             <div className="min-w-0">
               <p className="text-xs font-medium text-slate-600">
                 Produto cadastrado (opcional)
               </p>
-              <div className="mt-1 max-h-48 overflow-y-auto rounded-xl border">
+              <div className="mt-1 max-h-72 overflow-y-auto rounded-xl border">
                 <button
                   type="button"
                   onClick={() => selecionarProduto("")}
@@ -1027,30 +1057,33 @@ export default function ComprasPage() {
                 >
                   Digitar material manualmente
                 </button>
-                {produtosFiltrados.map((p) => {
-                  const ativo = form.produto_id === p.id;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => selecionarProduto(p.id)}
-                      className={`block w-full border-b px-3 py-2 text-left text-sm last:border-b-0 ${
-                        ativo
-                          ? "bg-blue-50 font-semibold text-blue-700"
-                          : "bg-white text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      {p.codigo ? `${p.codigo} — ` : ""}
-                      {p.nome}
-                    </button>
-                  );
-                })}
+                {produtosFiltrados.slice(0, 80).map((p) => (
+                  <OpcaoProdutoCompra
+                    key={p.id}
+                    produto={p}
+                    selecionado={form.produto_id === p.id}
+                    podeCorrigirImagem={Boolean(dados?.acessos?.corrigirImagemProduto)}
+                    podeInativar={Boolean(dados?.acessos?.inativarProduto)}
+                    aoSelecionar={() => selecionarProduto(p.id)}
+                    aoAtualizarFoto={(url) => atualizarFotoCatalogo(p.id, url)}
+                    aoInativar={() => inativarNoCatalogo(p.id)}
+                  />
+                ))}
+                {produtosFiltrados.length > 80 && (
+                  <p className="px-3 py-2 text-xs text-slate-500">
+                    Mostrando os primeiros 80 resultados. Digite mais caracteres para refinar a busca.
+                  </p>
+                )}
                 {produtosFiltrados.length === 0 && (
                   <p className="px-3 py-3 text-[11px] text-amber-600">
                     Nenhum produto encontrado com esse filtro/busca.
                   </p>
                 )}
               </div>
+            </div>
+              <ProdutoCompraDetalhes
+                produto={dados?.produtos.find(p => p.id === form.produto_id) || null}
+              />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-medium text-slate-600">

@@ -17,6 +17,8 @@ export type ComprasAcessos = {
   receber: boolean
   conferir: boolean
   gerenciarKanban: boolean
+  corrigirImagemProduto: boolean
+  inativarProduto: boolean
 }
 
 const ACOES: Record<keyof ComprasAcessos, { setor: string; acao: string; minimo: 'consulta'|'edicao' }> = {
@@ -35,6 +37,8 @@ const ACOES: Record<keyof ComprasAcessos, { setor: string; acao: string; minimo:
   receber: { setor: 'recebimento', acao: 'compras.recebimento.receber', minimo: 'edicao' },
   conferir: { setor: 'recebimento', acao: 'compras.recebimento.conferir', minimo: 'edicao' },
   gerenciarKanban: { setor: 'compras', acao: 'compras.kanban.gerenciar', minimo: 'edicao' },
+  corrigirImagemProduto: { setor: 'compras', acao: 'compras.geral.corrigir_imagem_produto', minimo: 'edicao' },
+  inativarProduto: { setor: 'compras', acao: 'compras.geral.inativar_produto', minimo: 'edicao' },
 }
 
 const peso = { oculto: 0, consulta: 1, edicao: 2 } as const
@@ -68,7 +72,7 @@ export async function obterComprasAcessos(usuario: { id: string; empresa_id: str
   return Object.fromEntries(chaves.map(k => {
     const regra = ACOES[k]
     const base = niveis.get(regra.setor) || 'oculto'
-    const novoEscopo = ['verProprios','editarProprios','editarTodos','financeiro','gerenciarKanban'].includes(k)
+    const novoEscopo = ['verProprios','editarProprios','editarTodos','financeiro','gerenciarKanban','corrigirImagemProduto','inativarProduto'].includes(k)
     const explicito = conf.acoes && Object.prototype.hasOwnProperty.call(conf.acoes, regra.acao)
       ? nivel(conf.acoes[regra.acao]) : (novoEscopo ? 'oculto' : base)
     return [k, Math.min(peso[base], peso[explicito]) >= peso[regra.minimo]]
