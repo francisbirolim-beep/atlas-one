@@ -29,6 +29,60 @@ export async function GET(req: NextRequest) {
     if (!acessos.consultar && !acessos.solicitar) {
       return NextResponse.json({ error: 'Sem autorização para consultar Compras.' }, { status: 403 })
     }
+    // Pesquisa no banco inteiro: o limite de linhas da API de produtos (1.000)
+    // não deve impedir a seleção de códigos existentes, como SU008.
+    if (!req.nextUrl.searchParams.has('produtoId')) {
+      const busca = String(req.nextUrl.searchParams.get('busca') || '').slice(0, 75)
+      const categoria = String(req.nextUrl.searchParams.get('categoria') || 'todos')
+      const categorias = new Set(['todos', 'perfil', 'acessorio', 'vidro', 'produto_pronto', 'outros'])
+      if (!categorias.has(categoria)) {
+        return NextResponse.json({ error: 'Categoria inválida.' }, { status: 400 })
+      }
+      let query = supabaseAdmin.from('produtos')
+        .select('id,nome,codigo,categoria,unidade,ativo,foto_url')
+        .eq('empresa_id', usuario.empresa_id).eq('ativo', true)
+      if (['perfil', 'acessorio', 'vidro'].includes(categoria)) {
+        query = query.eq('categoria', categoria)
+      } else if (categoria === 'produto_pronto') {
+        query = query.in('categoria', ['produto', 'pu', 'porta_janela_padrao'])
+      } else if (categoria === 'outros') {
+        query = query.not('categoria', 'in', '("perfil","acessorio","vidro","produto","pu","porta_janela_padrao")')
+      }
+      const partes = busca.toUpperCase().match(/[A-ZÀ-Ú]+|[0-9]+/g) || []
+      // Um % entre blocos permite SU008, SU-008 e SU 008, sem atrair CM008.
+      const filtro = partes.join('%').replace(/[^A-Z0-9À-Ú%]/g, '')
+      if (filtro) query = query.or('codigo.ilike.%' + filtro + '%,nome.ilike.%' + filtro + '%')
+      const { data, error } = await query.order('nome', { ascending: true }).limit(150)
+      if (error) throw error
+      const normalizarCodigo = (valor: string | null) => (valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+      const procurado = normalizarCodigo(busca)
+      const itens = (data || []).map(p => ({ ...p, custo: null })).sort((a, b) => {
+        const codigoA = normalizarCodigo(a.codigo)
+        const codigoB = normalizarCodigo(b.codigo)
+        const relevancia = (codigo: string) =>
+          !procurado ? 3 : codigo === procurado ? 0 : codigo.startsWith(procurado) ? 1 : codigo.includes(procurado) ? 2 : 3
+        return relevancia(codigoA) - relevancia(codigoB) || a.nome.localeCompare(b.nome, 'pt-BR')
+      }).slice(0, 100)
+      // Alguns produtos têm desenho validado na biblioteca, embora a foto
+      // principal do cadastro ainda esteja vazia.
+      const semFoto = itens.filter(item => !item.foto_url).map(item => item.id)
+      if (semFoto.length) {
+        const { data: imagens, error: erroImagens } = await supabaseAdmin.from('produto_imagens')
+          .select('produto_id,url,principal')
+          .in('produto_id', semFoto).eq('ativo', true).eq('status_validacao', 'validada')
+          .order('principal', { ascending: false }).limit(200)
+        if (!erroImagens && imagens) {
+          const fotoPorProduto = new Map<string, string>()
+          for (const imagem of imagens) {
+            if (!fotoPorProduto.has(imagem.produto_id)) fotoPorProduto.set(imagem.produto_id, imagem.url)
+          }
+          for (const item of itens) {
+            if (!item.foto_url) item.foto_url = fotoPorProduto.get(item.id) || null
+          }
+        }
+      }
+      return NextResponse.json({ produtos: itens, limite: 100 })
+    }
     const produtoId = String(req.nextUrl.searchParams.get('produtoId') || '')
     if (!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(produtoId)) {
       return NextResponse.json({ error: 'Produto inválido.' }, { status: 400 })
@@ -42,7 +96,29 @@ export async function GET(req: NextRequest) {
       .eq('produto_id', produto.id).eq('ativo', true).eq('status_validacao', 'validada')
       .order('principal', { ascending: false }).order('created_at', { ascending: false }).limit(12)
     if (error) throw error
-    return NextResponse.json({ imagens: (fotos || []).map(foto => ({ url: foto.url, tipo: foto.tipo })) })
+    // Catálogo oficial já vinculado ao produto. A referência permite abrir o
+    // desenho na página correta sem confundir fotos de fornecedores diferentes.
+    const { data: refsCatalogo } = await supabaseAdmin.from('fornecedor_catalogo_itens')
+      .select('documento_id,codigo_fornecedor,dados_extraidos')
+      .eq('empresa_id', usuario.empresa_id).eq('produto_id', produto.id).limit(5)
+    let catalogo: { url: string; pagina: number; codigo: string; titulo: string } | null = null
+    const ids = [...new Set((refsCatalogo || []).map(ref => ref.documento_id).filter(Boolean))]
+    if (ids.length) {
+      const { data: docs } = await supabaseAdmin.from('fornecedor_documentos')
+        .select('id,url,nome_arquivo').eq('empresa_id', usuario.empresa_id).in('id', ids)
+      for (const ref of refsCatalogo || []) {
+        const doc = (docs || []).find(item => item.id === ref.documento_id)
+        const pagina = Number(ref.dados_extraidos?.pagina_pdf)
+        if (doc?.url?.startsWith('https://') && Number.isInteger(pagina) && pagina > 0) {
+          catalogo = { url: doc.url, pagina, codigo: ref.codigo_fornecedor || '', titulo: doc.nome_arquivo || 'Catálogo do fornecedor' }
+          break
+        }
+      }
+    }
+    return NextResponse.json({
+      imagens: (fotos || []).map(foto => ({ url: foto.url, tipo: foto.tipo })),
+      catalogo,
+    })
   } catch (error) {
     console.error('Erro ao carregar imagens do material:', error)
     return NextResponse.json({ error: 'Não foi possível carregar as imagens.' }, { status: 500 })
