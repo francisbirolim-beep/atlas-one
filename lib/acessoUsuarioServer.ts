@@ -1,5 +1,5 @@
 import { supabaseAdmin } from './supabaseAdmin'
-import { moduloDaAcaoPermissao } from './permissoesBlocos'
+import { moduloDaAcaoPermissao, fallbackAcaoPermissao } from './permissoesBlocos'
 
 export type NivelAcessoServer = 'oculto' | 'consulta' | 'edicao'
 
@@ -55,7 +55,7 @@ export async function nivelAcaoUsuarioServer(params:{
   const tetoModulo=escolhido?menor(nivelSetor,nivel(escolhido)):nivelSetor
   if(tetoModulo==='oculto')return 'oculto'
   const explicito=nivel(config?.acoes?.[params.acaoId])
-  if(!config?.acoes || !(params.acaoId in config.acoes)) return tetoModulo
+  if(!config?.acoes || !(params.acaoId in config.acoes)) return fallbackAcaoPermissao(params.acaoId,tetoModulo)
   return menor(tetoModulo,explicito)
 }
 

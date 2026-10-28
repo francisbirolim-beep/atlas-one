@@ -3,14 +3,14 @@
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 import { ehEmAndamento, nomeEtapa } from '@/lib/wvetroEtapaComercial'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, MessageCircle, CheckCircle2, Search, Wrench, RefreshCw, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { listarTipologias } from '@/lib/tipologias'
 import { KanbanColuna, OrcamentoRapido, ItemEsquadria, TipoEsquadria, HistoricoItem, Usuario, Anexo, Tipologia } from '@/lib/tipos'
-import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard, excluirOrcamento } from '@/lib/kanban'
+import { listarColunas, criarColuna, renomearColuna, excluirColuna, moverCard } from '@/lib/kanban'
 import { executarAutomacoesColuna } from '@/lib/automacoes'
 import { verificarDuplicatasAutomacaoSetor } from '@/lib/automacoesSetor'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
@@ -80,6 +80,24 @@ return digitos.startsWith('55') ? digitos : `55${digitos}`
 function formatarMoedaBRL(valor: number | null | undefined): string {
 const numero = Number(valor || 0)
 return `R$ ${numero.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+// Apenas os dois estágios finalizados mudam de visibilidade ao virar o mês.
+// Arquivar aqui significa FILTRAR: o orçamento permanece intacto no banco.
+function colunaDeHistorico(nome: string): boolean {
+  const normalizada = nomeEtapa(nome)
+  return normalizada === 'vendido' || (normalizada.includes('enviado') && normalizada.includes('cliente'))
+}
+function mesLocalAtual(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+type CardRetiradoKanban = {
+  id: string
+  cliente_nome: string | null
+  kanban_retirado_em: string
+  kanban_retirado_motivo: string | null
+  usuario_nome?: string
 }
 
 function dataLocalYmd(valor: string | null | undefined): string | null {
@@ -303,6 +321,16 @@ const [tipoFiltroData, setTipoFiltroData] = useState<'entrada' | 'movimentacao'>
 const [filtroDataDe, setFiltroDataDe] = useState('')
 const [filtroDataAte, setFiltroDataAte] = useState('')
 const [filtroTemperatura, setFiltroTemperatura] = useState('')
+const [modoHistorico, setModoHistorico] = useState<'atual' | 'mes' | 'periodo' | 'todos'>('atual')
+const [mesHistorico, setMesHistorico] = useState(mesLocalAtual)
+const [mesDoSistema, setMesDoSistema] = useState(mesLocalAtual)
+const [podeRetirarCard, setPodeRetirarCard] = useState(false)
+const [podeRestaurarCard, setPodeRestaurarCard] = useState(false)
+const [retirados, setRetirados] = useState<CardRetiradoKanban[] | null>(null)
+const [erroKanban, setErroKanban] = useState('')
+const [salvandoRetirada, setSalvandoRetirada] = useState(false)
+const cargaId = useRef(0)
+
 const [corAssistencia, setCorAssistencia] = useState('#8b5cf6')
 const [tiposVersao, setTiposVersao] = useState(0)
 const [buscandoWVetro, setBuscandoWVetro] = useState(false)
@@ -315,61 +343,154 @@ const [motivoValorVendaWVetro, setMotivoValorVendaWVetro] = useState('')
 const [conferindoValorVendaWVetro, setConferindoValorVendaWVetro] = useState(false)
 
 useEffect(() => {
-carregar()
 usuarioAtual().then(setUsuario)
 lerCorAssistencia().then(setCorAssistencia)
 listarTipologias().then(list => {
 tipoLabels = Object.fromEntries(list.map(tp => [tp.chave, tp.label]))
 setTiposVersao(v => v + 1)
 })
-const t = setInterval(() => setAgora(Date.now()), 60000)
+const t = setInterval(() => {setAgora(Date.now());setMesDoSistema(mesLocalAtual())}, 60000)
 return () => clearInterval(t)
 }, [])
 
-async function carregar() {
-setCarregando(true)
-const [cols, { data: orc }] = await Promise.all([
-listarColunas(),
-supabase
-.from('orcamentos')
-.select('*')
-.or('modo_entrada.is.null,modo_entrada.neq.balcao')
-.order('created_at', { ascending: false }),
-])
-setColunas(cols)
-if (orc) {
-const lista = (orc as OrcamentoRapido[]).filter(c => (c as any).modo_entrada !== 'wvetro_api_vinculado')
-setCards(lista)
-// Consulta somente as obras vinculadas aos orçamentos, sem misturar clientes,
-// alterar status do Kanban ou editar o cadastro do cliente.
-setStatusLocais('carregando')
-const idsObras = [...new Set(lista.map(c => c.obra_id).filter((id): id is string => !!id))]
-if (idsObras.length) {
+// Recarrega os estágios finalizados somente quando o período muda.
+useEffect(() => { void carregar() }, [modoHistorico, mesHistorico, mesDoSistema, filtroDataDe, filtroDataAte])
+useEffect(() => {
+  let ativo = true
   void (async () => {
-    const mapa: Record<string, ObraKanbanLocal> = {}
-    for (let inicio = 0; inicio < idsObras.length; inicio += 80) {
-      const { data, error } = await supabase.from('obras')
-        .select('id,nome,endereco,numero_endereco,bairro,cidade,uf,cep,observacoes')
-        .in('id', idsObras.slice(inicio, inicio + 80))
-      if (error) { setStatusLocais('erro'); return } // Orçamentos continuam acessíveis se falhar.
-      for (const obra of (data || []) as ObraKanbanLocal[]) mapa[obra.id] = obra
-    }
-    setObrasPorId(mapa)
-    setStatusLocais('pronto')
+    try {
+      const token = await tokenAtual()
+      if (!token) return
+      const r = await fetch('/api/kanban/comercial/cards', {headers:{Authorization:`Bearer ${token}`}, cache:'no-store'})
+      if (!r.ok) return
+      const d = await r.json()
+      if (ativo) {setPodeRetirarCard(d.podeRetirar === true);setPodeRestaurarCard(d.podeRestaurar === true)}
+    } catch { /* sem permissão validada, ação fica desabilitada */ }
   })()
-} else {
-  setObrasPorId({})
-  setStatusLocais('pronto')
+  return () => {ativo = false}
+}, [])
+
+async function consultarRetirados() {
+  try {
+    const token = await tokenAtual()
+    if (!token) throw Error('Sessão inválida.')
+    const r = await fetch('/api/kanban/comercial/cards?retirados=1', {headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
+    const d = await r.json()
+    if (!r.ok) throw Error(d.erro || 'Não foi possível consultar cards retirados.')
+    setRetirados(d.retirados || [])
+    setErroKanban('')
+  } catch (e) {setErroKanban(e instanceof Error ? e.message : 'Falha ao consultar cards retirados.')}
 }
-if (typeof window !== 'undefined') {
-const idAlvo = new URLSearchParams(window.location.search).get('orcamento')
-if (idAlvo) {
-const alvo = lista.find(c => c.id === idAlvo)
-if (alvo) abrirCard(alvo)
+
+async function operarRetirada(id:string, acao:'retirar'|'restaurar', nome:string) {
+  const motivo = window.prompt(`${acao === 'retirar' ? 'Retirar' : 'Restaurar'} card de ${nome}?\n\nInforme o motivo obrigatório (mínimo 8 caracteres):`, acao==='retirar'?'Card duplicado: ':'Correção autorizada: ')
+  if (motivo === null) return false
+  if (motivo.trim().length < 8) {alert('Informe pelo menos 8 caracteres no motivo.');return false}
+  if (!window.confirm(`${acao==='retirar'?'Retirar':'Restaurar'} o card de ${nome}?\n\nMotivo: ${motivo.trim()}\nA ação ficará registrada e poderá ser auditada.`)) return false
+  setSalvandoRetirada(true)
+  try {
+    const token = await tokenAtual()
+    if (!token) throw Error('Sessão inválida.')
+    const r = await fetch('/api/kanban/comercial/cards',{
+      method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify({id,acao,motivo:motivo.trim()})
+    })
+    const d = await r.json().catch(()=>({}))
+    if (!r.ok) throw Error(d.erro || 'Operação não concluída.')
+    setErroKanban('')
+    return true
+  } catch(e) {
+    alert(e instanceof Error ? e.message : 'Não foi possível alterar o card.')
+    return false
+  } finally {setSalvandoRetirada(false)}
 }
+
+async function restaurarCardRetirado(card:CardRetiradoKanban) {
+  if(!await operarRetirada(card.id,'restaurar',card.cliente_nome||'cliente não identificado'))return
+  setRetirados(prev => prev?.filter(c=>c.id!==card.id)||[])
+  void carregar()
 }
-}
-setCarregando(false)
+
+async function carregar() {
+const idCarga = ++cargaId.current
+setCarregando(true)
+setErroKanban('')
+try {
+  const cols = await listarColunas()
+  if (idCarga !== cargaId.current) return
+  const historicas = cols.filter(c => colunaDeHistorico(c.nome)).map(c=>c.id)
+  const abertas = cols.filter(c => !colunaDeHistorico(c.nome)).map(c=>c.id)
+  const base = () => supabase.from('orcamentos').select('*')
+    .or('modo_entrada.is.null,modo_entrada.neq.balcao')
+    .is('kanban_retirado_em',null)
+  // Todos os cards de trabalho continuam acessíveis. As etapas finalizadas
+  // consultam somente o mês padrão; o histórico mais antigo é carregado sob demanda.
+  const consultar = async (colunaIds:string[], criterio:'abertas'|'nulas'|'historico'|'historico_sem_data') => {
+    if (criterio !== 'nulas' && !colunaIds.length) return [] as OrcamentoRapido[]
+    const todos:OrcamentoRapido[]=[]
+    for (let ini=0;ini<15000;ini+=750) {
+      let q = base().order('created_at',{ascending:false}).range(ini,ini+749)
+      q = criterio === 'nulas' ? q.is('coluna_id',null) : q.in('coluna_id',colunaIds)
+      if ((criterio==='historico' || criterio==='historico_sem_data') && modoHistorico!=='todos' && modoHistorico!=='periodo') {
+        const mes = modoHistorico==='atual'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(mesHistorico)?mesLocalAtual():mesHistorico
+        const [ano,m] = mes.split('-').map(Number)
+        const proximo = m===12 ? `${ano+1}-01-01` : `${ano}-${String(m+1).padStart(2,'0')}-01`
+        const inicio=`${mes}-01T00:00:00-03:00`
+        const fim=`${proximo}T00:00:00-03:00`
+        // A data de entrada na etapa é a referência do fechamento do card.
+        q = criterio==='historico_sem_data'
+          ? q.is('coluna_atualizada_em',null).gte('created_at',inicio).lt('created_at',fim)
+          : q.gte('coluna_atualizada_em',inicio).lt('coluna_atualizada_em',fim)
+      }
+      if ((criterio==='historico' || criterio==='historico_sem_data') && modoHistorico==='periodo') {
+        if (criterio==='historico_sem_data') q = q.is('coluna_atualizada_em',null)
+        const campo = criterio==='historico_sem_data'?'created_at':'coluna_atualizada_em'
+        if (filtroDataDe) q = q.gte(campo,`${filtroDataDe}T00:00:00-03:00`)
+        if (filtroDataAte) q = q.lt(campo,`${filtroDataAte}T23:59:59-03:00`)
+      }
+      const {data,error} = await q
+      if (error) throw error
+      todos.push(...((data || []) as OrcamentoRapido[]))
+      if ((data || []).length < 750) break
+    }
+    return todos
+  }
+  const [ativas,nulas,terminadas,terminadasSemData] = await Promise.all([
+    consultar(abertas,'abertas'),
+    consultar([], 'nulas'),
+    consultar(historicas,'historico'),
+    modoHistorico==='todos' ? Promise.resolve([] as OrcamentoRapido[]) : consultar(historicas,'historico_sem_data'),
+  ])
+  if (idCarga !== cargaId.current) return
+  let lista = [...ativas,...nulas,...terminadas,...terminadasSemData].filter(c => (c as any).modo_entrada !== 'wvetro_api_vinculado')
+  const idAlvo = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('orcamento') : null
+  if (idAlvo && !lista.some(c=>c.id===idAlvo)) {
+    const {data:direto} = await base().eq('id',idAlvo).maybeSingle()
+    if(direto) lista=[direto as OrcamentoRapido,...lista]
+  }
+  if (idCarga !== cargaId.current) return
+  setColunas(cols)
+  setCards(lista)
+  setStatusLocais('carregando')
+  const idsObras = [...new Set(lista.map(c=>c.obra_id).filter((id):id is string=>!!id))]
+  if (idsObras.length) {
+    void (async () => {
+      const mapa:Record<string,ObraKanbanLocal>={}
+      for(let ini=0;ini<idsObras.length;ini+=80) {
+        const {data,error}=await supabase.from('obras')
+          .select('id,nome,endereco,numero_endereco,bairro,cidade,uf,cep,observacoes')
+          .in('id',idsObras.slice(ini,ini+80))
+        if(error) {if(idCarga===cargaId.current)setStatusLocais('erro');return}
+        for(const obra of (data||[]) as ObraKanbanLocal[])mapa[obra.id]=obra
+      }
+      if(idCarga===cargaId.current){setObrasPorId(mapa);setStatusLocais('pronto')}
+    })()
+  } else {setObrasPorId({});setStatusLocais('pronto')}
+  if(idAlvo){const alvo=lista.find(c=>c.id===idAlvo);if(alvo)abrirCard(alvo)}
+} catch(e) {
+  if(idCarga===cargaId.current)setErroKanban('Não foi possível carregar os cards. Nada foi alterado. Atualize para tentar novamente.')
+  console.error('[kanban mensal carregar]',e)
+} finally {if(idCarga===cargaId.current)setCarregando(false)}
 }
 
 function passaFiltro(c: OrcamentoRapido): boolean {
@@ -386,9 +507,11 @@ const bate = bateBusca(
 if (!bate) return false
 }
 if (filtroDataDe || filtroDataAte) {
-const referencia = tipoFiltroData === 'entrada'
-? (c.kanban_entrada_em || c.created_at)
-: c.coluna_atualizada_em
+const colunaDoCard = colunas.find(col=>col.id===c.coluna_id)
+const referenciarMovimentacao = modoHistorico==='periodo' && !!colunaDoCard && colunaDeHistorico(colunaDoCard.nome)
+const referencia = referenciarMovimentacao || tipoFiltroData !== 'entrada'
+? (c.coluna_atualizada_em || c.created_at)
+: (c.kanban_entrada_em || c.created_at)
 const dataCard = dataLocalYmd(referencia)
 if (!dataCard) return false
 if (filtroDataDe && dataCard < filtroDataDe) return false
@@ -405,8 +528,15 @@ frio: { emoji: '❄️', label: 'Frio', texto: 'text-blue-600', fundo: 'bg-blue-
 }
 
 function cardsDaColuna(colunaId: string, index: number) {
+const coluna = colunas.find(c => c.id===colunaId)
 return cards
 .filter(c => (c.coluna_id || colunas[0]?.id) === colunaId || (!c.coluna_id && index === 0))
+.filter(c => {
+  if (!coluna || !colunaDeHistorico(coluna.nome) || modoHistorico==='todos' || modoHistorico==='periodo') return true
+  const referencia = dataLocalYmd(c.coluna_atualizada_em || c.created_at)
+  const mes = modoHistorico==='atual' || !mesHistorico ? mesLocalAtual() : mesHistorico
+  return !!referencia && referencia.startsWith(mes)
+})
 .filter(passaFiltro)
 }
 
@@ -1140,15 +1270,12 @@ setEditando(null)
 }
 }
 
-async function excluirCard() {
-if (!cardSelecionado) return
-if (!window.confirm(`Excluir o orçamento de ${cardSelecionado.cliente_nome}? Essa ação não pode ser desfeita.`)) return
-const ok = await excluirOrcamento(cardSelecionado.id)
-if (ok) {
-setCards(prev => prev.filter(c => c.id !== cardSelecionado.id))
+async function retirarCard() {
+if(!cardSelecionado || !podeRetirarCard || salvandoRetirada)return
+if(!await operarRetirada(cardSelecionado.id,'retirar',cardSelecionado.cliente_nome||'cliente não identificado'))return
+setCards(prev=>prev.filter(c=>c.id!==cardSelecionado.id))
 setCardSelecionado(null)
 setEditando(null)
-}
 }
 
 async function tentarFechar() {
@@ -1452,7 +1579,7 @@ return (
 <input
 type="text"
 value={busca}
-onChange={e => setBusca(e.target.value)}
+onChange={e => {setBusca(e.target.value);if(e.target.value.trim())setModoHistorico('todos')}}
 placeholder="Buscar por cliente, cidade, arquiteto, vendedor, tipo..."
 className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"
 />
@@ -1522,6 +1649,40 @@ className="text-xs text-slate-400 hover:text-slate-600 px-2"
 Limpar filtros
 </button>
 )}
+</div>
+
+<div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+  <div className="flex flex-wrap items-end gap-2">
+    <label className="text-xs font-semibold text-slate-600">Histórico: Enviado ao cliente / Vendido
+      <select aria-label="Período dos cards enviados e vendidos" value={modoHistorico}
+        onChange={e=>setModoHistorico(e.target.value as typeof modoHistorico)}
+        className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">
+        <option value="atual">Mês atual (padrão)</option>
+        <option value="mes">Escolher mês anterior</option>
+        <option value="periodo">Período personalizado (De / Até)</option>
+        <option value="todos">Todo o histórico</option>
+      </select>
+    </label>
+    {modoHistorico==='mes'&&<label className="text-xs font-semibold text-slate-600">Mês / ano
+      <input type="month" aria-label="Mês do histórico" value={mesHistorico}
+        onChange={e=>setMesHistorico(e.target.value)} className="mt-1 block rounded-lg border border-slate-300 p-2 text-sm"/>
+    </label>}
+    {podeRestaurarCard&&<button onClick={()=>retirados?setRetirados(null):void consultarRetirados()}
+      className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
+      {retirados?'Ocultar retirados':'Cards retirados (auditoria)'}
+    </button>}
+  </div>
+  <p className="text-xs text-slate-500">Fazer orçamento, Em andamento e Orçamento feito permanecem visíveis mesmo após a virada do mês. Enviado ao cliente e Vendido exibem o mês selecionado; os meses anteriores continuam salvos e pesquisáveis.</p>
+  {modoHistorico==='periodo'&&!filtroDataDe&&!filtroDataAte&&<p className="text-xs text-amber-700">Selecione as datas De e Até acima. Sem datas, o histórico inteiro fica disponível.</p>}
+  {erroKanban&&<p role="alert" className="text-sm font-semibold text-red-700">{erroKanban}</p>}
+  {retirados&&<div className="rounded-lg border border-slate-200 p-3 space-y-2">
+    <p className="text-sm font-bold text-slate-700">Cards retirados — até 100 mais recentes</p>
+    {retirados.length===0&&<p className="text-sm text-slate-500">Nenhum card retirado.</p>}
+    {retirados.map(c=><div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 text-sm">
+      <div><strong>{c.cliente_nome||'Sem cliente'}</strong><p className="text-xs text-slate-600">{c.kanban_retirado_motivo||'Sem motivo'} · {new Date(c.kanban_retirado_em).toLocaleString('pt-BR')} · por {c.usuario_nome || 'usuário registrado'}</p></div>
+      <button disabled={salvandoRetirada} onClick={()=>void restaurarCardRetirado(c)} className="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-semibold text-indigo-700 disabled:opacity-50">Restaurar card</button>
+    </div>)}
+  </div>}
 </div>
 
 <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-4 sm:mx-0 sm:gap-4 sm:px-0">
@@ -1783,12 +1944,13 @@ className="w-full py-3 flex items-center justify-center gap-2 border border-bran
 >
 <Plus size={16} /> Adicionar tipologia
 </Link>
-{usuario?.role === 'master' && (
+{podeRetirarCard && (
 <button
-onClick={excluirCard}
+disabled={salvandoRetirada}
+onClick={retirarCard}
 className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
 >
-<Trash2 size={13} /> Excluir este orçamento
+<Trash2 size={13} /> Retirar card duplicado/incorreto
 </button>
 )}
 </div>
@@ -2658,12 +2820,13 @@ className="w-full py-3 bg-brand-navy text-white rounded-xl font-medium hover:bg-
 {salvando ? 'Salvando...' : ehOrcamentoWVetro(cardSelecionado) ? 'Salvar rascunho / alterações' : 'Salvar alterações'}
 </button>
 
-{usuario?.role === 'master' && (
+{podeRetirarCard && (
 <button
-onClick={excluirCard}
+disabled={salvandoRetirada}
+onClick={retirarCard}
 className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 text-xs font-medium hover:bg-red-50 rounded-lg transition"
 >
-<Trash2 size={13} /> Excluir este orçamento
+<Trash2 size={13} /> Retirar card duplicado/incorreto
 </button>
 )}
 
