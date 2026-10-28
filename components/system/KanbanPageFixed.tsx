@@ -5,7 +5,7 @@ import { ehEmAndamento, nomeEtapa } from '@/lib/wvetroEtapaComercial'
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, MessageCircle, CheckCircle2, Search, Wrench, RefreshCw, Loader2 } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, X, Phone, MapPin, Camera, FileText, User, Building2, Clock, Play, Paperclip, MessageCircle, CheckCircle2, Search, Wrench, RefreshCw, Loader2, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { listarTipologias } from '@/lib/tipologias'
@@ -1650,6 +1650,17 @@ Limpar filtros
 </button>
 )}
 </div>
+
+{usuario?.role === 'master' && (
+  <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3">
+    <p className="text-xs font-medium text-indigo-900">Master: escolha os funcionários que podem retirar ou restaurar cards duplicados.</p>
+    <button type="button"
+      onClick={() => window.dispatchEvent(new Event('atlas:permissoes-kanban-comercial'))}
+      className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800">
+      <ShieldCheck size={17} /> Autorizar funcionários a retirar cards
+    </button>
+  </div>
+)}
 
 <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 space-y-3">
   <div className="flex flex-wrap items-end gap-2">
