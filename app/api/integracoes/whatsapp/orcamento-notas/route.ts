@@ -24,7 +24,14 @@ export async function GET(req: NextRequest) {
     const { data: orcamento, error: erroOrcamento } = await supabaseAdmin.from('orcamentos')
       .select('id,modo_entrada,ia_fontes,ia_resultado_original,descricao_livre,created_at').eq('id', id).eq('empresa_id', usuario.empresa_id).maybeSingle()
     if (erroOrcamento) throw erroOrcamento
-    if (!orcamento || orcamento.modo_entrada !== 'whatsapp') return NextResponse.json({ error: 'Notas não encontradas.' }, { status: 404 })
+    // Card W.Vetro pode incorporar um orçamento do WhatsApp revisado e
+    // vinculado no próprio tenant, sem perder a origem técnica.
+    const fonteWhatsapp = orcamento?.ia_fontes as Record<string, unknown> | null
+    const origemVinculada = String(fonteWhatsapp?.origem_whatsapp_card_id || '')
+    const wvetroComWhatsapp = orcamento?.modo_entrada === 'wvetro_api' &&
+      /^[a-f\d-]{36}$/i.test(origemVinculada)
+    if (!orcamento || (orcamento.modo_entrada !== 'whatsapp' && !wvetroComWhatsapp))
+      return NextResponse.json({ error: 'Notas não encontradas.' }, { status: 404 })
     const { data: intakes, error: erroIntake } = await supabaseAdmin.from('atendimento_whatsapp_intakes')
       .select('id,conversa_id,participante_nome,conteudo_bruto,mensagens_ids,anexos,primeira_mensagem_em,ultima_mensagem_em,gatilho_fechamento,ai_resultado,atendimento_whatsapp_grupos(nome)')
       .eq('orcamento_id', id).eq('empresa_id', usuario.empresa_id).order('created_at', { ascending: true }).limit(150)
