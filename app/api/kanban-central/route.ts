@@ -76,7 +76,7 @@ export async function GET(req:NextRequest){
   const setorColunas=selecionado?[selecionado]:permitidos
   const [colunas,vr,acessos]=await Promise.all([
     semearColunas(ctx.u.empresa_id,setorColunas),
-    db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,valor_venda,created_at,status').eq('empresa_id',ctx.u.empresa_id)
+    db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,valor_venda,created_at,status').eq('empresa_id',ctx.u.empresa_id).is('excluida_em',null)
       .order('created_at',{ascending:false}).limit(1000),
     ctx.u.role==='master'?db.from('central_kanban_acessos').select('usuario_id,setor,nivel,responsavel').eq('empresa_id',ctx.u.empresa_id):
       Promise.resolve({data:[],error:null}),

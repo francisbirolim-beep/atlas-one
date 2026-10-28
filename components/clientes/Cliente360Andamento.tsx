@@ -138,7 +138,7 @@ export default function Cliente360Andamento({ clienteId }: { clienteId: string }
       supabase.from('clientes').select('id,nome').eq('id', clienteId).maybeSingle(),
       supabase.from('obras').select('id,nome,status').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
       supabase.from('orcamentos').select('id,numero,obra_id,status,valor_estimado').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
-      supabase.from('vendas_obras').select('id,orcamento_id,obra_id,valor_venda,custo_previsto,status,confirmado_em').eq('cliente_id', clienteId).order('confirmado_em', { ascending: true }),
+      supabase.from('vendas_obras').select('id,orcamento_id,obra_id,valor_venda,custo_previsto,status,confirmado_em').eq('cliente_id', clienteId).is('excluida_em',null).order('confirmado_em', { ascending: true }),
       supabase.from('medicoes_finais').select('id,orcamento_id,obra_id,status_operacional,created_at').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
       supabase.from('financeiro_contas_receber').select('id,orcamento_id,obra_id,valor,valor_pago,valor_desconto,status').eq('cliente_id', clienteId).order('created_at', { ascending: true }),
       supabase.from('setor_kanban_colunas').select('id,setor_id,nome,ordem').in('setor_id', SETORES).order('ordem', { ascending: true }),

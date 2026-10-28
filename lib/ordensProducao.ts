@@ -156,7 +156,7 @@ export async function marcarCardLiberadoProducao(
 
 export async function listarVendasProducao(clienteId: string, obraId?: string | null): Promise<VendaProducao[]> {
   if (!clienteId) return []
-  let q = supabase.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id').eq('cliente_id', clienteId).order('created_at', { ascending: false })
+  let q = supabase.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id').eq('cliente_id', clienteId).is('excluida_em',null).order('created_at', { ascending: false })
   if (obraId) q = q.eq('obra_id', obraId)
   const { data } = await q
   return (data || []) as VendaProducao[]

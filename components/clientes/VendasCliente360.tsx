@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Building2, ChevronRight, CircleDollarSign, FileText, Loader2 } from 'lucide-react'
+import { Building2, ChevronRight, CircleDollarSign, FileText, Loader2, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 
 type VendaObra = {
   id: string
@@ -66,8 +67,38 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
   const [contas,setContas]=useState<ContaVenda[]>([])
   const [carregando,setCarregando]=useState(true)
   const [erro,setErro]=useState('')
+  const [aviso,setAviso]=useState('')
+  const [master,setMaster]=useState(false)
+  const [selecionada,setSelecionada]=useState<VendaObra|null>(null)
+  const [motivo,setMotivo]=useState('')
+  const [excluindo,setExcluindo]=useState(false)
 
   useEffect(()=>{ void carregar() },[clienteId,verFinanceiro])
+  useEffect(()=>{
+    let montado=true
+    void usuarioAtual().then(usuario=>{if(montado)setMaster(usuario?.role==='master')})
+    return ()=>{montado=false}
+  },[])
+
+  async function excluirVenda(){
+    if(!selecionada||excluindo||motivo.trim().length<8)return
+    setExcluindo(true);setErro('');setAviso('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw new Error('Sessão expirada. Entre novamente.')
+      const resposta=await fetch('/api/vendas/excluir',{
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+        body:JSON.stringify({vendaId:selecionada.id,clienteId,motivo:motivo.trim(),confirmar:true}),
+      })
+      const resultado=await resposta.json().catch(()=>({}))
+      if(!resposta.ok||!resultado.ok)throw new Error(resultado.error||'Não foi possível excluir a venda.')
+      setSelecionada(null);setMotivo('')
+      await carregar()
+      setAviso('Venda excluída da lista ativa, com histórico preservado. As outras vendas não foram alteradas.')
+    }catch(e){setErro(e instanceof Error?e.message:'Não foi possível excluir a venda.')}
+    finally{setExcluindo(false)}
+  }
+
 
   async function carregar(){
     setCarregando(true); setErro('')
@@ -75,6 +106,7 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
       .from('vendas_obras')
       .select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,status,confirmado_em,created_at')
       .eq('cliente_id',clienteId)
+      .is('excluida_em',null)
       .order('confirmado_em',{ascending:false})
 
     if(vendasResp.error){ setErro(vendasResp.error.message); setCarregando(false); return }
@@ -113,6 +145,7 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
   if(carregando) return <div className="rounded-2xl border bg-white p-8 text-center text-sm text-slate-500"><Loader2 size={16} className="mx-auto mb-2 animate-spin"/>Carregando vendas...</div>
 
   return <div className="space-y-5">
+    {aviso&&<div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{aviso}</div>}
     {erro&&<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
 
     <div className="grid gap-3 sm:grid-cols-3">
@@ -144,7 +177,8 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
           const contasVenda=contas.filter(c=>c.venda_obra_id===v.id&&c.status!=='cancelado')
           const recebido=contasVenda.reduce((s,c)=>s+Number(c.valor_pago||0),0)
           const saldo=contasVenda.reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
-          return <Link key={v.id} href={`/clientes/${clienteId}/vendas/${v.id}`} className="flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
+          return <div key={v.id} className="flex items-center gap-1">
+            <Link href={`/clientes/${clienteId}/vendas/${v.id}`} className="flex min-w-0 flex-1 flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 font-bold text-slate-900"><Building2 size={15} className="text-brand-navy"/>{obra?.nome||`Venda #${v.numero||'—'}`}</span>
@@ -163,7 +197,12 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
               </div>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500"><ChevronRight size={18}/></span>
             </div>
-          </Link>
+            </Link>
+            {master&&<button type="button" title="Excluir esta venda" aria-label={'Excluir venda número '+String(v.numero||'')}
+              onClick={()=>{setSelecionada(v);setMotivo('');setErro('');setAviso('')}}
+              className="mr-4 shrink-0 rounded-lg border border-red-100 p-2 text-red-600 hover:bg-red-50"
+              ><Trash2 size={16}/></button>}
+          </div>
         })}
         {!vendas.length&&<div className="px-5 py-10 text-center">
           <CircleDollarSign size={28} className="mx-auto text-slate-300"/>
@@ -172,5 +211,26 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
         </div>}
       </div>
     </section>
+
+    {selecionada&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-label="Excluir venda incorreta">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <h3 className="text-lg font-bold text-slate-900">Excluir venda nº {selecionada.numero||'—'}?</h3>
+        <p className="mt-2 text-sm text-slate-700">Valor: <strong>{moeda(selecionada.valor_venda)}</strong>. A exclusão é individual e auditada; a outra venda da cliente será preservada.</p>
+        <p className="mt-2 text-xs text-amber-700">Contas ainda não recebidas vinculadas a esta venda serão canceladas. Com recebimentos ou operação iniciada, a exclusão será bloqueada para regularização.</p>
+        <label className="mt-4 block text-sm font-semibold text-slate-700" htmlFor="motivo-excluir-venda">Motivo obrigatório (mínimo 8 caracteres)</label>
+        <textarea id="motivo-excluir-venda" value={motivo} onChange={e=>setMotivo(e.target.value)}
+          rows={3} maxLength={1000} placeholder="Ex.: Venda importada para a cliente errada"
+          className="mt-2 w-full rounded-lg border border-slate-300 p-3 text-sm focus:border-red-400 focus:outline-none"/>
+        {erro&&<p className="mt-2 text-xs text-red-700">{erro}</p>}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" disabled={excluindo} onClick={()=>{setSelecionada(null);setErro('')}}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Cancelar</button>
+          <button type="button" disabled={excluindo||motivo.trim().length<8} onClick={()=>void excluirVenda()}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+            {excluindo?'Excluindo...':'Confirmar exclusão'}
+          </button>
+        </div>
+      </div>
+    </div>}
   </div>
 }
