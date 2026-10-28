@@ -12,7 +12,8 @@ import { obterOuCriarCliente } from '@/lib/clientes'
 import type { Cliente } from '@/lib/tipos'
 
 type ClienteBusca = Pick<Cliente, 'id' | 'nome' | 'whatsapp' | 'telefone' | 'cidade' | 'bairro' | 'cpf_cnpj'> & { apelido?: string | null }
-const CACHE_CLIENTES_IDENTIFICAR = 'atlas_clientes_identificar_cache_v1'
+// Cache anterior é desconsiderado: poderia conter clientes já inativados.
+const CACHE_CLIENTES_IDENTIFICAR = 'atlas_clientes_identificar_cache_v2_ativos'
 
 function temNomeCompleto(nome: string) {
   return nome.trim().split(/\s+/).filter(Boolean).length >= 2
@@ -52,6 +53,7 @@ export default function IdentificarCliente() {
         const { data, error } = await supabase
           .from('clientes')
           .select('id,nome,apelido,whatsapp,telefone,cidade,bairro,cpf_cnpj')
+          .eq('ativo', true)
           .or([
             `nome.ilike.${padraoContem}`,
             `apelido.ilike.${padraoContem}`,

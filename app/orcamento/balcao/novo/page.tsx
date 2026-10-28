@@ -95,6 +95,7 @@ export default function NovoOrcamentoBalcao() {
         supabase
           .from('clientes')
           .select('id,nome,apelido,whatsapp,telefone,email,cpf_cnpj,cidade,bairro,endereco,cep')
+          .eq('ativo', true)
           .order('nome')
           .limit(1000),
       ])

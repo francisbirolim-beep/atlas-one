@@ -35,10 +35,11 @@ export async function obterOuCriarCliente(dados: DadosCliente): Promise<string |
   if (whatsapp) {
     const { data: existente } = await supabase
       .from('clientes')
-      .select('id')
+      .select('id,ativo')
       .eq('whatsapp', whatsapp)
       .maybeSingle()
 
+    if (existente?.ativo === false) return null // Não reabrir cadastro inativo silenciosamente.
     if (existente) {
       await supabase
         .from('clientes')

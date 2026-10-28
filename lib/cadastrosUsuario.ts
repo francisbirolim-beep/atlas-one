@@ -19,7 +19,7 @@ export const CADASTROS_360 = [
 ] as const
 
 export type Cadastro360Id = typeof CADASTROS_360[number]['id']
-export type Cadastro360Acao = 'ver' | 'criar' | 'editar' | 'excluir' | 'aprovar'
+export type Cadastro360Acao = 'ver' | 'criar' | 'editar' | 'excluir' | 'aprovar' | 'inativar' | 'reativar'
 
 export const CADASTRO_360_ACOES: { id: Cadastro360Acao; label: string }[] = [
   { id: 'ver', label: 'Ver' },
@@ -27,6 +27,8 @@ export const CADASTRO_360_ACOES: { id: Cadastro360Acao; label: string }[] = [
   { id: 'editar', label: 'Editar' },
   { id: 'excluir', label: 'Excluir' },
   { id: 'aprovar', label: 'Aprovar' },
+  { id: 'inativar', label: 'Inativar' },
+  { id: 'reativar', label: 'Reativar' },
 ]
 
 export interface CadastrosUsuarioConfig {
@@ -38,19 +40,19 @@ const IDS_VALIDOS = new Set<Cadastro360Id>(CADASTROS_360.map(item => item.id))
 const ACOES_VALIDAS = new Set<Cadastro360Acao>(CADASTRO_360_ACOES.map(item => item.id))
 const TODOS = CADASTROS_360.map(item => item.id) as Cadastro360Id[]
 const TODAS_ACOES = CADASTRO_360_ACOES.map(item => item.id)
+// Novas ações sensíveis são opt-in. Nunca herdam liberação de configurações antigas.
+export const ACOES_LEGADAS: Cadastro360Acao[] = ['ver', 'criar', 'editar', 'excluir', 'aprovar']
 
 function chaveLegada(usuarioId: string) {
   return `cadastros_360_usuario:${usuarioId}`
 }
 
-function acoesCompletas(ids: Cadastro360Id[]) {
-  return Object.fromEntries(ids.map(id => [id, [...TODAS_ACOES]])) as Record<Cadastro360Id, Cadastro360Acao[]>
+function acoesCompletas(ids: Cadastro360Id[], role: Usuario['role'] = 'funcionario') {
+  return Object.fromEntries(ids.map(id => [id, role === 'master' ? [...TODAS_ACOES] : [...ACOES_LEGADAS]])) as Record<Cadastro360Id, Cadastro360Acao[]>
 }
 
-export function cadastrosConfigPadrao(_role: Usuario['role'] = 'funcionario'): CadastrosUsuarioConfig {
-  // Compatibilidade: usuários que já tinham acesso aos Cadastros 360 continuam
-  // com as mesmas opções e, até configuração explícita, com todas as ações.
-  return { visiveis: [...TODOS], acoes: acoesCompletas(TODOS) }
+export function cadastrosConfigPadrao(role: Usuario['role'] = 'funcionario'): CadastrosUsuarioConfig {
+  return { visiveis: [...TODOS], acoes: acoesCompletas(TODOS, role) }
 }
 
 function normalizarAcoes(valor: unknown, visiveis: Cadastro360Id[], legadoSemMatriz: boolean) {
@@ -127,7 +129,7 @@ export function temPermissaoCadastro360(
   if (usuario?.role === 'master') return true
   if (!config?.visiveis.includes(cadastro)) return false
   const acoes = config.acoes?.[cadastro]
-  if (!acoes) return true
+  if (!acoes) return ACOES_LEGADAS.includes(acao)
   return acoes.includes(acao)
 }
 

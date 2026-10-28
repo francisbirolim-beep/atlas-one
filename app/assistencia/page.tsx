@@ -71,6 +71,7 @@ export default function Assistencia() {
       const { data } = await supabase
         .from('clientes')
         .select('*')
+        .eq('ativo', true)
         .order('nome')
         .limit(1000)
       if (!ativo) return
