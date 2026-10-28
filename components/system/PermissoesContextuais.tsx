@@ -92,9 +92,22 @@ export default function PermissoesContextuais() {
     return () => window.removeEventListener('atlas:cliente360-aba', atualizar)
   }, [pathname])
 
+  // O atalho do Kanban abre exatamente as ações do módulo Fazer orçamento,
+  // sem autorizar ninguém automaticamente e sem mexer em outros módulos.
+  useEffect(() => {
+    if (pathname !== '/kanban/comercial' || !master) return
+    const abrirKanban = () => {
+      setModuloId('fazer-orcamento')
+      setAberto(true)
+      void carregar()
+    }
+    window.addEventListener('atlas:permissoes-kanban-comercial', abrirKanban)
+    return () => window.removeEventListener('atlas:permissoes-kanban-comercial', abrirKanban)
+  }, [pathname, master])
+
   useEffect(() => {
     if (!aberto) return
-    const primeiro = contexto.moduloIds.find(id => modulos.some(m => m.id === id))
+    const primeiro = pathname === '/kanban/comercial' ? 'fazer-orcamento' : contexto.moduloIds.find(id => modulos.some(m => m.id === id))
     setModuloId(primeiro || '')
   }, [aberto, contexto.titulo, modulos])
 
@@ -249,7 +262,7 @@ export default function PermissoesContextuais() {
         aria-label="Gerenciar permissões desta tela"
         title="Atalho do Master: quem pode ver e editar esta tela"
       >
-        <ShieldCheck size={16} /> Permissões
+        <ShieldCheck size={16} /> {pathname === '/kanban/comercial' ? 'Autorizar cards' : 'Permissões'}
       </button>
       {aberto && (
         <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-950/55 px-2 py-5 sm:items-center sm:px-4" role="presentation">
@@ -276,6 +289,13 @@ export default function PermissoesContextuais() {
                     </label>
                     <Link href="/configuracoes/usuarios" onClick={() => setAberto(false)} className="self-end rounded-xl border border-indigo-200 px-3 py-2.5 text-center text-xs font-semibold text-indigo-700 hover:bg-indigo-50">Gerenciamento completo ↗</Link>
                   </div>
+                  {pathname === '/kanban/comercial' && moduloAtual?.id === 'fazer-orcamento' && (
+                    <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 text-sm text-indigo-900">
+                      <strong>Autorizar retirada de cards do Kanban comercial</strong>
+                      <p className="mt-1">1. Selecione o funcionário. 2. Confirme que Setor e Módulo estão em <strong>Consulta e edição</strong>. 3. Marque <strong>Retirar card duplicado/incorreto</strong> e, se desejar, <strong>Restaurar card retirado</strong>. 4. Toque em <strong>Salvar permissões desta área</strong>.</p>
+                      <p className="mt-1 text-xs">Essa autorização não libera exclusão de colunas nem apaga orçamentos, vendas ou histórico.</p>
+                    </div>
+                  )}
                   {contexto.recursoCliente360 && <p className="mb-3 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-800">Cliente 360: a permissão da aba é independente das ações do setor. Para liberar uma aba bloqueada pelo setor, libere também a ação de consulta correspondente abaixo.</p>}
                   {!moduloAtual && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">Selecione a área correspondente a esta tela para ver e ajustar suas ações. As permissões específicas do WhatsApp continuam no gerenciamento completo.</p>}
                   <div className="grid gap-4 md:grid-cols-[minmax(185px,0.95fr)_minmax(0,1.7fr)]">
@@ -344,8 +364,10 @@ export default function PermissoesContextuais() {
                                 </label>
                               </div>
                               {moduloAtual.id==='configuracoes'&&<p className="px-3 py-3 text-xs font-semibold text-violet-800">Exclusivo do Master. Não é possível liberar configurações do Atlas para funcionários.</p>}
-                              {moduloAtual.acoes.map(acao => (
-                                <label key={acao.id} className="flex flex-col gap-2 border-b border-slate-100 px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+                              {(pathname === '/kanban/comercial' && moduloAtual.id === 'fazer-orcamento'
+                                ? [...moduloAtual.acoes].sort((a,b)=>Number(b.id.endsWith('_card'))-Number(a.id.endsWith('_card')))
+                                : moduloAtual.acoes).map(acao => (
+                                <label key={acao.id} className={`flex flex-col gap-2 border-b border-slate-100 px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between ${pathname === '/kanban/comercial' && acao.id.endsWith('_card') ? 'bg-indigo-50/60' : ''}`}>
                                   <span className="min-w-0"><span className="block text-sm font-medium">{acao.label}</span><span className="mt-0.5 block text-xs text-slate-500">{acao.descricao}</span></span>
                                   <label className="flex shrink-0 items-center gap-2 text-xs font-semibold text-slate-600">
                                     <input type="checkbox" aria-label={'Liberar ação '+acao.label}
