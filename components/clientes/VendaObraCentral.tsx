@@ -305,7 +305,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   async function carregar(){
     setCarregando(true);setErro('')
-    const vr=await supabase.from('vendas_obras').select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,custo_previsto,status,confirmado_em,confirmado_por_nome,itens_snapshot').eq('id',vendaId).eq('cliente_id',clienteId).maybeSingle()
+    const vr=await supabase.from('vendas_obras').select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,custo_previsto,status,confirmado_em,confirmado_por_nome,itens_snapshot').eq('id',vendaId).eq('cliente_id',clienteId).is('excluida_em',null).maybeSingle()
     if(vr.error||!vr.data){setErro('Venda não encontrada para este cliente.');setCarregando(false);return}
     const v=vr.data as Venda; setVenda(v)
     // Cada lote é uma solicitação de cotação por categoria, independente de compra aprovada.
