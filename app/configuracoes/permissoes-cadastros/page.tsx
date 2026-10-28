@@ -8,6 +8,7 @@ import { usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
 import {
   CADASTRO_360_ACOES,
+  ACOES_LEGADAS,
   CADASTROS_360,
   cadastrosConfigPadrao,
   lerCadastrosUsuarioConfig,
@@ -73,7 +74,7 @@ export default function PermissoesCadastrosPage() {
   function temAcao(id: Cadastro360Id, acao: Cadastro360Acao) {
     if (!config || !habilitado(id)) return false
     const lista = config.acoes?.[id]
-    return lista ? lista.includes(acao) : true
+    return lista ? lista.includes(acao) : ACOES_LEGADAS.includes(acao)
   }
 
   function alternarCadastro(id: Cadastro360Id) {
@@ -81,13 +82,13 @@ export default function PermissoesCadastrosPage() {
     const ligado = habilitado(id)
     const visiveis = ligado ? config.visiveis.filter(x => x !== id) : [...config.visiveis, id]
     const acoes = { ...(config.acoes || {}) }
-    acoes[id] = ligado ? [] : CADASTRO_360_ACOES.map(a => a.id)
+    acoes[id] = ligado ? [] : [...ACOES_LEGADAS]
     setConfig({ visiveis, acoes })
   }
 
   function alternarAcao(id: Cadastro360Id, acao: Cadastro360Acao) {
     if (!config || selecionado?.role === 'master' || !habilitado(id)) return
-    const atual = config.acoes?.[id] ? [...(config.acoes[id] || [])] : CADASTRO_360_ACOES.map(a => a.id)
+    const atual = config.acoes?.[id] ? [...(config.acoes[id] || [])] : [...ACOES_LEGADAS]
     const existe = atual.includes(acao)
     let proxima = existe ? atual.filter(a => a !== acao) : [...atual, acao]
     if (acao === 'ver' && existe) proxima = []
@@ -99,7 +100,8 @@ export default function PermissoesCadastrosPage() {
   function marcarTudo() {
     if (!config || selecionado?.role === 'master') return
     const visiveis = CADASTROS_360.map(c => c.id)
-    const acoes = Object.fromEntries(visiveis.map(id => [id, CADASTRO_360_ACOES.map(a => a.id)]))
+    // Liberação em lote não concede ações críticas de inativar/reativar.
+    const acoes = Object.fromEntries(visiveis.map(id => [id, [...ACOES_LEGADAS]]))
     setConfig({ visiveis, acoes })
   }
 
@@ -130,7 +132,7 @@ export default function PermissoesCadastrosPage() {
       <header className="mb-5 flex flex-wrap items-center gap-3">
         <Link href="/configuracoes/usuarios" className="rounded-lg p-2 text-slate-500 hover:bg-white"><ArrowLeft size={20}/></Link>
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-navy text-white"><ShieldCheck size={20}/></div>
-        <div className="min-w-0 flex-1"><h1 className="text-xl font-bold text-slate-900">Permissões dos Cadastros 360</h1><p className="text-sm text-slate-500">Controle por usuário quem pode ver, criar, editar, excluir e aprovar.</p></div>
+        <div className="min-w-0 flex-1"><h1 className="text-xl font-bold text-slate-900">Permissões dos Cadastros 360</h1><p className="text-sm text-slate-500">Controle individual: visualizar, criar, editar, excluir, aprovar, inativar e reativar. As duas últimas exigem autorização expressa.</p></div>
       </header>
 
       <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
@@ -149,7 +151,7 @@ export default function PermissoesCadastrosPage() {
               <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="p-3 text-left">Cadastro</th><th className="p-3 text-center">Acesso</th>{CADASTRO_360_ACOES.map(a=><th key={a.id} className="p-3 text-center">{a.label}</th>)}</tr></thead>
-                  <tbody>{CADASTROS_360.map(cadastro=>{const ligado=selecionado.role==='master'||habilitado(cadastro.id);return <tr key={cadastro.id} className="border-t border-slate-100"><td className="p-3"><p className="font-medium text-slate-800">{cadastro.label}</p><p className="text-[11px] text-slate-400">{cadastro.grupo}</p></td><td className="p-3 text-center"><button type="button" disabled={selecionado.role==='master'} onClick={()=>alternarCadastro(cadastro.id)} className={`mx-auto flex h-7 w-7 items-center justify-center rounded-lg border ${ligado?'border-emerald-300 bg-emerald-50 text-emerald-700':'border-slate-200 text-transparent'} disabled:opacity-70`}>{ligado&&<Check size={15}/>}</button></td>{CADASTRO_360_ACOES.map(acao=>{const ativo=selecionado.role==='master'||temAcao(cadastro.id,acao.id);return <td key={acao.id} className="p-3 text-center"><label className={`inline-flex items-center justify-center ${!ligado?'opacity-30':''}`}><input type="checkbox" checked={ativo} disabled={selecionado.role==='master'||!ligado} onChange={()=>alternarAcao(cadastro.id,acao.id)} className="h-4 w-4 rounded border-slate-300"/></label></td>})}</tr>})}</tbody>
+                  <tbody>{CADASTROS_360.map(cadastro=>{const ligado=selecionado.role==='master'||habilitado(cadastro.id);return <tr key={cadastro.id} className="border-t border-slate-100"><td className="p-3"><p className="font-medium text-slate-800">{cadastro.label}</p><p className="text-[11px] text-slate-400">{cadastro.grupo}</p></td><td className="p-3 text-center"><button type="button" disabled={selecionado.role==='master'} onClick={()=>alternarCadastro(cadastro.id)} className={`mx-auto flex h-7 w-7 items-center justify-center rounded-lg border ${ligado?'border-emerald-300 bg-emerald-50 text-emerald-700':'border-slate-200 text-transparent'} disabled:opacity-70`}>{ligado&&<Check size={15}/>}</button></td>{CADASTRO_360_ACOES.map(acao=>{const ativo=selecionado.role==='master'||temAcao(cadastro.id,acao.id);return <td key={acao.id} className="p-3 text-center"><label className={`inline-flex items-center justify-center ${!ligado?'opacity-30':''}`}><input type="checkbox" checked={cadastro.id === 'clientes' || (acao.id !== 'inativar' && acao.id !== 'reativar') ? ativo : false} disabled={selecionado.role==='master'||!ligado||(cadastro.id!=='clientes'&&(acao.id==='inativar'||acao.id==='reativar'))} onChange={()=>alternarAcao(cadastro.id,acao.id)} className="h-4 w-4 rounded border-slate-300"/></label></td>})}</tr>})}</tbody>
                 </table>
               </div>
 

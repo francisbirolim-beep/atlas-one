@@ -126,9 +126,9 @@ export default function AppTopbar() {
       setErroBusca('')
       try {
         const [clientesResp, clientesPorApelidoResp, orcamentosResp, medicoesResp] = await Promise.all([
-          supabase.from('clientes').select('*').order('created_at', { ascending: false }).limit(300),
+          supabase.from('clientes').select('*').eq('ativo', true).order('created_at', { ascending: false }).limit(300),
           // Localiza apelidos também de clientes antigos, fora dos 300 cadastros recentes.
-          supabase.from('clientes').select('id,nome,apelido,cidade,bairro,cep,endereco,cpf_cnpj,whatsapp,telefone,email').ilike('apelido', `%${q}%`).limit(50),
+          supabase.from('clientes').select('id,nome,apelido,cidade,bairro,cep,endereco,cpf_cnpj,whatsapp,telefone,email').eq('ativo', true).ilike('apelido', `%${q}%`).limit(50),
           supabase.from('orcamentos').select('*').order('created_at', { ascending: false }).limit(300),
           supabase.from('medicoes_finais').select('*').order('created_at', { ascending: false }).limit(200),
         ])

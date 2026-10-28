@@ -44,7 +44,7 @@ async function buscarClientePorId(id: string, empresaId: string): Promise<Client
 async function buscarClientes(q: string, empresaId: string): Promise<ClienteCatalogo[]> {
   const termos = termosBusca(q)
   if (!termos.length) return []
-  const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).eq('empresa_id', empresaId).order('nome').limit(1000)
+  const { data, error } = await supabaseAdmin.from('clientes').select(CAMPOS_CLIENTE).eq('empresa_id', empresaId).eq('ativo', true).order('nome').limit(1000)
   if (error) throw error
   return ((data || []) as ClienteCatalogo[])
     .filter(c => correspondeBuscaAtlas(q, c.nome, c.apelido, c.cpf_cnpj, c.telefone, c.whatsapp, c.email, c.cidade, c.bairro, c.endereco, c.cep))

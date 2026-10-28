@@ -62,7 +62,7 @@ export async function GET(req:NextRequest){
  try{
   const [forn,cli,plano,obras,compras]=await Promise.all([
    pagar?supabaseAdmin.from('fornecedores').select('id,nome,cnpj_cpf,telefone,whatsapp,cidade,endereco,email,contato').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(600):Promise.resolve({data:[],error:null}),
-   receber?supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,telefone,whatsapp,cidade,endereco,email').eq('empresa_id',u.empresa_id).order('nome').limit(1000):Promise.resolve({data:[],error:null}),
+   receber?supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,telefone,whatsapp,cidade,endereco,email').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(1000):Promise.resolve({data:[],error:null}),
    pagar?supabaseAdmin.from('financeiro_plano_contas').select('id,codigo,nome,grupo').eq('empresa_id',u.empresa_id).eq('ativo',true).order('codigo').limit(250):Promise.resolve({data:[],error:null}),
    receber?supabaseAdmin.from('obras').select('id,cliente_id,nome,numero').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(1000):Promise.resolve({data:[],error:null}),
    pagar?supabaseAdmin.from('compras_nfs').select('id,numero,fornecedor_id,fornecedor_nome,data_emissao').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(250):Promise.resolve({data:[],error:null})

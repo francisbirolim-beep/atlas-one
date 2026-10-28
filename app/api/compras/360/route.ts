@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     if (!acessos.consultar) {
       const [produtos, clientes, obras] = await Promise.all([
         supabaseAdmin.from('produtos').select('id,nome,codigo,categoria,unidade').eq('empresa_id',empresaId).eq('ativo',true).order('nome').limit(5000),
-        supabaseAdmin.from('clientes').select('id,nome,apelido,cidade').eq('empresa_id',empresaId).order('nome').limit(2000),
+        supabaseAdmin.from('clientes').select('id,nome,apelido,cidade').eq('empresa_id',empresaId).eq('ativo',true).order('nome').limit(2000),
         supabaseAdmin.from('obras').select('id,cliente_id,nome,status').eq('empresa_id',empresaId).order('nome').limit(4000),
       ]);
       if (produtos.error || clientes.error || obras.error) throw new Error('Erro ao carregar dados de solicitação');
@@ -122,6 +122,7 @@ export async function GET(req: NextRequest) {
         .from("clientes")
         .select("id,nome,apelido,cidade")
         .eq("empresa_id", empresaId)
+        .eq("ativo", true)
         .order("nome")
         .limit(2000),
       supabaseAdmin

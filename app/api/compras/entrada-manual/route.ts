@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     if (tipo === 'clientes') {
       if (q.length < 3) return NextResponse.json({ clientes: [] })
       const { data, error } = await db.from('clientes').select('id,nome,cidade')
-        .eq('empresa_id', empresa).ilike('nome', `%${q}%`).order('nome').limit(30)
+        .eq('empresa_id', empresa).eq('ativo',true).ilike('nome', `%${q}%`).order('nome').limit(30)
       if (error) throw error
       return NextResponse.json({ clientes: data || [] })
     }
