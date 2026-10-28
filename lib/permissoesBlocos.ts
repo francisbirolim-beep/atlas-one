@@ -22,6 +22,8 @@ export const ACOES_CMV_DELEGACAO_EXPLICITA = [
  'financeiro.cmv.recebimentos_conferir_terceiros',
  'comercial.orcamento.retirar_card',
  'comercial.orcamento.restaurar_card',
+ 'compras.geral.corrigir_imagem_produto',
+ 'compras.geral.inativar_produto',
 ] as const
 const DELEGACOES_EXPLICITAS = new Set<string>(ACOES_CMV_DELEGACAO_EXPLICITA)
 export function fallbackAcaoPermissao(id:string,setor:NivelPermissao):NivelPermissao {
@@ -310,6 +312,8 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('compras.geral.editar_todos','Editar todas as solicitações','Alterar ou cancelar solicitações da empresa, com histórico.'),
     a('compras.geral.financeiro','Consultar valores e custos','Ver valores financeiros, preços e custos de compras.'),
     a('compras.geral.solicitar','Criar solicitação','Abrir necessidade/pedido de compra.'),
+    a('compras.geral.corrigir_imagem_produto','Corrigir imagem do material','Substituir a imagem principal de perfis e acessórios, com histórico e validação.'),
+    a('compras.geral.inativar_produto','Inativar material no filtro','Ocultar material da lista de novas compras sem apagar o cadastro ou histórico.'),
     a('compras.geral.editar','Editar solicitação','Corrigir necessidades de material quando autorizado.'),
     a('compras.geral.cotar','Fazer cotação','Registrar propostas de fornecedores.'),
     a('compras.geral.aprovar','Aprovar compra','Autorizar pedido de compra.'),

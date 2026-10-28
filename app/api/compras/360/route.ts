@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     // Não expor lista de compras, fornecedores, valores ou cotações sem "consultar".
     if (!acessos.consultar) {
       const [produtos, clientes, obras] = await Promise.all([
-        supabaseAdmin.from('produtos').select('id,nome,codigo,categoria,unidade').eq('empresa_id',empresaId).eq('ativo',true).order('nome').limit(5000),
+        supabaseAdmin.from('produtos').select('id,nome,codigo,categoria,unidade,foto_url,ativo').eq('empresa_id',empresaId).eq('ativo',true).order('nome').limit(5000),
         supabaseAdmin.from('clientes').select('id,nome,apelido,cidade').eq('empresa_id',empresaId).eq('ativo',true).order('nome').limit(2000),
         supabaseAdmin.from('obras').select('id,cliente_id,nome,status').eq('empresa_id',empresaId).order('nome').limit(4000),
       ]);
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
         .limit(2000),
       supabaseAdmin
         .from("produtos")
-        .select("id,nome,codigo,categoria,unidade,custo,ativo")
+        .select("id,nome,codigo,categoria,unidade,custo,ativo,foto_url")
         .eq("empresa_id", empresaId)
         .eq("ativo", true)
         .order("nome")
@@ -146,6 +146,21 @@ export async function GET(req: NextRequest) {
       if (resposta.error) throw new Error(resposta.error.message);
     }
 
+    // Produtos inativados deixam de aparecer na busca, mas ainda precisam
+    // resolver os nomes/imagens dos cards de pedidos já existentes.
+    const ativosPorId = new Set((produtosResp.data || []).map((p) => p.id));
+    const historicosIds = Array.from(new Set(
+      (necessidadesResp.data || [])
+        .map((item) => item.produto_id)
+        .filter((id): id is string => typeof id === "string" && !ativosPorId.has(id)),
+    ));
+    const produtosHistoricos = historicosIds.length
+      ? await supabaseAdmin.from("produtos")
+          .select("id,nome,codigo,categoria,unidade,custo,ativo,foto_url")
+          .eq("empresa_id", empresaId).in("id", historicosIds)
+      : { data: [], error: null };
+    if (produtosHistoricos.error) throw new Error(produtosHistoricos.error.message);
+
     const nfIds = Array.from(
       new Set(
         (historicoResp.data || []).map((item) => item.nf_id).filter(Boolean),
@@ -178,7 +193,8 @@ export async function GET(req: NextRequest) {
       acessos,
       necessidades: necessidadesResp.data || [],
       cotacoes: (acessos.financeiro || acessos.cotar || acessos.comprar) ? (cotacoesResp.data || []) : (cotacoesResp.data || []).map(c=>({ ...c,preco_unitario:null,frete:0,forma_pagamento:null })),
-      produtos: (produtosResp.data || []).map(p=>(acessos.financeiro || acessos.cotar || acessos.comprar)?p:{...p,custo:null}),
+      produtos: [...(produtosResp.data || []), ...(produtosHistoricos.data || [])]
+        .map(p => (acessos.financeiro || acessos.cotar || acessos.comprar) ? p : { ...p, custo: null }),
       fornecedores: (fornecedoresResp.data || []).map(f=>(acessos.financeiro || acessos.cotar || acessos.comprar)?f:{...f,pedido_minimo:null}),
       ultimoPrecoPorProduto: (acessos.financeiro || acessos.cotar || acessos.comprar) ? Object.fromEntries(ultimoPorProduto) : {},
       historicoWVetroSuprimentos: (acessos.financeiro || acessos.cotar || acessos.comprar) ? (historicoWVetroResp.data || []) : [],
