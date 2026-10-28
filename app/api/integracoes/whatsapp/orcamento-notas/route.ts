@@ -25,9 +25,9 @@ export async function GET(req: NextRequest) {
       .select('id,modo_entrada,ia_fontes,ia_resultado_original,descricao_livre,created_at').eq('id', id).eq('empresa_id', usuario.empresa_id).maybeSingle()
     if (erroOrcamento) throw erroOrcamento
     if (!orcamento || orcamento.modo_entrada !== 'whatsapp') return NextResponse.json({ error: 'Notas não encontradas.' }, { status: 404 })
-    const { data: intake, error: erroIntake } = await supabaseAdmin.from('atendimento_whatsapp_intakes')
+    const { data: intakes, error: erroIntake } = await supabaseAdmin.from('atendimento_whatsapp_intakes')
       .select('id,conversa_id,participante_nome,conteudo_bruto,mensagens_ids,anexos,primeira_mensagem_em,ultima_mensagem_em,gatilho_fechamento,ai_resultado,atendimento_whatsapp_grupos(nome)')
-      .eq('orcamento_id', id).eq('empresa_id', usuario.empresa_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      .eq('orcamento_id', id).eq('empresa_id', usuario.empresa_id).order('created_at', { ascending: true }).limit(150)
     if (erroIntake) throw erroIntake
     // Registros anteriores à regra atual podem ter perdido o vínculo de intake,
     // mas preservam uma cópia imutável das mensagens e mídias em ia_fontes.
@@ -36,15 +36,24 @@ export async function GET(req: NextRequest) {
       conteudo_bruto?: string
       anexos?: Array<Record<string, unknown>>
     }
-    const dadosIntake = intake || null
+    const registros = intakes || []
+    const dadosIntake = registros[registros.length - 1] || null
     const grupoRegistrado = (dadosIntake?.atendimento_whatsapp_grupos as unknown as { nome?: string } | null)?.nome || ''
-    const anexos = Array.isArray(dadosIntake?.anexos) ? dadosIntake.anexos
-      : Array.isArray(fontes.anexos) ? fontes.anexos : []
+    const anexosAgrupados = registros.flatMap(r => Array.isArray(r.anexos) ? r.anexos : [])
+    const anexosOriginais = anexosAgrupados.length ? anexosAgrupados :
+      Array.isArray(fontes.anexos) ? fontes.anexos : []
+    const anexos = anexosOriginais.filter((a: any, index: number) => {
+      const chave = String(a?.whatsapp_message_id || a?.mensagem_id || '')
+      return !chave || anexosOriginais.findIndex((b: any) =>
+        String(b?.whatsapp_message_id || b?.mensagem_id || '') === chave) === index
+    })
 
     // Na importação antiga, o intake pode não existir mais. As mídias mantêm
     // o id da mensagem: ele aponta à conversa e ao JID originais, sem inferir
     // o grupo pelo nome do cliente ou pelo conteúdo das mensagens.
-    let conversaId: string | null = dadosIntake?.conversa_id || null
+    const conversasVinculadas = [...new Set(registros.map(r => r.conversa_id).filter(Boolean))]
+    let conversaId: string | null = conversasVinculadas.length === 1
+      ? conversasVinculadas[0]! : (registros.length ? null : dadosIntake?.conversa_id || null)
     let grupo = grupoRegistrado
     if (!dadosIntake && anexos.length) {
       const refs = [...new Set(anexos.map((a: any) => String(a?.mensagem_id || ''))
@@ -86,7 +95,11 @@ export async function GET(req: NextRequest) {
     const origemStatus = !grupo ? 'nao_identificada' : grupoConferido ? 'correta' : 'outro_grupo'
     const historico = !dadosIntake
     if (!grupo) grupo = 'Não foi possível identificar o grupo original'
-    const textoOriginal = String(dadosIntake?.conteudo_bruto || fontes.conteudo_bruto || orcamento.descricao_livre || '')
+    const textoOriginal = registros.length
+      ? registros.map(r => String(r.conteudo_bruto || '')).filter(Boolean).join('\n\n')
+      : String(fontes.conteudo_bruto || orcamento.descricao_livre || '')
+    const idsMensagens = [...new Set(registros.flatMap(r =>
+      Array.isArray(r.mensagens_ids) ? r.mensagens_ids.map(String) : []))]
     if (!dadosIntake && !textoOriginal && !anexos.length)
       return NextResponse.json({ error: 'Este card antigo não possui conteúdo recuperável do WhatsApp.' }, { status: 404 })
     const paths = [...new Set(anexos.map((a: any) => String(a?.media_path || ''))
@@ -104,9 +117,9 @@ export async function GET(req: NextRequest) {
       historico,
       conversaId,
       participanteNome: dadosIntake?.participante_nome || null,
-      primeiraMensagemEm: dadosIntake?.primeira_mensagem_em || orcamento.created_at,
+      primeiraMensagemEm: registros[0]?.primeira_mensagem_em || orcamento.created_at,
       ultimaMensagemEm: dadosIntake?.ultima_mensagem_em || orcamento.created_at,
-      totalMensagens: Array.isArray(dadosIntake?.mensagens_ids) ? dadosIntake.mensagens_ids.length : null,
+      totalMensagens: registros.length ? idsMensagens.length : null,
       gatilho: dadosIntake?.gatilho_fechamento || null,
       textoOriginal,
       resumoIA: dadosIntake?.ai_resultado?.resumo || (orcamento.ia_resultado_original as any)?.resumo || null,
