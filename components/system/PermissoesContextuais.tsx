@@ -35,12 +35,12 @@ function copiarEdicao(entrada: AcessoPorUsuario): Edicao {
   }
 }
 
-function nivelResumo(entrada: Edicao, modulo: ItemPermissaoBloco | undefined, recurso?: RecursoCliente360): NivelPermissao {
+function nivelResumo(entrada: Edicao, modulo: ItemPermissaoBloco | undefined, recurso?: RecursoCliente360, acoesDaPagina?: ItemPermissaoBloco['acoes']): NivelPermissao {
   if (recurso) return nivelCliente360({ role: 'funcionario', setores: entrada.setores, acoes: entrada.config.acoes, modulos:entrada.config.modulos, cliente360: entrada.config.cliente360 }, recurso)
   if (!modulo) return 'oculto'
   const setor = entrada.setores[modulo.setorId] || 'oculto'
   if (setor === 'oculto') return 'oculto'
-  const permitidas = modulo.acoes.map(acao => nivelEfetivoAcao(
+  const permitidas = (acoesDaPagina || modulo.acoes).map(acao => nivelEfetivoAcao(
     'funcionario',entrada.setores,entrada.config,modulo.setorId,acao.id))
   if (!permitidas.some(nivel => nivel !== 'oculto')) return 'oculto'
   if (permitidas.some(nivel => nivel === 'edicao')) return 'edicao'
@@ -64,8 +64,22 @@ export default function PermissoesContextuais() {
 
   const contexto = useMemo(() => resolverContextoPermissoes(pathname, abaCliente), [pathname, abaCliente])
   const modulos = useMemo(() => montarBlocosPermissao(setores).flatMap(bloco => bloco.itens), [setores])
-  const moduloAtual = modulos.find(modulo => modulo.id === moduloId)
-  const modulosDaTela = modulos
+  // O atalho contextual nunca oferece módulos de outras telas. O catálogo
+  // completo continua disponível apenas em Configurações > Usuários.
+  // No Kanban comercial o módulo correspondente é Fazer orçamento.
+  const modulosDaTela = useMemo(() => {
+    const ids = pathname === '/kanban/comercial' ? ['fazer-orcamento'] : contexto.moduloIds
+    return ids.map(id => modulos.find(modulo => modulo.id === id))
+      .filter((modulo): modulo is ItemPermissaoBloco => Boolean(modulo))
+  }, [pathname, contexto, modulos])
+  const moduloAtual = modulosDaTela.find(modulo => modulo.id === moduloId)
+  // Retirada/restauração são as únicas autorizações específicas de cards
+  // nesta tela. Edição de preço, PDFs etc. pertencem ao módulo completo.
+  const acoesDaTela = moduloAtual
+    ? pathname === '/kanban/comercial'
+      ? moduloAtual.acoes.filter(acao => acao.id === 'comercial.orcamento.retirar_card' || acao.id === 'comercial.orcamento.restaurar_card')
+      : moduloAtual.acoes
+    : []
   const usuarioSelecionado = usuarios.find(entrada => entrada.usuario.id === usuarioId)
   const alterado = Boolean(usuarioSelecionado && rascunho &&
     JSON.stringify(copiarEdicao(usuarioSelecionado)) !== JSON.stringify(rascunho))
@@ -107,9 +121,9 @@ export default function PermissoesContextuais() {
 
   useEffect(() => {
     if (!aberto) return
-    const primeiro = pathname === '/kanban/comercial' ? 'fazer-orcamento' : contexto.moduloIds.find(id => modulos.some(m => m.id === id))
+    const primeiro = modulosDaTela[0]?.id
     setModuloId(primeiro || '')
-  }, [aberto, contexto.titulo, modulos])
+  }, [aberto, modulosDaTela])
 
   useEffect(() => {
     if (!aberto) return
@@ -173,7 +187,7 @@ export default function PermissoesContextuais() {
       if((anterior==='oculto'&&nivel!=='oculto')||(anterior==='consulta'&&nivel==='edicao')){
         for(const item of modulosDaTela.filter(item=>item.setorId===moduloAtual.setorId)){
           modulos[item.id]=anterior==='consulta'?'consulta':'oculto'
-          if(anterior==='consulta')for(const acao of item.acoes){
+          if(anterior==='consulta')for(const acao of (pathname === '/kanban/comercial' && item.id === 'fazer-orcamento' ? acoesDaTela : item.acoes)){
             if(!(acao.id in acoes))acoes[acao.id]='consulta'
           }
         }
@@ -191,8 +205,8 @@ export default function PermissoesContextuais() {
       if(!atual)return atual
       const anterior=atual.config.modulos?.[moduloAtual.id]||atual.setores[moduloAtual.setorId]||'oculto'
       const acoes={...atual.config.acoes}
-      if(anterior==='oculto'&&nivel!=='oculto')for(const acao of moduloAtual.acoes)acoes[acao.id]='oculto'
-      else if(anterior==='consulta'&&nivel==='edicao')for(const acao of moduloAtual.acoes){
+      if(anterior==='oculto'&&nivel!=='oculto')for(const acao of acoesDaTela)acoes[acao.id]='oculto'
+      else if(anterior==='consulta'&&nivel==='edicao')for(const acao of acoesDaTela){
         if(!(acao.id in acoes))acoes[acao.id]='consulta'
       }
       return {...atual,config:{...atual.config,
@@ -280,14 +294,21 @@ export default function PermissoesContextuais() {
               ) : (
                 <>
                   <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                    <label className="text-xs font-semibold text-slate-600">
-                      Área / módulo de permissões
-                      <select value={moduloId} onChange={evento => { setModuloId(evento.target.value); setMensagem('') }} className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">
-                        <option value="">Selecione a área</option>
-                        {modulos.map(modulo => <option key={modulo.id} value={modulo.id}>{modulo.label}</option>)}
-                      </select>
-                    </label>
-                    <Link href="/configuracoes/usuarios" onClick={() => setAberto(false)} className="self-end rounded-xl border border-indigo-200 px-3 py-2.5 text-center text-xs font-semibold text-indigo-700 hover:bg-indigo-50">Gerenciamento completo ↗</Link>
+                    <div className="min-w-0 text-xs font-semibold text-slate-600">
+                      Permissões relacionadas à tela atual
+                      {modulosDaTela.length === 1 ? (
+                        <div className="mt-1 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm font-bold text-indigo-900">
+                          {contexto.titulo} <span className="font-normal">· {moduloAtual?.label}</span>
+                        </div>
+                      ) : modulosDaTela.length > 1 ? (
+                        <select aria-label="Escolher módulo desta tela" value={moduloId} onChange={evento => { setModuloId(evento.target.value); setMensagem('') }} className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">
+                          {modulosDaTela.map(modulo => <option key={modulo.id} value={modulo.id}>{modulo.label}</option>)}
+                        </select>
+                      ) : (
+                        <p className="mt-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-normal text-amber-900">Esta tela ainda não possui permissões próprias cadastradas.</p>
+                      )}
+                    </div>
+                    <Link href="/configuracoes/usuarios" onClick={() => setAberto(false)} className="self-end rounded-xl border border-indigo-200 px-3 py-2.5 text-center text-xs font-semibold text-indigo-700 hover:bg-indigo-50">Gerenciar todos os setores ↗</Link>
                   </div>
                   {pathname === '/kanban/comercial' && moduloAtual?.id === 'fazer-orcamento' && (
                     <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 text-sm text-indigo-900">
@@ -297,14 +318,14 @@ export default function PermissoesContextuais() {
                     </div>
                   )}
                   {contexto.recursoCliente360 && <p className="mb-3 rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-800">Cliente 360: a permissão da aba é independente das ações do setor. Para liberar uma aba bloqueada pelo setor, libere também a ação de consulta correspondente abaixo.</p>}
-                  {!moduloAtual && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">Selecione a área correspondente a esta tela para ver e ajustar suas ações. As permissões específicas do WhatsApp continuam no gerenciamento completo.</p>}
+                  {!moduloAtual && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">Para autorizações que não pertencem a esta tela, use Gerenciar todos os setores. Nenhum acesso de outro módulo será alterado aqui.</p>}
                   <div className="grid gap-4 md:grid-cols-[minmax(185px,0.95fr)_minmax(0,1.7fr)]">
                     <div>
                       <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Quem tem acesso</h3>
                       <div className="max-h-[400px] space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-1.5">
                         {usuarios.map(entrada => {
                           const selecionado = entrada.usuario.id === usuarioId
-                          const nivel = entrada.usuario.role === 'master' ? 'edicao' : nivelResumo(entrada, moduloAtual, contexto.recursoCliente360)
+                          const nivel = entrada.usuario.role === 'master' ? 'edicao' : nivelResumo(entrada, moduloAtual, contexto.recursoCliente360, acoesDaTela)
                           return (
                             <button type="button" key={entrada.usuario.id} onClick={() => selecionar(entrada)} className={'w-full rounded-lg px-3 py-2.5 text-left transition ' + (selecionado ? 'bg-indigo-100 ring-1 ring-indigo-300' : 'hover:bg-slate-50')}>
                               <span className="block truncate text-sm font-semibold">{entrada.usuario.nome}</span>
@@ -334,7 +355,7 @@ export default function PermissoesContextuais() {
                                 <option value="herdar">Herdar regra do setor</option>
                                 {NIVEIS.map(nivel => <option key={nivel.valor} value={nivel.valor}>{nivel.label}</option>)}
                               </select>
-                              <span className="mt-2 block font-normal">Acesso efetivo: {NIVEIS.find(n => n.valor === nivelResumo(rascunho, moduloAtual, contexto.recursoCliente360))?.label}. A regra do setor pode limitar a aba.</span>
+                              <span className="mt-2 block font-normal">Acesso efetivo: {NIVEIS.find(n => n.valor === nivelResumo(rascunho, moduloAtual, contexto.recursoCliente360, acoesDaTela))?.label}. A regra do setor pode limitar a aba.</span>
                             </label>
                           )}
                           {moduloAtual ? (
@@ -364,9 +385,8 @@ export default function PermissoesContextuais() {
                                 </label>
                               </div>
                               {moduloAtual.id==='configuracoes'&&<p className="px-3 py-3 text-xs font-semibold text-violet-800">Exclusivo do Master. Não é possível liberar configurações do Atlas para funcionários.</p>}
-                              {(pathname === '/kanban/comercial' && moduloAtual.id === 'fazer-orcamento'
-                                ? [...moduloAtual.acoes].sort((a,b)=>Number(b.id.endsWith('_card'))-Number(a.id.endsWith('_card')))
-                                : moduloAtual.acoes).map(acao => (
+                              {pathname === '/kanban/comercial' && <p className="border-b border-slate-100 px-3 py-2 text-xs text-slate-600">Apenas as autorizações de cards desta tela aparecem abaixo. Para preços, PDF e outros módulos, use o gerenciamento completo.</p>}
+                              {acoesDaTela.map(acao => (
                                 <label key={acao.id} className={`flex flex-col gap-2 border-b border-slate-100 px-3 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between ${pathname === '/kanban/comercial' && acao.id.endsWith('_card') ? 'bg-indigo-50/60' : ''}`}>
                                   <span className="min-w-0"><span className="block text-sm font-medium">{acao.label}</span><span className="mt-0.5 block text-xs text-slate-500">{acao.descricao}</span></span>
                                   <label className="flex shrink-0 items-center gap-2 text-xs font-semibold text-slate-600">
