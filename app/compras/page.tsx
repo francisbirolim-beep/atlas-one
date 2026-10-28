@@ -291,6 +291,9 @@ export default function ComprasPage() {
     [filtroCategoriaProduto, setFiltroCategoriaProduto] =
       useState<FiltroCategoriaProduto>("todos"),
     [buscaProdutoCatalogo, setBuscaProdutoCatalogo] = useState(""),
+    [produtosBusca, setProdutosBusca] = useState<Produto[]>([]),
+    [carregandoBuscaProdutos, setCarregandoBuscaProdutos] = useState(false),
+    [erroBuscaProdutos, setErroBuscaProdutos] = useState(""),
     [buscaClienteDestino, setBuscaClienteDestino] = useState(""),
     [revisando, setRevisando] = useState(false),
     [selecionadaId, setSelecionadaId] = useState<string | null>(null),
@@ -302,6 +305,35 @@ export default function ComprasPage() {
   useEffect(() => {
     void carregar();
   }, []);
+  useEffect(() => {
+    if (!novaAberta || !dados?.acessos?.solicitar) return;
+    let cancelado = false;
+    setCarregandoBuscaProdutos(true);
+    setErroBuscaProdutos("");
+    setProdutosBusca([]);
+    const tempo = setTimeout(async () => {
+      try {
+        const token = await tokenAtual();
+        if (!token) throw new Error("Sua sessão expirou. Entre novamente no Atlas.");
+        const params = new URLSearchParams({
+          busca: buscaProdutoCatalogo,
+          categoria: filtroCategoriaProduto,
+        });
+        const resposta = await fetch("/api/compras/produtos?" + params, {
+          headers: { Authorization: "Bearer " + token },
+          cache: "no-store",
+        });
+        const json = await resposta.json().catch(() => ({}));
+        if (!resposta.ok) throw new Error(json.error || "Falha ao pesquisar materiais.");
+        if (!cancelado) setProdutosBusca(Array.isArray(json.produtos) ? json.produtos : []);
+      } catch (e) {
+        if (!cancelado) setErroBuscaProdutos(e instanceof Error ? e.message : "Falha na pesquisa.");
+      } finally {
+        if (!cancelado) setCarregandoBuscaProdutos(false);
+      }
+    }, 230);
+    return () => { cancelado = true; clearTimeout(tempo); };
+  }, [novaAberta, dados?.acessos?.solicitar, filtroCategoriaProduto, buscaProdutoCatalogo]);
   useEffect(() => {
     if (!dados) return;
     const clienteId = searchParams.get("cliente");
@@ -365,25 +397,9 @@ export default function ComprasPage() {
   }, [dados, busca]);
   const selecionada =
     dados?.necessidades.find((n) => n.id === selecionadaId) || null;
-  const produtosFiltrados = useMemo(() => {
-    const consultaCodigo = buscaProdutoCatalogo.replace(/[^a-z0-9]/gi, "").toUpperCase();
-    const codigoCompleto = /[A-Z]/.test(consultaCodigo) && /[0-9]/.test(consultaCodigo);
-    const lista = (dados?.produtos || []).filter((p) =>
-      p.ativo !== false &&
-      (filtroCategoriaProduto === "todos" ||
-        grupoCategoriaProduto(p.categoria) === filtroCategoriaProduto) &&
-      (codigoCompleto
-        ? (p.codigo || "").replace(/[^a-z0-9]/gi, "").toUpperCase().startsWith(consultaCodigo)
-        : correspondeBuscaAtlas(buscaProdutoCatalogo, p.nome, p.codigo, p.categoria))
-    );
-    if (codigoCompleto) {
-      lista.sort((a, b) => {
-        const exato = (p: Produto) => (p.codigo || "").replace(/[^a-z0-9]/gi, "").toUpperCase() === consultaCodigo;
-        return Number(exato(b)) - Number(exato(a)) || a.nome.localeCompare(b.nome, "pt-BR");
-      });
-    }
-    return lista;
-  }, [dados?.produtos, filtroCategoriaProduto, buscaProdutoCatalogo]);
+  // Resultados consultados diretamente no banco: não dependem dos 1.000
+  // primeiros itens do catálogo geral carregados no painel.
+  const produtosFiltrados = produtosBusca;
   const cotacoesSelecionadas = (dados?.cotacoes || [])
     .filter((c) => c.necessidade_id === selecionadaId)
     .sort((a, b) => {
@@ -413,7 +429,8 @@ export default function ComprasPage() {
   const fornecedor = (id: string) =>
     dados?.fornecedores.find((f) => f.id === id);
   const produto = (id: string | null) =>
-    dados?.produtos.find((p) => p.id === id);
+    dados?.produtos.find((p) => p.id === id) ||
+    produtosBusca.find((p) => p.id === id);
   const cliente = (id: string | null) =>
     dados?.clientes.find((c) => c.id === id);
   const obra = (id: string | null) => dados?.obras.find((o) => o.id === id);
@@ -446,12 +463,15 @@ export default function ComprasPage() {
       ...anterior,
       produtos: anterior.produtos.map((p) => p.id === id ? { ...p, foto_url: fotoUrl } : p),
     } : anterior);
+    setProdutosBusca((anterior) => anterior.map((p) =>
+      p.id === id ? { ...p, foto_url: fotoUrl } : p));
   }
   function inativarNoCatalogo(id: string) {
     setDados((anterior) => anterior ? {
       ...anterior,
-      produtos: anterior.produtos.filter((p) => p.id !== id),
+      produtos: anterior.produtos.map((p) => p.id === id ? { ...p, ativo: false } : p),
     } : anterior);
+    setProdutosBusca((anterior) => anterior.filter((p) => p.id !== id));
     setForm((anterior) => anterior.produto_id === id
       ? { ...anterior, produto_id: "" }
       : anterior);
@@ -1034,10 +1054,11 @@ export default function ComprasPage() {
                 inputClassName="w-full rounded-xl border p-3 text-sm"
               />
               <p className="mt-1 text-[11px] text-slate-400">
-                {produtosFiltrados.length}{" "}
-                {produtosFiltrados.length === 1
-                  ? "produto encontrado"
-                  : "produtos encontrados"}
+                {carregandoBuscaProdutos
+                  ? "Pesquisando todos os produtos cadastrados..."
+                  : erroBuscaProdutos
+                    ? erroBuscaProdutos
+                    : `${produtosFiltrados.length} ${produtosFiltrados.length === 1 ? "produto encontrado" : "produtos encontrados"}`}
               </p>
             </div>
             <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
@@ -1074,15 +1095,15 @@ export default function ComprasPage() {
                     Mostrando os primeiros 80 resultados. Digite mais caracteres para refinar a busca.
                   </p>
                 )}
-                {produtosFiltrados.length === 0 && (
+                {!carregandoBuscaProdutos && !erroBuscaProdutos && produtosFiltrados.length === 0 && (
                   <p className="px-3 py-3 text-[11px] text-amber-600">
-                    Nenhum produto encontrado com esse filtro/busca.
+                    Nenhum produto ativo encontrado. Você pode digitar o material manualmente.
                   </p>
                 )}
               </div>
             </div>
               <ProdutoCompraDetalhes
-                produto={dados?.produtos.find(p => p.id === form.produto_id) || null}
+                produto={produto(form.produto_id) || null}
               />
             </div>
             <div className="min-w-0">
