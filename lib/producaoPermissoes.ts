@@ -1,6 +1,6 @@
 import type { AcessoUsuarioConfig } from './acessoUsuario'
 import type { NivelPermissao } from './tipos'
-import { moduloDaAcaoPermissao } from './permissoesBlocos'
+import { moduloDaAcaoPermissao, fallbackAcaoPermissao } from './permissoesBlocos'
 
 // Um módulo oculto nunca é reaberto pela permissão de uma ação.
 // Regras explícitas da ação prevalecem, respeitando o teto do setor.
@@ -23,7 +23,7 @@ export function nivelEfetivoAcao(
   const tetoModulo=nivelModulo && PESO[nivelModulo]<PESO[setor]?nivelModulo:setor
   if(tetoModulo==='oculto')return 'oculto'
   const acao=config.acoes?.[acaoId]
-  if(!acao)return tetoModulo // Configuração antiga herda o módulo e setor.
+  if(!acao)return fallbackAcaoPermissao(acaoId,tetoModulo) // Delegações de retirada exigem liberação explícita.
   return PESO[acao]<PESO[tetoModulo]?acao:tetoModulo
 }
 

@@ -20,6 +20,8 @@ export const ACOES_CMV_DELEGACAO_EXPLICITA = [
  'financeiro.cmv.recebimentos_editar_terceiros',
  'financeiro.cmv.recebimentos_cancelar_terceiros',
  'financeiro.cmv.recebimentos_conferir_terceiros',
+ 'comercial.orcamento.retirar_card',
+ 'comercial.orcamento.restaurar_card',
 ] as const
 const DELEGACOES_EXPLICITAS = new Set<string>(ACOES_CMV_DELEGACAO_EXPLICITA)
 export function fallbackAcaoPermissao(id:string,setor:NivelPermissao):NivelPermissao {
@@ -108,6 +110,8 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('comercial.orcamento.pdf','Gerar PDF','Gerar e imprimir orçamento.'),
     a('comercial.orcamento.enviar','Enviar orçamento','Enviar proposta ao cliente/vendedor.'),
     a('comercial.orcamento.aprovar','Confirmar venda','Aprovar/confirmar orçamento vendido.'),
+    a('comercial.orcamento.retirar_card','Retirar card duplicado/incorreto','Retirar um card do Kanban comercial, com motivo e histórico; não exclui o orçamento.'),
+    a('comercial.orcamento.restaurar_card','Restaurar card retirado','Recolocar no Kanban um card retirado, com motivo e histórico.'),
   ]),
   m('venda-balcao','venda-balcao','Venda balcão','PDV, orçamento balcão e consulta de preço.','comercial',[
     a('comercial.balcao.consultar_preco','Consultar preço','Consultar produtos e preços.'),
