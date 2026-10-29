@@ -255,6 +255,8 @@ type ObraResumida = { id: string; nome: string; endereco?: string | null; numero
 
 interface RascunhoOrcamentoRapido {
   itens: ItemForm[]
+  modo?: 'sob-medida' | 'rapido'
+  adicionarAo?: string | null
   clienteIdOrigem: string | null
   clienteNome: string
   clienteWhatsapp: string
@@ -384,6 +386,10 @@ export default function OrcamentoRapido() {
         if (Array.isArray(d.arquivos)) setArquivos(d.arquivos.map(arquivoDoRascunho))
         setRascunhoSalvoEm(rascunho.atualizadoEm)
         setRascunhoRestaurado(true)
+        // Restaura o modo e o destino do orçamento anterior, não somente os campos.
+        if (d.modo === 'sob-medida') params.set('modo', 'sob-medida')
+        if (d.adicionarAo && !params.has('adicionarAo')) params.set('adicionarAo', d.adicionarAo)
+        window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
 
         // Contexto de cliente, obra e complemento permanece intacto.
       }
@@ -410,6 +416,8 @@ export default function OrcamentoRapido() {
       clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
       acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
       arquivos: arquivos.map(arquivoParaRascunho),
+      modo: fluxoSobMedida ? 'sob-medida' : 'rapido',
+      adicionarAo: new URLSearchParams(window.location.search).get('adicionarAo'),
     }
   }
 
