@@ -22,6 +22,7 @@ import type { Usuario } from '@/lib/tipos'
 import VendasCliente360 from '@/components/clientes/VendasCliente360'
 import ComprasClienteCards from '@/components/compras/ComprasClienteCards'
 import CadastroCliente360 from '@/components/clientes/CadastroCliente360'
+import RascunhosOrcamentoCliente from '@/components/clientes/RascunhosOrcamentoCliente'
 import {
   adicionarDocumentoCliente,
   alocarRecebimentoEmObra,
@@ -399,6 +400,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
     </div></header>
 
     <main className="mx-auto max-w-7xl px-4 py-5">{erro&&<div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
+      {pode('orcamentos') && <RascunhosOrcamentoCliente clienteId={cliente.id}/>}
 
 
       <div className="mt-5 overflow-x-auto border-b"><div className="flex min-w-max">{abas.filter(a=>pode(a.id)).map(a=><button key={a.id} onClick={()=>setAba(a.id)} className={`border-b-2 px-3 py-3 text-sm font-semibold ${aba===a.id?'border-brand-navy text-brand-navy':'border-transparent text-slate-500'}`}>{a.label}</button>)}</div></div>
