@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { Acabamento, Cliente, Contramarco, OrigemCliente, TemperaturaLead, TipoEsquadria } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { descricaoMedidaPadrao } from '@/lib/orcamentoRapidoProdutoLivre'
-import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
+import { listarRascunhos, obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
 import { formatarEnderecoObra, coordenadasDaObra, coordenadasEmTexto, decomporEnderecoObra, linkRotaObra, localizacaoRegistradaNaObra } from '@/lib/enderecoObra'
@@ -315,6 +315,10 @@ export default function OrcamentoRapido() {
   const [erroEhValidacao, setErroEhValidacao] = useState(false)
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
+  const [rascunhoIdAtivo, setRascunhoIdAtivo] = useState(RASCUNHO_ID)
+  const [rascunhosDisponiveis, setRascunhosDisponiveis] = useState<Array<{ id: string; atualizadoEm: string; dados: RascunhoOrcamentoRapido }>>([])
+  const [mostrarRascunhos, setMostrarRascunhos] = useState(false)
+  const [itemInvalidoId, setItemInvalidoId] = useState<string | null>(null)
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
   const [rascunhoSalvoEm, setRascunhoSalvoEm] = useState<string | null>(null)
@@ -333,8 +337,21 @@ export default function OrcamentoRapido() {
   useEffect(() => {
     let ativo = true
     const params = new URLSearchParams(window.location.search)
-    const inicioNovoSobMedida = params.get('modo') === 'sob-medida' && params.get('novo') === '1'
-    obterRascunho<RascunhoOrcamentoRapido>(RASCUNHO_ID).then(rascunho => {
+    // Nova solicitação recebe ID próprio e preserva pedidos pendentes.
+    const idSolicitado = params.get('rascunho')
+    const idValido = idSolicitado === RASCUNHO_ID || !!idSolicitado?.startsWith(`${RASCUNHO_ID}:pedido:`)
+    const abrirNovo = !idValido && (params.has('cliente') || params.get('novo') === '1')
+    const idAtivo = idValido ? idSolicitado! : abrirNovo ? `${RASCUNHO_ID}:pedido:${uuidv4()}` : RASCUNHO_ID
+    setRascunhoIdAtivo(idAtivo)
+    if (abrirNovo) {
+      params.set('rascunho', idAtivo)
+      params.delete('novo')
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
+    }
+    void listarRascunhos<RascunhoOrcamentoRapido>()
+      .then(lista => { if (ativo) setRascunhosDisponiveis(lista.filter(r => r.id === RASCUNHO_ID || r.id.startsWith(`${RASCUNHO_ID}:pedido:`)).sort((a, b) => b.atualizadoEm.localeCompare(a.atualizadoEm))) })
+      .catch(() => {})
+    obterRascunho<RascunhoOrcamentoRapido>(idAtivo).then(rascunho => {
       if (!ativo) return
       if (rascunho?.dados) {
         const d = rascunho.dados
@@ -368,18 +385,7 @@ export default function OrcamentoRapido() {
         setRascunhoSalvoEm(rascunho.atualizadoEm)
         setRascunhoRestaurado(true)
 
-        // Um rascunho existente sempre vence o contexto de uma nova navegação.
-        // Assim, abrir outro cliente/obra nunca reaproveita nem apaga o trabalho pendente.
-        params.delete('novo')
-        params.delete('cliente')
-        params.delete('obra')
-        params.delete('adicionarAo')
-        const busca = params.toString()
-        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
-      } else if (inicioNovoSobMedida) {
-        params.delete('novo')
-        const busca = params.toString()
-        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
+        // Contexto de cliente, obra e complemento permanece intacto.
       }
       setRascunhoCarregado(true)
     }).catch(() => setRascunhoCarregado(true))
@@ -411,7 +417,7 @@ export default function OrcamentoRapido() {
     if (salvandoRascunhoManual) return
     setSalvandoRascunhoManual(true)
     try {
-      await salvarRascunho(RASCUNHO_ID, montarRascunhoAtual())
+      await salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
       setRascunhoSalvoEm(new Date().toISOString())
       setErroSalvamentoLocal('')
     } catch {
@@ -424,12 +430,12 @@ export default function OrcamentoRapido() {
   useEffect(() => {
     if (!rascunhoCarregado || salvo || salvoOffline) return
     const timer = window.setTimeout(() => {
-      salvarRascunho(RASCUNHO_ID, montarRascunhoAtual())
+      salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
         .then(() => { setRascunhoSalvoEm(new Date().toISOString()); setErroSalvamentoLocal('') })
         .catch(() => setErroSalvamentoLocal('Falha ao salvar localmente. Mantenha esta tela aberta e toque em “Salvar medição agora”.'))
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline, rascunhoIdAtivo])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
@@ -625,7 +631,7 @@ export default function OrcamentoRapido() {
   async function salvarComoPendente(dadosForm: DadosOrcamentoForm, motivo = '') {
     try {
       await salvarPendente({ id: uuidv4(), tipo: 'orcamento', criadoEm: new Date().toISOString(), dados: dadosForm })
-      await removerRascunho(RASCUNHO_ID).catch(() => {})
+      await removerRascunho(rascunhoIdAtivo).catch(() => {})
       setRascunhoSalvoEm(null)
       setMotivoPendente(motivo)
       setSalvando(false)
@@ -664,7 +670,7 @@ export default function OrcamentoRapido() {
       if (resultado.ok) {
         const temPendenciasTecnicas = itens.some(item => item.itemTipo === 'sob_medida' && (!item.tipologiaId || item.configuracaoStatus === 'pendente'))
         setSalvando(false)
-        await removerRascunho(RASCUNHO_ID).catch(() => {})
+        await removerRascunho(rascunhoIdAtivo).catch(() => {})
         setRascunhoSalvoEm(null)
         setPedidoEnviadoId(resultado.id || null)
         setSalvoComPendenciasTecnicas(temPendenciasTecnicas)
@@ -765,7 +771,7 @@ export default function OrcamentoRapido() {
   }
 
   function resetar() {
-    void removerRascunho(RASCUNHO_ID).catch(() => {})
+    void removerRascunho(rascunhoIdAtivo).catch(() => {})
     setRascunhoSalvoEm(null)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
     setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
