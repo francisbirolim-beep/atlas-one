@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { Acabamento, Cliente, Contramarco, OrigemCliente, TemperaturaLead, TipoEsquadria } from '@/lib/tipos'
 import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { descricaoMedidaPadrao } from '@/lib/orcamentoRapidoProdutoLivre'
-import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
+import { listarRascunhos, obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
 import { formatarEnderecoObra, coordenadasDaObra, coordenadasEmTexto, decomporEnderecoObra, linkRotaObra, localizacaoRegistradaNaObra } from '@/lib/enderecoObra'
@@ -241,7 +241,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
     {item.itemTipo==='material_avulso'&&<div><label className="mb-1 block text-xs text-slate-500">Categoria</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([['perfil','Perfil'],['acessorio','Acessório'],['vidro','Vidro'],['outros','Outros']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>{setBusca('');setResultados([]);onChange({materialCategoria:v,produtoId:null,produtoNome:null})}} className={`rounded-lg border px-2 py-2 text-xs ${item.materialCategoria===v?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>{l}</button>)}</div></div>}
     {item.itemTipo==='kit_porta_pronta'&&<p className="text-xs text-blue-800">O catálogo é opcional. Você pode digitar o tipo de porta aqui ou descrevê-lo nas observações para liberar o envio.</p>}
     {item.itemTipo==='medida_padrao'&&<p className="text-xs text-blue-800">Produto não cadastrado? Escreva o nome normalmente e envie o orçamento. O cadastro e a conferência de custo/preço podem ser feitos depois.</p>}
-    <div><label className="mb-1 block text-xs text-slate-500">{item.itemTipo==='kit_porta_pronta'?'Tipo de porta / buscar kit cadastrado':rotulo}</label><input value={busca} onChange={e=>{const texto=e.target.value;setBusca(texto);if(item.itemTipo==='kit_porta_pronta')onChange({tipoOutroTexto:texto,produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'});else if(item.itemTipo==='medida_padrao')onChange({tipo:'outro',tipoOutroTexto:texto,produtoNome:texto,produtoId:null,precoUnit:null,modoOrigem:'manual'});else if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
+    <div><label htmlFor={`nome-produto-${item.id}`} className="mb-1 block text-xs text-slate-500">{item.itemTipo==='kit_porta_pronta'?'Tipo de porta / buscar kit cadastrado':item.itemTipo==='medida_padrao'?'Nome ou descrição do produto pronto *':rotulo}</label><input id={`nome-produto-${item.id}`} value={busca} onChange={e=>{const texto=e.target.value;setBusca(texto);if(item.itemTipo==='kit_porta_pronta')onChange({tipoOutroTexto:texto,produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'});else if(item.itemTipo==='medida_padrao')onChange({tipo:'outro',tipoOutroTexto:texto,produtoNome:texto,produtoId:null,precoUnit:null,modoOrigem:'manual'});else if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
     {!!resultados.length&&<div className="max-h-56 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="block w-full border-b px-3 py-2 text-left last:border-0"><b className="text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b><p className="text-xs text-slate-500">{p.categoria==='porta_janela_padrao'?'Produto pronto':p.categoria==='kit'?'Kit':p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</p></button>)}</div>}
     {podeOferecerCadastro&&(podeCadastrarProdutoPronto?<div className="rounded-xl border border-blue-200 bg-blue-50 p-3"><p className="text-xs font-semibold text-blue-900">Produto pronto “{busca.trim()}” não encontrado.</p><p className="mt-1 text-[11px] text-blue-700">Pode enviar com este nome, sem cadastrar agora. Cadastro e preço/custo podem ser completados depois.</p><button type="button" onClick={()=>void cadastrarProdutoPronto()} disabled={cadastrandoProdutoPronto} className="mt-2 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{cadastrandoProdutoPronto?'Cadastrando...':'Cadastrar este produto'}</button></div>:<p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Produto não encontrado no catálogo. O texto será salvo como descrição livre; o cadastro poderá ser feito depois pelo responsável.</p>)}
     {erroCadastro&&<p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{erroCadastro}</p>}
@@ -255,6 +255,8 @@ type ObraResumida = { id: string; nome: string; endereco?: string | null; numero
 
 interface RascunhoOrcamentoRapido {
   itens: ItemForm[]
+  modo?: 'sob-medida' | 'rapido'
+  adicionarAo?: string | null
   clienteIdOrigem: string | null
   clienteNome: string
   clienteWhatsapp: string
@@ -315,6 +317,10 @@ export default function OrcamentoRapido() {
   const [erroEhValidacao, setErroEhValidacao] = useState(false)
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
+  const [rascunhoIdAtivo, setRascunhoIdAtivo] = useState(RASCUNHO_ID)
+  const [rascunhosDisponiveis, setRascunhosDisponiveis] = useState<Array<{ id: string; atualizadoEm: string; dados: RascunhoOrcamentoRapido }>>([])
+  const [mostrarRascunhos, setMostrarRascunhos] = useState(false)
+  const [itemInvalidoId, setItemInvalidoId] = useState<string | null>(null)
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
   const [rascunhoSalvoEm, setRascunhoSalvoEm] = useState<string | null>(null)
@@ -333,8 +339,22 @@ export default function OrcamentoRapido() {
   useEffect(() => {
     let ativo = true
     const params = new URLSearchParams(window.location.search)
-    const inicioNovoSobMedida = params.get('modo') === 'sob-medida' && params.get('novo') === '1'
-    obterRascunho<RascunhoOrcamentoRapido>(RASCUNHO_ID).then(rascunho => {
+    // Nova solicitação recebe ID próprio e preserva pedidos pendentes.
+    const idSolicitado = params.get('rascunho')
+    const idValido = idSolicitado === RASCUNHO_ID || !!idSolicitado?.startsWith(`${RASCUNHO_ID}:pedido:`)
+    // Abrir o formulário sempre significa NOVO. Apenas ?rascunho=... restaura.
+    const abrirNovo = !idValido
+    const idAtivo = idValido ? idSolicitado! : abrirNovo ? `${RASCUNHO_ID}:pedido:${uuidv4()}` : RASCUNHO_ID
+    setRascunhoIdAtivo(idAtivo)
+    if (abrirNovo) {
+      params.set('rascunho', idAtivo)
+      params.delete('novo')
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
+    }
+    void listarRascunhos<RascunhoOrcamentoRapido>()
+      .then(lista => { if (ativo) setRascunhosDisponiveis(lista.filter(r => r.id === RASCUNHO_ID || r.id.startsWith(`${RASCUNHO_ID}:pedido:`)).sort((a, b) => b.atualizadoEm.localeCompare(a.atualizadoEm))) })
+      .catch(() => {})
+    obterRascunho<RascunhoOrcamentoRapido>(idAtivo).then(rascunho => {
       if (!ativo) return
       if (rascunho?.dados) {
         const d = rascunho.dados
@@ -367,19 +387,12 @@ export default function OrcamentoRapido() {
         if (Array.isArray(d.arquivos)) setArquivos(d.arquivos.map(arquivoDoRascunho))
         setRascunhoSalvoEm(rascunho.atualizadoEm)
         setRascunhoRestaurado(true)
+        // Restaura o modo e o destino do orçamento anterior, não somente os campos.
+        if (d.modo === 'sob-medida') params.set('modo', 'sob-medida')
+        if (d.adicionarAo && !params.has('adicionarAo')) params.set('adicionarAo', d.adicionarAo)
+        window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
 
-        // Um rascunho existente sempre vence o contexto de uma nova navegação.
-        // Assim, abrir outro cliente/obra nunca reaproveita nem apaga o trabalho pendente.
-        params.delete('novo')
-        params.delete('cliente')
-        params.delete('obra')
-        params.delete('adicionarAo')
-        const busca = params.toString()
-        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
-      } else if (inicioNovoSobMedida) {
-        params.delete('novo')
-        const busca = params.toString()
-        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
+        // Contexto de cliente, obra e complemento permanece intacto.
       }
       setRascunhoCarregado(true)
     }).catch(() => setRascunhoCarregado(true))
@@ -401,9 +414,11 @@ export default function OrcamentoRapido() {
   function montarRascunhoAtual(): RascunhoOrcamentoRapido {
     return {
       itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-      clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
+      clienteIdOrigem: clienteIdOrigem || new URLSearchParams(window.location.search).get('cliente'), clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
       acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
       arquivos: arquivos.map(arquivoParaRascunho),
+      modo: fluxoSobMedida ? 'sob-medida' : 'rapido',
+      adicionarAo: new URLSearchParams(window.location.search).get('adicionarAo'),
     }
   }
 
@@ -411,8 +426,9 @@ export default function OrcamentoRapido() {
     if (salvandoRascunhoManual) return
     setSalvandoRascunhoManual(true)
     try {
-      await salvarRascunho(RASCUNHO_ID, montarRascunhoAtual())
+      await salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
       setRascunhoSalvoEm(new Date().toISOString())
+      void listarRascunhos<RascunhoOrcamentoRapido>().then(lista => setRascunhosDisponiveis(lista.filter(r => r.id === RASCUNHO_ID || r.id.startsWith(`${RASCUNHO_ID}:pedido:`)).sort((a,b) => b.atualizadoEm.localeCompare(a.atualizadoEm)))).catch(() => {})
       setErroSalvamentoLocal('')
     } catch {
       setErroSalvamentoLocal('Não foi possível salvar a medição neste aparelho. Mantenha a tela aberta e confira o espaço do navegador.')
@@ -424,12 +440,12 @@ export default function OrcamentoRapido() {
   useEffect(() => {
     if (!rascunhoCarregado || salvo || salvoOffline) return
     const timer = window.setTimeout(() => {
-      salvarRascunho(RASCUNHO_ID, montarRascunhoAtual())
+      salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
         .then(() => { setRascunhoSalvoEm(new Date().toISOString()); setErroSalvamentoLocal('') })
         .catch(() => setErroSalvamentoLocal('Falha ao salvar localmente. Mantenha esta tela aberta e toque em “Salvar medição agora”.'))
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline, rascunhoIdAtivo])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
@@ -555,6 +571,7 @@ export default function OrcamentoRapido() {
     setSalvando(false)
     setErro('')
     setErroEhValidacao(false)
+    setItemInvalidoId(null)
   }
 
   function atualizarItem(id: string, campo: keyof ItemForm, valor: any) {
@@ -625,7 +642,7 @@ export default function OrcamentoRapido() {
   async function salvarComoPendente(dadosForm: DadosOrcamentoForm, motivo = '') {
     try {
       await salvarPendente({ id: uuidv4(), tipo: 'orcamento', criadoEm: new Date().toISOString(), dados: dadosForm })
-      await removerRascunho(RASCUNHO_ID).catch(() => {})
+      await removerRascunho(rascunhoIdAtivo).catch(() => {})
       setRascunhoSalvoEm(null)
       setMotivoPendente(motivo)
       setSalvando(false)
@@ -664,7 +681,7 @@ export default function OrcamentoRapido() {
       if (resultado.ok) {
         const temPendenciasTecnicas = itens.some(item => item.itemTipo === 'sob_medida' && (!item.tipologiaId || item.configuracaoStatus === 'pendente'))
         setSalvando(false)
-        await removerRascunho(RASCUNHO_ID).catch(() => {})
+        await removerRascunho(rascunhoIdAtivo).catch(() => {})
         setRascunhoSalvoEm(null)
         setPedidoEnviadoId(resultado.id || null)
         setSalvoComPendenciasTecnicas(temPendenciasTecnicas)
@@ -695,12 +712,21 @@ export default function OrcamentoRapido() {
     setConferenciaAberta(false)
     setErro('')
     setErroEhValidacao(false)
+    setItemInvalidoId(null)
 
     const falharValidacao = (mensagem: string) => {
       setSalvando(false)
       setConferenciaAberta(false)
       setErroEhValidacao(true)
       setErro(mensagem)
+      // O erro não descarta o levantamento nem cria um pedido falsamente enviado.
+      // Persistir imediatamente, sem depender do autosave de 350 ms.
+      void salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
+        .then(() => {
+          setRascunhoSalvoEm(new Date().toISOString())
+          setErro(mensagem + '. Pedido não enviado; rascunho salvo neste aparelho para este cliente.')
+        })
+        .catch(() => setErroSalvamentoLocal('Não foi possível salvar o rascunho neste aparelho. Mantenha a tela aberta e toque em “Salvar medição agora”.'))
       return false
     }
 
@@ -728,7 +754,11 @@ export default function OrcamentoRapido() {
       }
       // Medida padrão sem cadastro entra como descrição livre e fica pendente de precificação.
       if (it.itemTipo === 'medida_padrao') {
-        if (!it.produtoId && !descricaoMedidaPadrao(it)) return falharValidacao(`Informe o nome ou descrição do produto de medida padrão em ${referencia}`)
+        if (!it.produtoId && !descricaoMedidaPadrao(it)) {
+          setItemInvalidoId(it.id)
+          window.requestAnimationFrame(() => document.getElementById(`nome-produto-${it.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+          return falharValidacao(`Informe o nome ou descrição do produto de medida padrão em ${referencia}`)
+        }
         continue
       }
       if (it.itemTipo !== 'sob_medida' && !it.produtoId) return falharValidacao(`Selecione um produto cadastrado em ${referencia}`)
@@ -764,8 +794,39 @@ export default function OrcamentoRapido() {
     setConferenciaAberta(true)
   }
 
+  function urlNovoPedido(): string {
+    const params = new URLSearchParams()
+    if (clienteIdOrigem) params.set('cliente', clienteIdOrigem)
+    if (fluxoSobMedida) params.set('modo', 'sob-medida')
+    params.set('novo', '1')
+    return `/orcamento-rapido?${params.toString()}`
+  }
+
+  async function navegarPreservandoRascunho(url: string) {
+    try {
+      // Só preservar um pedido que tenha trabalho iniciado, evitando rascunhos vazios.
+      const existeConteudo = Boolean(obraNome.trim() || arquivos.length || itens.some(it =>
+        it.itemTipo || it.ambiente.trim() || it.produtoNome?.trim() || it.tipoOutroTexto.trim() ||
+        it.descricao.trim() || it.largura.trim() || it.altura.trim() || it.fotos.length
+      ))
+      if (existeConteudo) await salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
+      window.location.assign(url)
+    } catch {
+      setErroSalvamentoLocal('Não foi possível proteger o rascunho. Tente salvar novamente antes de sair.')
+    }
+  }
+
   function resetar() {
-    void removerRascunho(RASCUNHO_ID).catch(() => {})
+    const novoRascunhoId = `${RASCUNHO_ID}:pedido:${uuidv4()}`
+    void removerRascunho(rascunhoIdAtivo).catch(() => {})
+    // A próxima edição não pode recriar o ID do pedido enviado.
+    setRascunhoIdAtivo(novoRascunhoId)
+    const params = new URLSearchParams(window.location.search)
+    params.set('rascunho', novoRascunhoId)
+    params.delete('cliente'); params.delete('obra'); params.delete('adicionarAo'); params.delete('novo')
+    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
+    setRascunhoRestaurado(false)
+    setMostrarRascunhos(false)
     setRascunhoSalvoEm(null)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
     setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
@@ -782,6 +843,9 @@ export default function OrcamentoRapido() {
   if (salvo) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-lg w-full text-center"><CheckCircle size={48} className="text-brand-teal mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">{fluxoSobMedida ? 'Orçamento sob medida salvo!' : 'Pedido enviado!'}</h2><p className="text-slate-500 mb-6">{fluxoSobMedida ? (salvoComPendenciasTecnicas ? `O orçamento de ${clienteNome} foi salvo com segurança. Há tipologias ou variáveis técnicas pendentes, que podem ser completadas depois sem refazer o orçamento.` : `A configuração de ${clienteNome} foi salva. Agora você pode calcular materiais, custo, sobra, margem e preço.`) : `${clienteNome} entrou no painel de orçamentos.`}</p><div className="grid gap-3">{pedidoEnviadoId && fluxoSobMedida && !salvoComPendenciasTecnicas && <Link href={`/orcamento/${pedidoEnviadoId}/composicao`} className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl flex items-center justify-center gap-2 font-bold"><Calculator size={17} /> Calcular o orçamento</Link>}{pedidoEnviadoId && <Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 border border-brand-teal text-brand-teal rounded-xl flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> {salvoComPendenciasTecnicas ? 'Completar pendências técnicas' : 'Editar este orçamento'}</Link>}<div className="grid grid-cols-2 gap-3"><button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl">Novo orçamento</button><Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl">Ver painel</Link></div></div></div></div>
 
   const totalEsquadrias = itens.reduce((soma, item) => soma + Math.max(1, Number.parseInt(item.quantidade || '1', 10) || 1), 0)
+  const rascunhosVisiveis = clienteIdOrigem
+    ? rascunhosDisponiveis.filter(r => r.dados?.clienteIdOrigem === clienteIdOrigem)
+    : rascunhosDisponiveis
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -793,7 +857,13 @@ export default function OrcamentoRapido() {
           <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual} className="rounded-lg border border-brand-navy px-3 py-2 text-xs font-semibold text-brand-navy disabled:opacity-60">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
           {erroSalvamentoLocal && <p role="alert" className="w-full text-xs font-semibold text-red-700">{erroSalvamentoLocal}</p>}
         </div>
-        {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
+        
+         <div className="flex flex-wrap gap-2">
+           <button type="button" onClick={() => void navegarPreservandoRascunho(urlNovoPedido())} className="rounded-lg border border-brand-navy bg-white px-3 py-2 text-xs font-semibold text-brand-navy">+ Novo pedido sem apagar o atual</button>
+           {rascunhosVisiveis.length > 0 && <button type="button" onClick={() => setMostrarRascunhos(v => !v)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">{mostrarRascunhos ? 'Ocultar rascunhos' : `Recuperar rascunhos (${rascunhosVisiveis.length})`}</button>}
+         </div>
+         {mostrarRascunhos && <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"><h3 className="text-sm font-bold text-slate-800">Rascunhos salvos neste aparelho</h3><p className="text-xs text-slate-500">Abrir um rascunho não apaga o pedido atual. Os dados ficam separados até o envio.</p>{rascunhosVisiveis.map(r => <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div className="text-xs text-slate-700"><b>{r.dados?.clienteNome || 'Cliente não informado'}</b><span className="ml-2 text-slate-500">{new Date(r.atualizadoEm).toLocaleString('pt-BR')}</span></div><a href={`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`} onClick={e => { e.preventDefault(); void navegarPreservandoRascunho(`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`) }} className="rounded-md border border-brand-navy px-3 py-1.5 text-xs font-bold text-brand-navy">Continuar</a></div>)}</section>}
+         {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value) }} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
@@ -913,7 +983,8 @@ export default function OrcamentoRapido() {
               <label className="block text-xs text-slate-600">Largura da guarnição (mm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraGuarnicaoMm || ''} onChange={e=>atualizarItem(item.id,'larguraGuarnicaoMm',e.target.value)} placeholder="60" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
             </div>
           </div>}
-          {item.itemTipo==='sob_medida' ? <SeletorEsquadriaInteligente value={{ modoOrigem:item.modoOrigem, produtoId:item.produtoId, precoUnit:item.precoUnit, tipo:item.tipo, tipoOutroTexto:item.tipoOutroTexto, folhas:item.folhas, largura:item.largura, altura:item.altura, linhaId:item.linhaId, linhaNome:item.linhaNome, tipologiaId:item.tipologiaId, configuracaoPresetId:item.configuracaoPresetId, configuracaoNome:item.configuracaoNome, configuracaoValidada:item.configuracaoValidada, modoConfiguracao:item.modoConfiguracao, configuracaoStatus:item.configuracaoStatus, variaveis:item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} /> : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
+          {item.itemTipo==='medida_padrao' && itemInvalidoId===item.id && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">Preencha o nome deste produto pronto (ex.: janela 1000 × 1200 mm). Não é necessário cadastrá-lo previamente.</p>}
+           {item.itemTipo==='sob_medida' ? <SeletorEsquadriaInteligente value={{ modoOrigem:item.modoOrigem, produtoId:item.produtoId, precoUnit:item.precoUnit, tipo:item.tipo, tipoOutroTexto:item.tipoOutroTexto, folhas:item.folhas, largura:item.largura, altura:item.altura, linhaId:item.linhaId, linhaNome:item.linhaNome, tipologiaId:item.tipologiaId, configuracaoPresetId:item.configuracaoPresetId, configuracaoNome:item.configuracaoNome, configuracaoValidada:item.configuracaoValidada, modoConfiguracao:item.modoConfiguracao, configuracaoStatus:item.configuracaoStatus, variaveis:item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} /> : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
           {item.itemTipo==='sob_medida' && item.tipo && !item.tipologiaId && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input data-preserve-case="true" value={item.folhas} onChange={e => atualizarItem(item.id,'folhas',e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
 
           {item.itemTipo==='sob_medida' ? <>

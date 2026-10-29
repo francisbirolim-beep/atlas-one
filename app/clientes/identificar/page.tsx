@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import { obterOuCriarCliente } from '@/lib/clientes'
 import type { Cliente } from '@/lib/tipos'
+import RascunhosOrcamentoCliente from '@/components/clientes/RascunhosOrcamentoCliente'
 
 type ClienteBusca = Pick<Cliente, 'id' | 'nome' | 'whatsapp' | 'telefone' | 'cidade' | 'bairro' | 'cpf_cnpj'> & { apelido?: string | null }
 // Cache anterior é desconsiderado: poderia conter clientes já inativados.
@@ -161,6 +162,7 @@ export default function IdentificarCliente() {
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-500"><ChevronRight size={22} /></span>
           </Link>
 
+          <RascunhosOrcamentoCliente clienteId={clienteSelecionado.id}/>
           {acoes.map((acao) => {
             const Icone = acao.icone
             return (

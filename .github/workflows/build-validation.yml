@@ -35,6 +35,12 @@ jobs:
       - name: Explicit TypeScript check
         run: npm run typecheck
 
+      - name: Budget product without catalog registration
+        run: node scripts/test-orcamento-rapido-produto-livre.cjs
+
+      - name: Budget client drafts and new request isolation
+        run: node scripts/test-orcamento-rascunhos-cliente-20261029.cjs
+
       - name: W.Vetro technical regression
         run: npm run test:wvetro-comparador
 

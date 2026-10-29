@@ -135,6 +135,17 @@ export async function salvarRascunho<T>(id: string, dados: T): Promise<void> {
   })
 }
 
+/** Lista rascunhos locais para recuperação sem substituir outro cliente/pedido. */
+export async function listarRascunhos<T = any>(): Promise<RascunhoOffline<T>[]> {
+  const db = await abrirDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_RASCUNHOS, 'readonly')
+    const pedido = tx.objectStore(STORE_RASCUNHOS).getAll()
+    pedido.onsuccess = () => resolve((pedido.result as RascunhoOffline<T>[]) || [])
+    pedido.onerror = () => reject(pedido.error)
+  })
+}
+
 export async function obterRascunho<T>(id: string): Promise<RascunhoOffline<T> | null> {
   const db = await abrirDB()
   return new Promise((resolve, reject) => {
