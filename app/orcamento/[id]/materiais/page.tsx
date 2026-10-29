@@ -43,6 +43,13 @@ function nomeGrupo(grupo: GrupoMaterialOrcamento) {
   return grupo === 'perfis' ? 'Perfis' : grupo === 'acessorios' ? 'Acessórios' : grupo === 'vidros' ? 'Vidros' : 'Outros'
 }
 
+function FotoMaterial({ linha }: { linha: LinhaMaterialOrcamento }) {
+  const [erro, setErro] = useState(false)
+  if (linha.grupo !== 'perfis' && linha.grupo !== 'acessorios') return <span className="text-slate-400">—</span>
+  if (!linha.imagem_url || erro) return <span className="flex h-14 w-16 items-center justify-center rounded-md border border-dashed border-amber-300 bg-amber-50 p-1 text-center text-[9px] font-medium text-amber-800">Imagem pendente</span>
+  return <img src={linha.imagem_url} onError={() => setErro(true)} alt={`${linha.codigo || ''} ${linha.descricao}`} loading="lazy" className="h-14 w-16 rounded-md border bg-white object-contain print:h-12 print:w-14" />
+}
+
 function TabelaMateriais({ linhas, consolidada }: { linhas: LinhaMaterialOrcamento[]; consolidada: boolean }) {
   if (linhas.length === 0) return <p className="rounded-xl border border-dashed p-6 text-center text-sm text-slate-400">Nenhum material neste filtro.</p>
 
@@ -51,6 +58,7 @@ function TabelaMateriais({ linhas, consolidada }: { linhas: LinhaMaterialOrcamen
       <thead className="bg-slate-100 print:bg-white">
         <tr>
           <th className="border-b px-3 py-2">Grupo</th>
+          <th className="border-b px-3 py-2">Imagem</th>
           <th className="border-b px-3 py-2">Código</th>
           <th className="border-b px-3 py-2">Descrição</th>
           <th className="border-b px-3 py-2">Cor</th>
@@ -64,6 +72,7 @@ function TabelaMateriais({ linhas, consolidada }: { linhas: LinhaMaterialOrcamen
       <tbody>
         {linhas.map(linha => <tr key={linha.chave} className="align-top print:break-inside-avoid">
           <td className="border-b px-3 py-2">{nomeGrupo(linha.grupo)}</td>
+          <td className="border-b px-3 py-2"><FotoMaterial linha={linha} /></td>
           <td className="border-b px-3 py-2 font-mono text-xs print:text-[9.5pt]">{linha.codigo || '—'}</td>
           <td className="border-b px-3 py-2">
             <div className="font-medium">{linha.descricao}</div>
@@ -163,6 +172,7 @@ export default function ListaMateriaisOrcamentoPage() {
       </section>
 
       {!dados.pacote ? <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-900"><div className="flex items-start gap-3"><TriangleAlert className="mt-0.5 shrink-0" /><div><h2 className="font-bold">Lista ainda não disponível</h2><p className="mt-1 text-sm">Este orçamento ainda não possui pacote técnico. Gere/recalcule a Composição e Precificação antes de emitir a lista. Nenhum material foi inferido.</p></div></div></section> : <>
+        {dados.pendenciasImagens > 0 && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 print:border-2"><div className="flex items-start gap-2"><TriangleAlert className="mt-0.5 shrink-0" size={18} /><div><b>Imagens do catálogo pendentes: {dados.pendenciasImagens} linha(s) de perfis ou acessórios.</b><div>As linhas continuam visíveis para conferência. A foto só é exibida quando vinculada ao produto exato por ID ou código, sem substituição por imagem parecida.</div></div></div></section>}
         {dados.pendencias > 0 && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 print:border-2"><div className="flex items-start gap-2"><TriangleAlert className="mt-0.5 shrink-0" size={18} /><div><b>PRÉVIA — existem {dados.pendencias} pendência(s) técnica(s).</b><div>Linhas pendentes permanecem identificadas e não devem ser tratadas como material definitivo.</div></div></div></section>}
 
         <section className="nao-imprimir flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-3">
