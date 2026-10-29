@@ -342,7 +342,8 @@ export default function OrcamentoRapido() {
     // Nova solicitação recebe ID próprio e preserva pedidos pendentes.
     const idSolicitado = params.get('rascunho')
     const idValido = idSolicitado === RASCUNHO_ID || !!idSolicitado?.startsWith(`${RASCUNHO_ID}:pedido:`)
-    const abrirNovo = !idValido && (params.has('cliente') || params.get('novo') === '1')
+    // Abrir o formulário sempre significa NOVO. Apenas ?rascunho=... restaura.
+    const abrirNovo = !idValido
     const idAtivo = idValido ? idSolicitado! : abrirNovo ? `${RASCUNHO_ID}:pedido:${uuidv4()}` : RASCUNHO_ID
     setRascunhoIdAtivo(idAtivo)
     if (abrirNovo) {
@@ -413,7 +414,7 @@ export default function OrcamentoRapido() {
   function montarRascunhoAtual(): RascunhoOrcamentoRapido {
     return {
       itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-      clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
+      clienteIdOrigem: clienteIdOrigem || new URLSearchParams(window.location.search).get('cliente'), clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
       acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
       arquivos: arquivos.map(arquivoParaRascunho),
       modo: fluxoSobMedida ? 'sob-medida' : 'rapido',
@@ -718,6 +719,14 @@ export default function OrcamentoRapido() {
       setConferenciaAberta(false)
       setErroEhValidacao(true)
       setErro(mensagem)
+      // O erro não descarta o levantamento nem cria um pedido falsamente enviado.
+      // Persistir imediatamente, sem depender do autosave de 350 ms.
+      void salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
+        .then(() => {
+          setRascunhoSalvoEm(new Date().toISOString())
+          setErro(mensagem + '. Pedido não enviado; rascunho salvo neste aparelho para este cliente.')
+        })
+        .catch(() => setErroSalvamentoLocal('Não foi possível salvar o rascunho neste aparelho. Mantenha a tela aberta e toque em “Salvar medição agora”.'))
       return false
     }
 
@@ -795,7 +804,12 @@ export default function OrcamentoRapido() {
 
   async function navegarPreservandoRascunho(url: string) {
     try {
-      await salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
+      // Só preservar um pedido que tenha trabalho iniciado, evitando rascunhos vazios.
+      const existeConteudo = Boolean(obraNome.trim() || arquivos.length || itens.some(it =>
+        it.itemTipo || it.ambiente.trim() || it.produtoNome?.trim() || it.tipoOutroTexto.trim() ||
+        it.descricao.trim() || it.largura.trim() || it.altura.trim() || it.fotos.length
+      ))
+      if (existeConteudo) await salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
       window.location.assign(url)
     } catch {
       setErroSalvamentoLocal('Não foi possível proteger o rascunho. Tente salvar novamente antes de sair.')
@@ -803,7 +817,16 @@ export default function OrcamentoRapido() {
   }
 
   function resetar() {
+    const novoRascunhoId = `${RASCUNHO_ID}:pedido:${uuidv4()}`
     void removerRascunho(rascunhoIdAtivo).catch(() => {})
+    // A próxima edição não pode recriar o ID do pedido enviado.
+    setRascunhoIdAtivo(novoRascunhoId)
+    const params = new URLSearchParams(window.location.search)
+    params.set('rascunho', novoRascunhoId)
+    params.delete('cliente'); params.delete('obra'); params.delete('adicionarAo'); params.delete('novo')
+    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
+    setRascunhoRestaurado(false)
+    setMostrarRascunhos(false)
     setRascunhoSalvoEm(null)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
     setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
@@ -820,6 +843,9 @@ export default function OrcamentoRapido() {
   if (salvo) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-lg w-full text-center"><CheckCircle size={48} className="text-brand-teal mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">{fluxoSobMedida ? 'Orçamento sob medida salvo!' : 'Pedido enviado!'}</h2><p className="text-slate-500 mb-6">{fluxoSobMedida ? (salvoComPendenciasTecnicas ? `O orçamento de ${clienteNome} foi salvo com segurança. Há tipologias ou variáveis técnicas pendentes, que podem ser completadas depois sem refazer o orçamento.` : `A configuração de ${clienteNome} foi salva. Agora você pode calcular materiais, custo, sobra, margem e preço.`) : `${clienteNome} entrou no painel de orçamentos.`}</p><div className="grid gap-3">{pedidoEnviadoId && fluxoSobMedida && !salvoComPendenciasTecnicas && <Link href={`/orcamento/${pedidoEnviadoId}/composicao`} className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl flex items-center justify-center gap-2 font-bold"><Calculator size={17} /> Calcular o orçamento</Link>}{pedidoEnviadoId && <Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 border border-brand-teal text-brand-teal rounded-xl flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> {salvoComPendenciasTecnicas ? 'Completar pendências técnicas' : 'Editar este orçamento'}</Link>}<div className="grid grid-cols-2 gap-3"><button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl">Novo orçamento</button><Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl">Ver painel</Link></div></div></div></div>
 
   const totalEsquadrias = itens.reduce((soma, item) => soma + Math.max(1, Number.parseInt(item.quantidade || '1', 10) || 1), 0)
+  const rascunhosVisiveis = clienteIdOrigem
+    ? rascunhosDisponiveis.filter(r => r.dados?.clienteIdOrigem === clienteIdOrigem)
+    : rascunhosDisponiveis
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -834,9 +860,9 @@ export default function OrcamentoRapido() {
         
          <div className="flex flex-wrap gap-2">
            <button type="button" onClick={() => void navegarPreservandoRascunho(urlNovoPedido())} className="rounded-lg border border-brand-navy bg-white px-3 py-2 text-xs font-semibold text-brand-navy">+ Novo pedido sem apagar o atual</button>
-           {rascunhosDisponiveis.length > 0 && <button type="button" onClick={() => setMostrarRascunhos(v => !v)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">{mostrarRascunhos ? 'Ocultar rascunhos' : `Recuperar rascunhos (${rascunhosDisponiveis.length})`}</button>}
+           {rascunhosVisiveis.length > 0 && <button type="button" onClick={() => setMostrarRascunhos(v => !v)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">{mostrarRascunhos ? 'Ocultar rascunhos' : `Recuperar rascunhos (${rascunhosVisiveis.length})`}</button>}
          </div>
-         {mostrarRascunhos && <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"><h3 className="text-sm font-bold text-slate-800">Rascunhos salvos neste aparelho</h3><p className="text-xs text-slate-500">Abrir um rascunho não apaga o pedido atual. Os dados ficam separados até o envio.</p>{rascunhosDisponiveis.map(r => <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div className="text-xs text-slate-700"><b>{r.dados?.clienteNome || 'Cliente não informado'}</b><span className="ml-2 text-slate-500">{new Date(r.atualizadoEm).toLocaleString('pt-BR')}</span></div><a href={`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`} onClick={e => { e.preventDefault(); void navegarPreservandoRascunho(`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`) }} className="rounded-md border border-brand-navy px-3 py-1.5 text-xs font-bold text-brand-navy">Continuar</a></div>)}</section>}
+         {mostrarRascunhos && <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"><h3 className="text-sm font-bold text-slate-800">Rascunhos salvos neste aparelho</h3><p className="text-xs text-slate-500">Abrir um rascunho não apaga o pedido atual. Os dados ficam separados até o envio.</p>{rascunhosVisiveis.map(r => <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div className="text-xs text-slate-700"><b>{r.dados?.clienteNome || 'Cliente não informado'}</b><span className="ml-2 text-slate-500">{new Date(r.atualizadoEm).toLocaleString('pt-BR')}</span></div><a href={`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`} onClick={e => { e.preventDefault(); void navegarPreservandoRascunho(`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`) }} className="rounded-md border border-brand-navy px-3 py-1.5 text-xs font-bold text-brand-navy">Continuar</a></div>)}</section>}
          {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value) }} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
