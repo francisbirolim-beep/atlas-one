@@ -100,6 +100,8 @@ export default function CustosPendentesPage() {
       <Link href={`/orcamento/${orcamentoId}/materiais`} className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold">Lista de materiais com imagens</Link>
     </header>
 
+    <section className="flex flex-wrap items-center gap-2 rounded-xl border bg-white p-3 text-sm"><span className="mr-1 font-semibold text-slate-800">Conferência técnica:</span><Link href={`/orcamento/${orcamentoId}/materiais?filtro=perfis`} className="rounded-lg border px-3 py-2">Perfis e medidas de corte</Link><Link href={`/orcamento/${orcamentoId}/materiais?filtro=acessorios`} className="rounded-lg border px-3 py-2">Acessórios de montagem</Link><Link href={`/orcamento/${orcamentoId}/plano-corte`} className="rounded-lg border px-3 py-2">Barras, cortes e sobras</Link><Link href="/cadastro/materiais" target="_blank" rel="noopener noreferrer" className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 font-semibold text-sky-900">Editar alumínio natural e beneficiamentos</Link></section>
+    <p className="text-xs text-slate-500">Valores do cadastro de materiais são globais e exigem acesso autorizado. Atualizar o preço não altera a receita de corte ou as quantidades de montagem; depois da atualização, recalcule o orçamento para refletir os valores revisados.</p>
     {erro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{erro}</div>}
     {mensagem && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{mensagem}</div>}
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
