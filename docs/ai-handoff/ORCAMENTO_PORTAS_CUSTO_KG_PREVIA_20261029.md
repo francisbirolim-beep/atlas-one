@@ -4,7 +4,7 @@ Branch isolada: `feat/orcamento-portas-homologacao-20261029`. Sem alteração de
 
 ## Decisões
 - Primeiro piloto: Porta de Correr Sequencial (L. Suprema), fórmula marcada como `validada` no banco. Variáveis técnicas e número de folhas continuam selecionáveis; não fixar medidas ou receitas por imagem.
-- Perfis e contramarcos: `custo_por_corte = (comprimento_corte_mm / 1000) × peso_kg_m × (preco_kg_aluminio + custo_pintura_kg)`. Quantidade multiplica os cortes; sobra é calculada separadamente por barras do pacote.
+- Perfis e contramarcos: `custo_por_corte = (comprimento_corte_mm / 1000) × peso_kg_m × (preco_kg_aluminio + cores.adicional_kg)`. Quantidade multiplica os cortes; sobra por barra usa o mesmo custo por kg da cor. NATURAL soma R$ 0,00/kg; BRANCO soma R$ 3,00/kg; ANODIZADO BRILHANTE soma R$ 12,64/kg, conforme o catálogo consultado em 29/10/2026. O campo genérico antigo `custo_pintura_kg` não deve ser somado indistintamente a todas as cores.
 - Sem peso, código exato, comprimento ou preço/kg: custo técnico pendente (sem fallback silencioso para valor genérico).
 - Acessórios sem custo: exibir como pendência e permitir validação de custo unitário em reais por orçamento. Não salvar automaticamente no catálogo geral.
 - Recalcular composição preserva preço manual de acessórios se item, código e unidade não mudarem; perfis continuam calculados por kg.
