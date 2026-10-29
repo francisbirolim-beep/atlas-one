@@ -777,6 +777,14 @@ export default function OrcamentoRapido() {
     setConferenciaAberta(true)
   }
 
+  function urlNovoPedido(): string {
+    const params = new URLSearchParams()
+    if (clienteIdOrigem) params.set('cliente', clienteIdOrigem)
+    if (fluxoSobMedida) params.set('modo', 'sob-medida')
+    params.set('novo', '1')
+    return `/orcamento-rapido?${params.toString()}`
+  }
+
   async function navegarPreservandoRascunho(url: string) {
     try {
       await salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
@@ -817,7 +825,7 @@ export default function OrcamentoRapido() {
         </div>
         
          <div className="flex flex-wrap gap-2">
-           <button type="button" onClick={() => void navegarPreservandoRascunho(`/orcamento-rapido?${new URLSearchParams({ ...(clienteIdOrigem ? { cliente: clienteIdOrigem } : {}), ...(fluxoSobMedida ? { modo: 'sob-medida' } : {}), novo: '1' }).toString()}`)} className="rounded-lg border border-brand-navy bg-white px-3 py-2 text-xs font-semibold text-brand-navy">+ Novo pedido sem apagar o atual</button>
+           <button type="button" onClick={() => void navegarPreservandoRascunho(urlNovoPedido())} className="rounded-lg border border-brand-navy bg-white px-3 py-2 text-xs font-semibold text-brand-navy">+ Novo pedido sem apagar o atual</button>
            {rascunhosDisponiveis.length > 0 && <button type="button" onClick={() => setMostrarRascunhos(v => !v)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">{mostrarRascunhos ? 'Ocultar rascunhos' : `Recuperar rascunhos (${rascunhosDisponiveis.length})`}</button>}
          </div>
          {mostrarRascunhos && <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"><h3 className="text-sm font-bold text-slate-800">Rascunhos salvos neste aparelho</h3><p className="text-xs text-slate-500">Abrir um rascunho não apaga o pedido atual. Os dados ficam separados até o envio.</p>{rascunhosDisponiveis.map(r => <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div className="text-xs text-slate-700"><b>{r.dados?.clienteNome || 'Cliente não informado'}</b><span className="ml-2 text-slate-500">{new Date(r.atualizadoEm).toLocaleString('pt-BR')}</span></div><a href={`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`} onClick={e => { e.preventDefault(); void navegarPreservandoRascunho(`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`) }} className="rounded-md border border-brand-navy px-3 py-1.5 text-xs font-bold text-brand-navy">Continuar</a></div>)}</section>}
