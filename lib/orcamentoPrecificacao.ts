@@ -84,6 +84,7 @@ export type PrecificacaoOrcamento = {
   produtos: ProdutoPrecificacao[]
   precoKgAluminio: number
   adicionalPinturaKg: number
+  adicionaisPorCor: Record<string, number>
   pendencias: string[]
 }
 
@@ -213,6 +214,19 @@ async function carregarConfigs() {
   }
 }
 
+async function carregarAdicionaisPorCor(): Promise<Map<string, number>> {
+  const { data, error } = await supabase.from('cores')
+    .select('nome,adicional_kg').eq('ativo', true)
+  if (error) throw new Error(`Falha ao buscar beneficiamentos por cor: ${error.message}`)
+  const adicionais = new Map<string, number>()
+  for (const cor of data || []) {
+    const chave = normalizarCorSobra(cor.nome)
+    const adicional = num(cor.adicional_kg, NaN)
+    if (chave && Number.isFinite(adicional) && adicional >= 0) adicionais.set(chave, adicional)
+  }
+  return adicionais
+}
+
 async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
   const [{ data: overrides }, { data: materiais }, produtos] = await Promise.all([
     supabase.from('orcamento_item_componentes_overrides').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
@@ -281,7 +295,7 @@ async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
   await recalcularAproveitamentoPacote(pacoteId, [])
 }
 
-async function custoMaterial(material: MaterialPacote, produto: any, catalogo: any, cfg: { precoKg: number; pinturaKg: number }) {
+async function custoMaterial(material: MaterialPacote, produto: any, catalogo: any, cfg: { precoKg: number; adicionalBeneficiamentoKg?: number | null; corReferencia?: string }) {
   if (material.categoria === 'perfil' || material.categoria === 'contramarco') {
     const pesoM = num(produto?.peso_kg_m)
     const corteMm = num(material.comprimento_corte_mm)
@@ -294,8 +308,11 @@ async function custoMaterial(material: MaterialPacote, produto: any, catalogo: a
     if (cfg.precoKg <= 0) {
       return { custo: 0, origem: 'pendente' as const, pendente: true, motivo: 'Preço oficial do quilo do alumínio não configurado.' }
     }
+    if (!cfg.corReferencia || cfg.adicionalBeneficiamentoKg == null || normalizarCorSobra(cfg.corReferencia) === 'COR A DEFINIR') {
+      return { custo: 0, origem: 'pendente' as const, pendente: true, motivo: `Acabamento ${cfg.corReferencia || 'não informado'} sem preço de beneficiamento validado no catálogo de cores.` }
+    }
     const kg = pesoM * corteMm / 1000
-    return { custo: kg * (cfg.precoKg + cfg.pinturaKg), origem: 'calculado' as const, pendente: false, motivo: null }
+    return { custo: kg * (cfg.precoKg + cfg.adicionalBeneficiamentoKg), origem: 'calculado' as const, pendente: false, motivo: null }
   }
 
   if (num(produto?.custo) > 0) {
@@ -385,9 +402,9 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string, r
     supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id', pacoteId).eq('excluido', false).order('ordem'),
     carregarProdutosAtivosPaginados(),
     supabase.from('catalogo_custos_tecnicos').select('*').eq('ativo', true),
-    supabase.from('orcamentos').select('margem_padrao_pct,itens').eq('id', orcamentoId).single(),
+    supabase.from('orcamentos').select('margem_padrao_pct,itens,acabamento').eq('id', orcamentoId).single(),
   ])
-  const cfg = await carregarConfigs()
+  const [cfg, adicionaisPorCor] = await Promise.all([carregarConfigs(), carregarAdicionaisPorCor()])
   const pMap = new Map<string, any>(((produtos || []) as any[]).map((p: any) => [String(p.id), p]))
   const perfilPorCodigo = new Map<string, any>()
   for (const p of (produtos || []) as any[]) {
@@ -420,10 +437,12 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string, r
   const linhas: any[] = []
   const itensOrcamento: any[] = Array.isArray(orc?.itens) ? orc.itens : []
   const tipologiaPorItemRef = new Map<string, string>()
+  const corPorItemRef = new Map<string, string>()
   const custosWvetro = custosDiretosWvetro(itensOrcamento)
   itensOrcamento.forEach((item: any, idx: number) => {
     const tipologiaId = String(item?.tipologia_id || '')
     if (tipologiaId) tipologiaPorItemRef.set(itemRef(item, idx), tipologiaId)
+    corPorItemRef.set(itemRef(item, idx), corItemOrcamento(item, orc))
   })
 
   for (const m of (materiais || []) as MaterialPacote[]) {
@@ -434,7 +453,11 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string, r
       origem: 'produto' | 'catalogo' | 'calculado' | 'pendente'
       pendente: boolean
       motivo: string | null
-    } = await custoMaterial(m, produto, cat, cfg)
+    } = await custoMaterial(m, produto, cat, {
+      precoKg: cfg.precoKg,
+      corReferencia: String(m.cor_ref || corPorItemRef.get(String(m.item_ref || '')) || orc?.acabamento || '').trim(),
+      adicionalBeneficiamentoKg: adicionaisPorCor.get(normalizarCorSobra(m.cor_ref || corPorItemRef.get(String(m.item_ref || '')) || orc?.acabamento)),
+    })
     const tipologiaId = m.item_ref ? tipologiaPorItemRef.get(String(m.item_ref)) : null
     const referencia = referenciaComponenteWvetro(referenciasWvetro, tipologiaId, m.categoria, m.codigo)
     const custoDiretoWvetro = retirarCustoDiretoWvetro(custosWvetro, m.item_ref, m.categoria, m.codigo)
@@ -596,7 +619,7 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
     supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
     carregarProdutosAtivosPaginados(),
   ])
-  const cfgPreco = await carregarConfigs()
+  const [cfgPreco, adicionaisCor] = await Promise.all([carregarConfigs(), carregarAdicionaisPorCor()])
   const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
   const tipologiaIds = Array.from(new Set<string>(itens.map((i: any) => String(i?.tipologia_id || '')).filter((id: string) => Boolean(id))))
   const { data: fs } = tipologiaIds.length
@@ -629,6 +652,7 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
     produtos: (produtos || []) as ProdutoPrecificacao[],
     precoKgAluminio: cfgPreco.precoKg,
     adicionalPinturaKg: cfgPreco.pinturaKg,
+    adicionaisPorCor: Object.fromEntries(adicionaisCor),
     pendencias,
   }
 }
@@ -856,7 +880,7 @@ export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId
   ])
   if (!orc) return { ok: false as const, error: 'Orçamento não encontrado.' }
 
-  const cfg = await carregarConfigs()
+  const [cfg, adicionaisCor] = await Promise.all([carregarConfigs(), carregarAdicionaisPorCor()])
   const margemGeral = num(orc.margem_padrao_pct, cfg.margemPadrao)
   const sobraGeral = Boolean(orc.cobrar_sobra_padrao)
   const itens: any[] = Array.isArray(orc.itens) ? orc.itens : []
@@ -894,8 +918,9 @@ export async function recalcularResumoPrecificacao(orcamentoId: string, pacoteId
   for (const b of (barras || []) as any[]) {
     if (b.fonte_tipo !== 'barra_nova' || num(b.sobra_final_mm) <= 0) continue
     const pesoM = pesoMap.get(String(b.produto_id)) || 0
-    if (pesoM <= 0 || pesoM >= 50 || cfg.precoKg <= 0) continue
-    const custoSobra = (num(b.sobra_final_mm) / 1000) * pesoM * (cfg.precoKg + cfg.pinturaKg)
+    const adicional = adicionaisCor.get(normalizarCorSobra(b.cor_ref))
+    if (pesoM <= 0 || pesoM >= 50 || cfg.precoKg <= 0 || adicional == null) continue
+    const custoSobra = (num(b.sobra_final_mm) / 1000) * pesoM * (cfg.precoKg + adicional)
     sobraTotalCusto += custoSobra
     const barraCortes = cortesPorBarra.get(String(b.id)) || []
     // A sobra existe economicamente mesmo quando a empresa decide não repassá-la ao cliente.
