@@ -17,6 +17,7 @@ export type LinhaMaterialOrcamento = {
   codigo?: string | null
   descricao: string
   unidade: string
+  imagem_url?: string | null
   cor_ref?: string | null
   quantidade: number
   comprimento_corte_mm?: number | null
@@ -34,6 +35,7 @@ export type ListaMateriaisOrcamento = {
   consolidada: LinhaMaterialOrcamento[]
   itemLabels: Record<string, string>
   pendencias: number
+  pendenciasImagens: number
 }
 
 function n(valor: unknown) {
@@ -77,7 +79,7 @@ function chaveConsolidacao(material: MaterialPacote) {
   ].join('|')
 }
 
-function linhaDoMaterial(material: MaterialPacote, label: string): LinhaMaterialOrcamento {
+function linhaDoMaterial(material: MaterialPacote, label: string, imagens: Map<string, string>): LinhaMaterialOrcamento {
   const quantidade = n(material.quantidade_ajustada)
   const ref = String(material.item_ref || 'sem-tipologia')
   return {
@@ -88,6 +90,9 @@ function linhaDoMaterial(material: MaterialPacote, label: string): LinhaMaterial
     codigo: material.codigo || null,
     descricao: material.descricao,
     unidade: material.unidade,
+    imagem_url: (material.produto_id
+      ? imagens.get(`id:${material.produto_id}`)
+      : imagens.get(`codigo:${(material.codigo || '').trim().toUpperCase()}`)) || null,
     cor_ref: material.cor_ref || null,
     quantidade,
     comprimento_corte_mm: material.comprimento_corte_mm ?? null,
@@ -99,7 +104,7 @@ function linhaDoMaterial(material: MaterialPacote, label: string): LinhaMaterial
   }
 }
 
-function consolidar(materiais: MaterialPacote[], labels: Record<string, string>) {
+function consolidar(materiais: MaterialPacote[], labels: Record<string, string>, imagens: Map<string, string>) {
   const mapa = new Map<string, LinhaMaterialOrcamento>()
 
   for (const material of materiais) {
@@ -110,7 +115,7 @@ function consolidar(materiais: MaterialPacote[], labels: Record<string, string>)
     const atual = mapa.get(chave)
 
     if (!atual) {
-      const linha = linhaDoMaterial(material, label)
+      const linha = linhaDoMaterial(material, label, imagens)
       linha.chave = chave
       mapa.set(chave, linha)
       continue
@@ -154,6 +159,39 @@ async function pacoteAtualDoOrcamento(orcamentoId: string) {
   return (fallback.data || null) as PacoteTecnico | null
 }
 
+// Fotos são obtidas do catálogo oficial por ID/código; não inferir imagens por semelhança.
+async function carregarImagensProdutos(materiais: MaterialPacote[]): Promise<Map<string, string>> {
+  const relevantes = materiais.filter(m => m.categoria === 'perfil' || m.categoria === 'contramarco' || m.categoria === 'acessorio')
+  const codigos = [...new Set(relevantes.map(m => (m.codigo || '').trim()).filter(Boolean))]
+  const ids = [...new Set(relevantes.map(m => m.produto_id || '').filter(Boolean))]
+  const imagens = new Map<string, string>()
+  const codigosAmbiguos = new Set<string>()
+
+  async function consultar(campo: 'codigo' | 'id', valores: string[]) {
+    for (let inicio = 0; inicio < valores.length; inicio += 100) {
+      const { data } = await supabase.from('produtos')
+        .select('id,codigo,foto_url')
+        .eq('ativo', true)
+        .in(campo, valores.slice(inicio, inicio + 100))
+      for (const produto of data || []) {
+        const url = String(produto.foto_url || '').trim()
+        if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) continue
+        imagens.set(`id:${produto.id}`, url)
+        if (produto.codigo) {
+          const chave = `codigo:${String(produto.codigo).trim().toUpperCase()}`
+          const anterior = imagens.get(chave)
+          if (anterior && anterior !== url) codigosAmbiguos.add(chave)
+          else if (!anterior) imagens.set(chave, url)
+        }
+      }
+    }
+  }
+
+  await Promise.all([consultar('codigo', codigos), consultar('id', ids)])
+  for (const chave of codigosAmbiguos) imagens.delete(chave)
+  return imagens
+}
+
 export async function carregarListaMateriaisOrcamento(orcamentoId: string): Promise<ListaMateriaisOrcamento | null> {
   const { data: orcamento, error: erroOrcamento } = await supabase
     .from('orcamentos')
@@ -165,7 +203,7 @@ export async function carregarListaMateriaisOrcamento(orcamentoId: string): Prom
 
   const pacote = await pacoteAtualDoOrcamento(orcamentoId)
   if (!pacote) {
-    return { orcamento, pacote: null, individual: [], consolidada: [], itemLabels: {}, pendencias: 0 }
+    return { orcamento, pacote: null, individual: [], consolidada: [], itemLabels: {}, pendencias: 0, pendenciasImagens: 0 }
   }
 
   const itens = Array.isArray(pacote.snapshot_itens) && pacote.snapshot_itens.length > 0
@@ -187,17 +225,19 @@ export async function carregarListaMateriaisOrcamento(orcamentoId: string): Prom
     .order('ordem')
 
   const ativos = (materiais || []) as MaterialPacote[]
+  const imagens = await carregarImagensProdutos(ativos)
   const individual = ativos.map(material => {
     const ref = String(material.item_ref || 'sem-tipologia')
-    return linhaDoMaterial(material, itemLabels[ref] || 'Material geral do orçamento')
+    return linhaDoMaterial(material, itemLabels[ref] || 'Material geral do orçamento', imagens)
   })
 
   return {
     orcamento,
     pacote,
     individual,
-    consolidada: consolidar(ativos, itemLabels),
+    consolidada: consolidar(ativos, itemLabels, imagens),
     itemLabels,
     pendencias: ativos.filter(material => material.status_calculo === 'pendente_formula').length,
+    pendenciasImagens: individual.filter(linha => (linha.grupo === 'perfis' || linha.grupo === 'acessorios') && !linha.imagem_url).length,
   }
 }
