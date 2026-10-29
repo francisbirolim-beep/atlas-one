@@ -777,6 +777,15 @@ export default function OrcamentoRapido() {
     setConferenciaAberta(true)
   }
 
+  async function navegarPreservandoRascunho(url: string) {
+    try {
+      await salvarRascunho(rascunhoIdAtivo, montarRascunhoAtual())
+      window.location.assign(url)
+    } catch {
+      setErroSalvamentoLocal('Não foi possível proteger o rascunho. Tente salvar novamente antes de sair.')
+    }
+  }
+
   function resetar() {
     void removerRascunho(rascunhoIdAtivo).catch(() => {})
     setRascunhoSalvoEm(null)
@@ -806,7 +815,13 @@ export default function OrcamentoRapido() {
           <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual} className="rounded-lg border border-brand-navy px-3 py-2 text-xs font-semibold text-brand-navy disabled:opacity-60">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
           {erroSalvamentoLocal && <p role="alert" className="w-full text-xs font-semibold text-red-700">{erroSalvamentoLocal}</p>}
         </div>
-        {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
+        
+         <div className="flex flex-wrap gap-2">
+           <button type="button" onClick={() => void navegarPreservandoRascunho(`/orcamento-rapido?${new URLSearchParams({ ...(clienteIdOrigem ? { cliente: clienteIdOrigem } : {}), ...(fluxoSobMedida ? { modo: 'sob-medida' } : {}), novo: '1' }).toString()}`)} className="rounded-lg border border-brand-navy bg-white px-3 py-2 text-xs font-semibold text-brand-navy">+ Novo pedido sem apagar o atual</button>
+           {rascunhosDisponiveis.length > 0 && <button type="button" onClick={() => setMostrarRascunhos(v => !v)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">{mostrarRascunhos ? 'Ocultar rascunhos' : `Recuperar rascunhos (${rascunhosDisponiveis.length})`}</button>}
+         </div>
+         {mostrarRascunhos && <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"><h3 className="text-sm font-bold text-slate-800">Rascunhos salvos neste aparelho</h3><p className="text-xs text-slate-500">Abrir um rascunho não apaga o pedido atual. Os dados ficam separados até o envio.</p>{rascunhosDisponiveis.map(r => <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div className="text-xs text-slate-700"><b>{r.dados?.clienteNome || 'Cliente não informado'}</b><span className="ml-2 text-slate-500">{new Date(r.atualizadoEm).toLocaleString('pt-BR')}</span></div><a href={`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`} onClick={e => { e.preventDefault(); void navegarPreservandoRascunho(`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}`) }} className="rounded-md border border-brand-navy px-3 py-1.5 text-xs font-bold text-brand-navy">Continuar</a></div>)}</section>}
+         {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value) }} placeholder="Nome do cliente *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
