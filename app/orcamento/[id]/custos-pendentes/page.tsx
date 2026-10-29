@@ -9,6 +9,7 @@ import { carregarPrecificacaoOrcamento, salvarCustoComponente, type ComponentePr
 const dinheiro = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const numero = (v: unknown) => Number.isFinite(Number(v)) ? Number(v) : 0
 const chave = (v?: string | null) => String(v || '').trim().toUpperCase()
+const chaveCor = (v?: string | null) => chave(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 
 function Miniatura({ produto, descricao }: { produto: ProdutoPrecificacao | null; descricao: string }) {
   const [erro, setErro] = useState(false)
@@ -48,12 +49,23 @@ export default function CustosPendentesPage() {
   function produto(c: ComponentePrecificacao) {
     return c.produto_id ? produtosPorId.get(c.produto_id) || null : produtosPorCodigo.get(chave(c.codigo)) || null
   }
+  function corPerfil(c: ComponentePrecificacao) {
+    const material = c.material_id ? materiaisPorId.get(c.material_id) : null
+    const itens: any[] = Array.isArray(dados?.orcamento?.itens) ? dados!.orcamento.itens : []
+    const item = itens.find((i: any, idx: number) => String(i.id || `item-${idx + 1}`) === String(c.item_ref || ''))
+    return String(material?.cor_ref || item?.cor || item?.acabamento || item?.cor_nome || dados?.orcamento?.acabamento || '').trim()
+  }
+  function precoKgPerfil(c: ComponentePrecificacao) {
+    const adicional = dados?.adicionaisPorCor[chaveCor(corPerfil(c))]
+    return adicional == null ? null : numero(dados?.precoKgAluminio) + adicional
+  }
   function diagnosticoPerfil(c: ComponentePrecificacao) {
     const p = produto(c)
     const material = c.material_id ? materiaisPorId.get(c.material_id) : null
     if (!p || !(numero(p.peso_kg_m) > 0 && numero(p.peso_kg_m) < 50)) return 'Peso kg/m do perfil não cadastrado ou inválido.'
     if (!(numero(material?.comprimento_corte_mm) > 0)) return 'Comprimento de corte não validado.'
     if (!(numero(dados?.precoKgAluminio) > 0)) return 'Preço do quilo do alumínio não configurado.'
+    if (chaveCor(corPerfil(c)) === 'COR A DEFINIR' || precoKgPerfil(c) == null) return `Acabamento ${corPerfil(c) || 'não informado'} sem preço validado.`
     return ''
   }
   const componentes = dados?.componentes || []
@@ -98,11 +110,11 @@ export default function CustosPendentesPage() {
 
     <section className="rounded-2xl border bg-white p-4">
       <h2 className="text-lg font-bold">1. Perfis — conferência por peso</h2>
-      <p className="mb-3 text-sm text-slate-500">Custo unitário = peso (kg/m) × comprimento de corte (m) × (preço do alumínio/kg + adicional de pintura/kg). Não substituímos peso ausente por custo genérico.</p>
+      <p className="mb-3 text-sm text-slate-500">Custo unitário = peso (kg/m) × comprimento de corte (m) × (preço do alumínio natural/kg + adicional do beneficiamento da cor/kg). Não substituímos peso ausente por custo genérico.</p>
       {perfil.length === 0 ? <p className="text-sm text-slate-500">Não há perfis neste pacote.</p> :
         <div className="space-y-2">{perfil.map(c => { const p = produto(c); const material = c.material_id ? materiaisPorId.get(c.material_id) : null; const falta = diagnosticoPerfil(c)
           return <article key={c.id} className="flex flex-wrap items-center gap-3 rounded-xl border p-3"><Miniatura produto={p} descricao={c.descricao} />
-            <div className="min-w-[200px] flex-1"><b>{c.codigo || 'Sem código'} — {c.descricao}</b><p className="text-xs text-slate-500">{numero(p?.peso_kg_m) || '—'} kg/m · {numero(material?.comprimento_corte_mm) || '—'} mm/corte · {c.quantidade} corte(s)</p>
+            <div className="min-w-[200px] flex-1"><b>{c.codigo || 'Sem código'} — {c.descricao}</b><p className="text-xs text-slate-500">{numero(p?.peso_kg_m) || '—'} kg/m · {numero(material?.comprimento_corte_mm) || '—'} mm/corte · {c.quantidade} corte(s) · {corPerfil(c) || 'Cor pendente'} · {precoKgPerfil(c) == null ? 'R$/kg pendente' : `${dinheiro(precoKgPerfil(c)!)} /kg`}</p>
               <p className={falta ? 'text-xs font-bold text-amber-800' : 'text-xs font-semibold text-emerald-700'}>{falta || `Custo calculado: ${dinheiro(c.custo_total)}`}</p></div>
             <span className="text-sm font-bold">{dinheiro(c.custo_unitario)}/corte</span>
           </article> })}</div>}
