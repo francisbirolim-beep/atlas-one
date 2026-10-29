@@ -69,6 +69,7 @@ export type ProdutoPrecificacao = {
   peso_kg_m?: number | null
   tamanho_barra_mm?: number | null
   tamanho_barra_mm_origem?: number | null
+  foto_url?: string | null
 }
 
 export type PrecificacaoOrcamento = {
@@ -81,6 +82,8 @@ export type PrecificacaoOrcamento = {
   politicas: PoliticaItem[]
   formulas: Record<string, { id: string; tipologia_id: string; configuracao_label: string; versao: number }>
   produtos: ProdutoPrecificacao[]
+  precoKgAluminio: number
+  adicionalPinturaKg: number
   pendencias: string[]
 }
 
@@ -122,7 +125,7 @@ async function carregarProdutosAtivosPaginados() {
   for (let inicio = 0; ; inicio += tamanhoPagina) {
     const { data, error } = await supabase
       .from('produtos')
-      .select('id,codigo,nome,categoria,unidade,unidade_origem,custo,preco,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem,dados_origem')
+      .select('id,codigo,nome,categoria,unidade,unidade_origem,custo,preco,peso_kg_m,tamanho_barra_mm,tamanho_barra_mm_origem,dados_origem,foto_url')
       .eq('ativo', true)
       .order('id')
       .range(inicio, inicio + tamanhoPagina - 1)
@@ -279,12 +282,20 @@ async function aplicarOverridesAoPacote(orcamentoId: string, pacoteId: string) {
 }
 
 async function custoMaterial(material: MaterialPacote, produto: any, catalogo: any, cfg: { precoKg: number; pinturaKg: number }) {
-  if ((material.categoria === 'perfil' || material.categoria === 'contramarco') && num(material.comprimento_corte_mm) > 0) {
+  if (material.categoria === 'perfil' || material.categoria === 'contramarco') {
     const pesoM = num(produto?.peso_kg_m)
-    if (pesoM > 0 && pesoM < 50 && cfg.precoKg > 0) {
-      const kg = pesoM * (num(material.comprimento_corte_mm) / 1000)
-      return { custo: kg * (cfg.precoKg + cfg.pinturaKg), origem: 'calculado' as const, pendente: false, motivo: null }
+    const corteMm = num(material.comprimento_corte_mm)
+    if (!(pesoM > 0 && pesoM < 50)) {
+      return { custo: 0, origem: 'pendente' as const, pendente: true, motivo: 'Perfil sem peso kg/m válido: conferir o código exato e cadastrar o peso no catálogo.' }
     }
+    if (corteMm <= 0) {
+      return { custo: 0, origem: 'pendente' as const, pendente: true, motivo: 'Perfil sem comprimento de corte válido: revisar a fórmula e a lista de corte.' }
+    }
+    if (cfg.precoKg <= 0) {
+      return { custo: 0, origem: 'pendente' as const, pendente: true, motivo: 'Preço oficial do quilo do alumínio não configurado.' }
+    }
+    const kg = pesoM * corteMm / 1000
+    return { custo: kg * (cfg.precoKg + cfg.pinturaKg), origem: 'calculado' as const, pendente: false, motivo: null }
   }
 
   if (num(produto?.custo) > 0) {
@@ -378,9 +389,32 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string, r
   ])
   const cfg = await carregarConfigs()
   const pMap = new Map<string, any>(((produtos || []) as any[]).map((p: any) => [String(p.id), p]))
+  const perfilPorCodigo = new Map<string, any>()
+  for (const p of (produtos || []) as any[]) {
+    if (p.categoria !== 'perfil' || !codigoKey(p.codigo)) continue
+    const codigo = codigoKey(p.codigo)
+    perfilPorCodigo.set(codigo, perfilPorCodigo.has(codigo) ? null : p)
+  }
   const cProduto = new Map<string, any>(((catalogo || []) as any[]).filter((c: any) => c.produto_id).map((c: any) => [String(c.produto_id), c]))
   const cCodigo = new Map<string, any>(((catalogo || []) as any[]).filter((c: any) => c.codigo).map((c: any) => [codigoKey(c.codigo), c]))
   const margem = num(orc?.margem_padrao_pct, cfg.margemPadrao)
+
+  // Custos de acessórios aprovados apenas neste orçamento sobrevivem ao recálculo
+  // quando código, item e unidade continuarem os mesmos. Perfis não aceitam
+  // override: são sempre recalculados pelo peso e custo por quilo.
+  const chaveAcessorio = (ref: unknown, codigo: unknown, produtoId: unknown, unidade: unknown) =>
+    [String(ref || ''), codigoKey(String(codigo || '')) || String(produtoId || ''), unidadeKey(String(unidade || ''))].join('|')
+  const { data: custosAprovados, error: erroCustosAprovados } = await supabase
+    .from('orcamento_precificacao_componentes')
+    .select('item_ref,codigo,produto_id,unidade,custo_unitario')
+    .eq('orcamento_id', orcamentoId).eq('categoria', 'acessorio')
+    .eq('origem_custo', 'manual').eq('incluido_manual', false).eq('excluido', false)
+  if (erroCustosAprovados) throw new Error(`Falha ao preservar os custos validados: ${erroCustosAprovados.message}`)
+  const valoresAprovados = new Map<string, number>()
+  for (const anterior of custosAprovados || []) {
+    const valor = num(anterior.custo_unitario)
+    if (valor > 0) valoresAprovados.set(chaveAcessorio(anterior.item_ref, anterior.codigo, anterior.produto_id, anterior.unidade), valor)
+  }
 
   await supabase.from('orcamento_precificacao_componentes').delete().eq('orcamento_id', orcamentoId).eq('incluido_manual', false)
   const linhas: any[] = []
@@ -393,7 +427,7 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string, r
   })
 
   for (const m of (materiais || []) as MaterialPacote[]) {
-    const produto = m.produto_id ? pMap.get(m.produto_id) : null
+    const produto = m.produto_id ? pMap.get(m.produto_id) : (m.categoria === 'perfil' || m.categoria === 'contramarco' ? perfilPorCodigo.get(codigoKey(m.codigo)) : null)
     const cat = m.produto_id ? cProduto.get(m.produto_id) : cCodigo.get(codigoKey(m.codigo))
     let custo: {
       custo: number
@@ -445,29 +479,33 @@ async function gerarComponentesDoPacote(orcamentoId: string, pacoteId: string, r
     }
 
     const quantidade = Math.max(0, num(m.quantidade_ajustada))
-    const custoTotal = custo.custo * quantidade
+    const aprovado = m.categoria === 'acessorio'
+      ? valoresAprovados.get(chaveAcessorio(m.item_ref, m.codigo, m.produto_id, m.unidade))
+      : undefined
+    const custoAdotado = aprovado != null ? aprovado : custo.custo
+    const custoTotal = custoAdotado * quantidade
     linhas.push({
       orcamento_id: orcamentoId,
       pacote_id: pacoteId,
       material_id: m.id,
       item_ref: m.item_ref || null,
       categoria: categoriaMaterial(m.categoria),
-      produto_id: m.produto_id || null,
+      produto_id: produto?.id || m.produto_id || null,
       catalogo_custo_id: cat?.id || null,
       codigo: m.codigo || null,
       descricao: m.descricao,
       unidade: m.unidade || 'UN',
       quantidade,
-      custo_unitario: custo.custo,
+      custo_unitario: custoAdotado,
       custo_total: custoTotal,
       margem_pct: margem,
       preco_venda: margemVenda(custoTotal, margem),
-      origem_custo: m.status_calculo === 'pendente_formula' ? 'pendente' : custo.origem,
-      origem_custo_oficial: referenciaCustoUnitario != null ? 'pendente' : (m.status_calculo === 'pendente_formula' || custo.pendente ? 'pendente' : 'atlas'),
+      origem_custo: m.status_calculo === 'pendente_formula' ? 'pendente' : (aprovado != null ? 'manual' : custo.origem),
+      origem_custo_oficial: m.status_calculo === 'pendente_formula' ? 'pendente' : (aprovado != null ? 'manual' : referenciaCustoUnitario != null ? 'pendente' : (custo.pendente ? 'pendente' : 'atlas')),
       referencia_custo_origem: referenciaCustoUnitario != null ? 'wvetro' : null,
       referencia_custo_valor: referenciaCustoUnitario,
       referencia_custo_dados: referenciaDados,
-      custo_pendente: m.status_calculo === 'pendente_formula' || custo.pendente,
+      custo_pendente: m.status_calculo === 'pendente_formula' || (aprovado == null && custo.pendente),
       incluido_manual: false,
       excluido: false,
       observacoes: [m.justificativa_ajuste, custo.motivo].filter(Boolean).join(' ') || null,
@@ -558,6 +596,7 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
     supabase.from('orcamento_item_precificacao').select('*').eq('orcamento_id', orcamentoId).order('created_at'),
     carregarProdutosAtivosPaginados(),
   ])
+  const cfgPreco = await carregarConfigs()
   const itens: any[] = Array.isArray(orcamento.itens) ? orcamento.itens : []
   const tipologiaIds = Array.from(new Set<string>(itens.map((i: any) => String(i?.tipologia_id || '')).filter((id: string) => Boolean(id))))
   const { data: fs } = tipologiaIds.length
@@ -588,6 +627,8 @@ export async function carregarPrecificacaoOrcamento(orcamentoId: string): Promis
     politicas: (politicas || []) as PoliticaItem[],
     formulas,
     produtos: (produtos || []) as ProdutoPrecificacao[],
+    precoKgAluminio: cfgPreco.precoKg,
+    adicionalPinturaKg: cfgPreco.pinturaKg,
     pendencias,
   }
 }
@@ -614,6 +655,7 @@ export async function salvarPoliticaItem(orcamentoId: string, itemRefValue: stri
 }
 
 export async function salvarCustoComponente(componente: ComponentePrecificacao, custoUnitario: number, salvarCatalogo: boolean) {
+  if (componente.categoria === 'perfil') return { ok: false as const, error: 'Perfis de alumínio exigem peso kg/m, comprimento e preço do quilo; corrija o cadastro técnico e recalcule, em vez de informar custo manual.' }
   const custo = Math.max(0, num(custoUnitario))
   if (custo <= 0) return { ok: false as const, error: 'Informe um custo maior que R$ 0,00. Custo zero continua pendente até existir uma exceção controlada com justificativa.' }
   const total = custo * num(componente.quantidade)
