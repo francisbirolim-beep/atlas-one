@@ -422,7 +422,9 @@ try {
   if (idCarga !== cargaId.current) return
   const historicas = cols.filter(c => colunaDeHistorico(c.nome)).map(c=>c.id)
   const abertas = cols.filter(c => !colunaDeHistorico(c.nome)).map(c=>c.id)
-  const base = () => supabase.from('orcamentos').select('*')
+  // A listagem preserva os campos técnicos de validação, sem os payloads brutos.
+  // O registro completo é consultado por id antes de abrir qualquer editor.
+  const base = () => supabase.from('orcamentos_kanban_resumo').select('*')
     .or('modo_entrada.is.null,modo_entrada.neq.balcao')
     .is('kanban_retirado_em',null)
   // Todos os cards de trabalho continuam acessíveis. As etapas finalizadas
@@ -699,9 +701,10 @@ finally {setSalvandoBairro(false)}
 async function abrirCard(card: OrcamentoRapido) {
 const agoraIso = new Date().toISOString()
 let cardAberto = card
-if(ehOrcamentoWVetro(card)){
+// Nunca editar um resumo: inclusive formulários e WhatsApp podem ter dados W.Vetro.
+{
 const {data,error}=await supabase.from('orcamentos').select('*').eq('id',card.id).maybeSingle()
-if(error||!data){window.alert('Não foi possível atualizar o status das validações. Reabra o card.');return}
+if(error||!data){window.alert('Não foi possível carregar os detalhes do orçamento. Tente abrir o card novamente.');return}
 cardAberto=data as OrcamentoRapido
 setCards(prev=>prev.map(c=>c.id===card.id?cardAberto:c))
 }
@@ -2870,3 +2873,4 @@ className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 tex
 </div>
 )
 }
+
