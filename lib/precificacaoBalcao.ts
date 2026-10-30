@@ -31,3 +31,21 @@ export function abaixoDoPrecoMinimo(produto: { preco_minimo?: number | null }, p
 export function arredondarMoeda(valor: number | null): number | null {
   return valor == null ? null : Math.round((valor + Number.EPSILON) * 100) / 100
 }
+
+// Percentual aplicado AO CUSTO (acréscimo / markup), diferente da margem real
+// sobre o preço de venda. Não substituir margem_percentual do banco por markup.
+export function precoPorAcrescimoSobreCusto(custo: number | null | undefined, acrescimoPercentual: number | null | undefined): number | null {
+  if (custo == null || acrescimoPercentual == null) return null
+  const c = Number(custo)
+  const a = Number(acrescimoPercentual)
+  if (!Number.isFinite(c) || c < 0 || !Number.isFinite(a) || a < 0) return null
+  return c * (1 + a / 100)
+}
+
+export function acrescimoSobreCustoPorPreco(custo: number | null | undefined, preco: number | null | undefined): number | null {
+  if (custo == null || preco == null) return null
+  const c = Number(custo)
+  const p = Number(preco)
+  if (!Number.isFinite(c) || c <= 0 || !Number.isFinite(p) || p < 0) return null
+  return ((p - c) / c) * 100
+}
