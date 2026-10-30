@@ -1,0 +1,31 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const vm = require('node:vm')
+const path = require('node:path')
+const ts = require('typescript')
+const file = path.resolve(__dirname, '../lib/precificacaoBalcao.ts')
+const source = fs.readFileSync(file, 'utf8')
+const js = ts.transpileModule(source, { compilerOptions:{ module: ts.ModuleKind.CommonJS } }).outputText
+const exportsObj = {}
+vm.runInNewContext(js, {exports: exportsObj, module: {exports: exportsObj}})
+const { precoPorAcrescimoSobreCusto, acrescimoSobreCustoPorPreco, precoPorMargemReal, margemRealPorPreco, arredondarMoeda } = exportsObj
+assert.equal(precoPorAcrescimoSobreCusto(100,30),130, 'Acréscimo: R$ 100 +30% deve dar R$ 130')
+assert.equal(precoPorAcrescimoSobreCusto(100,100),200, 'Acréscimo de 100% deve ser aceito')
+assert.equal(precoPorAcrescimoSobreCusto(100,200),300, 'Acréscimo acima de 100% deve ser aceito')
+assert.equal(arredondarMoeda(precoPorMargemReal(100,30)),142.86, 'Margem real original preservada')
+assert.equal(Number(margemRealPorPreco(100,130).toFixed(2)),23.08, 'Markup de 30% implica margem real 23.08%')
+assert.equal(acrescimoSobreCustoPorPreco(100,130),30, 'Preço de 130 implica markup de 30%')
+assert.equal(acrescimoSobreCustoPorPreco(100,200),100, 'Preço de 200 implica markup de 100%')
+assert.equal(acrescimoSobreCustoPorPreco(100,0),-100, 'Produto antigo sem preço não deve ser modificado')
+assert.equal(precoPorAcrescimoSobreCusto(null,30),null,'Custo ausente não gera preço')
+assert.equal(precoPorAcrescimoSobreCusto(100,null),null,'Percentual ausente não gera preço')
+assert.equal(acrescimoSobreCustoPorPreco(0,130),null,'Não dividir por custo zero')
+assert.equal(precoPorAcrescimoSobreCusto(100,-2),null,'Acréscimo negativo não permitido')
+const cadastro=fs.readFileSync(path.resolve(__dirname,'../app/cadastro/produtos/page.tsx'),'utf8')
+const lote=fs.readFileSync(path.resolve(__dirname,'../app/cadastro/produtos/precificacao/page.tsx'),'utf8')
+for(const [nome,tela] of [['cadastro',cadastro],['lote',lote]]){
+ assert.match(tela,/precoPorAcrescimoSobreCusto/,nome+': suporta acréscimo')
+ assert.match(tela,/precoPorMargemReal/,nome+': mantém margem real')
+ assert.match(tela,/margem_percentual:margem|margem_percentual:numeroTexto\(form\.margem\)|margem_percentual:numeroTexto\(d\.margem\)/, nome+': armazena somente margem real')
+}
+console.log('OK: Cadastro e precificação por acréscimo e margem real (12 casos + UI).')
