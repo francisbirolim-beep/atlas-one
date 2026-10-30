@@ -20,7 +20,6 @@ import { corTextoParaFundo } from '@/lib/cor'
 import { lerCorAssistencia } from '@/lib/configGeral'
 import { bateBusca } from '@/lib/texto'
 import { v4 as uuidv4 } from 'uuid'
-import { jsPDF } from 'jspdf'
 import ConferenciaItemWVetro, { TipoImportadoWVetro, EditorTecnicoWVetro } from './ConferenciaItemWVetro'
 import {snapshotItemWVetro,diferencasItemWVetro,statusItemWVetro} from '@/lib/wvetroValidacaoItem'
 import {centavosVendaWVetro,valorOrigemVendaWVetro} from '@/lib/wvetroValorVendaValidacao'
@@ -172,7 +171,8 @@ madeirado: 'Amadeirado',
 outro: 'Outra cor',
 }
 
-function gerarPdfOrcamento(card: OrcamentoRapido): Blob {
+async function gerarPdfOrcamento(card: OrcamentoRapido): Promise<Blob> {
+const { jsPDF } = await import('jspdf')
 const doc = new jsPDF({ unit: 'mm', format: 'a4' })
 const margem = 15
 const largura = 210 - margem * 2
@@ -353,8 +353,10 @@ const t = setInterval(() => {setAgora(Date.now());setMesDoSistema(mesLocalAtual(
 return () => clearInterval(t)
 }, [])
 
-// Recarrega os estágios finalizados somente quando o período muda.
-useEffect(() => { void carregar() }, [modoHistorico, mesHistorico, mesDoSistema, filtroDataDe, filtroDataAte])
+// Datas só alteram a consulta remota no modo período; nos demais modos o filtro é local.
+const periodoConsultaDe = modoHistorico === 'periodo' ? filtroDataDe : ''
+const periodoConsultaAte = modoHistorico === 'periodo' ? filtroDataAte : ''
+useEffect(() => { void carregar() }, [modoHistorico, mesHistorico, mesDoSistema, periodoConsultaDe, periodoConsultaAte])
 useEffect(() => {
   let ativo = true
   void (async () => {
@@ -420,7 +422,9 @@ try {
   if (idCarga !== cargaId.current) return
   const historicas = cols.filter(c => colunaDeHistorico(c.nome)).map(c=>c.id)
   const abertas = cols.filter(c => !colunaDeHistorico(c.nome)).map(c=>c.id)
-  const base = () => supabase.from('orcamentos').select('*')
+  // A listagem preserva os campos técnicos de validação, sem os payloads brutos.
+  // O registro completo é consultado por id antes de abrir qualquer editor.
+  const base = () => supabase.from('orcamentos_kanban_resumo').select('*')
     .or('modo_entrada.is.null,modo_entrada.neq.balcao')
     .is('kanban_retirado_em',null)
   // Todos os cards de trabalho continuam acessíveis. As etapas finalizadas
@@ -697,9 +701,10 @@ finally {setSalvandoBairro(false)}
 async function abrirCard(card: OrcamentoRapido) {
 const agoraIso = new Date().toISOString()
 let cardAberto = card
-if(ehOrcamentoWVetro(card)){
+// Nunca editar um resumo: inclusive formulários e WhatsApp podem ter dados W.Vetro.
+{
 const {data,error}=await supabase.from('orcamentos').select('*').eq('id',card.id).maybeSingle()
-if(error||!data){window.alert('Não foi possível atualizar o status das validações. Reabra o card.');return}
+if(error||!data){window.alert('Não foi possível carregar os detalhes do orçamento. Tente abrir o card novamente.');return}
 cardAberto=data as OrcamentoRapido
 setCards(prev=>prev.map(c=>c.id===card.id?cardAberto:c))
 }
@@ -1183,7 +1188,7 @@ let pdfUrlAtual: string | null = null
 const slugCliente = (editando.cliente_nome || 'cliente').trim().replace(/\s+/g, '-').toLowerCase()
 const nomeArquivoPdf = `orcamento-v${versaoFormatada}-${slugCliente}-${agoraIso.slice(0, 10)}.pdf`
 try {
-const pdfBlob = gerarPdfOrcamento(editando)
+const pdfBlob = await gerarPdfOrcamento(editando)
 pdfFile = new File([pdfBlob], nomeArquivoPdf, { type: 'application/pdf' })
 } catch (e) {
 console.error('Erro ao gerar PDF do orçamento:', e)
@@ -1547,7 +1552,7 @@ setCardSelecionado(null)
 setEditando(null)
 }
 
-if (carregando) {
+if (carregando && colunas.length === 0) {
 return <div className="min-h-screen flex items-center justify-center text-slate-400">Carregando...</div>
 }
 
@@ -1685,7 +1690,7 @@ Limpar filtros
   </div>
   <p className="text-xs text-slate-500">Fazer orçamento, Em andamento e Orçamento feito permanecem visíveis mesmo após a virada do mês. Enviado ao cliente e Vendido exibem o mês selecionado; os meses anteriores continuam salvos e pesquisáveis.</p>
   {modoHistorico==='periodo'&&!filtroDataDe&&!filtroDataAte&&<p className="text-xs text-amber-700">Selecione as datas De e Até acima. Sem datas, o histórico inteiro fica disponível.</p>}
-  {erroKanban&&<p role="alert" className="text-sm font-semibold text-red-700">{erroKanban}</p>}
+  {erroKanban&&<div role="alert" className="text-sm font-semibold text-red-700"><p>{erroKanban}</p><button type="button" disabled={carregando} onClick={()=>void carregar()} className="mt-2 rounded-lg border px-3 py-2 disabled:opacity-50">{carregando ? 'Tentando novamente...' : 'Tentar novamente'}</button></div>}
   {retirados&&<div className="rounded-lg border border-slate-200 p-3 space-y-2">
     <p className="text-sm font-bold text-slate-700">Cards retirados — até 100 mais recentes</p>
     {retirados.length===0&&<p className="text-sm text-slate-500">Nenhum card retirado.</p>}
@@ -2868,3 +2873,4 @@ className="w-full py-2 flex items-center justify-center gap-1.5 text-red-500 tex
 </div>
 )
 }
+
