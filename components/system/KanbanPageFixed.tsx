@@ -144,6 +144,22 @@ type WVetroCandidatoKanban = {
   status_validacao?: 'pendente' | 'aprovado' | 'rejeitado' | 'outro_cliente' | string | null
 }
 
+type WVetroPreviaNumeroKanban = {
+  numero: string
+  nomeWVetro: string
+  valor: number | null
+  quantidadeItens: number
+  data: string | null
+  origem: string
+  clienteAtlas: { id: string; nome: string } | null
+  compativel: boolean
+  conflito: boolean
+  existe: { id: string; nome: string; clienteId: string | null } | null
+  tokenConferencia: string
+  cardAtualizadoEm: string | null
+  nomeCard: string
+}
+
 function fluxoWVetro(card: OrcamentoRapido | null | undefined): Record<string, any> {
   const fluxo = (card as any)?.wvetro_fluxo
   return fluxo && typeof fluxo === 'object' && !Array.isArray(fluxo) ? fluxo : {}
@@ -338,6 +354,11 @@ const [sincronizandoWVetro, setSincronizandoWVetro] = useState(false)
 const [validandoWVetro, setValidandoWVetro] = useState(false)
 const [candidatosWVetro, setCandidatosWVetro] = useState<WVetroCandidatoKanban[]>([])
 const [mensagemWVetro, setMensagemWVetro] = useState('')
+const [abrirBuscaNumeroWVetro, setAbrirBuscaNumeroWVetro] = useState(false)
+const [numeroDigitadoWVetro, setNumeroDigitadoWVetro] = useState('')
+const [previaNumeroWVetro, setPreviaNumeroWVetro] = useState<WVetroPreviaNumeroKanban | null>(null)
+const [confirmouNumeroWVetro, setConfirmouNumeroWVetro] = useState(false)
+const [confirmouDivergenciaNumeroWVetro, setConfirmouDivergenciaNumeroWVetro] = useState(false)
 const [valorVendaWVetroDraft, setValorVendaWVetroDraft] = useState('')
 const [motivoValorVendaWVetro, setMotivoValorVendaWVetro] = useState('')
 const [conferindoValorVendaWVetro, setConferindoValorVendaWVetro] = useState(false)
@@ -746,6 +767,11 @@ setWhatsappVendedor('')
 setMensagemVendedor(mensagemPadraoVendedor(cardAberto))
 setCandidatosWVetro([])
 setMensagemWVetro('')
+setAbrirBuscaNumeroWVetro(false)
+setNumeroDigitadoWVetro('')
+setPreviaNumeroWVetro(null)
+setConfirmouNumeroWVetro(false)
+setConfirmouDivergenciaNumeroWVetro(false)
 
 await registrarHistorico(
 cardAberto.id,
@@ -829,9 +855,10 @@ listarHistorico(cardSelecionado.id).then(setHistorico)
 }
 
 async function apiWVetroKanban(
-acao: 'buscar' | 'vincular' | 'validar_importacao' | 'corrigir_importacao',
+acao: 'buscar' | 'vincular' | 'validar_importacao' | 'corrigir_importacao' | 'consultar_numero' | 'vincular_numero',
 numeroWvetro?: string,
 correcao?: OrcamentoRapido | null,
+dadosExtras?: Record<string, unknown>,
 ) {
 const token = await tokenAtual()
 if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
@@ -839,7 +866,7 @@ if (!cardSelecionado) throw new Error('Abra um orçamento antes de sincronizar.'
 const resp = await fetch('/api/integracoes/wvetro/orcamentos/kanban', {
 method: 'POST',
 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-body: JSON.stringify({ acao, cardId: cardSelecionado.id, numeroWvetro, correcao }),
+body: JSON.stringify({ acao, cardId: cardSelecionado.id, numeroWvetro, correcao, ...dadosExtras }),
 })
 const json = await resp.json().catch(() => ({}))
 if (!resp.ok) throw new Error(json?.error || 'Falha ao consultar o W.Vetro.')
@@ -1015,6 +1042,72 @@ setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao buscar orçamentos 
 } finally {
 setBuscandoWVetro(false)
 }
+}
+
+async function consultarNumeroWVetroCard() {
+  if (!cardSelecionado || buscandoWVetro || sincronizandoWVetro) return
+  const numero = numeroDigitadoWVetro.trim()
+  if (!/^[1-9][0-9]{0,9}$/.test(numero)) {
+    setMensagemWVetro('Digite o número exato do orçamento W.Vetro, somente números.')
+    return
+  }
+  setBuscandoWVetro(true)
+  setMensagemWVetro('')
+  setPreviaNumeroWVetro(null)
+  setConfirmouNumeroWVetro(false)
+  setConfirmouDivergenciaNumeroWVetro(false)
+  try {
+    const dados = await apiWVetroKanban('consultar_numero', numero)
+    if (!dados?.tokenConferencia || dados.numero !== numero) {
+      throw new Error('A conferência não retornou o número solicitado. Nada foi alterado.')
+    }
+    setPreviaNumeroWVetro(dados as WVetroPreviaNumeroKanban)
+    setMensagemWVetro(dados.conflito
+      ? 'Este número já possui vínculo com outro cliente. Não é possível sincronizar este card.'
+      : 'Confira o nome, o número e o Cliente 360. Esta prévia não alterou o card.')
+  } catch (e) {
+    setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao consultar o número W.Vetro.')
+  } finally {
+    setBuscandoWVetro(false)
+  }
+}
+
+async function confirmarNumeroWVetroCard() {
+  const previa = previaNumeroWVetro
+  if (!cardSelecionado || !previa || !confirmouNumeroWVetro || previa.conflito || sincronizandoWVetro) return
+  if (!previa.compativel && !confirmouDivergenciaNumeroWVetro) {
+    setMensagemWVetro('Os nomes são diferentes. Confira o cliente e marque a confirmação da divergência.')
+    return
+  }
+  setSincronizandoWVetro(true)
+  setMensagemWVetro('')
+  try {
+    const dados = await apiWVetroKanban('vincular_numero', previa.numero, null, {
+      tokenConferencia: previa.tokenConferencia,
+      cardAtualizadoEm: previa.cardAtualizadoEm,
+      confirmaNumero: previa.numero,
+      confirmaNome: previa.nomeWVetro,
+      confirmouVinculo: true,
+      confirmouDivergencia: confirmouDivergenciaNumeroWVetro,
+    })
+    const atualizado = dados.orcamento as OrcamentoRapido
+    if (!atualizado?.id || atualizado.id !== cardSelecionado.id) {
+      throw new Error('O Atlas não confirmou o vínculo com este card. Reabra e confira antes de mover.')
+    }
+    const exibicao = { ...atualizado, anexos: normalizarVersoesLegadas(atualizado.anexos) }
+    setEditando(exibicao)
+    setCardSelecionado(exibicao)
+    setCards(prev => prev.filter(c => c.id !== dados.ocultadoId).map(c => c.id === exibicao.id ? exibicao : c))
+    setHistorico(await listarHistorico(exibicao.id))
+    setPreviaNumeroWVetro(null)
+    setAbrirBuscaNumeroWVetro(false)
+    setCandidatosWVetro([])
+    setMensagemWVetro([dados.mensagem, dados.avisoAnexo].filter(Boolean).join(' '))
+  } catch (e) {
+    setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao vincular por número.')
+  } finally {
+    setSincronizandoWVetro(false)
+  }
 }
 
 async function adicionarAnexo(file: File | undefined) {
@@ -2499,7 +2592,74 @@ className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg
 {buscandoWVetro || sincronizandoWVetro ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
 {sincronizandoWVetro ? 'Sincronizando...' : 'Sincronizar W.Vetro'}
 </button>
+<button
+type="button"
+onClick={() => { setAbrirBuscaNumeroWVetro(v => !v); setPreviaNumeroWVetro(null); setConfirmouNumeroWVetro(false); setConfirmouDivergenciaNumeroWVetro(false); setMensagemWVetro('') }}
+disabled={buscandoWVetro || sincronizandoWVetro || enviandoAnexo}
+className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-800 hover:bg-blue-50 disabled:opacity-50"
+>
+<Search size={13} /> Sincronizar por número W.Vetro
+</button>
 </div>
+
+{abrirBuscaNumeroWVetro && (
+<div className="space-y-3 rounded-xl border border-blue-200 bg-white p-3">
+  <p className="text-xs font-bold text-slate-800">Buscar orçamento exato no W.Vetro</p>
+  <div className="flex flex-wrap items-end gap-2">
+    <label className="min-w-[160px] flex-1 text-xs font-semibold text-slate-600">
+      Nº do orçamento W.Vetro
+      <input type="text" inputMode="numeric" maxLength={10} placeholder="Ex.: 1255"
+        value={numeroDigitadoWVetro}
+        onChange={e => { setNumeroDigitadoWVetro(e.target.value.replace(/\D/g, '')); setPreviaNumeroWVetro(null); setConfirmouNumeroWVetro(false); setConfirmouDivergenciaNumeroWVetro(false) }}
+        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+      />
+    </label>
+    <button type="button" onClick={() => void consultarNumeroWVetroCard()}
+      disabled={buscandoWVetro || sincronizandoWVetro || !/^[1-9][0-9]{0,9}$/.test(numeroDigitadoWVetro)}
+      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+      {buscandoWVetro ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+      {buscandoWVetro ? 'Consultando...' : 'Buscar número'}
+    </button>
+  </div>
+  {previaNumeroWVetro && (
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="text-xs font-bold text-slate-800">Prévia de conferência — nenhuma alteração feita</p>
+      <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+        <div><dt className="text-slate-500">Nº W.Vetro</dt><dd className="font-bold">#{previaNumeroWVetro.numero}</dd></div>
+        <div><dt className="text-slate-500">Cliente no W.Vetro</dt><dd className="font-bold break-words">{previaNumeroWVetro.nomeWVetro}</dd></div>
+        <div><dt className="text-slate-500">Cliente vinculado a este card</dt><dd className="font-bold break-words">{previaNumeroWVetro.clienteAtlas?.nome || 'Não identificado'}</dd></div>
+        <div><dt className="text-slate-500">Origem / itens</dt><dd className="font-semibold">{previaNumeroWVetro.origem} · {previaNumeroWVetro.quantidadeItens} item(ns)</dd></div>
+        <div><dt className="text-slate-500">Valor no W.Vetro</dt><dd className="font-semibold">{previaNumeroWVetro.valor == null ? 'Não informado' : formatarMoedaBRL(previaNumeroWVetro.valor)}</dd></div>
+        <div><dt className="text-slate-500">Card de destino</dt><dd className="font-semibold break-words">{previaNumeroWVetro.nomeCard}</dd></div>
+      </dl>
+      {previaNumeroWVetro.existe && <p className="rounded-lg bg-amber-50 px-2 py-2 text-[11px] text-amber-800">
+        Este número também consta em um orçamento Atlas de {previaNumeroWVetro.existe.nome || 'cliente não informado'}. O vínculo será permitido somente se a identidade for compatível.
+      </p>}
+      {previaNumeroWVetro.conflito
+        ? <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-bold text-red-700">Bloqueado: este número pertence a outro cadastro. Confira o Cliente 360 antes de continuar.</p>
+        : <>
+          {!previaNumeroWVetro.compativel && <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-900">
+            <input type="checkbox" className="mt-0.5" checked={confirmouDivergenciaNumeroWVetro}
+              onChange={e => setConfirmouDivergenciaNumeroWVetro(e.target.checked)} />
+            Conferi a diferença entre o nome do W.Vetro e o Cliente 360 e confirmo que são a mesma pessoa.
+          </label>}
+          <label className="flex items-start gap-2 text-xs text-slate-700">
+            <input type="checkbox" className="mt-0.5" checked={confirmouNumeroWVetro}
+              onChange={e => setConfirmouNumeroWVetro(e.target.checked)} />
+            Confirmo que o orçamento #{previaNumeroWVetro.numero} de {previaNumeroWVetro.nomeWVetro} pertence a este card.
+          </label>
+          <button type="button" onClick={() => void confirmarNumeroWVetroCard()}
+            disabled={sincronizandoWVetro || !confirmouNumeroWVetro || (!previaNumeroWVetro.compativel && !confirmouDivergenciaNumeroWVetro)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+            {sincronizandoWVetro ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+            {sincronizandoWVetro ? 'Vinculando...' : 'Confirmar sincronização com este card'}
+          </button>
+        </>}
+    </div>
+  )}
+  <p className="text-[11px] text-slate-500">O card e os anexos são preservados. Após vincular, as conferências de esquadrias e as regras de movimentação continuam obrigatórias.</p>
+</div>
+)}
 
 {mensagemWVetro && (
 <div className="rounded-lg border border-blue-100 bg-white px-3 py-2 text-xs text-slate-600">{mensagemWVetro}</div>
