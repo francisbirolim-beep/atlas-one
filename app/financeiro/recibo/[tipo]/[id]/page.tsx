@@ -9,6 +9,7 @@ export default function ReciboFinanceiroPage(){
  const params=useParams<{tipo:string;id:string}>()
  const busca=useSearchParams()
  const obraId=busca.get('obraId')||''
+ const acao=busca.get('acao')==='imprimir'?'imprimir':busca.get('acao')==='pdf'?'pdf':null
  const [dados,setDados]=useState<ReciboInfo|null>(null),[loading,setLoading]=useState(true),[erro,setErro]=useState('')
  useEffect(()=>{
   let ativo=true
@@ -27,6 +28,6 @@ export default function ReciboFinanceiroPage(){
  },[params.id,params.tipo,obraId])
  return <main className="min-h-screen bg-slate-100 p-4 sm:p-8 print:bg-white print:p-0">
   <div className="no-print mx-auto mb-3 max-w-[820px]"><Link className="text-sm font-semibold text-blue-700 underline" href={params.tipo==='pagar'?'/financeiro/contas-pagar':'/financeiro/contas-receber'}>← Voltar para o financeiro</Link></div>
-  {loading?<p className="text-center text-sm text-slate-600">Carregando recibo...</p>:erro?<p role="alert" className="mx-auto max-w-[820px] rounded-xl bg-red-50 p-4 text-sm text-red-700">{erro}</p>:dados?<ReciboImpressao dados={dados}/>:<p>Recibo não encontrado.</p>}
+  {loading?<p className="text-center text-sm text-slate-600">Carregando recibo...</p>:erro?<p role="alert" className="mx-auto max-w-[820px] rounded-xl bg-red-50 p-4 text-sm text-red-700">{erro}</p>:dados?<ReciboImpressao dados={dados} acaoInicial={acao}/>:<p>Recibo não encontrado.</p>}
  </main>
 }

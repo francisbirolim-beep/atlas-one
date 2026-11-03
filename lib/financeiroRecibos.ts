@@ -1,7 +1,7 @@
 export type ReciboInfo={
   tipo:'pagar'|'receber';nome:string;documento?:string|null;obra?:string|null;
   referencia?:string|null;descricao?:string|null;data:string;forma?:string|null;
-  valorOriginal:number;valorMovimento:number;saldo:number;id:string
+  valorOriginal:number;valorMovimento:number;saldo:number;id:string;assinaturaDataUri?:string|null
 }
 export function textoRecibo(d:ReciboInfo){
  const moeda=(n:number)=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
