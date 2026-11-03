@@ -3,6 +3,7 @@ import {autenticarCompras} from '@/lib/comprasServer'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
 import {usuarioPodeAcaoServer} from '@/lib/acessoUsuarioServer'
 import type {ReciboInfo} from '@/lib/financeiroRecibos'
+import { assinaturaReciboAutorizada } from '@/lib/financeiroAssinatura'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -64,7 +65,7 @@ export async function GET(req:NextRequest){
   const valorOriginal=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Number(c.valor||0),0)
   const saldo=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
   const recebidoNaObra=filtroObra?(alocs.data||[]).filter(a=>a.tipo==='conta'&&(a.obra_id||'sem-obra')===filtroObra).reduce((v,a)=>v+Number(a.valor||0),0):Number(rec.valor)
-  const recibo:ReciboInfo={tipo:'receber',id,nome:cli.data.nome,documento:cli.data.cpf_cnpj,obra:obra?.data?.nome|| (idsObras.length>1&&!filtroObra?'Recebimento de múltiplas obras — consulte os extratos individualizados':'Sem obra vinculada'),descricao:rec.observacoes||null,referencia:rec.referencia,data:rec.data_recebimento,forma:rec.forma,valorOriginal:valorOriginal||Number(rec.valor),valorMovimento:recebidoNaObra,saldo}
+  const recibo:ReciboInfo={tipo:'receber',id,nome:cli.data.nome,documento:cli.data.cpf_cnpj,obra:obra?.data?.nome|| (idsObras.length>1&&!filtroObra?'Recebimento de múltiplas obras — consulte os extratos individualizados':'Sem obra vinculada'),descricao:rec.observacoes||null,referencia:rec.referencia,data:rec.data_recebimento,forma:rec.forma,valorOriginal:valorOriginal||Number(rec.valor),valorMovimento:recebidoNaObra,saldo,assinaturaDataUri:assinaturaReciboAutorizada()}
   return NextResponse.json({ok:true,recibo})
  }catch(e){console.error('recibo financeiro',e);return bad('Não foi possível carregar os dados do recibo.',500)}
 }
