@@ -1,3 +1,9 @@
+## 2026-11-03 — Sincronização por número W.Vetro
+
+- API autenticada para prévia e confirmação, busca por número exato, seleção de Cliente 360 existente ou criação explícita por Master e proteção contra troca de cliente.
+- Botão na aba Orçamentos do Cliente 360, tela dedicada com origem, itens, valor, situação e avisos. Reuso de `candidatos-cliente` sem alterar seu funcionamento.
+- Teste isolado `scripts/test-wvetro-sincronizar-numero.cjs`, cobrindo os dois números, divergência, bloqueio e nenhuma escrita de prévia.
+
 ## 2026-10-24/25 — Prévia do Kanban Geral e planejamento de instalação (somente branch isolada)
 
 - Rotas React com oito colunas, modo TV, painel lateral e pedidos separados sem duplicar projeto; leitura de vendas, compras, produto/imagem, ordens e instalação por API autenticada Master.

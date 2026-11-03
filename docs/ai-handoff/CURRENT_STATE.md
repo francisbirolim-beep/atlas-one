@@ -1,3 +1,10 @@
+## 2026-11-03 — W.Vetro: sincronização por número (IMPLEMENTADA, A PUBLICAR)
+
+- Rota `/api/integracoes/wvetro/orcamentos/sincronizar-numero` e tela `/integracoes/wvetro/sincronizar-numero`, atalho aditivo no Cliente 360. Consulta exata primeiro histórico e, se ausente, `pedidoByKey`; prévia sem gravação.
+- Token HMAC por usuário/empresa/número/nome/cliente; confirmação explícita, confirmação extra de divergência e bloqueio de vínculo com outro cliente. Master pode criar cadastro novo somente com aprovação; reutiliza o fluxo histórico já existente.
+- #588 Ronaldo Seron: histórico com 12 itens, Cliente 360 "RONALDO S"; #714 Roberto Marcio Barreto Santos: histórico com 7 itens, cliente ainda inexistente. Ambos aguardam conferência, sem importação automática.
+- Sem alteração de cálculos, precificação, integração por datas, banco, anexos ou Kanban. Testes de TypeScript, W.Vetro existentes e novo teste de prévia/segurança aprovados.
+
 ## 2026-10-24/25 — Kanban Geral e Capacidade de Instalação (NOVO PREVIEW, NÃO PUBLICADO)
 
 - Branch isolada feat/visao-geral-etapas-20261024, com páginas /visao-geral-projetos e /relatorios/instalacoes, APIs exclusivas de consulta e configuração Master e prévia HTML interativa sem banco em public/atlas-visao-geral-preview.html.
