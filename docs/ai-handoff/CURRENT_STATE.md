@@ -1,3 +1,10 @@
+## 2026-11-03 — Kanban Comercial: corrigir cliente vinculado ao orçamento
+
+- Adicionada ao modal do card a ação **Trocar cliente vinculado** (somente Master), com busca de Cliente 360 ativo, prévia do ID/nome realmente associado e seleção explícita da obra no cadastro de destino.
+- Rota autenticada `GET/POST /api/kanban/comercial/trocar-cliente`: escopo de empresa, origem/destino validados, atualização concorrente controlada por `updated_at`, justificativa e confirmação, registro em histórico. Não move nem inativa clientes ou obras antigos automaticamente.
+- Bloqueia orçamento finalizado, convertido/aprovado, W.Vetro já vinculado, assistência, dependências financeiras/produção/CRM e obra de outro titular. Atualiza somente `cliente_id`, `cliente_nome`, `cliente_whatsapp`, `obra_id`, `updated_at`. Itens, medidas, valores, fotos, anexos e estágios ficam intocados.
+- Caso Valdinei Noel: cadastro anterior "VALDINEI NOEL (BRANCO)" e correto "VALDINEI NOEL DA COSTA" confirmados em leitura; o card #361 e a obra antiga não foram migrados automaticamente. O correto tem as obras CASA e LOJA. Teste simulado e TypeScript aprovados.
+
 ## 2026-11-03 — W.Vetro: sincronização por número (IMPLEMENTADA, A PUBLICAR)
 
 - Rota `/api/integracoes/wvetro/orcamentos/sincronizar-numero` e tela `/integracoes/wvetro/sincronizar-numero`, atalho aditivo no Cliente 360. Consulta exata primeiro histórico e, se ausente, `pedidoByKey`; prévia sem gravação.
