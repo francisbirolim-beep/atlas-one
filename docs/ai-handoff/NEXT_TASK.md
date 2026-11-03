@@ -1,3 +1,10 @@
+## 2026-11-03 — HOMOLOGAR sincronização W.Vetro por número
+
+1. No Cliente 360 abrir Orçamentos → Sincronizar por número, consultar #588 e confirmar que "RONALDO S" é "RONALDO SERON" antes de vincular 12 itens.
+2. Consultar #714, conferir "ROBERTO MARCIO BARRETO SANTOS" e, se correto, criar Cliente 360 novo com autorização Master; conferir 7 itens.
+3. Verificar bloqueio de número vinculado a outro cliente, permissão sem Master, clientes homônimos, nenhum recálculo de valores e sincronização antiga intacta.
+4. Fazer implantação atômica com rollback ao deployment anterior após checagens e aprovação.
+
 ## 2026-10-24/25 — PRÓXIMO: homologar prévia de Visão Geral e instalações (SEM DEPLOY)
 
 1. Abrir no MacBook http://localhost:4017/atlas-visao-geral-preview.html e testar cores, oito colunas, card/painel lateral, pedido de compra por obra e relatório/calendário. Todos os dados exibidos nesta URL são fictícios.
