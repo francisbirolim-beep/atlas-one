@@ -29,6 +29,39 @@ import LeituraTrenaIA from '@/components/system/LeituraTrenaIA'
 import WhatsAppOrcamentoNotas from '@/components/system/WhatsAppOrcamentoNotas'
 import { linkRotaObra, localizacaoRegistradaNaObra, enderecoCompletoObra } from '@/lib/enderecoObra'
 
+type ClienteTrocaOpcao = {
+  id: string
+  nome: string
+  ativo?: boolean
+  cidade?: string | null
+  whatsapp?: string | null
+  telefone?: string | null
+}
+type ObraDestinoTroca = {
+  id: string
+  nome: string
+  cliente_id: string
+  endereco: string | null
+  numero_endereco: string | null
+  bairro: string | null
+  cidade: string | null
+  uf: string | null
+  cep: string | null
+  observacoes: string | null
+}
+type PreviaTrocaCliente = {
+  cardId: string
+  atualizadoEm: string
+  clienteAnterior: { id: string; nome: string }
+  nomeExibidoNoCard?: string
+  clienteNovo: ClienteTrocaOpcao
+  obraAnterior: { id: string; nome: string; cliente_id: string } | null
+  obrasDestino: ObraDestinoTroca[]
+  motivosBloqueio: string[]
+  whatsappAtual: string | null
+  novoWhatsapp: string | null
+}
+
 type ObraKanbanLocal = {
   id: string
   nome: string
@@ -354,6 +387,15 @@ const [sincronizandoWVetro, setSincronizandoWVetro] = useState(false)
 const [validandoWVetro, setValidandoWVetro] = useState(false)
 const [candidatosWVetro, setCandidatosWVetro] = useState<WVetroCandidatoKanban[]>([])
 const [mensagemWVetro, setMensagemWVetro] = useState('')
+const [abrirTrocaCliente, setAbrirTrocaCliente] = useState(false)
+const [buscaClienteTroca, setBuscaClienteTroca] = useState('')
+const [resultadosClienteTroca, setResultadosClienteTroca] = useState<ClienteTrocaOpcao[]>([])
+const [previaTrocaCliente, setPreviaTrocaCliente] = useState<PreviaTrocaCliente | null>(null)
+const [obraIdTrocaCliente, setObraIdTrocaCliente] = useState('')
+const [motivoTrocaCliente, setMotivoTrocaCliente] = useState('')
+const [confirmouTrocaCliente, setConfirmouTrocaCliente] = useState(false)
+const [carregandoTrocaCliente, setCarregandoTrocaCliente] = useState(false)
+const [mensagemTrocaCliente, setMensagemTrocaCliente] = useState('')
 const [abrirBuscaNumeroWVetro, setAbrirBuscaNumeroWVetro] = useState(false)
 const [numeroDigitadoWVetro, setNumeroDigitadoWVetro] = useState('')
 const [previaNumeroWVetro, setPreviaNumeroWVetro] = useState<WVetroPreviaNumeroKanban | null>(null)
@@ -767,6 +809,14 @@ setWhatsappVendedor('')
 setMensagemVendedor(mensagemPadraoVendedor(cardAberto))
 setCandidatosWVetro([])
 setMensagemWVetro('')
+setAbrirTrocaCliente(false)
+setBuscaClienteTroca('')
+setResultadosClienteTroca([])
+setPreviaTrocaCliente(null)
+setObraIdTrocaCliente('')
+setMotivoTrocaCliente('')
+setConfirmouTrocaCliente(false)
+setMensagemTrocaCliente('')
 setAbrirBuscaNumeroWVetro(false)
 setNumeroDigitadoWVetro('')
 setPreviaNumeroWVetro(null)
@@ -1107,6 +1157,102 @@ async function confirmarNumeroWVetroCard() {
     setMensagemWVetro(e instanceof Error ? e.message : 'Falha ao vincular por número.')
   } finally {
     setSincronizandoWVetro(false)
+  }
+}
+
+async function consultarTrocaCliente(query: string) {
+  const token = await tokenAtual()
+  if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+  const r = await fetch('/api/kanban/comercial/trocar-cliente?' + query, {
+    headers: { Authorization: 'Bearer ' + token }, cache: 'no-store',
+  })
+  const dados = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(dados.error || 'Não foi possível consultar os clientes.')
+  return dados
+}
+
+async function buscarClientesParaTroca() {
+  if (carregandoTrocaCliente || buscaClienteTroca.trim().length < 2) return
+  setCarregandoTrocaCliente(true)
+  setMensagemTrocaCliente('')
+  setResultadosClienteTroca([])
+  setPreviaTrocaCliente(null)
+  try {
+    const dados = await consultarTrocaCliente('busca=' + encodeURIComponent(buscaClienteTroca.trim()))
+    setResultadosClienteTroca((dados.clientes || []) as ClienteTrocaOpcao[])
+    if (!dados.clientes?.length) setMensagemTrocaCliente('Nenhum cliente ativo encontrado com esse nome.')
+  } catch (e) {
+    setMensagemTrocaCliente(e instanceof Error ? e.message : 'Falha na pesquisa de clientes.')
+  } finally {
+    setCarregandoTrocaCliente(false)
+  }
+}
+
+async function selecionarClienteParaTroca(id: string) {
+  if (!cardSelecionado || carregandoTrocaCliente) return
+  setCarregandoTrocaCliente(true)
+  setMensagemTrocaCliente('')
+  setPreviaTrocaCliente(null)
+  setObraIdTrocaCliente('')
+  setConfirmouTrocaCliente(false)
+  try {
+    const dados = await consultarTrocaCliente('cardId=' + encodeURIComponent(cardSelecionado.id) +
+      '&clienteId=' + encodeURIComponent(id))
+    setPreviaTrocaCliente(dados as PreviaTrocaCliente)
+    if (!dados.obraAnterior) setObraIdTrocaCliente('__sem_obra__')
+  } catch (e) {
+    setMensagemTrocaCliente(e instanceof Error ? e.message : 'Não foi possível conferir o cadastro.')
+  } finally {
+    setCarregandoTrocaCliente(false)
+  }
+}
+
+async function confirmarTrocaDeCliente() {
+  const p = previaTrocaCliente
+  if (!p || !cardSelecionado || carregandoTrocaCliente || !confirmouTrocaCliente ||
+    !obraIdTrocaCliente || motivoTrocaCliente.trim().length < 8 || p.motivosBloqueio.length) return
+  const nomeNovo = p.clienteNovo.nome
+  if (!window.confirm('Confirmar troca de cadastro neste orçamento?\\n\\n' +
+    p.clienteAnterior.nome + ' → ' + nomeNovo +
+    '\\n\\nOs itens, valores, medidas e anexos serão preservados. A obra antiga não será movida.')) return
+  setCarregandoTrocaCliente(true)
+  setMensagemTrocaCliente('')
+  try {
+    const token = await tokenAtual()
+    if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+    const r = await fetch('/api/kanban/comercial/trocar-cliente', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cardId: cardSelecionado.id, clienteOrigemId: p.clienteAnterior.id,
+        clienteId: p.clienteNovo.id, atualizadoEm: p.atualizadoEm,
+        novaObraId: obraIdTrocaCliente === '__sem_obra__' ? null : obraIdTrocaCliente,
+        motivo: motivoTrocaCliente.trim(), confirmou: true,
+      }),
+    })
+    const dados = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(dados.error || 'Não foi possível trocar o cliente.')
+    const atualizado = dados.orcamento as OrcamentoRapido
+    if (!atualizado?.id || atualizado.id !== cardSelecionado.id || atualizado.cliente_id !== p.clienteNovo.id) {
+      throw new Error('O servidor não confirmou a troca no card. Reabra e confira o cadastro.')
+    }
+    const exibicao = { ...atualizado, anexos: normalizarVersoesLegadas(atualizado.anexos) }
+    setCardSelecionado(exibicao)
+    setEditando(exibicao)
+    setCards(prev => prev.map(c => c.id === exibicao.id ? exibicao : c))
+    if (dados.obra?.id) {
+      const o = dados.obra as ObraKanbanLocal
+      setObrasPorId(prev => ({ ...prev, [o.id]: o }))
+    }
+    setHistorico(await listarHistorico(exibicao.id))
+    setAbrirTrocaCliente(false)
+    setPreviaTrocaCliente(null)
+    setConfirmouTrocaCliente(false)
+    setMensagemTrocaCliente(dados.aviso || 'Cadastro correto vinculado ao orçamento.')
+  } catch (e) {
+    setMensagemTrocaCliente(e instanceof Error ? e.message : 'A troca não foi concluída.')
+  } finally {
+    setCarregandoTrocaCliente(false)
   }
 }
 
@@ -2021,6 +2167,107 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
   ) : cardSelecionado.obra_id ? <p className="mt-2 text-xs text-slate-500">{statusLocais === 'carregando' ? 'Consultando o endereço da obra...' : statusLocais === 'erro' ? 'Não foi possível consultar o endereço. Você pode abrir a obra pelo Cliente 360.' : 'Obra vinculada indisponível para consulta.'}</p>
     : <p className="mt-2 text-xs text-amber-700">Este orçamento antigo não tem obra vinculada. Confira a obra no Cliente 360.</p>}
   {cardSelecionado.cliente_id && <Link href={`/clientes/${cardSelecionado.cliente_id}`} className="mt-2 inline-flex text-xs font-semibold text-blue-700 underline">Abrir Cliente 360</Link>}
+  {usuario?.role === 'master' && !cardSelecionado.eh_assistencia && (
+    <button type="button"
+      disabled={salvando || sincronizandoWVetro || carregandoTrocaCliente}
+      onClick={() => {
+        setAbrirTrocaCliente(v => !v)
+        setPreviaTrocaCliente(null)
+        setResultadosClienteTroca([])
+        setObraIdTrocaCliente('')
+        setMotivoTrocaCliente('')
+        setConfirmouTrocaCliente(false)
+        setBuscaClienteTroca(cardSelecionado.cliente_nome.split(' ')[0] || '')
+        setMensagemTrocaCliente('')
+      }}
+      className="ml-3 mt-2 inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 text-xs font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-50">
+      <User size={13}/> Trocar cliente vinculado
+    </button>
+  )}
+  {mensagemTrocaCliente && <p role="status" className="mt-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs text-blue-900">{mensagemTrocaCliente}</p>}
+  {abrirTrocaCliente && usuario?.role === 'master' && (
+    <div className="mt-3 space-y-3 rounded-xl border border-blue-200 bg-white p-3">
+      <div>
+        <p className="text-sm font-bold text-slate-900">Corrigir cadastro deste orçamento</p>
+        <p className="mt-1 text-xs text-slate-600">Atual: <b>{cardSelecionado.cliente_nome}</b>. O Master pode selecionar outro Cliente 360 ativo. Salve eventuais edições do orçamento antes de realizar a troca.</p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="min-w-[155px] flex-1 text-xs font-semibold text-slate-600">
+          Buscar cliente correto
+          <input type="search" value={buscaClienteTroca} placeholder="Nome do cliente"
+            onChange={e => { setBuscaClienteTroca(e.target.value); setResultadosClienteTroca([]); setPreviaTrocaCliente(null); setConfirmouTrocaCliente(false) }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void buscarClientesParaTroca() } }}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </label>
+        <button type="button" disabled={carregandoTrocaCliente || buscaClienteTroca.trim().length < 2}
+          onClick={() => void buscarClientesParaTroca()}
+          className="inline-flex items-center gap-1 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+          {carregandoTrocaCliente ? <Loader2 size={13} className="animate-spin"/> : <Search size={13}/>}
+          Procurar
+        </button>
+      </div>
+      {resultadosClienteTroca.length > 0 && (
+        <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2">
+          {resultadosClienteTroca.map(c => (
+            <button type="button" key={c.id} disabled={carregandoTrocaCliente || c.id === cardSelecionado.cliente_id}
+              onClick={() => void selecionarClienteParaTroca(c.id)}
+              className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs hover:bg-blue-50 disabled:opacity-50">
+              <b className="block text-slate-900">{c.nome}</b>
+              <span className="text-slate-500">{c.cidade || 'Cidade não informada'}{c.id === cardSelecionado.cliente_id ? ' · cadastro atual' : ''}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {previaTrocaCliente && (
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-bold text-slate-800">Prévia da troca — nada foi alterado</p>
+          <dl className="space-y-2 text-xs text-slate-700">
+            <div><dt className="font-semibold text-slate-500">Cadastro realmente vinculado (atual)</dt><dd className="font-semibold text-amber-800">{previaTrocaCliente.clienteAnterior.nome}</dd></div>
+            {previaTrocaCliente.nomeExibidoNoCard && previaTrocaCliente.nomeExibidoNoCard !== previaTrocaCliente.clienteAnterior.nome && <div><dt className="font-semibold text-slate-500">Nome escrito no orçamento</dt><dd>{previaTrocaCliente.nomeExibidoNoCard}</dd></div>}
+            <div><dt className="font-semibold text-slate-500">Cadastro correto</dt><dd className="font-bold text-blue-800">{previaTrocaCliente.clienteNovo.nome}</dd></div>
+            <div><dt className="font-semibold text-slate-500">WhatsApp após a troca</dt><dd>{previaTrocaCliente.novoWhatsapp || 'Não informado'}</dd></div>
+            <div><dt className="font-semibold text-slate-500">Obra atualmente vinculada</dt><dd>{previaTrocaCliente.obraAnterior?.nome || 'Nenhuma'}</dd></div>
+          </dl>
+          {previaTrocaCliente.motivosBloqueio.length > 0 ? (
+            <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs font-semibold text-red-800">
+              {previaTrocaCliente.motivosBloqueio.map((motivo, i) => <p key={i}>{motivo}</p>)}
+            </div>
+          ) : <>
+            <label className="block text-xs font-semibold text-slate-700">
+              Obra para vincular ao cadastro correto
+              <select value={obraIdTrocaCliente} onChange={e => { setObraIdTrocaCliente(e.target.value); setConfirmouTrocaCliente(false) }}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs">
+                <option value="">Selecione a obra de destino</option>
+                <option value="__sem_obra__">Sem obra vinculada por enquanto</option>
+                {previaTrocaCliente.obrasDestino.map(obra => <option key={obra.id} value={obra.id}>{obra.nome}{obra.cidade ? ' · ' + obra.cidade : ''}</option>)}
+              </select>
+            </label>
+            {previaTrocaCliente.obraAnterior && <p className="text-[11px] text-amber-800">
+              A obra anterior continuará no cadastro antigo, sem ser apagada. Escolha uma obra do novo cliente para não misturar cadastros.
+            </p>}
+            <label className="block text-xs font-semibold text-slate-700">
+              Motivo da correção
+              <textarea rows={2} maxLength={500} value={motivoTrocaCliente}
+                onChange={e => setMotivoTrocaCliente(e.target.value)}
+                placeholder="Ex.: Dois cadastros da mesma pessoa. Corrigindo para o cadastro completo."
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs"/>
+            </label>
+            <label className="flex items-start gap-2 text-xs text-slate-700">
+              <input type="checkbox" className="mt-0.5" checked={confirmouTrocaCliente} onChange={e => setConfirmouTrocaCliente(e.target.checked)}/>
+              Confirmo que {previaTrocaCliente.clienteAnterior.nome} e {previaTrocaCliente.clienteNovo.nome} correspondem à mesma pessoa ou que esta é a correção autorizada do cadastro.
+            </label>
+            <button type="button" onClick={() => void confirmarTrocaDeCliente()}
+              disabled={carregandoTrocaCliente || !confirmouTrocaCliente || !obraIdTrocaCliente || motivoTrocaCliente.trim().length < 8}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+              {carregandoTrocaCliente ? <Loader2 size={13} className="animate-spin"/> : <CheckCircle2 size={13}/>}
+              {carregandoTrocaCliente ? 'Alterando...' : 'Confirmar troca deste cliente'}
+            </button>
+          </>}
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500">A correção altera somente o vínculo do cliente, o WhatsApp associado e a obra escolhida. Valores, tipologias, medidas, imagens, anexos e histórico existente são preservados.</p>
+    </div>
+  )}
 </section>
 {naPrimeiraColuna && !sessaoAtiva && !podeEditarSemIniciar ? (
 <div className="text-center py-10 space-y-4">

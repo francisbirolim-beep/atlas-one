@@ -1,3 +1,9 @@
+## 2026-11-03 — Corrigir vínculo cliente/obra diretamente no Kanban Comercial
+
+- Novo formulário recolhível na área Cliente e local da obra do modal: pesquisa, seleção do cadastro correto, comparação de origem/destino, seleção de obra de destino, justificativa e confirmação explícita pelo Master.
+- API `app/api/kanban/comercial/trocar-cliente/route.ts` com validações server-side de empresa, role, dependências e versão, atualização condicional somente do vínculo e auditoria. A obra anterior permanece no cadastro antigo sem movimento automático.
+- `scripts/test-kanban-troca-cliente.cjs`: caso duplicado Valdinei, prévia sem gravação, permissão Master, bloqueio de financeiro e obra errada, concorrência, preservação de valores/fotos/anexos e histórico. Não exige migração SQL.
+
 ## 2026-11-03 — Sincronização por número W.Vetro
 
 - API autenticada para prévia e confirmação, busca por número exato, seleção de Cliente 360 existente ou criação explícita por Master e proteção contra troca de cliente.

@@ -1,3 +1,10 @@
+## 2026-11-03 — HOMOLOGAR troca de cliente no card do Kanban Comercial
+
+1. Como Master abrir card #361 (Valdinei) → Cliente e local da obra → Trocar cliente vinculado. Confirmar nome do cadastro realmente associado (VALDINEI NOEL (BRANCO)), mesmo que no texto do orçamento apareça outro nome.
+2. Pesquisar e escolher VALDINEI NOEL DA COSTA, selecionar explicitamente CASA ou LOJA (ou sem obra), informar justificativa e confirmar. Checar que Cliente 360 do destino passou a exibir esse orçamento e o de origem não; confirmar WhatsApp correto.
+3. Conferir que valores, itens, medidas, fotos, anexos, Kanban, histórico e sincronização W.Vetro por número não foram alterados; cliente antigo não é inativado e sua obra não é movida automaticamente.
+4. Validar perfil sem Master, cliente inativo, obra de outro cliente, orçamento já vinculado ao W.Vetro e bloqueios de finanças/produção. Executar preview e deploy controlado com rollback, sem mexer nos demais módulos.
+
 ## 2026-11-03 — HOMOLOGAR sincronização W.Vetro por número
 
 1. No Cliente 360 abrir Orçamentos → Sincronizar por número, consultar #588 e confirmar que "RONALDO S" é "RONALDO SERON" antes de vincular 12 itens.
