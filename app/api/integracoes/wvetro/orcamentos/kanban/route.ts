@@ -12,6 +12,7 @@ import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import { materializarPacoteTecnicoWVetro } from '@/lib/wvetroPacoteTecnicoServer'
 import { houveConferenciaHumanaWVetro } from '@/lib/wvetroPreservacaoSincronizacao'
 import { POST as candidatosClienteWVetro } from '../candidatos-cliente/route'
+import { POST as sincronizarPorNumeroWVetro } from '../sincronizar-numero/route'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -137,6 +138,29 @@ async function autenticarWVetroDoTenant(req: NextRequest): Promise<UsuarioTenant
   const slugPermitido = String(process.env.WVETRO_EMPRESA_SLUG || 'esquadrifacio').trim().toLowerCase()
   if (!empresa?.ativo || String(empresa.slug || '').trim().toLowerCase() !== slugPermitido) return null
   return usuario
+}
+
+// Consulta e aprovação por número exato reaproveitam o mesmo fluxo seguro
+// do Cliente 360. Esta função não modifica o sincronizador por período.
+async function solicitarConferenciaNumeroKanban(
+  req: NextRequest,
+  clienteId: string,
+  parametros: Record<string, unknown>,
+) {
+  const interna = new NextRequest(
+    new URL('/api/integracoes/wvetro/orcamentos/sincronizar-numero', req.nextUrl.origin),
+    {
+      method: 'POST',
+      headers: {
+        authorization: req.headers.get('authorization') || '',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ ...parametros, clienteId, criarNovo: false }),
+    },
+  )
+  const resposta = await sincronizarPorNumeroWVetro(interna)
+  const dados = await resposta.json().catch(() => ({}))
+  return { ok: resposta.ok, status: resposta.status, dados }
 }
 
 async function listarRecentes(clienteNome: string) {
@@ -456,6 +480,124 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
     if (alvoErro) throw alvoErro
     if (!alvo) return NextResponse.json({ error: 'Orçamento do Kanban não encontrado.' }, { status: 404 })
+
+    // Consulta por número exato: usa o histórico do W.Vetro ou pedidoByKey.
+    // Só associa a este card quando o usuário valida nome, número e destino.
+    if (acao === 'consultar_numero' || acao === 'vincular_numero') {
+      const numeroWvetro = txt(body.numeroWvetro)
+      if (!/^[1-9][0-9]{0,9}$/.test(numeroWvetro)) {
+        return NextResponse.json({ error: 'Digite o número exato do orçamento W.Vetro.' }, { status: 400 })
+      }
+      if (!alvo.cliente_id) {
+        return NextResponse.json({
+          error: 'Este card ainda não tem um Cliente 360 vinculado. Vincule o cliente correto antes de sincronizar por número, para impedir associação com outro cadastro.',
+        }, { status: 409 })
+      }
+      const { data: clienteDestino, error: erroCliente } = await supabaseAdmin
+        .from('clientes').select('id,nome')
+        .eq('empresa_id', usuario.empresa_id).eq('id', alvo.cliente_id).maybeSingle()
+      if (erroCliente) throw erroCliente
+      if (!clienteDestino || !nomesClientesCompativeis(clienteDestino.nome, alvo.cliente_nome)) {
+        return NextResponse.json({
+          error: 'O cliente vinculado ao card não corresponde ao nome do card. Confira os cadastros antes de sincronizar.',
+        }, { status: 409 })
+      }
+      const numeroAtual = txt(obj(alvo.wvetro_fluxo).numero, obj(alvo.wvetro_fluxo).numero_wvetro)
+      if (numeroAtual && numeroAtual !== numeroWvetro) {
+        return NextResponse.json({
+          error: `Este card já está vinculado ao W.Vetro #${numeroAtual}. Não é seguro substituí-lo pelo #${numeroWvetro}.`,
+        }, { status: 409 })
+      }
+
+      if (acao === 'consultar_numero') {
+        const consulta = await solicitarConferenciaNumeroKanban(req, alvo.cliente_id, {
+          acao: 'consultar', numero: numeroWvetro,
+        })
+        if (!consulta.ok) return NextResponse.json({ error: consulta.dados.error || 'Falha na consulta por número.' }, { status: consulta.status })
+        return NextResponse.json({
+          ...consulta.dados, cardId: alvo.id, nomeCard: alvo.cliente_nome,
+          cardAtualizadoEm: alvo.updated_at || null,
+          mensagem: 'Prévia somente leitura. Confirme o número, o cliente e o card antes de vincular.',
+        }, { headers: { 'Cache-Control': 'no-store' } })
+      }
+
+      if (String(body.cardAtualizadoEm || '') !== String(alvo.updated_at || '')) {
+        return NextResponse.json({
+          error: 'Este card foi atualizado depois da consulta. Busque o número novamente para evitar sobrescrever informações recentes.',
+        }, { status: 409 })
+      }
+      if (body.confirmouVinculo !== true ||
+          txt(body.confirmaNumero) !== numeroWvetro ||
+          !txt(body.confirmaNome)) {
+        return NextResponse.json({ error: 'Confirme o número e o nome apresentados na prévia.' }, { status: 400 })
+      }
+      if (houveConferenciaHumanaWVetro(obj(alvo.wvetro_fluxo))) {
+        if (numeroAtual !== numeroWvetro) {
+          return NextResponse.json({ error: 'Card com conferências registradas. A mudança de número foi bloqueada.' }, { status: 409 })
+        }
+        const pdfExistente = await completarPdfOriginalWVetro(usuario.empresa_id, alvo, numeroWvetro)
+        return NextResponse.json({
+          ok: true, orcamento: pdfExistente.orcamento, ocultadoId: null,
+          mensagem: 'W.Vetro já vinculado. As conferências existentes foram preservadas.',
+          avisoAnexo: pdfExistente.mensagem,
+        })
+      }
+
+      // A confirmação reconsulta a origem e valida o token, o cliente e o
+      // número no servidor. O cliente nunca é escolhido automaticamente.
+      const aprovado = await solicitarConferenciaNumeroKanban(req, alvo.cliente_id, {
+        acao: 'confirmar', numero: numeroWvetro,
+        tokenConferencia: body.tokenConferencia,
+        confirmaNumero: body.confirmaNumero,
+        confirmaNome: body.confirmaNome,
+        confirmouVinculo: body.confirmouVinculo,
+        confirmouDivergencia: body.confirmouDivergencia === true,
+      })
+      if (!aprovado.ok) return NextResponse.json({
+        error: aprovado.dados.error || 'Falha ao confirmar a identidade do W.Vetro.',
+      }, { status: aprovado.status })
+      const fonteId = txt(aprovado.dados.orcamentoAtlasId)
+      if (!fonteId) {
+        return NextResponse.json({
+          error: 'O histórico foi confirmado, mas não foi possível identificar o orçamento Atlas de origem.',
+        }, { status: 409 })
+      }
+      const { data: fonte, error: fonteErro } = await supabaseAdmin
+        .from('orcamentos').select('*')
+        .eq('empresa_id', usuario.empresa_id).eq('id', fonteId).maybeSingle()
+      if (fonteErro) throw fonteErro
+      if (!fonte || fonte.cliente_id !== alvo.cliente_id ||
+          txt(obj(fonte.wvetro_fluxo).numero) !== numeroWvetro) {
+        return NextResponse.json({
+          error: 'O orçamento encontrado não pertence ao cliente e número confirmados. O card não foi modificado.',
+        }, { status: 409 })
+      }
+      const { data: alvoAtual, error: alvoAtualErro } = await supabaseAdmin
+        .from('orcamentos').select('*')
+        .eq('empresa_id', usuario.empresa_id).eq('id', alvo.id).maybeSingle()
+      if (alvoAtualErro) throw alvoAtualErro
+      if (!alvoAtual || (fonte.id !== alvo.id && String(alvoAtual.updated_at || '') !== String(alvo.updated_at || ''))) {
+        return NextResponse.json({
+          error: 'O card foi atualizado durante a sincronização. Seus dados foram preservados; reabra-o para revisar o vínculo.',
+        }, { status: 409 })
+      }
+      const resultado = fonte.id === alvo.id
+        ? { atualizado: fonte, divergenciaItens: false }
+        : await mesclarFonteNoCard(usuario.empresa_id, alvoAtual, fonte, usuario)
+      const pdf = await completarPdfOriginalWVetro(usuario.empresa_id, resultado.atualizado, numeroWvetro)
+      await inserirHistorico(
+        alvo.id, usuario, 'Sincronizou W.Vetro por número confirmado',
+        `W.Vetro #${numeroWvetro} confirmado para ${alvo.cliente_nome}; card preservado e valores sujeitos à conferência normal.`,
+      )
+      return NextResponse.json({
+        ok: true, orcamento: pdf.orcamento, ocultadoId: fonte.id !== alvo.id ? fonte.id : null,
+        numeroWvetro, divergenciaItens: resultado.divergenciaItens,
+        mensagem: resultado.divergenciaItens
+          ? `W.Vetro #${numeroWvetro} vinculado. Os itens do card foram preservados devido à diferença de quantidade; confira as esquadrias antes de mover.`
+          : `W.Vetro #${numeroWvetro} vinculado ao card correto. Confira as esquadrias antes de avançar.`,
+        avisoAnexo: pdf.mensagem,
+      }, { headers: { 'Cache-Control': 'no-store' } })
+    }
 
     if (acao === 'buscar') {
       let recentes: Awaited<ReturnType<typeof listarRecentes>> | null = null
