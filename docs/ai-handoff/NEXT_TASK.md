@@ -1,3 +1,12 @@
+## 2026-11-03 — HOMOLOGAR unificacao de clientes, SEM PUBLICAR antes de concluir
+
+1. Aplicar a migration candidata apenas em banco de teste, com snapshot restauravel. Validar as permissões Master/delegado/sem permissão e RLS; consultar advisors de seguranca do Supabase.
+2. Criar em homologacao dois clientes ficticios com orcamentos, obras, balcao, CRM, financeiro, W.Vetro, assistencia, documentos e mensagens; verificar pre-visualizacao, escolha explicita do principal e resultado Cliente 360 com TODOS os vinculos. Confirmar que o cadastro original apenas fica inativo.
+3. Simular conflito de CPF/CNPJ, duas operacoes simultaneas, falha de constraints, CPF divergente, registro desatualizado, tabela nova desconhecida e referencia sem empresa. Garantir rollback integral (sem efeito parcial).
+4. Testar a busca nos dois orcamentos com 10 mil clientes, nomes acentuados, apelidos, CPF/telefone formatados, clientes homonimos e clientes inativos; revisar responsividade e confirmar que numero, medidas, valores, anexos e o rascunho do orcamento permanecem intactos.
+5. Conferir relatorio em `/relatorios/clientes-unificacoes`, exportacao, paginacao e autorizacao de acesso. A operacao de Pendencias tambem usa a nova RPC; validar os dois pontos de entrada com justificativa e permissao.
+6. Apos homologacao, backup, revisao de branch, PR e aprovacao expressa para release, aplicar migration de forma controlada e publicar em segundo plano com rollback pronto.
+
 ## 2026-11-03 — HOMOLOGAR troca de cliente no card do Kanban Comercial
 
 1. Como Master abrir card #361 (Valdinei) → Cliente e local da obra → Trocar cliente vinculado. Confirmar nome do cadastro realmente associado (VALDINEI NOEL (BRANCO)), mesmo que no texto do orçamento apareça outro nome.

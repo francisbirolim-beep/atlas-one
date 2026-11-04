@@ -19,7 +19,7 @@ export const CADASTROS_360 = [
 ] as const
 
 export type Cadastro360Id = typeof CADASTROS_360[number]['id']
-export type Cadastro360Acao = 'ver' | 'criar' | 'editar' | 'excluir' | 'aprovar' | 'inativar' | 'reativar'
+export type Cadastro360Acao = 'ver' | 'criar' | 'editar' | 'excluir' | 'aprovar' | 'inativar' | 'reativar' | 'mesclar'
 
 export const CADASTRO_360_ACOES: { id: Cadastro360Acao; label: string }[] = [
   { id: 'ver', label: 'Ver' },
@@ -29,6 +29,7 @@ export const CADASTRO_360_ACOES: { id: Cadastro360Acao; label: string }[] = [
   { id: 'aprovar', label: 'Aprovar' },
   { id: 'inativar', label: 'Inativar' },
   { id: 'reativar', label: 'Reativar' },
+  { id: 'mesclar', label: 'Unificar cadastros' },
 ]
 
 export interface CadastrosUsuarioConfig {

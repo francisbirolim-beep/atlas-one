@@ -26,6 +26,8 @@ type ClienteResumo = {
   email?: string | null
   cidade?: string | null
   bairro?: string | null
+  ativo?: boolean
+  updated_at?: string | null
 }
 
 type Pendencia = {
@@ -175,9 +177,20 @@ export default function PendenciasCadastroPage() {
   async function confirmarVinculo(p: Pendencia) {
     if (!clienteEscolhido) return
     const eMesclagem = Boolean(p.cliente_id)
+    let motivo = ''
     if (eMesclagem) {
+      if (!p.cliente?.updated_at || !clienteEscolhido.updated_at) {
+        setErro('Os cadastros precisam ser recarregados antes da unificação.')
+        return
+      }
+      motivo = window.prompt('Informe por que os dois cadastros representam o mesmo cliente (mínimo 8 caracteres):')?.trim() || ''
+      if (!motivo) return
+      if (motivo.length < 8 || motivo.length > 500) {
+        setErro('A justificativa precisa ter entre 8 e 500 caracteres.')
+        return
+      }
       const ok = window.confirm(
-        `Mesclar "${p.cliente?.nome || p.titulo}" em "${clienteEscolhido.nome}"? Todos os vínculos serão transferidos para o cadastro escolhido.`,
+        `Unificar "${p.cliente.nome}" em "${clienteEscolhido.nome}"? O cadastro de origem será preservado como inativo, os vínculos transferidos e a justificativa auditada.`,
       )
       if (!ok) return
     }
@@ -192,6 +205,11 @@ export default function PendenciasCadastroPage() {
           pendenciaId: p.id,
           origemClienteId: p.cliente_id,
           destinoClienteId: clienteEscolhido.id,
+          ...(eMesclagem ? {
+            motivo, confirmou: true,
+            origemAtualizadoEm: p.cliente?.updated_at,
+            destinoAtualizadoEm: clienteEscolhido.updated_at,
+          } : {}),
         }),
       })
       setMensagem(eMesclagem
@@ -308,7 +326,7 @@ export default function PendenciasCadastroPage() {
                     <div className="mt-4 border-t pt-4">
                       <div className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
                         {p.cliente_id
-                          ? 'Escolha o cadastro principal. O Atlas transferirá orçamentos, obras, financeiro e demais vínculos antes de retirar o cadastro duplicado.'
+                          ? 'Escolha o cadastro principal. O Atlas irá transferir os vínculos em uma operação auditada e manter o cadastro original inativo, sem excluí-lo.'
                           : 'Procure o cliente correto no Atlas. O orçamento W.Vetro será vinculado a esse cadastro.'}
                       </div>
                       <div className="relative mt-3">

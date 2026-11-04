@@ -22,6 +22,7 @@ import type { Usuario } from '@/lib/tipos'
 import VendasCliente360 from '@/components/clientes/VendasCliente360'
 import ComprasClienteCards from '@/components/compras/ComprasClienteCards'
 import CadastroCliente360 from '@/components/clientes/CadastroCliente360'
+import ClienteOrigensUnificadas from '@/components/clientes/ClienteOrigensUnificadas'
 import {
   adicionarDocumentoCliente,
   alocarRecebimentoEmObra,
@@ -405,7 +406,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
       <div className="mt-5 overflow-x-auto border-b"><div className="flex min-w-max">{abas.filter(a=>pode(a.id)).map(a=><button key={a.id} onClick={()=>setAba(a.id)} className={`border-b-2 px-3 py-3 text-sm font-semibold ${aba===a.id?'border-brand-navy text-brand-navy':'border-transparent text-slate-500'}`}>{a.label}</button>)}</div></div>
 
       <div className="mt-5 space-y-5">
-        {aba==='cadastro'&&pode('cadastro')&&<CadastroCliente360 cliente={cliente} obras={obras} onAtualizado={atualizarCadastrosCliente360} podeEditarCliente={pode('cadastro',true)} podeEditarObra={pode('obras',true)} mostrarObras={pode('obras')} mostrarObservacoes={pode('observacoes')} podeEditarObservacoes={pode('observacoes',true)}/>}
+        {aba==='cadastro'&&pode('cadastro')&&<><CadastroCliente360 cliente={cliente} obras={obras} onAtualizado={atualizarCadastrosCliente360} podeEditarCliente={pode('cadastro',true)} podeEditarObra={pode('obras',true)} mostrarObras={pode('obras')} mostrarObservacoes={pode('observacoes')} podeEditarObservacoes={pode('observacoes',true)}/><ClienteOrigensUnificadas clienteId={clienteId}/></>}
         {aba==='visao'&&pode('visao')&&<div className="space-y-5">
           <div><p className="text-xs font-bold uppercase tracking-widest text-slate-400">Central do cliente</p><h2 className="mt-1 text-xl font-bold text-slate-900">O que você deseja fazer?</h2><p className="mt-1 text-sm text-slate-500">Acesse diretamente o que precisa, sem exposição de valores financeiros.</p></div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

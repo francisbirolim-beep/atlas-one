@@ -15,6 +15,7 @@ import { Produto, CategoriaProduto, ItemBalcao, DadosEmpresa } from '@/lib/tipos
 import { abaixoDoPrecoMinimo, margemRealPorPreco, precoVendaBalcao } from '@/lib/precificacaoBalcao'
 import { correspondeBuscaAtlas, normalizarBuscaAtlas } from '@/lib/buscaAtlas'
 import BuscaAtlasInput from '@/components/system/BuscaAtlasInput'
+import BuscaClientesComGestao from '@/components/clientes/BuscaClientesComGestao'
 
 type ProdutoBalcao = Produto & {
   preco_minimo?: number | null
@@ -58,7 +59,6 @@ export default function NovoOrcamentoBalcao() {
   const router = useRouter()
   const [produtos, setProdutos] = useState<ProdutoBalcao[]>([])
   const [linhas, setLinhas] = useState<LinhaTecnica[]>([])
-  const [clientes, setClientes] = useState<ClienteBusca[]>([])
   const [empresa, setEmpresa] = useState<DadosEmpresa | null>(null)
   const [configOrcamento, setConfigOrcamento] = useState<ConfiguracaoOrcamento | null>(null)
   const [carregando, setCarregando] = useState(true)
@@ -87,25 +87,19 @@ export default function NovoOrcamentoBalcao() {
 
   useEffect(() => {
     async function carregar() {
-      const [listaProdutos, listaLinhas, dadosEmpresa, config, clientesResp] = await Promise.all([
+      const [listaProdutos, listaLinhas, dadosEmpresa, config] = await Promise.all([
         listarProdutos(),
         listarLinhasTecnicas(),
         lerDadosEmpresa(),
         lerConfiguracaoOrcamento(),
-        supabase
-          .from('clientes')
-          .select('id,nome,apelido,whatsapp,telefone,email,cpf_cnpj,cidade,bairro,endereco,cep')
-          .eq('ativo', true)
-          .order('nome')
-          .limit(1000),
       ])
       setProdutos((listaProdutos as ProdutoBalcao[]).filter(p => Boolean(p.unidade?.trim()) && p.ativo))
       setLinhas(listaLinhas.filter(l => l.ativo))
-      const listaClientes = (clientesResp.data || []) as ClienteBusca[]
-      setClientes(listaClientes)
       const clienteContextoId = new URLSearchParams(window.location.search).get('cliente')
       if (clienteContextoId) {
-        const clienteContexto = listaClientes.find(c => c.id === clienteContextoId)
+        const { data: clienteContexto } = await supabase.from('clientes')
+          .select('id,nome,apelido,whatsapp,telefone,email,cpf_cnpj,cidade,bairro,endereco,cep')
+          .eq('id', clienteContextoId).eq('ativo', true).maybeSingle()
         if (clienteContexto) selecionarCliente(clienteContexto)
       }
       setEmpresa(dadosEmpresa)
@@ -117,15 +111,6 @@ export default function NovoOrcamentoBalcao() {
     }
     carregar()
   }, [])
-
-  useEffect(() => {
-    if (clientes.length === 0 || clienteSelecionadoId) return
-    const clienteId = new URLSearchParams(window.location.search).get('cliente')
-    if (!clienteId) return
-    const c = clientes.find(cl => cl.id === clienteId)
-    if (c) selecionarCliente(c)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientes])
 
   const linhasPorProduto = useMemo(() => {
     const mapa = new Map<string, LinhaTecnica[]>()
@@ -166,25 +151,6 @@ export default function NovoOrcamentoBalcao() {
       ...linhasProduto.flatMap(l => [l.nome, l.fabricante, l.descricao, ...(l.apelidos || [])])
     )
   }), [produtos, busca, categoria, linhaId, linhasPorProduto])
-
-  const clientesEncontrados = useMemo(() => {
-    if (clienteSelecionadoId || clienteBusca.trim().length < 2) return []
-    return clientes
-      .filter(c => correspondeBuscaAtlas(
-        clienteBusca,
-        c.nome,
-        c.apelido,
-        c.cpf_cnpj,
-        c.whatsapp,
-        c.telefone,
-        c.email,
-        c.cidade,
-        c.bairro,
-        c.endereco,
-        c.cep
-      ))
-      .slice(0, 12)
-  }, [clientes, clienteBusca, clienteSelecionadoId])
 
   const itensCarrinho = useMemo(() => Object.entries(carrinho)
     .filter(([, linha]) => linha.quantidade > 0)
@@ -434,9 +400,9 @@ export default function NovoOrcamentoBalcao() {
           <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="text-sm font-semibold text-slate-800">Dados do cliente</h2><p className="text-xs text-slate-500">Encontre um cliente existente por nome, apelido, cidade, bairro, telefone, CPF/CNPJ ou endereço.</p></div>{clienteSelecionadoId ? <button onClick={limparCliente} className="inline-flex items-center gap-1 text-xs font-semibold text-red-500"><X size={13}/>Trocar cliente</button> : null}</div>
           <div className="relative mb-4">
             <BuscaAtlasInput value={clienteBusca} onValueChange={valor => { setClienteBusca(valor); if (clienteSelecionadoId) setClienteSelecionadoId(null) }} placeholder="Buscar cliente em todo o cadastro..." inputClassName="w-full rounded-lg border border-slate-200 py-2.5 pr-3 text-sm" />
-            {!clienteSelecionadoId && clientesEncontrados.length > 0 && <div className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-xl border bg-white shadow-xl">{clientesEncontrados.map(c => <button key={c.id} type="button" onClick={() => selecionarCliente(c)} className="block w-full border-b px-3 py-2.5 text-left hover:bg-slate-50"><div className="flex items-center gap-2 text-sm font-semibold text-slate-800"><UserCheck size={14}/>{c.nome}{c.apelido ? <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] text-sky-700">{c.apelido}</span> : null}</div><div className="mt-0.5 text-xs text-slate-500">{[c.cidade,c.bairro,c.whatsapp||c.telefone,c.cpf_cnpj].filter(Boolean).join(' • ')}</div></button>)}</div>}
+            <BuscaClientesComGestao busca={clienteBusca} selecionadoId={clienteSelecionadoId} onSelecionar={selecionarCliente} />
           </div>
-          {clienteSelecionadoId ? <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Cliente existente selecionado. O orçamento será vinculado ao mesmo cadastro do Atlas.</div> : clienteBusca.trim().length >= 2 && clientesEncontrados.length === 0 ? <div className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Nenhum cliente encontrado. Preencha os dados abaixo para cadastrar junto com o orçamento.</div> : null}
+          {clienteSelecionadoId ? <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Cliente existente selecionado. O orçamento será vinculado ao mesmo cadastro do Atlas.</div> : clienteBusca.trim().length >= 2 ? <div className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Se o cliente não estiver nos resultados da busca, preencha os dados abaixo para cadastrar junto com o orçamento.</div> : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs text-slate-600">Nome *<input value={clienteNome} onChange={e => setClienteNome(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></label>
             <label className="text-xs text-slate-600">Apelido<input value={clienteApelido} onChange={e => setClienteApelido(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Nome pelo qual é conhecido" /></label>
