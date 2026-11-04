@@ -19,7 +19,9 @@ const normalizar = (valor: string) => String(valor || '').normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').toUpperCase()
 const codigo = (valor: string) => {
   const limpo = String(valor || '').trim().toUpperCase()
+  // Não confundir URL, número de pedido, telefone e identificadores de tela com perfis.
   if (!/^[A-Z][A-Z0-9._/-]{1,39}$/.test(limpo) || !/\d/.test(limpo)) return ''
+  if (/^(HTTP|HTTPS|WWW|URL|CLIENTE|ORCAMENTO|PEDIDO|CELULAR|TELEFONE|CNPJ|CPF|DATA|ITEM|VALOR|CEP)[0-9._-]/.test(limpo)) return ''
   return limpo.replaceAll('/', '-')
 }
 const numero = (texto: string): number | null => {
@@ -121,11 +123,9 @@ function leituraPosicional(partes: string[]): ComponenteCandidato | null {
       }
     }
   }
-  // Sem cabeçalho e sem eixo: identificar a peça, sem inventar comprimento.
-  if (partes.length >= 3) {
-    const descricao = partes[1].length > 1 && !numero(partes[1]) ? partes[1] : cod
-    return { codigo:cod,tipo:'perfil',descricao,eixo:'',comprimento_mm:null,quantidade:1 }
-  }
+  // Nunca inventar quantidade 1 ou cadastrar uma linha sem medida verificada.
+  // Quatro textos separados por tabulação podem ser URL, cliente ou cabeçalho comercial.
+  // Aceitamos linha posicional somente com eixo, corte e quantidade explícitos.
   return null
 }
 export function extrairComponentesRelatorio(texto: string): ComponenteCandidato[] {
@@ -137,7 +137,9 @@ export function extrairComponentesRelatorio(texto: string): ComponenteCandidato[
     if (partes.length < 3) continue
     const possivel=cabecalho(partes)
     if (possivel) {cols=possivel;continue}
-    const componente=(cols ? leituraColunas(partes,cols) : null) || leituraPosicional(partes)
+    // Quando existe cabeçalho, respeitar a ordem das colunas. Não usar o parser
+    // posicional como fallback: uma linha inválida do orçamento não é um perfil.
+    const componente=cols ? leituraColunas(partes,cols) : leituraPosicional(partes)
     if (componente) detectados.push(componente)
   }
   // Não apagar cortes distintos do mesmo código; apenas linhas idênticas do relatório.

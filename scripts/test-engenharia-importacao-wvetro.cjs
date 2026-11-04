@@ -43,4 +43,15 @@ assert.equal(extrairComponentesRelatorio('Texto de orçamento sem perfil\nPorta 
 assert.ok(extrairComponentesRelatorio('SU001;L;1492;2\nSU001;L;1492;2').length===1)
 assert.ok(extrairComponentesRelatorio('SU001;L;1492;2\nSU001;L;1493;2').length===2)
 assert.equal(extrairComponentesRelatorio('PORTA;L;1492;2').length,0,'Texto genérico não pode virar código')
+// Relatório comercial em tabelas, com números de pedidos, clientes e URLs:
+// nenhuma combinação sem eixo e comprimento comprovados pode virar perfil.
+const extrato = Array.from({length:50}, (_,i)=>
+  'ORCAMENTO' + (100+i) + '\\tCLIENTE' + i + '\\t1500\\t2300').join('\\n')
+assert.equal(extrairComponentesRelatorio(extrato).length,0,
+  '50 linhas comerciais não podem se tornar 50 perfis falsos')
+assert.equal(extrairComponentesRelatorio('SU001\\tMarco lateral\\t1500\\t2').length,0,
+  'Sem cabeçalho e sem eixo: comprimento não é comprovado')
+assert.equal(diagnosticarRelatorio(extrato,'relatorio.pdf').componentes.length,0)
+assert.equal(extrairComponentesRelatorio('https://sistema.wvetro.com.br/relori?123\\t1492\\t2\\t99').length,0)
+assert.equal(extrairComponentesRelatorio('SU001;L;1492;2').length,1)
 console.log('OK: atalhos do W.Vetro, orçamento comercial, PDF sem texto, cabeçalhos, cortes, eixos e deduplicação.')
