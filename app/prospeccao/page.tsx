@@ -3,11 +3,14 @@
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 
 import { useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { CalendarDays, Clock3, Filter, Flame, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
+import { CalendarDays, Clock3, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
+
+const MapaProspeccoes = dynamic(() => import('@/components/MapaProspeccoes'), { ssr: false })
 
 function formatarData(valor?: string | null) {
   if (!valor) return 'Sem retorno agendado'
@@ -29,7 +32,7 @@ export default function ProspeccaoPage() {
   const [vendedor, setVendedor] = useState('')
   const [cidade, setCidade] = useState('')
   const [bairro, setBairro] = useState('')
-  const [aba, setAba] = useState<'kanban' | 'agenda'>('kanban')
+  const [aba, setAba] = useState<'kanban' | 'agenda' | 'mapa'>('kanban')
   const [arrastando, setArrastando] = useState<string | null>(null)
 
   async function carregar() {
@@ -96,7 +99,7 @@ export default function ProspeccaoPage() {
             <select value={cidade} onChange={e=>{setCidade(e.target.value);setBairro('')}} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Todas as cidades</option>{cidades.map(c=><option key={c}>{c}</option>)}</select>
             <select value={bairro} onChange={e=>setBairro(e.target.value)} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Todos os bairros</option>{bairros.map(b=><option key={b}>{b}</option>)}</select>
           </div>
-          <div className="mt-3 flex gap-2 border-t pt-3"><button onClick={()=>setAba('kanban')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='kanban'?'bg-slate-900 text-white':'text-slate-500'}`}><Filter size={15}/> Kanban</button><button onClick={()=>setAba('agenda')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='agenda'?'bg-slate-900 text-white':'text-slate-500'}`}><CalendarDays size={15}/> Agenda</button></div>
+          <div className="mt-3 flex gap-2 border-t pt-3"><button onClick={()=>setAba('kanban')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='kanban'?'bg-slate-900 text-white':'text-slate-500'}`}><Filter size={15}/> Kanban</button><button onClick={()=>setAba('agenda')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='agenda'?'bg-slate-900 text-white':'text-slate-500'}`}><CalendarDays size={15}/> Agenda</button><button onClick={()=>setAba('mapa')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='mapa'?'bg-slate-900 text-white':'text-slate-500'}`}><Map size={15}/> Mapa das obras</button></div>
         </section>
 
         {carregando ? <div className="rounded-2xl border bg-white p-10 text-center text-slate-400">Carregando prospecções...</div> : aba === 'kanban' ? (
@@ -113,6 +116,8 @@ export default function ProspeccaoPage() {
               </section>
             })}
           </div>
+        ) : aba === 'mapa' ? (
+          <MapaProspeccoes registros={filtrados} />
         ) : (
           <section className="overflow-hidden rounded-2xl border bg-white">
             <div className="border-b px-5 py-4"><h2 className="font-bold text-slate-900">Próximas ações</h2><p className="text-xs text-slate-500">Os compromissos também aparecem na agenda pessoal do vendedor.</p></div>

@@ -289,6 +289,7 @@ export default function OrcamentoRapido() {
   const [obraNumero, setObraNumero] = useState('')
   const [obraBairro, setObraBairro] = useState('')
   const [obraCep, setObraCep] = useState('')
+  const [consultandoCepObra,setConsultandoCepObra]=useState(false)
   const [obraLocalizacao, setObraLocalizacao] = useState('')
   const [obraLocalizacaoConfirmada, setObraLocalizacaoConfirmada] = useState<'sim'|'nao'|''>('')
   const [obraPrecisaoMetros, setObraPrecisaoMetros] = useState<number | null>(null)
@@ -498,6 +499,30 @@ export default function OrcamentoRapido() {
     limparErroValidacaoAoEditar()
   }
 
+  async function consultarCepDaObra(){
+    if(obraCep.replace(/\D/g,'').length!==8){
+      setAvisoLocalizacao('Informe um CEP com oito dígitos.')
+      return
+    }
+    setConsultandoCepObra(true)
+    setAvisoLocalizacao('Consultando CEP na base postal...')
+    try{
+      const resp=await fetch('/api/geocodificacao/cep?cep='+encodeURIComponent(obraCep))
+      const dados=await resp.json() as {cep?:string;rua?:string;bairro?:string;cidade?:string;error?:string}
+      if(!resp.ok) throw new Error(dados.error||'CEP não encontrado.')
+      limparErroValidacaoAoEditar()
+      setObraCep(dados.cep||obraCep)
+      if(dados.rua) setObraRua(dados.rua)
+      if(dados.bairro) setObraBairro(dados.bairro)
+      if(dados.cidade) setCidade(dados.cidade)
+      setAvisoLocalizacao('CEP consultado na base postal. Confira o número do imóvel antes de enviar.')
+    }catch(e){
+      setAvisoLocalizacao(e instanceof Error?e.message:'Falha na consulta de CEP.')
+    }finally{
+      setConsultandoCepObra(false)
+    }
+  }
+
   function capturarEnderecoDaObra() {
     if (capturandoLocalizacao) return
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -528,15 +553,13 @@ export default function OrcamentoRapido() {
           + encodeURIComponent(pos.coords.latitude) + '&lon='
           + encodeURIComponent(pos.coords.longitude), { cache: 'no-store' })
         if (!resp.ok) throw new Error('Endereço não localizado.')
-        const dados = await resp.json() as { rua?: string; bairro?: string; cidade?: string; cep?: string; numero?: string; numeroOrigem?: string | null }
+        const dados = await resp.json() as { rua?: string; bairro?: string; cidade?: string; cep?: string; numero?: string; numeroOrigem?: string | null; cepAviso?: string }
         if (dados.rua) setObraRua(dados.rua)
         if (dados.bairro) setObraBairro(dados.bairro)
         if (dados.cidade) setCidade(dados.cidade)
-        if (dados.cep) setObraCep(dados.cep)
+        setObraCep(dados.cep || '')
         if (dados.numero) setObraNumero(atual => atual.trim() ? atual : dados.numero || '')
-        setAvisoLocalizacao(dados.rua
-          ? (dados.bairro ? 'Rua e bairro identificados no mapa. Confira e complete o número, se necessário.' : 'Rua encontrada, mas o bairro não consta no mapa. Informe-o manualmente, se souber.')
-          : 'GPS salvo, mas a rua não foi identificada. Digite o endereço e o número.')
+        setAvisoLocalizacao(dados.cepAviso || (dados.rua ? 'Endereço sugerido. Confira bairro, número e CEP.' : 'GPS salvo. Complete o endereço manualmente.'))
       } catch {
         setAvisoLocalizacao('GPS salvo, mas não foi possível identificar a rua. Complete o endereço manualmente.')
       } finally {
@@ -876,6 +899,7 @@ export default function OrcamentoRapido() {
                 onChange={e => { limparErroValidacaoAoEditar(); setObraCep(e.target.value) }}
                 placeholder="00000-000" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
             </label>
+            <button type="button" disabled={consultandoCepObra||obraCep.replace(/\D/g,'').length!==8} onClick={()=>void consultarCepDaObra()} className="rounded-xl border border-blue-300 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700 disabled:opacity-40 sm:col-span-2">{consultandoCepObra?'Consultando CEP...':'Consultar CEP e completar endereço da obra'}</button>
           </div>
           <p className="text-xs text-slate-500">Cidade da obra: <strong className="text-slate-700">{cidade || 'preencha no bloco acima'}</strong>. É atualizada também pelo GPS, quando encontrada.</p>
           <p className="text-xs text-slate-500">Número do imóvel: o mapa só sugere quando existe um número cadastrado próximo. Não estimamos faixas de números sem fonte confiável.</p>

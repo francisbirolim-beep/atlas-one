@@ -21,6 +21,8 @@ export default function NovaProspeccaoPage(){
   const [numero,setNumero]=useState('')
   const [cidade,setCidade]=useState('')
   const [bairro,setBairro]=useState('')
+  const [cep,setCep]=useState('')
+  const [consultandoCep,setConsultandoCep]=useState(false)
   const [endereco,setEndereco]=useState('')
   const [observacoes,setObservacoes]=useState('')
   const [resultado,setResultado]=useState('identificada')
@@ -32,17 +34,36 @@ export default function NovaProspeccaoPage(){
   const [erro,setErro]=useState('')
   const [avisoEndereco,setAvisoEndereco]=useState('')
 
+  async function buscarPeloCep(){
+    if(cep.replace(/\D/g,'').length!==8){setAvisoEndereco('Informe um CEP com 8 dígitos.');return}
+    setConsultandoCep(true)
+    setAvisoEndereco('Consultando a base postal...')
+    try{
+      const resposta=await fetch('/api/geocodificacao/cep?cep='+encodeURIComponent(cep))
+      const dados=await resposta.json() as {cep?:string;rua?:string;bairro?:string;cidade?:string;error?:string}
+      if(!resposta.ok) throw new Error(dados.error||'CEP não encontrado.')
+      setCep(dados.cep||cep)
+      if(dados.rua) setEndereco(dados.rua)
+      if(dados.bairro) setBairro(dados.bairro)
+      if(dados.cidade) setCidade(dados.cidade)
+      setAvisoEndereco('CEP consultado na base postal. Confira o número e os dados da obra.')
+    }catch(e){
+      setAvisoEndereco(e instanceof Error?e.message:'Falha na consulta do CEP.')
+    }finally{setConsultandoCep(false)}
+  }
+
   async function preencherEndereco(lat:number,lon:number){
     setAvisoEndereco('Identificando cidade, bairro e rua...')
     try{
       const response=await fetch(`/api/geocodificacao/reversa?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`)
       if(!response.ok) throw new Error('geocodificacao')
-      const dados=await response.json() as {cidade?:string;bairro?:string;rua?:string;numero?:string}
+      const dados=await response.json() as {cidade?:string;bairro?:string;rua?:string;numero?:string;cep?:string;cepOrigem?:string|null;cepAviso?:string}
       if(dados.cidade) setCidade(dados.cidade)
       if(dados.bairro) setBairro(dados.bairro)
       if(dados.rua) setEndereco(dados.rua)
       if(dados.numero) setNumero(dados.numero)
-      setAvisoEndereco('Endereço preenchido automaticamente. Confira antes de salvar.')
+      setCep(dados.cep||'')
+      setAvisoEndereco(dados.cepAviso||'GPS capturado. Confira o endereço antes de salvar.')
     }catch{
       setAvisoEndereco('Localização salva. Não foi possível preencher o endereço automaticamente; você pode completar manualmente.')
     }
@@ -65,7 +86,7 @@ export default function NovaProspeccaoPage(){
     const escolha=RESULTADOS.find(r=>r.id===resultado) || RESULTADOS[0]
     const identificacao=[endereco.trim(),numero.trim()].filter(Boolean).join(', ') || `Obra ${numero.trim()||'identificada em campo'}`
     setSalvando(true)
-    const r=await criarProspeccao({nome_cliente:identificacao,nome_obra:identificacao,cidade,bairro,endereco:[endereco.trim(),numero.trim()].filter(Boolean).join(', '),latitude,longitude,precisao_m:precisao,observacoes,proxima_acao:escolha.proxima})
+    const r=await criarProspeccao({nome_cliente:identificacao,nome_obra:identificacao,cidade,bairro,cep,endereco:[endereco.trim(),numero.trim()].filter(Boolean).join(', '),latitude,longitude,precisao_m:precisao,observacoes,proxima_acao:escolha.proxima})
     if(!r.ok||!r.id){setSalvando(false);setErro(r.error||'Não foi possível salvar.');return}
     const dados=await buscarProspeccao(r.id)
     if(dados.prospeccao){
@@ -77,7 +98,7 @@ export default function NovaProspeccaoPage(){
   return <div className="min-h-screen bg-slate-50">
     <header className="sticky top-0 z-20 border-b bg-white/95 backdrop-blur"><div className="mx-auto flex max-w-xl items-center gap-3 px-4 py-3"><Link href="/prospeccao" className="rounded-xl border p-2 text-slate-600"><ArrowLeft size={18}/></Link><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-blue-600">Prospecção em campo</p><h1 className="font-bold text-slate-900">Registrar obra aqui</h1></div></div></header>
     <form onSubmit={salvar} className="mx-auto max-w-xl space-y-4 px-4 py-5 pb-32">
-      <section className="rounded-2xl border bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><MapPin size={18} className="text-blue-600"/><div><h2 className="font-bold">Local da obra</h2><p className="text-xs text-slate-500">Use o GPS para preencher o endereço e complete só o que faltar.</p></div></div><button type="button" onClick={capturarLocalizacao} disabled={capturando} className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-60"><LocateFixed size={15}/>{capturando?'Localizando...':'Usar localização'}</button></div>{latitude!=null&&longitude!=null&&<p className="mb-2 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><Check size={14}/>Localização capturada · precisão aproximada de {Math.round(precisao||0)} m</p>}{avisoEndereco&&<p className="mb-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">{avisoEndereco}</p>}<div className="grid gap-3 sm:grid-cols-2"><input value={cidade} onChange={e=>setCidade(e.target.value)} placeholder="Cidade" className="rounded-xl border px-3 py-3 text-sm"/><input value={bairro} onChange={e=>setBairro(e.target.value)} placeholder="Bairro" className="rounded-xl border px-3 py-3 text-sm"/><input value={endereco} onChange={e=>setEndereco(e.target.value)} placeholder="Rua / referência" className="rounded-xl border px-3 py-3 text-sm"/><input value={numero} onChange={e=>setNumero(e.target.value)} inputMode="numeric" placeholder="Número do imóvel" className="rounded-xl border px-3 py-3 text-sm"/></div><textarea value={observacoes} onChange={e=>setObservacoes(e.target.value)} rows={3} placeholder="Observação rápida (opcional)" className="mt-3 w-full rounded-xl border px-3 py-3 text-sm"/></section>
+      <section className="rounded-2xl border bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><MapPin size={18} className="text-blue-600"/><div><h2 className="font-bold">Local da obra</h2><p className="text-xs text-slate-500">Use o GPS para preencher o endereço e complete só o que faltar.</p></div></div><button type="button" onClick={capturarLocalizacao} disabled={capturando} className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-60"><LocateFixed size={15}/>{capturando?'Localizando...':'Usar localização'}</button></div>{latitude!=null&&longitude!=null&&<p className="mb-2 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"><Check size={14}/>Localização capturada · precisão aproximada de {Math.round(precisao||0)} m</p>}{avisoEndereco&&<p className="mb-3 rounded-xl bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">{avisoEndereco}</p>}<div className="grid gap-3 sm:grid-cols-2"><input value={cidade} onChange={e=>setCidade(e.target.value)} placeholder="Cidade" className="rounded-xl border px-3 py-3 text-sm"/><input value={bairro} onChange={e=>setBairro(e.target.value)} placeholder="Bairro" className="rounded-xl border px-3 py-3 text-sm"/><input value={endereco} onChange={e=>setEndereco(e.target.value)} placeholder="Rua / referência" className="rounded-xl border px-3 py-3 text-sm"/><input value={numero} onChange={e=>setNumero(e.target.value)} inputMode="numeric" placeholder="Número do imóvel" className="rounded-xl border px-3 py-3 text-sm"/><input value={cep} onChange={e=>setCep(e.target.value)} inputMode="numeric" maxLength={9} placeholder="CEP (00000-000)" aria-label="CEP da obra" className="rounded-xl border px-3 py-3 text-sm sm:col-span-2"/><button type="button" disabled={consultandoCep||cep.replace(/\D/g,'').length!==8} onClick={()=>void buscarPeloCep()} className="rounded-xl border border-blue-300 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700 disabled:opacity-40 sm:col-span-2">{consultandoCep?'Consultando CEP...':'Consultar CEP e preencher endereço'}</button></div><textarea value={observacoes} onChange={e=>setObservacoes(e.target.value)} rows={3} placeholder="Observação rápida (opcional)" className="mt-3 w-full rounded-xl border px-3 py-3 text-sm"/></section>
       <section className="rounded-2xl border bg-white p-4 shadow-sm"><h2 className="font-bold">Resultado da passagem</h2><p className="mb-3 text-xs text-slate-500">Isso diferencia obra encontrada de visita ou contato realizado.</p><div className="space-y-2">{RESULTADOS.map(item=><button type="button" key={item.id} onClick={()=>setResultado(item.id)} className={`w-full rounded-xl border p-3 text-left transition ${resultado===item.id?'border-blue-600 bg-blue-50 ring-1 ring-blue-600':'bg-white'}`}><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-slate-900">{item.titulo}</p><p className="mt-0.5 text-xs text-slate-500">{item.descricao}</p></div><span className={`mt-1 h-4 w-4 rounded-full border ${resultado===item.id?'border-[5px] border-blue-600':'border-slate-300'}`}/></div></button>)}</div></section>
       {erro&&<p className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{erro}</p>}
       <div className="fixed inset-x-0 bottom-[calc(4.3rem+env(safe-area-inset-bottom))] z-40 border-t bg-white/95 p-3 backdrop-blur md:static md:border-0 md:bg-transparent md:p-0"><button disabled={salvando||capturando} className="mx-auto flex w-full max-w-xl items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white shadow-lg disabled:opacity-60"><Check size={17}/>{salvando?'Salvando...':'Salvar registro'}</button></div>
