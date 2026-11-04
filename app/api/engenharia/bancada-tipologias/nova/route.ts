@@ -201,14 +201,37 @@ export async function POST(req: NextRequest) {
         ok: Boolean(conferencia?.ok), avaliados: conferencia?.avaliados || 0, conformes: conferencia?.conformes || 0,
       }, hash_pdf: doc ? sha(doc.buffer) : null, confirmado_em: null, responsavel_validacao: null,
       fonte_tipo: doc?.mime || null } },
-  })
-  if (registro.error) {
+  }).select('id').single()
+  if (registro.error || !registro.data?.id) {
     // Falha ao salvar evidência não apaga o laboratório já criado; alerta explícito ao operador.
     return NextResponse.json({ ok: true, formulaId, tipologiaId: tipologia.id, pendentes, semImagem,
       aviso: 'Receita criada, mas a evidência não pôde ser registrada. Envie novamente o documento antes de validar.' },
       { headers: { 'Cache-Control': 'private,no-store' } })
   }
+  // Códigos não encontrados entram na fila oficial de candidatos, nunca como produtos ativos.
+  // Assim o projetista pode vincular a imagem técnica correta antes de aprovar o material.
+  let candidatosPendentes = 0
+  if (pendentes.length) {
+    const { error: erroCandidatos } = await supabaseAdmin.from('ai_aprendizado_candidatos').insert(
+      componentes.filter(c => pendentes.includes(c.codigo)).filter((c, index, lista) =>
+        lista.findIndex(outro => outro.codigo === c.codigo) === index).map(c => ({
+        entrada_id: registro.data?.id,
+        empresa_id: usuario.empresa_id,
+        tipo: 'produto', modulo: 'engenharia_tipologias',
+        titulo: c.codigo + ' · ' + c.descricao,
+        dados: { codigo: c.codigo, nome: c.descricao, categoria: c.tipo === 'perfil' ? 'perfil' : 'acessorio',
+          foto_url: null, imagem_pendente: true, fonte_tipologia_id: tipologia.id,
+          origem: fonte, status_validacao: 'pendente' },
+        deduplicacao: { codigo: c.codigo, empresa_id: usuario.empresa_id },
+        acao_sugerida: 'Confirmar perfil/acessório, anexar imagem técnica correspondente ao código e validar cadastro.',
+        status: 'pendente',
+      })),
+    )
+    if (erroCandidatos) candidatosPendentes = pendentes.length
+  }
   return NextResponse.json({ ok: true, formulaId, tipologiaId: tipologia.id, pendentes, semImagem,
-    aviso: 'Tipologia criada SOMENTE em desenvolvimento; fórmulas, croqui e catálogo aguardam validação.' },
+    aviso: candidatosPendentes
+      ? 'Tipologia criada em desenvolvimento. Há códigos pendentes cuja fila de cadastro não pôde ser gravada; informe o suporte antes de validar.'
+      : 'Tipologia criada SOMENTE em desenvolvimento; fórmulas, croqui e catálogo aguardam validação.' },
     { headers: { 'Cache-Control': 'private,no-store' } })
 }
