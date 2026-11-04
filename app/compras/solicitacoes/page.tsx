@@ -7,6 +7,7 @@ import type {ComprasAcessos} from '@/lib/comprasPermissoesServer'
 import CarrinhosFluxoAprovado from '@/components/compras/CarrinhosFluxoAprovado'
 import ImportadorListaCompras from '@/components/compras/ImportadorListaCompras'
 import CotacoesComparativo from '@/components/compras/CotacoesComparativo'
+import BuscaClienteCompras, {type ClienteEncontrado} from '@/components/compras/BuscaClienteCompras'
 import {criarObraCliente} from '@/lib/cliente360'
 
 type Cliente={id:string;nome:string}
@@ -91,24 +92,66 @@ export default function ComprasSolicitacoes(){
   const r=await fetch(url,{...init,headers:{Authorization:'Bearer '+token,...init?.headers},cache:'no-store'})
   const json=await r.json().catch(()=>({}));if(!r.ok)throw Error(json.error||'Falha de comunicação');return json
  },[])
+ const obrasCarregadas=useRef(new Set<string>())
+ const obrasEmAndamento=useRef(new Set<string>())
+ const [obrasConsultando,setObrasConsultando]=useState<string[]>([])
+ const carregarObrasCliente=useCallback(async(id:string)=>{
+  if(!id||obrasCarregadas.current.has(id)||obrasEmAndamento.current.has(id))return
+  obrasEmAndamento.current.add(id);setObrasConsultando(at=>[...at,id])
+  try{
+   const j=await request('/api/compras/clientes-busca?obrasClienteId='+encodeURIComponent(id))
+   setD(at=>at?{...at,obras:[...at.obras.filter(o=>o.cliente_id!==id),...(j.obras||[])]}:at)
+   obrasCarregadas.current.add(id)
+   if(j.limiteAtingido)setErro('Este cliente tem muitas obras. Exibindo as primeiras 500; confira a obra antes de enviar.')
+  }catch(e){setErro(e instanceof Error?e.message:'Não foi possível consultar as obras do cliente.')}
+  finally{
+   obrasEmAndamento.current.delete(id)
+   setObrasConsultando(at=>at.filter(v=>v!==id))
+  }
+ },[request])
+ const memorizarCliente=useCallback((cliente:ClienteEncontrado|null)=>{
+  if(!cliente)return
+  setD(at=>at?{...at,clientes:at.clientes.some(c=>c.id===cliente.id)?at.clientes:
+    [...at.clientes,{id:cliente.id,nome:cliente.nome}]}:at)
+  void carregarObrasCliente(cliente.id)
+ },[carregarObrasCliente])
  const carregar=useCallback(async()=>{
-  try{setBusy(true);setD(await request('/api/compras/solicitacoes'))}catch(e){setErro(e instanceof Error?e.message:'Erro de consulta')}
+  try{
+   setBusy(true)
+   const dados:Payload=await request('/api/compras/solicitacoes')
+   // Preserva o cliente digitado e as obras já consultadas após atualizar o Kanban.
+   setD(anterior=>anterior?{...dados,
+    clientes:[...dados.clientes,...anterior.clientes.filter(c=>!dados.clientes.some(x=>x.id===c.id))],
+    obras:[...dados.obras,...anterior.obras.filter(o=>!dados.obras.some(x=>x.id===o.id))]
+   }:dados)
+  }catch(e){setErro(e instanceof Error?e.message:'Erro de consulta')}
   finally{setBusy(false)}
  },[request])
  useEffect(()=>{void carregar()},[carregar])
- // Cliente 360 -> Pedido de compra: reutiliza o formulário aprovado, sem passar
- // pelo Compras 360 legado. A obra continua sob escolha e validação do usuário.
+ // Cliente 360 -> Compras: resolve cliente e obras pelo ID, mesmo fora dos primeiros 10 mil.
  useEffect(()=>{
   if(!d||origemClienteAplicada.current)return
   origemClienteAplicada.current=true
   const params=new URLSearchParams(window.location.search)
   const clienteOrigem=params.get('cliente')
-  if(!clienteOrigem||!d.clientes.some(c=>c.id===clienteOrigem))return
-  const obraOrigem=params.get('obra')
-  const obraValida=obraOrigem&&d.obras.some(o=>o.id===obraOrigem&&o.cliente_id===clienteOrigem)?obraOrigem:''
-  setItens(atuais=>atuais.map((item,index)=>index===0&&item.cliente_id===''&&item.obra_id===''&&item.descricao.trim()===''
-   ?{...item,modo:obraValida?'obra':(d.obras.some(o=>o.cliente_id===clienteOrigem)?'obra':'cliente_avulso'),cliente_id:clienteOrigem,obra_id:obraValida}:item))
- },[d])
+  if(!clienteOrigem)return
+  void (async()=>{
+   try{
+    const clienteBusca=await request('/api/compras/clientes-busca?clienteId='+encodeURIComponent(clienteOrigem))
+    const cliente:Cliente=clienteBusca.cliente
+    const obrasBusca=await request('/api/compras/clientes-busca?obrasClienteId='+encodeURIComponent(clienteOrigem))
+    const obras:Obra[]=obrasBusca.obras||[]
+    obrasCarregadas.current.add(clienteOrigem)
+    setD(at=>at?{...at,clientes:at.clientes.some(c=>c.id===cliente.id)?at.clientes:[...at.clientes,cliente],
+     obras:[...at.obras.filter(o=>o.cliente_id!==clienteOrigem),...obras]}:at)
+    const obraOrigem=params.get('obra')
+    const obraValida=obraOrigem&&obras.some(o=>o.id===obraOrigem)?obraOrigem:''
+    setItens(at=>at.map((item,index)=>index===0&&!item.cliente_id&&!item.obra_id&&!item.descricao.trim()
+     ?{...item,modo:obraValida?'obra':obras.length?'obra':'cliente_avulso',
+      cliente_id:clienteOrigem,obra_id:obraValida}:item))
+   }catch(e){setErro(e instanceof Error?e.message:'Não foi possível vincular o cliente de origem.')}
+  })()
+ },[d,request])
  useEffect(()=>{
   if(!d||origemPedidoAplicada.current)return
   origemPedidoAplicada.current=true
@@ -234,10 +277,12 @@ export default function ComprasSolicitacoes(){
      <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>setItens(at=>at.map((v,k)=>k===0?{...v,modo:'estoque',cliente_id:'',obra_id:''}:v))} className={'rounded-lg border px-4 py-2 text-xs font-semibold '+(resolverDestino(itens,0).destino==='estoque'?'bg-blue-700 text-white':'bg-white')}>Para estoque</button>
       <button type="button" onClick={()=>setItens(at=>at.map((v,k)=>k===0?{...v,modo:'obra'}:v))} className={'rounded-lg border px-4 py-2 text-xs font-semibold '+(resolverDestino(itens,0).destino!=='estoque'?'bg-blue-700 text-white':'bg-white')}>Para cliente</button></div>
      {resolverDestino(itens,0).destino!=='estoque'&&<>
-      <label className="block text-xs font-medium">Cliente *<select value={itens[0]?.cliente_id||''} onChange={e=>setItens(at=>at.map((v,k)=>k===0?{...v,cliente_id:e.target.value,obra_id:''}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">Selecione o cliente</option>{d.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
+      <BuscaClienteCompras label="Cliente *" value={itens[0]?.cliente_id||''}
+       selecionado={d.clientes.find(c=>c.id===itens[0]?.cliente_id)}
+       onChange={c=>{memorizarCliente(c);setItens(at=>at.map((v,k)=>k===0?{...v,cliente_id:c?.id||'',obra_id:''}:v))}}/>
       {!!itens[0]?.cliente_id&&<div className="flex flex-wrap gap-2"><button type="button" className={'rounded-lg border px-3 py-2 text-xs '+(itens[0].modo==='obra'?'bg-blue-100 font-bold':'bg-white')} onClick={()=>setItens(at=>at.map((v,k)=>k===0?{...v,modo:'obra'}:v))}>Obra existente</button>
        <button type="button" className={'rounded-lg border px-3 py-2 text-xs '+(itens[0].modo==='cliente_avulso'?'bg-blue-100 font-bold':'bg-white')} onClick={()=>setItens(at=>at.map((v,k)=>k===0?{...v,modo:'cliente_avulso',obra_id:''}:v))}>Pedido avulso (sem obra)</button></div>}
-      {itens[0]?.modo==='obra'&&<><label className="block text-xs font-medium">Obra do cliente<select value={itens[0]?.obra_id||''} onChange={e=>setItens(at=>at.map((v,k)=>k===0?{...v,obra_id:e.target.value}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">Selecione a obra</option>{d.obras.filter(o=>o.cliente_id===itens[0]?.cliente_id).map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
+      {itens[0]?.modo==='obra'&&<><label className="block text-xs font-medium">Obra do cliente<select value={itens[0]?.obra_id||''} onChange={e=>setItens(at=>at.map((v,k)=>k===0?{...v,obra_id:e.target.value}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">{obrasConsultando.includes(itens[0]?.cliente_id||'')?'Carregando obras...':'Selecione a obra'}</option>{d.obras.filter(o=>o.cliente_id===itens[0]?.cliente_id).map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
        <div className="flex flex-wrap gap-2"><input value={obraNova} onChange={e=>setObraNova(e.target.value)} placeholder="Ou digite o nome da nova obra" className="min-w-[180px] flex-1 rounded-lg border bg-white p-2 text-xs"/><button type="button" disabled={criandoObra||!itens[0]?.cliente_id||!obraNova.trim()} onClick={()=>void criarObraNoPedido()} className="rounded-lg border border-blue-400 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50">{criandoObra?'Criando...':'+ Criar obra e vincular'}</button></div></>}
       {itens[0]?.modo==='cliente_avulso'&&<p className="text-xs text-blue-800">O cliente ficará vinculado sem criar obra fictícia. Informe a finalidade no campo de observações.</p>}
      </>}
@@ -275,10 +320,14 @@ export default function ComprasSolicitacoes(){
              <option value="estoque">Enviar para estoque</option>
            </select>
            {i.modo==='obra'&&<div className="mt-3 grid gap-2 sm:grid-cols-2">
-             <label className="text-xs font-medium">Cliente *<select value={i.cliente_id} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,cliente_id:e.target.value,obra_id:''}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">Selecionar cliente</option>{d.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
-             <label className="text-xs font-medium">Obra *<select value={i.obra_id} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,obra_id:e.target.value}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">Selecionar obra</option>{obras.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
+             <BuscaClienteCompras label="Cliente *" value={i.cliente_id}
+              selecionado={d.clientes.find(c=>c.id===i.cliente_id)}
+              onChange={c=>{memorizarCliente(c);setItens(a=>a.map((v,k)=>k===idx?{...v,cliente_id:c?.id||'',obra_id:''}:v))}}/>
+             <label className="text-xs font-medium">Obra *<select value={i.obra_id} onChange={e=>setItens(a=>a.map((v,k)=>k===idx?{...v,obra_id:e.target.value}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">{obrasConsultando.includes(i.cliente_id)?'Carregando obras...':'Selecionar obra'}</option>{obras.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>
            </div>}
-           {i.modo==='cliente_avulso'&&<label className="mt-3 block text-xs font-medium">Cliente para compra avulsa *<select value={i.cliente_id} onChange={e=>setItens(at=>at.map((v,k)=>k===idx?{...v,cliente_id:e.target.value,obra_id:''}:v))} className="mt-1 w-full rounded-lg border bg-white p-2.5"><option value="">Selecionar cliente</option>{d.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>}
+           {i.modo==='cliente_avulso'&&<div className="mt-3"><BuscaClienteCompras label="Cliente para compra avulsa *" value={i.cliente_id}
+             selecionado={d.clientes.find(c=>c.id===i.cliente_id)}
+             onChange={c=>{memorizarCliente(c);setItens(at=>at.map((v,k)=>k===idx?{...v,cliente_id:c?.id||'',obra_id:''}:v))}}/></div>}
            {i.modo==='mesma'&&<p className="mt-2 text-xs font-medium text-blue-700">{x.destino!=='estoque'?(d.clientes.find(c=>c.id===x.cliente_id)?.nome||'Cliente')+' · '+(x.destino==='cliente_avulso'?'Pedido avulso':d.obras.find(o=>o.id===x.obra_id)?.nome||'Selecione obra no item anterior'):'Mesmo destino: estoque'}</p>}
            {x.destino==='estoque'&&<p className="mt-2 text-xs text-emerald-800">Este item será destinado ao estoque geral da empresa.</p>}
          </div>
@@ -314,7 +363,7 @@ export default function ComprasSolicitacoes(){
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{d.solicitacoes.filter(s=>!pedidoAberto||s.id===pedidoAberto).map(s=><article key={s.id} className="rounded-xl border p-3"><div className="flex items-center justify-between gap-2"><strong className="text-sm">{'Pedido de compra · '+d.itens.filter(i=>i.solicitacao_id===s.id).length+' item(ns)'}</strong><span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] text-blue-700">{stat(s.status)}</span></div><p className="my-2 text-xs text-slate-500">Solicitado por {s.solicitante_nome} · {dt(s.created_at)}</p>
     <Link href={'/compras/documento/solicitacao/'+s.id} target="_blank" rel="noopener noreferrer" className="mb-3 inline-flex rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">Imprimir lista / Baixar PDF para conferência</Link>
     {comprador&&<CotacoesComparativo solicitacaoId={s.id} fornecedores={d.fornecedores} produtos={d.produtos} itens={d.itens.filter(i=>i.solicitacao_id===s.id)} podeEditar={!!(d.acessos.cotar||d.acessos.comprar)}/>}
-    {(d.acessos.editarTodos||d.acessos.editarProprios&&s.solicitante_id===d.usuarioId)&&<div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2"><span className="w-full text-[11px] font-medium text-slate-600">Ações do pedido completo</span><button onClick={()=>{const i=d.itens.find(i=>i.solicitacao_id===s.id&&i.status==='ativo');if(!i)return;setEditando(i.id);setEditDesc(i.descricao);setEditQtd(i.quantidade_necessaria==null?'':String(i.quantidade_necessaria));setEditDestino(i.destino);setEditCliente(i.cliente_id||'');setEditObra(i.obra_id||'');setEditCategoria(i.categoria);setEditFoto(null);setPedidoAberto(s.id)}} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800">Editar pedido (por item)</button><button disabled={busy||d.itens.every(i=>i.solicitacao_id!==s.id||i.status!=='ativo')} onClick={()=>void cancelarPedido(s)} className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 disabled:opacity-40">Excluir pedido completo</button></div>}
+    {(d.acessos.editarTodos||d.acessos.editarProprios&&s.solicitante_id===d.usuarioId)&&<div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2"><span className="w-full text-[11px] font-medium text-slate-600">Ações do pedido completo</span><button onClick={()=>{const i=d.itens.find(i=>i.solicitacao_id===s.id&&i.status==='ativo');if(!i)return;setEditando(i.id);setEditDesc(i.descricao);setEditQtd(i.quantidade_necessaria==null?'':String(i.quantidade_necessaria));setEditDestino(i.destino);setEditCliente(i.cliente_id||'');setEditObra(i.obra_id||'');if(i.cliente_id)void carregarObrasCliente(i.cliente_id);setEditCategoria(i.categoria);setEditFoto(null);setPedidoAberto(s.id)}} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800">Editar pedido (por item)</button><button disabled={busy||d.itens.every(i=>i.solicitacao_id!==s.id||i.status!=='ativo')} onClick={()=>void cancelarPedido(s)} className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 disabled:opacity-40">Excluir pedido completo</button></div>}
     <div className="mb-3 flex border-b text-xs font-semibold">{([['itens','Itens ('+d.itens.filter(i=>i.solicitacao_id===s.id).length+')'],['observacoes','Observações'],['historico','Histórico']] as const).map(([aba,texto])=><button key={aba} type="button" onClick={()=>setAbaPedido(aba)} className={'border-b-2 px-3 py-2 '+(abaPedido===aba?'border-blue-600 text-blue-700':'border-transparent text-slate-500')}>{texto}</button>)}</div>
     {abaPedido==='observacoes'&&<div className="rounded-lg bg-slate-50 p-4 text-xs text-slate-600">{s.observacoes||'Nenhuma observação registrada neste pedido.'}</div>}
     {abaPedido==='historico'&&<div className="space-y-2 rounded-lg bg-slate-50 p-3">{d.historico.filter(e=>e.solicitacao_id===s.id).map(e=><div className="border-b py-1 text-[11px]" key={e.id}><b>{dt(e.created_at)} · {e.autor_nome}</b><p>{e.detalhe}</p></div>)}{!d.historico.some(e=>e.solicitacao_id===s.id)&&<p className="text-xs text-slate-500">Nenhum evento registrado.</p>}</div>}
@@ -330,7 +379,7 @@ export default function ComprasSolicitacoes(){
      })}
      {comprador&&i.status==='ativo'&&<button className="mt-2 text-xs font-semibold text-blue-700 underline" onClick={()=>abrir(i)}>Validar produto / cotar / carrinho</button>}
      {(d.acessos.editarTodos||d.acessos.editarProprios&&s.solicitante_id===d.usuarioId)&&i.status==='ativo'&&<div className="mt-2 flex flex-wrap gap-2">
-       <button type="button" disabled={busy} className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50" onClick={()=>{setEditando(i.id);setEditDesc(i.descricao);setEditQtd(i.quantidade_necessaria==null?'':String(i.quantidade_necessaria));setEditDestino(i.destino);setEditCliente(i.cliente_id||'');setEditObra(i.obra_id||'');setEditCategoria(i.categoria);setEditFoto(null)}}>Editar item</button>
+       <button type="button" disabled={busy} className="rounded-lg border border-blue-300 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50" onClick={()=>{setEditando(i.id);setEditDesc(i.descricao);setEditQtd(i.quantidade_necessaria==null?'':String(i.quantidade_necessaria));setEditDestino(i.destino);setEditCliente(i.cliente_id||'');setEditObra(i.obra_id||'');if(i.cliente_id)void carregarObrasCliente(i.cliente_id);setEditCategoria(i.categoria);setEditFoto(null)}}>Editar item</button>
        <button type="button" disabled={busy} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 disabled:opacity-50" onClick={()=>{const motivo=prompt('Motivo da exclusão (ficará registrado no histórico):','Item solicitado incorretamente');if(motivo===null)return;if(!confirm('Confirmar exclusão deste item? O registro e histórico serão mantidos. Se já houver carrinho ou compra, será encaminhado para revisão do comprador.'))return;void alterarItem('cancelar',i.id,{motivo})}}>Excluir item</button>
       </div>}
      {i.status==='cancelado'&&<p className="mt-2 rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">Item excluído · histórico preservado</p>}
@@ -340,7 +389,9 @@ export default function ComprasSolicitacoes(){
        <label className="block text-xs">Descrição<input aria-label="Descrição corrigida" className="mt-1 w-full rounded border p-2" value={editDesc} onChange={e=>setEditDesc(e.target.value)}/></label>
        <label className="block text-xs">Quantidade<input aria-label="Quantidade corrigida" type="number" min="0.0001" step="any" className="mt-1 w-full rounded border p-2" value={editQtd} onChange={e=>setEditQtd(e.target.value)}/></label>
        <label className="block text-xs">Destino deste item<select aria-label="Destino corrigido" value={editDestino} className="mt-1 w-full rounded border p-2" onChange={e=>{setEditDestino(e.target.value as 'obra'|'estoque'|'cliente_avulso');setEditCliente('');setEditObra('')}}><option value="obra">Cliente e obra</option><option value="cliente_avulso">Cliente avulso (sem obra)</option><option value="estoque">Estoque</option></select></label>
-       {editDestino!=='estoque'&&<><label className="block text-xs">Cliente<select aria-label="Cliente corrigido" value={editCliente} onChange={e=>{setEditCliente(e.target.value);setEditObra('')}} className="mt-1 w-full rounded border p-2"><option value="">Selecionar cliente</option>{d.clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>{editDestino==='obra'&&<label className="block text-xs">Obra<select aria-label="Obra corrigida" className="mt-1 w-full rounded border p-2" value={editObra} onChange={e=>setEditObra(e.target.value)}><option value="">Selecionar obra</option>{d.obras.filter(o=>o.cliente_id===editCliente).map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>}</>}
+       {editDestino!=='estoque'&&<><BuscaClienteCompras label="Cliente corrigido" value={editCliente}
+         selecionado={d.clientes.find(c=>c.id===editCliente)}
+         onChange={c=>{memorizarCliente(c);setEditCliente(c?.id||'');setEditObra('')}}/>{editDestino==='obra'&&<label className="block text-xs">Obra<select aria-label="Obra corrigida" className="mt-1 w-full rounded border p-2" value={editObra} onChange={e=>setEditObra(e.target.value)}><option value="">{obrasConsultando.includes(editCliente)?'Carregando obras...':'Selecionar obra'}</option>{d.obras.filter(o=>o.cliente_id===editCliente).map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select></label>}</>}
        <label className="block text-xs">Trocar foto do material (opcional)<input type="file" accept="image/jpeg,image/png,image/webp" className="mt-1 w-full text-xs" onChange={e=>setEditFoto(e.target.files?.[0]||null)}/></label>
        <FotoItem foto={editFoto}/>
        <button disabled={busy} className="rounded bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40" onClick={()=>void alterarItem('editar',i.id,{categoria:editCategoria,descricao:editDesc,quantidade_necessaria:editQtd||null,destino:editDestino,cliente_id:editDestino!=='estoque'?editCliente:null,obra_id:editDestino==='obra'?editObra:null})}>Salvar alterações com histórico</button>

@@ -41,25 +41,22 @@ export async function GET(req:NextRequest){
   if(!todos&&!meus){
    // Solicitar somente: mostrar apenas o cadastro mínimo para selecionar cliente/obra.
    // Não expor pedidos, valores, fornecedores nem catálogo do comprador.
-   const [clientes,obras]=a.solicitar?await Promise.all([
-    db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(3000),
-    db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).order('nome').limit(4000)
-   ]):[{data:[],error:null},{data:[],error:null}]
-   if(clientes.error||obras.error)throw clientes.error||obras.error
-   return NextResponse.json({acessos:a,usuarioId:u.id,solicitacoes:[],itens:[],historico:[],clientes:clientes.data||[],
-    obras:obras.data||[],produtos:[],fornecedores:[],carrinhos:[],linhas:[]})
+   // Não transferir o cadastro inteiro de clientes/obras ao abrir Compras.
+   return NextResponse.json({acessos:a,usuarioId:u.id,solicitacoes:[],itens:[],historico:[],clientes:[],
+    obras:[],produtos:[],fornecedores:[],carrinhos:[],linhas:[]})
   }
   let q=db.from('compras_solicitacoes').select('*').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(300)
   if(!todos)q=q.eq('solicitante_id',u.id)
   const {data:solicitacoes,error:e}=await q;if(e)throw e
   const ids=(solicitacoes||[]).map(x=>x.id)
-  const apenasProprios=!todos&&!a.solicitar
+  // O histórico acessível determina os vínculos, nunca uma listagem global dos clientes.
   const clientesIds=[...new Set((solicitacoes||[]).map(s=>s.cliente_id).filter(Boolean))]
   const obrasIds=[...new Set((solicitacoes||[]).map(s=>s.obra_id).filter(Boolean))]
   const [itensR,clientesR,obrasR,produtosR,fornecedoresR]=await Promise.all([
    ids.length?db.from('compras_solicitacao_itens').select('*').eq('empresa_id',u.empresa_id).in('solicitacao_id',ids).order('ordem').limit(4000):Promise.resolve({data:[],error:null}),
-   apenasProprios?(clientesIds.length?db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).in('id',clientesIds):Promise.resolve({data:[],error:null})):db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(3000),
-   apenasProprios?(obrasIds.length?db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).in('id',obrasIds):Promise.resolve({data:[],error:null})):db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).order('nome').limit(4000),
+   // Somente pessoas/obras referenciadas em pedidos visíveis; novos clientes vêm da busca paginada.
+   clientesIds.length?db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).in('id',clientesIds):Promise.resolve({data:[],error:null}),
+   obrasIds.length?db.from('obras').select('id,nome,cliente_id').eq('empresa_id',u.empresa_id).in('id',obrasIds):Promise.resolve({data:[],error:null}),
    !todos?Promise.resolve({data:[],error:null}):db.from('produtos').select('id,codigo,nome,categoria,unidade,foto_url').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(5000),
    todos?db.from('fornecedores').select('id,nome,pedido_minimo').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(2000):Promise.resolve({data:[],error:null}),
   ])
@@ -68,7 +65,7 @@ export async function GET(req:NextRequest){
   // sem mostrar o cadastro inteiro a quem só consulta os próprios pedidos.
   let extrasClientesDados: Array<{id:string;nome:string}>=[]
   let extrasObrasDados: Array<{id:string;nome:string;cliente_id:string}>=[]
-  if(apenasProprios){
+  if((itensR.data||[]).length){
    const extrasClientes=[...new Set((itensR.data||[]).map(i=>i.cliente_id).filter(Boolean))].filter(id=>!clientesIds.includes(id))
    const extrasObras=[...new Set((itensR.data||[]).map(i=>i.obra_id).filter(Boolean))].filter(id=>!obrasIds.includes(id))
    if(extrasClientes.length){const {data,error}=await db.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).in('id',extrasClientes);if(error)throw error;extrasClientesDados=data||[]}

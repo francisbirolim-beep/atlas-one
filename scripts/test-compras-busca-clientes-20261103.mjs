@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import {prepararBuscaCliente,filtrosBuscaCliente,finalDocumento} from '../lib/comprasBuscaClientes.ts'
+assert.equal(prepararBuscaCliente(' Maria  Souza ').termo,'Maria Souza')
+assert.equal(prepararBuscaCliente('12').apto,false)
+assert.equal(prepararBuscaCliente('119').apto,true)
+assert.equal(filtrosBuscaCliente('João').includes('apelido.ilike.%João%'),true)
+assert.equal(filtrosBuscaCliente('17987654321').includes('cpf_cnpj.ilike.%1%7%9%8%7%6%5%4%3%2%1%'),true)
+assert.equal(filtrosBuscaCliente('123,456%').includes(','),true) // separadores estruturais somente entre filtros
+assert.equal(prepararBuscaCliente("abc),nome.eq.x").termo.includes(')'),false)
+assert.equal(filtrosBuscaCliente(''),null)
+assert.equal(prepararBuscaCliente('Mar**ia').termo,'Mar ia')
+assert.equal(finalDocumento('123.456.789-01'),'•••• 8901')
+const api=fs.readFileSync(new URL('../app/api/compras/clientes-busca/route.ts',import.meta.url),'utf8')
+const ui=fs.readFileSync(new URL('../app/compras/solicitacoes/page.tsx',import.meta.url),'utf8')
+const solicitacoes=fs.readFileSync(new URL('../app/api/compras/solicitacoes/route.ts',import.meta.url),'utf8')
+assert.ok(api.includes(".eq('empresa_id',empresaId).eq('ativo',true)"))
+assert.ok(api.includes('obterComprasAcessos'))
+assert.ok(api.includes('.limit(20)'))
+assert.ok(api.includes("obrasClienteId"))
+assert.equal((ui.match(/<BuscaClienteCompras/g)||[]).length,4)
+assert.equal(ui.includes('d.clientes.map(c=><option'),false)
+assert.equal(solicitacoes.includes(".order('nome').limit(3000)"),false)
+assert.equal(solicitacoes.includes(".order('nome').limit(4000)"),false)
+assert.ok(ui.includes('clienteId='))
+assert.ok(ui.includes('obrasClienteId='))
+assert.ok(ui.includes('memorizarCliente(c)'))
+console.log('PASS: busca por nome, apelido, telefone e CPF, 20 resultados, vinculação de obra e zero dropdowns de clientes.')
