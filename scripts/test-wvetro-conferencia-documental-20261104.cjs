@@ -36,12 +36,12 @@ for(const exp of [
  /identidadeConfirmada/,
 ])assert.match(ui,exp)
 for(const exp of [
- /Imprimir \{selecionadasImpressao\.length/,
+ /Imprimir Selecionadas/,
  /fichas\?pacote=/,
- /Selecionar todas as tipologias para impress[ãa]o/,
- /Selecionar \$\{it\.ambiente/,
- /Conferir \/ PDF/,
- /linkFicha\(\[ref\]\)/,
+ /Selecionar tipologia para impress[ãa]o/,
+ /fotoDaTipologia\(it\)/,
+ /PDF \/ W\.Vetro/,
+ /linkFicha\(\[aberta\|\|'\'\]\)/,
  /VendaConferenciaDocumentalWVetro/,
 ])assert.match(tipologias,exp)
 for(const exp of [/breakAfter:'page'/,/Perfis e cortes/,/Acess[óo]rios/,/Vidros/,/Imagem/,/porVenda/,/orcamento_id/])assert.match(fichas,exp)
