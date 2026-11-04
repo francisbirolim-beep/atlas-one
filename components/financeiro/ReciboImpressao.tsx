@@ -15,7 +15,9 @@ export default function ReciboImpressao({
   const r = textoRecibo(dados)
   // Observações legadas podem repetir a anotação automática de desconto.
   // O desconto permanece registrado na linha financeira abaixo, uma única vez.
-  const observacoes = dados.descricao?.replace(/(?:Desconto concedido nesta baixa:\s*R\$\s*[0-9.,]+\s*)+/gi, ' ').trim()
+  const observacoes = dados.tipo === 'receber'
+    ? dados.descricao?.replace(/(?:Desconto concedido nesta baixa:\s*R\$\s*[0-9.,]+\s*)+/gi, ' ').trim()
+    : dados.descricao
   const moeda = (v:number) => Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
   const papelRef = useRef<HTMLDivElement>(null)
   const acaoExecutada = useRef(false)
