@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, Building2, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, Factory,
-  Boxes, FileDown, FileText, ImageIcon, Loader2, PackageCheck, Pencil, Plus, Receipt, RefreshCw, Replace, ShoppingCart, Trash2, Wallet, Wrench, X
+  ArrowRight, Boxes, FileDown, FileText, GripVertical, ImageIcon, Loader2, PackageCheck, Pencil, Plus, Receipt, RefreshCw, Replace, RotateCcw, ShoppingCart, Trash2, Wallet, Wrench, X
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { registrarRecebimentoVendaComDesconto } from '@/lib/cliente360Recebimentos'
@@ -37,6 +37,7 @@ import { avaliarFluxoVenda, type InstalacaoResumo } from '@/lib/vendaFluxoResumo
 import { refItemProducaoInstalacao } from '@/lib/vendaInstalacaoProducao'
 import { custoRealCompraConfirmada } from '@/lib/vendaCmvRegras'
 import { custoRevisado } from '@/lib/vendaCmvRevisao'
+import { ABAS_OBRA_PADRAO, ORDEM_ABAS_OBRA_PADRAO, lerOrdemAbasObra, salvarOrdemAbasObra, normalizarOrdemAbasObra, moverAbaObra, type AbaObraId } from '@/lib/ordemAbasObra'
 
 type Venda = {
   id:string
@@ -94,7 +95,7 @@ type LoteCotacao = {
   status:string;quantidade_itens:number;versao:number;itens:Array<{material_id:string;codigo:string|null;descricao:string;unidade:string;quantidade_cotar:number;cor?:string|null;comprimento_corte_mm?:number|null;status_etapa?:string|null;grupo_card_id?:string|null}>
   gerado_por_nome?:string|null;created_at:string;updated_at:string
 }
-type Aba='visao'|'financeiro'|'custos'|'compras'|'materiais'|'tipologias'|'medida-final'|'producao'|'instalacao'|'notas'|'documentos'|'historico'
+type Aba=AbaObraId
 interface Props{clienteId:string;vendaId:string}
 
 function moeda(v?:number|null){return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
@@ -254,6 +255,12 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const listaMateriaisRef=useRef<HTMLDivElement>(null)
   const tentouMaterializarVenda=useRef<string|null>(null)
   const [aba,setAba]=useState<Aba>('visao')
+  const [ordemAbas,setOrdemAbas]=useState<Aba[]>([...ORDEM_ABAS_OBRA_PADRAO])
+  const [organizandoAbas,setOrganizandoAbas]=useState(false)
+  const [abaArrastando,setAbaArrastando]=useState<Aba|null>(null)
+  const [abaDestino,setAbaDestino]=useState<Aba|null>(null)
+  const [usuarioOrdemAbasId,setUsuarioOrdemAbasId]=useState<string|null>(null)
+  const [erroSalvarAbas,setErroSalvarAbas]=useState(false)
   const [abrirEdicaoValorVenda,setAbrirEdicaoValorVenda]=useState(false)
   useEffect(()=>{
     if(new URLSearchParams(window.location.search).get('aba')==='medida-final')setAba('medida-final')
@@ -274,6 +281,15 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   useEffect(()=>{
     let ativo=true
     void usuarioAtual().then(u=>{if(ativo)setEhMaster(u?.role==='master')})
+    return()=>{ativo=false}
+  },[])
+
+  useEffect(()=>{
+    let ativo=true
+    void usuarioAtual().then(u=>{if(ativo){
+      setUsuarioOrdemAbasId(u?.id||null)
+      setOrdemAbas(u?.id?lerOrdemAbasObra(u.id):[...ORDEM_ABAS_OBRA_PADRAO])
+    }})
     return()=>{ativo=false}
   },[])
 
@@ -1269,14 +1285,25 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     }
   }
 
+  function atualizarOrdemVisualAbas(novaOrdem: readonly Aba[]){
+    const normalizada=normalizarOrdemAbasObra(novaOrdem)
+    setOrdemAbas(normalizada)
+    setErroSalvarAbas(!usuarioOrdemAbasId||!salvarOrdemAbasObra(usuarioOrdemAbasId,normalizada))
+  }
+
+  function moverAbaUmaPosicao(id:Aba,direcao:-1|1){
+    const posicao=ordemAbas.indexOf(id)
+    const destino=posicao+direcao
+    if(posicao<0||destino<0||destino>=ordemAbas.length)return
+    const nova=[...ordemAbas]
+    ;[nova[posicao],nova[destino]]=[nova[destino],nova[posicao]]
+    atualizarOrdemVisualAbas(nova)
+  }
+
   if(carregando)return <div className="min-h-screen bg-slate-50 p-8 text-center text-slate-400"><Loader2 className="mx-auto mb-2 animate-spin"/>Carregando central da venda...</div>
   if(!venda||!cliente)return <div className="min-h-screen bg-slate-50 p-8 text-red-600">{erro||'Venda não encontrada.'}</div>
 
-  const abas:{id:Aba;label:string}[]=[
-    {id:'visao',label:'Visão geral'},{id:'financeiro',label:'Financeiro'},{id:'custos',label:'Custos / CMV'},
-    {id:'compras',label:'Compras'},{id:'materiais',label:'Materiais'},{id:'tipologias',label:'Tipologias'},{id:'medida-final',label:'Medida Final'},{id:'producao',label:'Produção'},
-    {id:'instalacao',label:'Instalação'},{id:'notas',label:'Notas / Recibos'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'}
-  ]
+  const abas=ordemAbas.map(id=>ABAS_OBRA_PADRAO.find(a=>a.id===id)).filter((a):a is typeof ABAS_OBRA_PADRAO[number]=>Boolean(a))
 
   return <div className="min-h-screen bg-slate-50">
     <header className="border-b bg-white">
@@ -1437,7 +1464,30 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </div>}
       </section>}
 
-      <div className="mt-5 overflow-x-auto border-b"><div className="flex min-w-max">{abas.map(a=><button key={a.id} onClick={()=>setAba(a.id)} className={`border-b-2 px-3 py-3 text-sm font-semibold ${aba===a.id?'border-brand-navy text-brand-navy':'border-transparent text-slate-500'}`}>{a.label}</button>)}</div></div>
+      <div className="mt-5 border-b">
+        <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
+          {organizandoAbas&&<p className="mr-auto text-xs text-slate-600">Arraste os nomes ou use as setas para definir sua sequência de abas.</p>}
+          {organizandoAbas&&<button type="button" onClick={()=>atualizarOrdemVisualAbas(ORDEM_ABAS_OBRA_PADRAO)} className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"><RotateCcw size={13}/>Restaurar padrão</button>}
+          <button type="button" disabled={!usuarioOrdemAbasId} onClick={()=>{setOrganizandoAbas(!organizandoAbas);setAbaArrastando(null);setAbaDestino(null)}} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-800 hover:bg-blue-100 disabled:opacity-50"><GripVertical size={14}/>{organizandoAbas?'Concluir organização':'Organizar abas'}</button>
+        </div>
+        {erroSalvarAbas&&<p role="alert" className="mb-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Não foi possível salvar a sequência no navegador. Verifique se o armazenamento está habilitado.</p>}
+        <div className="overflow-x-auto">
+          <div className="flex min-w-max" role={organizandoAbas?undefined:'tablist'} aria-label="Seções da obra">
+            {abas.map((a,index)=>organizandoAbas?
+              <div key={a.id} draggable onDragStart={e=>{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',a.id);setAbaArrastando(a.id)}}
+                onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='move';if(abaDestino!==a.id)setAbaDestino(a.id)}}
+                onDrop={e=>{e.preventDefault();const idRecebido=e.dataTransfer.getData('text/plain');const origem=ORDEM_ABAS_OBRA_PADRAO.find(id=>id===idRecebido)||abaArrastando;if(origem)atualizarOrdemVisualAbas(moverAbaObra(ordemAbas,origem,a.id));setAbaArrastando(null);setAbaDestino(null)}}
+                onDragEnd={()=>{setAbaArrastando(null);setAbaDestino(null)}}
+                className={'flex shrink-0 cursor-grab items-center gap-1 rounded-t-lg border-2 px-2 py-2 text-sm font-semibold text-slate-800 active:cursor-grabbing '+(abaDestino===a.id?'border-blue-500 bg-blue-50':'border-transparent bg-slate-100')}>
+                <GripVertical size={15} className="shrink-0 text-slate-400" aria-hidden="true"/>
+                <span className="px-1">{a.label}</span>
+                <button type="button" disabled={index===0} onClick={()=>moverAbaUmaPosicao(a.id,-1)} aria-label={'Mover '+a.label+' para a esquerda'} title="Mover para a esquerda" className="rounded p-1 text-blue-700 hover:bg-white disabled:opacity-25"><ArrowLeft size={14}/></button>
+                <button type="button" disabled={index===abas.length-1} onClick={()=>moverAbaUmaPosicao(a.id,1)} aria-label={'Mover '+a.label+' para a direita'} title="Mover para a direita" className="rounded p-1 text-blue-700 hover:bg-white disabled:opacity-25"><ArrowRight size={14}/></button>
+              </div>
+            :<button key={a.id} role="tab" type="button" aria-selected={aba===a.id} onClick={()=>setAba(a.id)} className={'border-b-2 px-3 py-3 text-sm font-semibold '+(aba===a.id?'border-brand-navy text-brand-navy':'border-transparent text-slate-500 hover:text-slate-800')}>{a.label}</button>)}
+          </div>
+        </div>
+      </div>
 
       <div className="mt-5 space-y-5">
         {aba==='visao'&&<>
