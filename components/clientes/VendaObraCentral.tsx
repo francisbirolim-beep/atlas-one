@@ -1839,7 +1839,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         />}
 
         {aba==='medida-final'&&<Box titulo="Medida Final desta obra">
-          <VendaMedidaFinal clienteId={clienteId} vendaId={venda.id} obraId={venda.obra_id || null} orcamentoId={venda.orcamento_id}/>
+          <VendaMedidaFinal clienteId={clienteId} vendaId={venda.id} obraId={venda.obra_id || null} orcamentoId={venda.orcamento_id} itensVendidos={itensVendidos}/>
         </Box>}
 
         {aba==='producao'&&<Box titulo="Produção desta venda">
