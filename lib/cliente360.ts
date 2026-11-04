@@ -54,6 +54,7 @@ export interface RecebimentoCliente360 {
   valor: number
   valor_desconto?: number | null
   forma?: string | null
+  cartao_parcelas?: number | null
   referencia?: string | null
   observacoes?: string | null
   status: string
@@ -201,11 +202,13 @@ export async function registrarRecebimentoCliente(dados: {
   valor: number
   dataRecebimento?: string
   forma?: string
+  cartaoParcelas?: number | null
   referencia?: string
   observacoes?: string
   obraId?: string | null
 }): Promise<{ ok: boolean; recebimento?: RecebimentoCliente360; error?: string }> {
   if (!Number.isFinite(dados.valor) || dados.valor <= 0) return { ok: false, error: 'Informe um valor recebido válido.' }
+  if (dados.forma === 'cartao_credito' && (!Number.isInteger(dados.cartaoParcelas) || (dados.cartaoParcelas || 0)<1 || (dados.cartaoParcelas || 0)>18)) return { ok:false, error:'Informe de 1 a 18 parcelas para cartão de crédito.' }
   const usuario = await usuarioAtual()
   const { data, error } = await supabase
     .from('financeiro_recebimentos')
@@ -216,6 +219,7 @@ export async function registrarRecebimentoCliente(dados: {
       data_recebimento: dados.dataRecebimento || new Date().toISOString().slice(0, 10),
       valor: dados.valor,
       forma: dados.forma || null,
+      ...(dados.forma === 'cartao_credito' ? { cartao_parcelas: dados.cartaoParcelas } : {}),
       referencia: dados.referencia?.trim() || null,
       observacoes: dados.observacoes?.trim() || null,
       criado_por_id: usuario?.id || null,

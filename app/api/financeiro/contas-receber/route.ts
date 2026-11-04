@@ -42,6 +42,13 @@ export async function GET(req:NextRequest){
    if(r.error)throw r.error
    for(const a of r.data||[])if(a.tipo==='desconto')descontos[a.recebimento_id]=(descontos[a.recebimento_id]||0)+Number(a.valor||0)
   }
-  return NextResponse.json({ok:true,contas,recebimentos:(receb.data||[]).map(r=>({...r,...camposCadastro(r.cliente_id),desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})),nomesObras:nomes},{headers:{'Cache-Control':'private, no-store'}})
+  const multiformaIds=(receb.data||[]).filter(r=>r.forma==='multiplo').map(r=>r.id)
+  const composicoes:Record<string,Array<{forma:string;valor:number}>>={}
+  for(let i=0;i<multiformaIds.length;i+=80){
+    const detalhes=await supabaseAdmin.from('financeiro_recebimento_formas').select('recebimento_id,forma,valor,ordem').eq('empresa_id',u.empresa_id).in('recebimento_id',multiformaIds.slice(i,i+80)).order('ordem')
+    if(detalhes.error)throw detalhes.error
+    for(const d of detalhes.data||[])(composicoes[d.recebimento_id] ||= []).push({forma:d.forma,valor:Number(d.valor)})
+  }
+  return NextResponse.json({ok:true,contas,recebimentos:(receb.data||[]).map(r=>({...r,...camposCadastro(r.cliente_id),formas:composicoes[r.id]||[],composicaoInconsistente:r.forma==='multiplo'&&Math.abs((composicoes[r.id]||[]).reduce((a,f)=>a+f.valor,0)-Number(r.valor))>0.009,desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})),nomesObras:nomes},{headers:{'Cache-Control':'private, no-store'}})
  }catch(e){console.error('contas a receber leitura',e);return NextResponse.json({error:'Falha ao consultar Contas a Receber.'},{status:500})}
 }

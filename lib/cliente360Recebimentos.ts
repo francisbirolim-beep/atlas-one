@@ -70,6 +70,7 @@ export interface RegistrarRecebimentoVendaInput {
   desconto?: number
   dataRecebimento: string
   forma: string
+  formas?: Array<{ forma: string; valor: number; parcelas?: number | null }>
   referencia?: string
   observacoes?: string
 }
@@ -93,20 +94,54 @@ export async function registrarRecebimentoVendaComDesconto(
   }
 
   const desconto = Number.isFinite(dados.desconto) ? Math.max(0, Number(dados.desconto || 0)) : 0
-  const { data, error } = await supabase.rpc('registrar_recebimento_venda_autorizado', {
+  const formas = dados.formas || []
+  const usarComposicao = formas.length > 1 || formas.some(f => f.forma === 'cartao_credito')
+  if (formas.length > 0) {
+    const centavos = (valor: number) => Math.round(valor * 100)
+    if (
+      formas.length > 30 ||
+      formas.some(f => !f.forma || !Number.isFinite(f.valor) || f.valor <= 0 || Math.abs(f.valor * 100 - centavos(f.valor)) > 0.00001 ||
+        (f.forma === 'cartao_credito' ? !Number.isInteger(f.parcelas) || (f.parcelas||0)<1 || (f.parcelas||0)>18 : f.parcelas != null)) ||
+      formas.reduce((s, f) => s + centavos(f.valor), 0) !== centavos(dados.valorRecebido)
+    ) return { ok: false, error: 'Confira os valores das formas de pagamento. A soma precisa ser igual ao total recebido.' }
+  }
+  const parametrosComuns = {
     p_venda_obra_id: dados.vendaObraId,
     p_cliente_id: dados.clienteId,
-    p_valor_recebido: Number(dados.valorRecebido.toFixed(2)),
     p_desconto: Number(desconto.toFixed(2)),
     p_data_recebimento: dados.dataRecebimento || new Date().toISOString().slice(0, 10),
-    p_forma: dados.forma || 'pix',
     p_referencia: dados.referencia?.trim() || null,
     p_observacoes: dados.observacoes?.trim() || null,
-  })
+  }
+  // Recebimentos simples continuam usando a RPC existente, sem alteração de comportamento.
+  let resultadoRpc: unknown
+  if (usarComposicao) {
+    const { tokenAtual } = await import('./auth')
+    const token = await tokenAtual()
+    if (!token) return { ok: false, error: 'Sessão expirada. Entre novamente no Atlas.' }
+    const resposta = await fetch('/api/vendas/financeiro/recebimento-multiforma', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vendaObraId: dados.vendaObraId, clienteId: dados.clienteId,
+        formas, desconto, dataRecebimento: dados.dataRecebimento,
+        referencia: dados.referencia, observacoes: dados.observacoes,
+      }),
+    })
+    resultadoRpc = await resposta.json().catch(() => ({}))
+    if (!resposta.ok) return { ok: false, error: (resultadoRpc as {error?:string}).error || 'Não foi possível registrar o recebimento.' }
+  } else {
+    // A forma única mantém exatamente a rotina anterior.
+    const { data, error } = await supabase.rpc('registrar_recebimento_venda_autorizado', {
+      ...parametrosComuns,
+      p_valor_recebido: Number(dados.valorRecebido.toFixed(2)),
+      p_forma: dados.forma || 'pix',
+    })
+    if (error) return { ok: false, error: error.message }
+    resultadoRpc = data
+  }
 
-  if (error) return { ok: false, error: error.message }
-
-  const resultado = (data || {}) as {
+  const resultado = (resultadoRpc || {}) as {
     ok?: boolean
     recebimento_id?: string
     valor_recebido?: number

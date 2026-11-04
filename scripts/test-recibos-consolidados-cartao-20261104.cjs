@@ -1,0 +1,23 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const vm = require('node:vm')
+const ts = require('typescript')
+const path = require('node:path')
+const raiz = path.resolve(__dirname, '..')
+const codigo = fs.readFileSync(path.join(raiz,'lib/financeiroRecibos.ts'), 'utf8')
+const compilado = ts.transpileModule(codigo,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText
+const modulo = { exports: {} }
+vm.runInNewContext('(function(module,exports){'+compilado+'})',{}) (modulo,modulo.exports)
+const {descricaoFormaRecibo,somarRecebimentos} = modulo.exports
+assert.equal(descricaoFormaRecibo('cartao_credito', 5),'Cartão de crédito · 5x')
+assert.equal(descricaoFormaRecibo('cartao_credito', 1),'Cartão de crédito · 1x')
+assert.equal(descricaoFormaRecibo('cartao_debito', null),'Cartão de débito')
+assert.equal(descricaoFormaRecibo('dinheiro'),'Dinheiro')
+assert.equal(somarRecebimentos([{valor:1000},{valor:2000}]),3000)
+assert.equal(somarRecebimentos([{valor:0.1},{valor:0.2}]),0.3)
+const api=fs.readFileSync(path.join(raiz,'app/api/financeiro/recibo/route.ts'),'utf8')
+assert.match(api,/new Set\(ids\)\.size!==ids\.length/, 'IDs repetidos devem ser recusados')
+assert.match(api,/recebimentos\.some\(r=>r\.cliente_id!==clienteId\)/, 'É proibido misturar clientes')
+assert.match(api,/\.eq\('empresa_id',u\.empresa_id\)\.in\('id',ids\)/, 'Consulta isolada por empresa')
+assert.match(api,/\['cancelado','estornado'\]\.includes/, 'Recebimentos cancelados/estornados não entram')
+console.log('OK — recibos agrupados, valores, cartão e isolamento por cliente e empresa')
