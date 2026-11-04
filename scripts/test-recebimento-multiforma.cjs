@@ -32,7 +32,7 @@ assert.equal(detalhamentoRecebimento([], 'dinheiro', 3500)[0].valor, 3500)
 assert.equal(detalhamentoRecebimento([], 'multiplo', 3500).length, 0)
 assert.equal(Math.round((11682.36 - 682.36) * 100) / 100, 11000)
 
-const migration = read('supabase/migrations/20261104121333_recebimento_venda_multiforma.sql')
+const migration = read('supabase/migrations/20261104141951_recebimento_venda_multiforma_final.sql')
 assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.financeiro_recebimento_formas/)
 assert.match(migration, /ALTER TABLE public\.financeiro_recebimento_formas ENABLE ROW LEVEL SECURITY/)
 assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.financeiro_recebimento_ajustes/)
