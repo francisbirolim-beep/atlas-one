@@ -51,7 +51,7 @@ export async function GET(req:NextRequest){
  try{
   // Consultas independentes: não somar saldo a receber com entradas efetivamente recebidas.
   const [vendas,balcao,recebimentos,pagar,receber]=await Promise.all([
-   fetchLimit('vendas_obras','id,orcamento_id,status,valor_venda,custo_previsto,confirmado_em',empresa,q=>q.gte('confirmado_em',inicio+'T00:00:00-03:00').lte('confirmado_em',fim+'T23:59:59-03:00')),
+   fetchLimit('vendas_obras_data_comercial','id,orcamento_id,status,valor_venda,custo_previsto,confirmado_em,data_comercial',empresa,q=>q.gte('data_comercial',inicio).lte('data_comercial',fim)),
    fetchLimit('balcao_vendas','id,status,total,finalizada_em',empresa,q=>q.gte('finalizada_em',inicio+'T00:00:00-03:00').lte('finalizada_em',fim+'T23:59:59-03:00')),
    fetchLimit('financeiro_recebimentos','id,data_recebimento,valor,status,forma,valor_desconto',empresa,q=>q.gte('data_recebimento',inicio).lte('data_recebimento',fim)),
    fetchLimit('financeiro_contas_pagar','id,status,valor,valor_pago,vencimento,data_pagamento,descricao,fornecedor_nome',empresa,q=>q.or('and(data_pagamento.gte.'+inicio+',data_pagamento.lte.'+fim+'),and(vencimento.gte.'+inicio+',vencimento.lte.'+fim+')')),

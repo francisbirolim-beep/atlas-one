@@ -1,6 +1,7 @@
 'use client'
 
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+import { dataVendaEfetivaYmd, mesComercialAtual, vendaPertenceAoMes } from '@/lib/dataVendaComercial'
 import { ehEmAndamento, nomeEtapa } from '@/lib/wvetroEtapaComercial'
 
 import { useState, useEffect, useRef } from 'react'
@@ -121,9 +122,11 @@ function colunaDeHistorico(nome: string): boolean {
   const normalizada = nomeEtapa(nome)
   return normalizada === 'vendido' || (normalizada.includes('enviado') && normalizada.includes('cliente'))
 }
+function colunaDeVenda(coluna: KanbanColuna): boolean {
+  return coluna.gera_medicao_final === true || nomeEtapa(coluna.nome) === 'vendido'
+}
 function mesLocalAtual(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  return mesComercialAtual()
 }
 type CardRetiradoKanban = {
   id: string
@@ -138,6 +141,14 @@ if (!valor) return null
 const data = new Date(valor)
 if (Number.isNaN(data.getTime())) return null
 return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`
+}
+
+function dataVendaCard(card: OrcamentoRapido): string {
+  return dataVendaEfetivaYmd(card)
+}
+function mostrarDataVenda(card: OrcamentoRapido): string {
+  const data = dataVendaCard(card)
+  return data ? data.split('-').reverse().join('/') : 'Não informada'
 }
 
 function formatarDataBR(valor: string | null | undefined): string {
@@ -375,6 +386,12 @@ const [mesHistorico, setMesHistorico] = useState(mesLocalAtual)
 const [mesDoSistema, setMesDoSistema] = useState(mesLocalAtual)
 const [podeRetirarCard, setPodeRetirarCard] = useState(false)
 const [podeRestaurarCard, setPodeRestaurarCard] = useState(false)
+const [podeCorrigirDataVenda, setPodeCorrigirDataVenda] = useState(false)
+const [cardCorrigirVenda, setCardCorrigirVenda] = useState<OrcamentoRapido | null>(null)
+const [novaDataVenda, setNovaDataVenda] = useState('')
+const [motivoDataVenda, setMotivoDataVenda] = useState('')
+const [erroDataVenda, setErroDataVenda] = useState('')
+const [salvandoDataVenda, setSalvandoDataVenda] = useState(false)
 const [retirados, setRetirados] = useState<CardRetiradoKanban[] | null>(null)
 const [erroKanban, setErroKanban] = useState('')
 const [salvandoRetirada, setSalvandoRetirada] = useState(false)
@@ -427,7 +444,7 @@ useEffect(() => {
       const r = await fetch('/api/kanban/comercial/cards', {headers:{Authorization:`Bearer ${token}`}, cache:'no-store'})
       if (!r.ok) return
       const d = await r.json()
-      if (ativo) {setPodeRetirarCard(d.podeRetirar === true);setPodeRestaurarCard(d.podeRestaurar === true)}
+      if (ativo) {setPodeRetirarCard(d.podeRetirar === true);setPodeRestaurarCard(d.podeRestaurar === true);setPodeCorrigirDataVenda(d.podeCorrigirDataVenda === true)}
     } catch { /* sem permissão validada, ação fica desabilitada */ }
   })()
   return () => {ativo = false}
@@ -474,6 +491,46 @@ async function restaurarCardRetirado(card:CardRetiradoKanban) {
   void carregar()
 }
 
+function abrirCorrecaoDataVenda(card: OrcamentoRapido) {
+  setCardCorrigirVenda(card)
+  setNovaDataVenda(dataVendaCard(card))
+  setMotivoDataVenda('')
+  setErroDataVenda('')
+}
+
+async function confirmarCorrecaoDataVenda() {
+  if (!cardCorrigirVenda || salvandoDataVenda) return
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(novaDataVenda) || motivoDataVenda.trim().length < 8) {
+    setErroDataVenda('Informe uma data válida e o motivo da correção (mínimo de 8 caracteres).')
+    return
+  }
+  setSalvandoDataVenda(true)
+  setErroDataVenda('')
+  try {
+    const token = await tokenAtual()
+    if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+    const r = await fetch('/api/kanban/comercial/data-venda', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: cardCorrigirVenda.id,
+        data_venda: novaDataVenda,
+        data_anterior: dataVendaCard(cardCorrigirVenda),
+        motivo: motivoDataVenda.trim(),
+      }),
+    })
+    const resultado = await r.json().catch(() => ({}))
+    if (!r.ok || resultado.ok !== true) throw new Error(resultado.error || 'Não foi possível corrigir a data da venda.')
+    setCards(prev => prev.map(c => c.id === cardCorrigirVenda.id ? { ...c, data_venda: resultado.data_venda } : c))
+    setCardCorrigirVenda(null)
+    void carregar()
+  } catch (e) {
+    setErroDataVenda(e instanceof Error ? e.message : 'A correção não foi salva. Tente novamente.')
+  } finally {
+    setSalvandoDataVenda(false)
+  }
+}
+
 async function carregar() {
 const idCarga = ++cargaId.current
 setCarregando(true)
@@ -481,35 +538,49 @@ setErroKanban('')
 try {
   const cols = await listarColunas()
   if (idCarga !== cargaId.current) return
-  const historicas = cols.filter(c => colunaDeHistorico(c.nome)).map(c=>c.id)
-  const abertas = cols.filter(c => !colunaDeHistorico(c.nome)).map(c=>c.id)
+  const vendidas = cols.filter(c => colunaDeVenda(c)).map(c=>c.id)
+  const enviadas = cols.filter(c => colunaDeHistorico(c.nome) && !colunaDeVenda(c)).map(c=>c.id)
+  const abertas = cols.filter(c => !colunaDeHistorico(c.nome) && !colunaDeVenda(c)).map(c=>c.id)
   const base = () => supabase.from('orcamentos').select('*')
     .or('modo_entrada.is.null,modo_entrada.neq.balcao')
     .is('kanban_retirado_em',null)
   // Todos os cards de trabalho continuam acessíveis. As etapas finalizadas
   // consultam somente o mês padrão; o histórico mais antigo é carregado sob demanda.
-  const consultar = async (colunaIds:string[], criterio:'abertas'|'nulas'|'historico'|'historico_sem_data') => {
+  const consultar = async (colunaIds:string[], criterio:'abertas'|'nulas'|'historico'|'historico_sem_data'|'vendidos') => {
     if (criterio !== 'nulas' && !colunaIds.length) return [] as OrcamentoRapido[]
     const todos:OrcamentoRapido[]=[]
     for (let ini=0;ini<15000;ini+=750) {
       let q = base().order('created_at',{ascending:false}).range(ini,ini+749)
       q = criterio === 'nulas' ? q.is('coluna_id',null) : q.in('coluna_id',colunaIds)
-      if ((criterio==='historico' || criterio==='historico_sem_data') && modoHistorico!=='todos' && modoHistorico!=='periodo') {
+      if ((criterio==='historico' || criterio==='historico_sem_data' || criterio==='vendidos') && modoHistorico!=='todos' && modoHistorico!=='periodo') {
         const mes = modoHistorico==='atual'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(mesHistorico)?mesLocalAtual():mesHistorico
         const [ano,m] = mes.split('-').map(Number)
         const proximo = m===12 ? `${ano+1}-01-01` : `${ano}-${String(m+1).padStart(2,'0')}-01`
         const inicio=`${mes}-01T00:00:00-03:00`
         const fim=`${proximo}T00:00:00-03:00`
-        // A data de entrada na etapa é a referência do fechamento do card.
-        q = criterio==='historico_sem_data'
-          ? q.is('coluna_atualizada_em',null).gte('created_at',inicio).lt('created_at',fim)
-          : q.gte('coluna_atualizada_em',inicio).lt('coluna_atualizada_em',fim)
+        // Vendido usa a data comercial corrigida; cards legados mantêm o fallback da movimentação.
+        // Enviado ao cliente conserva a regra anterior, sem interferir no fluxo existente.
+        if (criterio==='vendidos') {
+          q = q.or(`and(data_venda.gte.${mes}-01,data_venda.lt.${proximo}),and(data_venda.is.null,coluna_atualizada_em.gte.${inicio},coluna_atualizada_em.lt.${fim}),and(data_venda.is.null,coluna_atualizada_em.is.null,created_at.gte.${inicio},created_at.lt.${fim})`)
+        } else {
+          q = criterio==='historico_sem_data'
+            ? q.is('coluna_atualizada_em',null).gte('created_at',inicio).lt('created_at',fim)
+            : q.gte('coluna_atualizada_em',inicio).lt('coluna_atualizada_em',fim)
+        }
       }
-      if ((criterio==='historico' || criterio==='historico_sem_data') && modoHistorico==='periodo') {
-        if (criterio==='historico_sem_data') q = q.is('coluna_atualizada_em',null)
-        const campo = criterio==='historico_sem_data'?'created_at':'coluna_atualizada_em'
-        if (filtroDataDe) q = q.gte(campo,`${filtroDataDe}T00:00:00-03:00`)
-        if (filtroDataAte) q = q.lt(campo,`${filtroDataAte}T23:59:59-03:00`)
+      if ((criterio==='historico' || criterio==='historico_sem_data' || criterio==='vendidos') && modoHistorico==='periodo') {
+        if (criterio==='vendidos') {
+          if (filtroDataDe || filtroDataAte) {
+            const de=filtroDataDe || '1900-01-01'
+            const ate=filtroDataAte || '9999-12-31'
+            q=q.or(`and(data_venda.gte.${de},data_venda.lte.${ate}),and(data_venda.is.null,coluna_atualizada_em.gte.${de}T00:00:00-03:00,coluna_atualizada_em.lte.${ate}T23:59:59.999-03:00),and(data_venda.is.null,coluna_atualizada_em.is.null,created_at.gte.${de}T00:00:00-03:00,created_at.lte.${ate}T23:59:59.999-03:00)`)
+          }
+        } else {
+          if (criterio==='historico_sem_data') q = q.is('coluna_atualizada_em',null)
+          const campo = criterio==='historico_sem_data'?'created_at':'coluna_atualizada_em'
+          if (filtroDataDe) q = q.gte(campo,`${filtroDataDe}T00:00:00-03:00`)
+          if (filtroDataAte) q = q.lte(campo,`${filtroDataAte}T23:59:59.999-03:00`)
+        }
       }
       const {data,error} = await q
       if (error) throw error
@@ -518,14 +589,15 @@ try {
     }
     return todos
   }
-  const [ativas,nulas,terminadas,terminadasSemData] = await Promise.all([
+  const [ativas,nulas,terminadas,terminadasSemData,vendas] = await Promise.all([
     consultar(abertas,'abertas'),
     consultar([], 'nulas'),
-    consultar(historicas,'historico'),
-    modoHistorico==='todos' ? Promise.resolve([] as OrcamentoRapido[]) : consultar(historicas,'historico_sem_data'),
+    consultar(enviadas,'historico'),
+    modoHistorico==='todos' ? Promise.resolve([] as OrcamentoRapido[]) : consultar(enviadas,'historico_sem_data'),
+    consultar(vendidas,'vendidos'),
   ])
   if (idCarga !== cargaId.current) return
-  let lista = [...ativas,...nulas,...terminadas,...terminadasSemData].filter(c => (c as any).modo_entrada !== 'wvetro_api_vinculado')
+  let lista = [...ativas,...nulas,...terminadas,...terminadasSemData,...vendas].filter(c => (c as any).modo_entrada !== 'wvetro_api_vinculado')
   const idAlvo = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('orcamento') : null
   if (idAlvo && !lista.some(c=>c.id===idAlvo)) {
     const {data:direto} = await base().eq('id',idAlvo).maybeSingle()
@@ -575,7 +647,8 @@ const referenciarMovimentacao = modoHistorico==='periodo' && !!colunaDoCard && c
 const referencia = referenciarMovimentacao || tipoFiltroData !== 'entrada'
 ? (c.coluna_atualizada_em || c.created_at)
 : (c.kanban_entrada_em || c.created_at)
-const dataCard = dataLocalYmd(referencia)
+const dataCard = referenciarMovimentacao && colunaDoCard && colunaDeVenda(colunaDoCard)
+  ? dataVendaCard(c) : dataLocalYmd(referencia)
 if (!dataCard) return false
 if (filtroDataDe && dataCard < filtroDataDe) return false
 if (filtroDataAte && dataCard > filtroDataAte) return false
@@ -595,10 +668,11 @@ const coluna = colunas.find(c => c.id===colunaId)
 return cards
 .filter(c => (c.coluna_id || colunas[0]?.id) === colunaId || (!c.coluna_id && index === 0))
 .filter(c => {
-  if (!coluna || !colunaDeHistorico(coluna.nome) || modoHistorico==='todos' || modoHistorico==='periodo') return true
-  const referencia = dataLocalYmd(c.coluna_atualizada_em || c.created_at)
+  if (!coluna || (!colunaDeHistorico(coluna.nome) && !colunaDeVenda(coluna)) || modoHistorico==='todos' || modoHistorico==='periodo') return true
+  const referencia = colunaDeVenda(coluna)
+    ? dataVendaCard(c) : dataLocalYmd(c.coluna_atualizada_em || c.created_at)
   const mes = modoHistorico==='atual' || !mesHistorico ? mesLocalAtual() : mesHistorico
-  return !!referencia && referencia.startsWith(mes)
+  return colunaDeVenda(coluna) ? vendaPertenceAoMes(c, mes) : !!referencia && referencia.startsWith(mes)
 })
 .filter(passaFiltro)
 }
@@ -1922,7 +1996,7 @@ Limpar filtros
       {retirados?'Ocultar retirados':'Cards retirados (auditoria)'}
     </button>}
   </div>
-  <p className="text-xs text-slate-500">Fazer orçamento, Em andamento e Orçamento feito permanecem visíveis mesmo após a virada do mês. Enviado ao cliente e Vendido exibem o mês selecionado; os meses anteriores continuam salvos e pesquisáveis.</p>
+  <p className="text-xs text-slate-500">Fazer orçamento, Em andamento e Orçamento feito permanecem visíveis mesmo após a virada do mês. Vendido mostra somente as vendas com data do mês selecionado; as anteriores ficam no histórico. Enviado ao cliente segue seu período de movimentação.</p>
   {modoHistorico==='periodo'&&!filtroDataDe&&!filtroDataAte&&<p className="text-xs text-amber-700">Selecione as datas De e Até acima. Sem datas, o histórico inteiro fica disponível.</p>}
   {erroKanban&&<p role="alert" className="text-sm font-semibold text-red-700">{erroKanban}</p>}
   {retirados&&<div className="rounded-lg border border-slate-200 p-3 space-y-2">
@@ -2079,6 +2153,18 @@ style={{ color: est ? est.texto : '#94a3b8', opacity: est ? 0.85 : 1 }}
 {formatarMoedaBRL(card.valor_estimado)}
 </p>
 )}
+{!card.eh_assistencia && colunaDeVenda(col) && (
+<div className="mt-2 rounded-lg border border-emerald-200 bg-white/70 px-2 py-1.5" onClick={e => e.stopPropagation()}>
+  <p className="text-[11px] font-semibold text-emerald-800">Venda: {mostrarDataVenda(card)}</p>
+  {podeCorrigirDataVenda && (
+    <button type="button" onClick={e => {e.stopPropagation();abrirCorrecaoDataVenda(card)}}
+      className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:underline"
+      title="Corrigir a data da venda para o Kanban e relatórios">
+      <Pencil size={11}/> Corrigir data da venda
+    </button>
+  )}
+</div>
+)}
 {!card.eh_assistencia && ehEmAndamento(col.nome) && (
 <p className="mt-1 rounded-md bg-white/50 px-2 py-1 text-[11px] font-medium" style={{color:est ? est.texto : '#92400e'}} title={card.kanban_motivo_andamento || ''}>
 ⏳ {card.kanban_motivo_andamento || 'Motivo pendente de registro'}
@@ -2116,6 +2202,45 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 </button>
 </div>
 </main>
+
+{cardCorrigirVenda && (
+<div role="dialog" aria-modal="true" aria-label="Corrigir data de venda"
+  className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+  <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl space-y-4">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <h3 className="text-lg font-bold text-slate-900">Corrigir data da venda</h3>
+        <p className="mt-1 text-sm text-slate-600">{cardCorrigirVenda.cliente_nome}</p>
+      </div>
+      <button type="button" disabled={salvandoDataVenda} onClick={() => setCardCorrigirVenda(null)}
+        className="rounded-lg p-1 text-slate-500 hover:bg-slate-100" aria-label="Fechar correção"><X size={18}/></button>
+    </div>
+    <p className="text-sm text-slate-700">Data registrada: <strong>{mostrarDataVenda(cardCorrigirVenda)}</strong></p>
+    <label className="block text-sm font-semibold text-slate-700">Data real da venda
+      <input type="date" value={novaDataVenda} onChange={e => setNovaDataVenda(e.target.value)}
+        max={dataVendaEfetivaYmd({ created_at: new Date().toISOString() }) || undefined}
+        className="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
+    </label>
+    <label className="block text-sm font-semibold text-slate-700">Motivo da correção (obrigatório)
+      <textarea rows={3} maxLength={1000} value={motivoDataVenda}
+        onChange={e => setMotivoDataVenda(e.target.value)}
+        placeholder="Ex.: venda confirmada no mês anterior; regularização do histórico"
+        className="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
+    </label>
+    <p className="text-xs text-slate-600">A data do orçamento, a movimentação e o financeiro não serão alterados. O card passa a aparecer no mês correto e os relatórios comerciais usarão essa data. O histórico registra quem corrigiu e por quê.</p>
+    {erroDataVenda && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-700">{erroDataVenda}</p>}
+    <div className="flex justify-end gap-2">
+      <button type="button" disabled={salvandoDataVenda} onClick={() => setCardCorrigirVenda(null)}
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Cancelar</button>
+      <button type="button" disabled={salvandoDataVenda || motivoDataVenda.trim().length < 8 || !novaDataVenda || novaDataVenda === dataVendaCard(cardCorrigirVenda)}
+        onClick={() => void confirmarCorrecaoDataVenda()}
+        className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+        {salvandoDataVenda ? 'Salvando...' : 'Salvar data da venda'}
+      </button>
+    </div>
+  </div>
+</div>
+)}
 
 {cardSelecionado && editando && (
 <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">

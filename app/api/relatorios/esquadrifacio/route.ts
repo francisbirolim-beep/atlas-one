@@ -47,13 +47,13 @@ export async function GET(req:NextRequest){
  const empresa=u.empresa_id
  try{
   const [obrasOrigem,balcaoOrigem,metas,notasOrigem,comprasCmvOrigem]=await Promise.all([
-   ler('vendas_obras','id,cliente_id,valor_venda,custo_previsto,confirmado_em,status',empresa,q=>q.gte('confirmado_em',inicio+'T00:00:00-03:00').lte('confirmado_em',fim+'T23:59:59-03:00')),
+   ler('vendas_obras_data_comercial','id,cliente_id,valor_venda,custo_previsto,confirmado_em,data_comercial,status',empresa,q=>q.gte('data_comercial',inicio).lte('data_comercial',fim)),
    ler('balcao_vendas','id,cliente_id,cliente_nome,vendedor_nome,total,status,finalizada_em',empresa,q=>q.gte('finalizada_em',inicio+'T00:00:00-03:00').lte('finalizada_em',fim+'T23:59:59-03:00')),
    ler('crm_metas','mes,meta_valor,usuario_id,usuario_nome',empresa,q=>q.gte('mes',inicio.slice(0,7)).lte('mes',fim.slice(0,7))),
    ler('compras_nfs','id,fornecedor_nome,valor_total,data_entrada,status',empresa,q=>q.gte('data_entrada',inicio).lte('data_entrada',fim)),
    ler('venda_cmv_lancamentos','id,fornecedor,valor,data_lancamento,etapa_cmv,origem,cancelado_em',empresa,q=>q.eq('etapa_cmv','comprado').eq('origem','compra').is('cancelado_em',null).gte('data_lancamento',inicio).lte('data_lancamento',fim))
   ])
-  const obras=(obrasOrigem as any[]).filter(v=>v.status!=='cancelada'&&v.status!=='cancelado'&&dia(v.confirmado_em)>=inicio&&dia(v.confirmado_em)<=fim)
+  const obras=(obrasOrigem as any[]).filter(v=>v.status!=='cancelada'&&v.status!=='cancelado'&&dia(v.data_comercial)>=inicio&&dia(v.data_comercial)<=fim)
   const balcao=(balcaoOrigem as any[]).filter(v=>v.status==='finalizada'&&dia(v.finalizada_em)>=inicio&&dia(v.finalizada_em)<=fim)
   const notas=(notasOrigem as any[]).filter(v=>!['cancelado','cancelada','rascunho','rejeitada'].includes(String(v.status).toLowerCase()))
   const idsCliente=[...new Set([...obras,...balcao].map((x:any)=>String(x.cliente_id||'')).filter(Boolean))]
@@ -68,7 +68,7 @@ export async function GET(req:NextRequest){
   for(const img of fotosOrigem){if(img.ativo&&!fotos.has(img.produto_id)&&typeof img.url==='string'&&/^https:\/\//.test(img.url))fotos.set(img.produto_id,img.url)}
   const mes=new Map<string,{mes:string;contratos:number;balcao:number;meta:number;obras:number}>()
   const buscarMes=(m:string)=>{const x=mes.get(m)||{mes:m,contratos:0,balcao:0,meta:0,obras:0};mes.set(m,x);return x}
-  for(const v of obras){const x=buscarMes(dia(v.confirmado_em).slice(0,7));x.contratos+=valor(v.valor_venda);x.obras++}
+  for(const v of obras){const x=buscarMes(dia(v.data_comercial).slice(0,7));x.contratos+=valor(v.valor_venda);x.obras++}
   for(const v of balcao)buscarMes(dia(v.finalizada_em).slice(0,7)).balcao+=valor(v.total)
   for(const m of metas as any[])buscarMes(String(m.mes)).meta+=valor(m.meta_valor)
   const mensal=[...mes.values()].sort((a,b)=>a.mes.localeCompare(b.mes)).map(x=>({...x,contratos:arredonda(x.contratos),balcao:arredonda(x.balcao),meta:arredonda(x.meta)}))
