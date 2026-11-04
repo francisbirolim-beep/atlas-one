@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, History, ImageOff, Loader2, Pencil, Plus, RefreshCw, Replace, Search, Trash2, X } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import VendaConferenciaDocumentalWVetro from '@/components/clientes/VendaConferenciaDocumentalWVetro'
 
 type Material={
  id:string;item_ref?:string|null;produto_id?:string|null;categoria:string;codigo?:string|null;
@@ -24,11 +25,12 @@ const nomeAcao:Record<Acao,string>={incluir:'Incluir material',substituir:'Subst
 const categoriaDoGrupo=(g:Grupo,cat:string)=>g==='perfis'?['perfil','contramarco'].includes(cat):g==='acessorios'?cat==='acessorio':g==='vidros'?cat==='vidro':g==='servicos'?!['perfil','contramarco','acessorio','vidro'].includes(cat):false
 const n=(x:unknown)=>Number(x||0).toLocaleString('pt-BR',{maximumFractionDigits:3})
 const url=(s:string)=>s.startsWith('http://')||s.startsWith('https://')?s:null
-export default function VendaTipologiasMateriais({itens,materiais,pacoteId,vendaId,imagensProdutos,onAtualizar}:{
- itens:any[];materiais:Material[];pacoteId:string|null;vendaId:string;
+export default function VendaTipologiasMateriais({itens,materiais,pacoteId,vendaId,obraId,imagensProdutos,onAtualizar}:{
+ itens:any[];materiais:Material[];pacoteId:string|null;vendaId:string;obraId?:string|null;
  imagensProdutos:Record<string,{foto_url?:string|null}>;onAtualizar:()=>Promise<void>
 }){
  const [aberta,setAberta]=useState<string|null>(null)
+ const [selecionadasImpressao,setSelecionadasImpressao]=useState<string[]>([])
  const [grupo,setGrupo]=useState<Grupo>('perfis')
  const [imagens,setImagens]=useState<Record<string,string>>({})
  const [historico,setHistorico]=useState<Registro[]>([])
@@ -135,7 +137,13 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
  const atualGrupo=grupo==='variaveis'?dadosAtuais?.variaveis||dadosAtuais?.wvetro_item?.Variaveis||{}:
   grupo==='formulas'?dadosAtuais?.wvetro_item?.Formulas||dadosAtuais?.wvetro_item?.Formula||{}:null
  return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-  <header className="border-b p-4"><h2 className="font-bold text-slate-900">Tipologias vendidas</h2><p className="mt-1 text-xs text-slate-500">Clique na linha para abrir a composição desta peça. Alterações técnicas ficam restritas à tipologia selecionada.</p></header>
+  <header className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+   <div><h2 className="font-bold text-slate-900">Tipologias vendidas</h2>
+    <p className="mt-1 text-xs text-slate-500">Clique na linha para abrir a composição desta peça. Alterações técnicas ficam restritas à tipologia selecionada.</p></div>
+   {obraId&&pacoteId&&<a target="_blank" rel="noopener noreferrer" href={'/obras/'+obraId+'/tipologias/fichas?pacote='+pacoteId+'&refs='+encodeURIComponent(selecionadasImpressao.join('|'))}
+    className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
+    Imprimir fichas {selecionadasImpressao.length?'selecionadas ('+selecionadasImpressao.length+')':'de todas as tipologias'}</a>}
+  </header>
   <div className="divide-y">
    {itensComRef.map((it,i)=>{
     const ref=it.ref
@@ -154,6 +162,14 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
        <span className="font-semibold">{linhas} materiais</span></span>
      </button>
      {estaAberta&&<div className="space-y-3 border-t bg-slate-50 p-3 md:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-white p-2">
+       <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+        <input type="checkbox" checked={selecionadasImpressao.includes(ref)} onChange={()=>setSelecionadasImpressao(prev=>prev.includes(ref)?prev.filter(x=>x!==ref):[...prev,ref])}/>
+        Selecionar esta tipologia para impressão</label>
+       {obraId&&pacoteId&&<a target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-blue-700"
+        href={'/obras/'+obraId+'/tipologias/fichas?pacote='+pacoteId+'&refs='+encodeURIComponent(ref)}>Abrir ficha individual / PDF</a>}
+      </div>
+      <VendaConferenciaDocumentalWVetro vendaId={vendaId} pacoteId={pacoteId} tipo="tipologia" itemRef={ref} compacto/>
       {!pacoteId&&<p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Sincronize o pacote técnico antes de editar os materiais.</p>}
       {!ref&&<p className="text-xs text-amber-800">Esta tipologia não possui identificador técnico; edição bloqueada para não misturar materiais.</p>}
       <nav className="flex flex-wrap gap-1 border-b pb-2" aria-label="Componentes da tipologia">

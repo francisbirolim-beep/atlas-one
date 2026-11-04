@@ -7,6 +7,7 @@ import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
 import VendaTipologiasMateriais from '@/components/clientes/VendaTipologiasMateriais'
+import VendaConferenciaDocumentalWVetro from '@/components/clientes/VendaConferenciaDocumentalWVetro'
 import VendaMedidaFinal from '@/components/clientes/VendaMedidaFinal'
 import VendaMedidaStatus from '@/components/clientes/VendaMedidaStatus'
 import {gruposItensEmEtapa, urlPdfCardCotacao, progressoLotesCotacao, ETAPAS_COTACAO, type EtapaCotacao} from '@/lib/cotacaoEtapas'
@@ -1742,6 +1743,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           const rotulo=rotuloCategoria(categoriaMaterialAberta)
           const cotacaoPerfilWVetroBloqueada=Boolean(orcamento?.wvetro_fluxo?.numero)&&categoriaMaterialAberta==='perfil'
           return <Box titulo="Materiais da obra · Conferência e separação">
+            <div className="mb-4"><VendaConferenciaDocumentalWVetro vendaId={venda.id} pacoteId={pacoteTecnicoId} tipo="materiais"/></div>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
               <div>
                 <b className="text-sm text-slate-800">Gerencie os materiais por categoria</b>
@@ -1834,6 +1836,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           materiais={materiaisTecnicos}
           pacoteId={pacoteTecnicoId}
           vendaId={venda.id}
+          obraId={venda.obra_id}
           imagensProdutos={produtosMateriais}
           onAtualizar={carregar}
         />}
