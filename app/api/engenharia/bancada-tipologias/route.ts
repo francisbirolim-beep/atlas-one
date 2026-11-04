@@ -4,6 +4,7 @@ import pdfParse from 'pdf-parse'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { assinaturaTecnica, conferirCaso, type CasoTipologia } from '@/lib/bancadaTipologias'
+import { conferirAcessorios } from '@/lib/bancadaAcessorios'
 import type { TipologiaFormulasCorte } from '@/lib/formulasCorteEngine'
 
 export const runtime = 'nodejs'
@@ -22,7 +23,7 @@ async function autorizar(req: NextRequest) {
 async function formulaPorId(id: string) {
   if (!uuid.test(id)) return null
   const { data, error } = await supabaseAdmin.from('engenharia_tipologia_formulas_corte')
-    .select('id,tipologia_id,variaveis,pecas,metadados_editor,versao,status,ativo')
+    .select('id,tipologia_id,variaveis,pecas,acessorios,metadados_editor,versao,status,ativo')
     .eq('id', id).maybeSingle()
   if (error || !data || !Array.isArray(data.pecas) || !Array.isArray(data.variaveis)) return null
   const meta = metadata(data.metadados_editor)
@@ -34,7 +35,9 @@ async function formulaPorId(id: string) {
     variaveis: data.variaveis,
     folgas,
   }
-  return { ...data, definicao, assinatura: hash(assinaturaTecnica(definicao)) }
+  const assinatura = hash(assinaturaTecnica(definicao) +
+    (meta.laboratorio ? JSON.stringify(Array.isArray(data.acessorios) ? data.acessorios : []) : ''))
+  return { ...data, definicao, assinatura }
 }
 
 function casoValido(input: unknown, formula: TipologiaFormulasCorte): CasoTipologia | null {
@@ -56,8 +59,17 @@ function casoValido(input: unknown, formula: TipologiaFormulasCorte): CasoTipolo
   const folgasRaw = metadata(obj.folgas)
   const folgas = { largura_mm: Number(folgasRaw.largura_mm), altura_mm: Number(folgasRaw.altura_mm) }
   if (![folgas.largura_mm, folgas.altura_mm].every(x => Number.isFinite(x) && x >= 0 && x <= 100)) return null
+  if (obj.acessorios != null && !Array.isArray(obj.acessorios)) return null
+  if (Array.isArray(obj.acessorios) && obj.acessorios.length > 500) return null
+  const acessorios: Array<{ codigo: string; quantidade: number }> = []
+  for (const item of Array.isArray(obj.acessorios) ? obj.acessorios : []) {
+    const codigo = texto(item?.codigo, 40).toUpperCase()
+    const quantidade = Number(item?.quantidade)
+    if (!/^[A-Z0-9_.-]{1,40}$/.test(codigo) || !Number.isFinite(quantidade) || quantidade <= 0 || quantidade > 10000) return null
+    acessorios.push({ codigo, quantidade })
+  }
   return { nome: texto(obj.nome, 150) || 'Projeto de referência',
-    largura_mm: largura, altura_mm: altura, opcoes: opcoes as Record<string, string>, folgas, cortes }
+    largura_mm: largura, altura_mm: altura, opcoes: opcoes as Record<string, string>, folgas, cortes, acessorios }
 }
 
 async function pdfLido(arquivo: File) {
@@ -77,7 +89,10 @@ export async function GET(req: NextRequest) {
   const u = await autorizar(req)
   if (!u) return errorJson('Acesso restrito ao usuário Master.', 403)
   const id = texto(req.nextUrl.searchParams.get('formulaId'), 50)
-  if (!await formulaPorId(id)) return errorJson('Fórmula não encontrada.', 404)
+  const formula = await formulaPorId(id)
+  if (!formula || (metadata(formula.metadados_editor).laboratorio && metadata(formula.metadados_editor).empresa_id !== u.empresa_id)) {
+    return errorJson('Fórmula não encontrada.', 404)
+  }
   const arquivoId = texto(req.nextUrl.searchParams.get('arquivoId'), 50)
   if (arquivoId) {
     if (!uuid.test(arquivoId)) return errorJson('Documento inválido.')
@@ -111,7 +126,9 @@ export async function POST(req: NextRequest) {
   const acao = texto(form.get('acao'), 50)
   const formulaId = texto(form.get('formulaId'), 50)
   const formula = await formulaPorId(formulaId)
-  if (!formula) return errorJson('Fórmula não encontrada.', 404)
+  if (!formula || (metadata(formula.metadados_editor).laboratorio && metadata(formula.metadados_editor).empresa_id !== u.empresa_id)) {
+    return errorJson('Fórmula não encontrada.', 404)
+  }
   const arquivo = form.get('arquivo')
   if (acao === 'extrair_pdf') {
     if (!(arquivo instanceof File)) return errorJson('Selecione o PDF técnico.')
@@ -127,6 +144,9 @@ export async function POST(req: NextRequest) {
     const caso = casoValido(raw, formula.definicao)
     if (!caso) return errorJson('Preencha medidas, variáveis, folgas e lista completa de cortes.')
     const conferencia = conferirCaso(formula.definicao, caso)
+    const comparacaoAcessorios = metadata(formula.metadados_editor).laboratorio
+      ? conferirAcessorios(formula.definicao, Array.isArray(formula.acessorios) ? formula.acessorios : [], caso)
+      : null
     const fonte = texto(form.get('fonte'), 220)
     if (fonte.length < 4) return errorJson('Identifique a origem do projeto ou número do orçamento.')
     let pdf: Awaited<ReturnType<typeof pdfLido>> | null = null
@@ -143,6 +163,10 @@ export async function POST(req: NextRequest) {
       formula_assinatura: formula.assinatura, formula_versao: formula.versao, caso, fonte,
       conferencia: { ok: conferencia.ok, avaliados: conferencia.avaliados,
         conformes: conferencia.conformes, erro: conferencia.erro || null },
+      conferencia_acessorios: comparacaoAcessorios ? {
+        ok: comparacaoAcessorios.ok, conferidos: comparacaoAcessorios.conferidos,
+        conformes: comparacaoAcessorios.conformes, erro: comparacaoAcessorios.erro || null,
+      } : null,
       hash_pdf: pdf?.hash || null, confirmado_em: null, responsavel_validacao: null }
     const { data, error } = await supabaseAdmin.from('ai_aprendizado_entradas').insert({
       empresa_id: u.empresa_id, tipo: pdf ? 'arquivo' : 'regra',
@@ -159,7 +183,7 @@ export async function POST(req: NextRequest) {
       if (storagePath) await supabaseAdmin.storage.from('atlas-aprendizado').remove([storagePath])
       return errorJson('Não foi possível gravar o projeto de referência.', 500)
     }
-    return NextResponse.json({ ok: true, id: data.id, conferencia }, { headers: { 'Cache-Control': 'private,no-store' } })
+    return NextResponse.json({ ok: true, id: data.id, conferencia, comparacaoAcessorios }, { headers: { 'Cache-Control': 'private,no-store' } })
   }
   if (acao === 'validar_caso') {
     const casoId = texto(form.get('casoId'), 50)
@@ -174,6 +198,10 @@ export async function POST(req: NextRequest) {
     if (!caso) return errorJson('Exemplo incompleto.', 422)
     const conferencia = conferirCaso(formula.definicao, caso)
     if (!conferencia.ok) return errorJson('Há divergências. Corrija a fórmula ou a referência antes de validar.', 409)
+    if (metadata(formula.metadados_editor).laboratorio) {
+      const avaliacao = conferirAcessorios(formula.definicao, Array.isArray(formula.acessorios) ? formula.acessorios : [], caso)
+      if (!avaliacao.ok) return errorJson(avaliacao.erro || 'A lista de acessórios não coincide com o projeto. Confira os componentes antes de aprovar.', 409)
+    }
     if (row.status === 'concluido') return NextResponse.json({ ok: true })
     if (row.status !== 'aguardando_validacao') return errorJson('O registro não está aguardando validação.', 409)
     const atualizado = { ...dados, conferencia: { ok: true, avaliados: conferencia.avaliados,
@@ -191,6 +219,19 @@ export async function POST(req: NextRequest) {
   }
   if (acao === 'validar_formula') {
     if (formula.ativo) return errorJson('Receita operacional ativa preservada. Valide uma versão de teste isolada.', 409)
+    if (metadata(formula.metadados_editor).laboratorio) {
+      const codigos = Array.from(new Set([
+        ...formula.definicao.pecas.map(p => p.codigo).filter((codigo): codigo is string => Boolean(codigo)),
+        ...(Array.isArray(formula.acessorios) ? formula.acessorios.map(a => a.codigo).filter(Boolean) : []),
+      ]))
+      const { data: catalogo, error: erroCatalogo } = await supabaseAdmin.from('produtos')
+        .select('codigo,foto_url,ativo').eq('empresa_id', u.empresa_id).in('codigo', codigos)
+      if (erroCatalogo) return errorJson('Não foi possível conferir o catálogo de materiais.', 500)
+      const cadastrados = new Map((catalogo || []).map(p => [String(p.codigo).toUpperCase(), p]))
+      const incompletos = codigos.filter(c => !cadastrados.get(c.toUpperCase())?.ativo ||
+        !cadastrados.get(c.toUpperCase())?.foto_url)
+      if (incompletos.length) return errorJson('Antes de validar, cadastre e confira a foto de cada perfil/acessório: ' + incompletos.slice(0, 12).join(', '), 409)
+    }
     const { data: itens, error } = await supabaseAdmin.from('ai_aprendizado_entradas')
       .select('id,metadados,status')
       .eq('empresa_id', u.empresa_id).eq('status', 'concluido')
@@ -202,8 +243,10 @@ export async function POST(req: NextRequest) {
     if (distintas.size < 3) return errorJson('São necessárias três medidas diferentes, com listas de corte conferidas e aprovadas.', 409)
     if (confirmadas.some(d => {
       const caso = casoValido(d.caso, formula.definicao)
-      return !caso || !conferirCaso(formula.definicao, caso).ok
-    })) return errorJson('Uma referência aprovada não corresponde mais às fórmulas.', 409)
+      return !caso || !conferirCaso(formula.definicao, caso).ok ||
+        (metadata(formula.metadados_editor).laboratorio && !conferirAcessorios(formula.definicao,
+          Array.isArray(formula.acessorios) ? formula.acessorios : [], caso).ok)
+    })) return errorJson('Uma referência aprovada não corresponde mais às fórmulas ou aos acessórios.', 409)
     const { data: formulaMarcada, error: updateError } = await supabaseAdmin.from('engenharia_tipologia_formulas_corte')
       .update({ status: 'validada', ativo: false, updated_at: new Date().toISOString() })
       .eq('id', formulaId).eq('ativo', false)

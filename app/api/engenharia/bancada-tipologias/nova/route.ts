@@ -111,6 +111,9 @@ export async function POST(req: NextRequest) {
   const largura = medidas(dados.largura_mm)
   const altura = medidas(dados.altura_mm)
   const componentes = normalizarComponentes(dados.componentes)
+  if (!Array.isArray(dados.componentes) || componentes.length !== dados.componentes.length) {
+    return responderErro('Existem códigos ou quantidades de materiais incompletos. Corrija todos os componentes antes de salvar.', 422)
+  }
   if (nome.length < 4 || !largura || !altura) return responderErro('Informe nome, largura e altura reais do primeiro projeto.')
   if (!componentes.length) return responderErro('Adicione ao menos um componente identificado; sem perfil confirmado não é possível criar a receita.')
   if (componentes.filter(c => c.tipo === 'perfil').length === 0) return responderErro('Adicione pelo menos um perfil à receita técnica.')
@@ -123,6 +126,7 @@ export async function POST(req: NextRequest) {
   const codigos = Array.from(new Set(componentes.map(c => c.codigo)))
   const { data: catalogo, error: erroCatalogo } = await supabaseAdmin.from('produtos')
     .select('codigo,nome,categoria,foto_url,ativo')
+    .eq('empresa_id', usuario.empresa_id)
     .in('codigo', codigos).limit(250)
   if (erroCatalogo) return responderErro('Não foi possível conferir o catálogo de materiais.', 500)
   const encontrados = new Map((catalogo || []).map(p => [String(p.codigo || '').toUpperCase(), p]))
@@ -185,10 +189,13 @@ export async function POST(req: NextRequest) {
     .map(c => ({ codigo: c.codigo, eixo: c.eixo as 'L' | 'H', comprimento_mm: c.comprimento_mm, quantidade: c.quantidade }))
   const caso: CasoTipologia | null = cortes.length
     ? { nome: nome + ' · referência inicial', largura_mm: largura, altura_mm: altura,
-      opcoes: {}, folgas: { largura_mm: 4, altura_mm: 4 }, cortes } : null
+      opcoes: {}, folgas: { largura_mm: 4, altura_mm: 4 }, cortes,
+      acessorios: componentes.filter(c => c.tipo === 'acessorio').map(c => ({
+        codigo: c.codigo, quantidade: c.quantidade,
+      })) } : null
   const conferencia = caso ? conferirCaso(definicao, caso) : null
   // Sempre há rastreabilidade do primeiro documento; sem cortes, não há aprovação técnica.
-  const assinar = createHash('sha256').update(assinaturaTecnica(definicao)).digest('hex')
+  const assinar = createHash('sha256').update(assinaturaTecnica(definicao) + JSON.stringify(acessorios)).digest('hex')
   const registro = await supabaseAdmin.from('ai_aprendizado_entradas').insert({
     empresa_id: usuario.empresa_id, tipo: doc ? 'arquivo' : 'regra', titulo: 'Tipologia · ' + nome,
     descricao: 'Fonte inicial e hipóteses de engenharia, aguardando conferência humana.',
