@@ -73,8 +73,8 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
   {titulo:'Concluídas',valor:cards.filter(c=>c.colunaId==='finalizado').length},
  ]
  return <section className="space-y-4" aria-label="Kanban geral das obras deste cliente">
-  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-   {kpis.map(k=><div key={k.titulo} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+   {kpis.map(k=><div key={k.titulo} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
     <p className="text-[11px] font-semibold text-slate-500">{k.titulo}</p>
     <p className="mt-1 text-2xl font-extrabold text-slate-900">{carregando&&!dados?'—':k.valor}</p>
    </div>)}
@@ -106,16 +106,16 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
    </div>
    {erro&&<div role="alert" className="m-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{erro}</div>}
    {carregando&&!dados&&<p className="p-5 text-sm text-slate-500">Consultando a evolução das obras...</p>}
-   {dados&&<div className="overflow-x-auto px-3 pb-4 pt-3" role="region" aria-label="Colunas do Kanban de obras" tabIndex={0}>
-    <div className="flex min-w-max gap-2">
+   {dados&&<div className="overflow-x-auto px-3 pb-3 pt-3" role="region" aria-label="Colunas do Kanban de obras" tabIndex={0}>
+    <div className="flex w-max gap-2 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
      {COLUNAS_KANBAN_CLIENTE.map(col=>{
       const lista=visiveis.filter(c=>c.colunaId===col.id)
-      return <div key={col.id} className="w-[238px] shrink-0 rounded-xl border border-slate-100 bg-slate-50/75">
+      return <div key={col.id} className="w-[238px] shrink-0 rounded-xl border sm:w-auto sm:min-w-0 border-slate-100 bg-slate-50/75">
        <div className={'flex min-h-14 items-center justify-between gap-2 rounded-t-xl border-b px-3 py-3 '+(cores[col.id]||cores.orcamento)}>
         <h3 className="text-xs font-extrabold">{col.nome}</h3>
         <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-bold">{lista.length}</span>
        </div>
-       <div className="min-h-[178px] space-y-2 p-2">
+       <div className="min-h-[140px] space-y-2 p-2">
         {lista.map(card=>{
          const atual=card.vendas[0]
          const abrirVenda=podeVerVendas&&atual
