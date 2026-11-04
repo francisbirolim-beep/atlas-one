@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, Printer } from 'lucide-react'
-import { type ReciboInfo, textoRecibo } from '@/lib/financeiroRecibos'
+import { descricaoFormaRecibo, type ReciboInfo, textoRecibo } from '@/lib/financeiroRecibos'
 
 type AcaoRecibo = 'imprimir' | 'pdf' | null
 
@@ -13,6 +13,7 @@ export default function ReciboImpressao({
   acaoInicial?: AcaoRecibo
 }) {
   const r = textoRecibo(dados)
+  const moeda = (v:number) => Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
   const papelRef = useRef<HTMLDivElement>(null)
   const acaoExecutada = useRef(false)
   const [gerandoPdf, setGerandoPdf] = useState(false)
@@ -34,11 +35,30 @@ export default function ReciboImpressao({
       const pdf = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm', compress: true })
       const maxLargura = 190
       const maxAltura = 277
-      let largura = maxLargura
-      let altura = canvas.height * largura / canvas.width
-      if (altura > maxAltura) { largura *= maxAltura / altura; altura = maxAltura }
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.96), 'JPEG', (210 - largura) / 2, 10, largura, altura)
-      pdf.save('recibo-esquadrifacio-' + dados.id.slice(0, 8) + '.pdf')
+      const alturaOriginalMm = canvas.height * maxLargura / canvas.width
+      if (dados.consolidado && alturaOriginalMm > maxAltura) {
+        // Mantém a fonte legível em recibos com muitos pagamentos: uma imagem por página.
+        const alturaFatia = Math.floor(maxAltura * canvas.width / maxLargura)
+        for (let y = 0, pagina = 0; y < canvas.height; y += alturaFatia, pagina++) {
+          if (pagina > 0) pdf.addPage()
+          const alturaPx = Math.min(alturaFatia, canvas.height - y)
+          const fatia = document.createElement('canvas')
+          fatia.width = canvas.width
+          fatia.height = alturaPx
+          const ctx = fatia.getContext('2d')
+          if (!ctx) throw new Error('Não foi possível preparar a página do PDF.')
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, fatia.width, fatia.height)
+          ctx.drawImage(canvas, 0, y, canvas.width, alturaPx, 0, 0, canvas.width, alturaPx)
+          pdf.addImage(fatia.toDataURL('image/jpeg', 0.96), 'JPEG', 10, 10, maxLargura, alturaPx * maxLargura / canvas.width)
+        }
+      } else {
+        let largura = maxLargura
+        let altura = alturaOriginalMm
+        if (altura > maxAltura) { largura *= maxAltura / altura; altura = maxAltura }
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.96), 'JPEG', (210 - largura) / 2, 10, largura, altura)
+      }
+      pdf.save('recibo-esquadrifacio-' + (dados.consolidado ? 'consolidado-' : '') + (dados.consolidado ? dados.id.replace(/^CONSOLIDADO-/, '').slice(0,12) : dados.id.slice(0,8)) + '.pdf')
     } catch (erro) {
       console.error('Falha ao gerar PDF de recibo', erro)
       setErroPdf('Não foi possível baixar o PDF. Use a opção Imprimir e selecione Salvar como PDF.')
@@ -73,8 +93,8 @@ export default function ReciboImpressao({
       <header className="border-b-2 border-slate-900 pb-5">
         <p className="text-xs font-black uppercase tracking-widest text-slate-900">ESQUADRIFÁCIO</p>
         <p className="mt-1 text-xs text-slate-600">Soluções em Alumínio</p>
-        <h1 className="mt-5 text-2xl font-black tracking-tight">{dados.tipo === 'pagar' ? 'RECIBO DE PAGAMENTO' : 'RECIBO DE RECEBIMENTO'}</h1>
-        <p className="mt-2 text-xs text-slate-500">Identificador do recebimento: {dados.id}</p>
+        <h1 className="mt-5 text-2xl font-black tracking-tight">{dados.tipo === 'pagar' ? 'RECIBO DE PAGAMENTO' : dados.consolidado ? 'RECIBO CONSOLIDADO DE RECEBIMENTOS' : 'RECIBO DE RECEBIMENTO'}</h1>
+        {dados.consolidado ? <p className="mt-2 text-xs text-slate-500">Comprovante conjunto de {dados.itens?.length || 0} lançamentos registrados. Referência: {dados.id}. Não gera novo recebimento.</p> : <p className="mt-2 text-xs text-slate-500">Identificador do recebimento: {dados.id}</p>}
         {dados.referencia && <p className="mt-1 text-xs text-slate-500">Referência: {dados.referencia}</p>}
       </header>
       <section className="mt-6 space-y-3 text-sm">
@@ -82,22 +102,41 @@ export default function ReciboImpressao({
         {dados.documento && <p><b>CPF/CNPJ:</b> {dados.documento}</p>}
         {dados.obra && <p><b>Referente à obra:</b> {dados.obra}</p>}
         {dados.descricao && <p><b>Observações:</b> {dados.descricao}</p>}
-        <p><b>Data do pagamento:</b> {r.data}</p>
-        <p><b>Forma de pagamento:</b> {dados.forma || 'Não informada'}</p>
+        <p><b>{dados.consolidado ? 'Data do último recebimento' : dados.tipo === 'pagar' ? 'Data do pagamento' : 'Data do recebimento'}:</b> {r.data}</p>
+        {!dados.consolidado && <p><b>Forma de pagamento:</b> {descricaoFormaRecibo(dados.forma, dados.itens?.[0]?.cartaoParcelas)}</p>}
       </section>
+      {dados.itens && dados.itens.length > 0 && <section className="mt-6">
+        <h2 className="mb-3 text-sm font-bold text-slate-800">{dados.consolidado ? 'Recebimentos incluídos neste recibo' : 'Detalhamento do pagamento'}</h2>
+        <div className="overflow-hidden rounded-xl border border-slate-200">
+          {dados.itens.map((item, indice) => <div key={item.id} className="border-b border-slate-200 p-3 text-xs last:border-0">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div><b>Lançamento {indice + 1} · {item.data.slice(8,10)}/{item.data.slice(5,7)}/{item.data.slice(0,4)}</b>
+                {item.obra && <p className="mt-1 text-slate-600">Obra: {item.obra}</p>}
+                <p className="mt-1 text-slate-500">ID: {item.id}</p>
+                {item.referencia && <p className="mt-1 text-slate-600">Referência: {item.referencia}</p>}
+              </div>
+              <b>{moeda(item.valor)}</b>
+            </div>
+            <div className="mt-2 space-y-1 border-t border-dashed pt-2">
+              {item.formas?.length ? item.formas.map((forma, i) => <div key={i} className="flex justify-between gap-3"><span>{descricaoFormaRecibo(forma.forma, forma.parcelas)}</span><b>{moeda(forma.valor)}</b></div>) : <p>{descricaoFormaRecibo(item.forma, item.cartaoParcelas)}</p>}
+            </div>
+            {!!item.desconto && item.desconto > 0 && <p className="mt-2 text-amber-800">Abatimento (não recebido em dinheiro): {moeda(item.desconto)}</p>}
+          </div>)}
+        </div>
+      </section>}
       <section className="mt-7 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
-          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{dados.tipo === 'pagar' ? 'Valor pago' : 'Valor recebido neste lançamento'}</span>
+          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{dados.tipo === 'pagar' ? 'Valor pago' : dados.consolidado ? 'Total efetivamente recebido' : 'Valor recebido neste lançamento'}</span>
           <b className="text-2xl text-slate-900">{r.movimento}</b>
         </div>
-        <p className="flex justify-between gap-4 text-sm"><span>Valor total dos títulos considerados</span><b>{r.original}</b></p>
-        <p className="flex justify-between gap-4 text-sm"><span>Saldo atual em aberto (consulta)</span><b>{r.saldo}</b></p>
+        {!dados.consolidado && <><p className="flex justify-between gap-4 text-sm"><span>Valor total dos títulos considerados</span><b>{r.original}</b></p>
+        <p className="flex justify-between gap-4 text-sm"><span>Saldo atual em aberto (consulta)</span><b>{r.saldo}</b></p></>}
       </section>
-      <p className="mt-5 text-xs leading-relaxed text-slate-600">
+      {dados.consolidado ? <p className="mt-5 text-xs leading-relaxed text-slate-600">Este documento reúne exclusivamente os recebimentos acima, sem criar novos lançamentos. Descontos não integram o valor efetivamente recebido. Não representa quitação integral de uma venda ou obrigação.</p> : <p className="mt-5 text-xs leading-relaxed text-slate-600">
         Este recibo comprova exclusivamente o valor do recebimento identificado acima.
         {dados.saldo > 0 ? ' Não representa quitação integral da obrigação.' : ' O saldo consultado está zerado.'}
         {' '}O saldo apresentado é a posição atual do título e pode ser diferente do saldo na data do pagamento.
-      </p>
+      </p>}
       {assinatura ? <section className="mt-11 flex flex-col items-center text-center">
         <img src={dados.assinaturaDataUri!} width={310} height={180} alt="Assinatura manuscrita autorizada da Esquadrifácio" className="h-[138px] w-[310px] object-contain" />
         <div className="w-[280px] border-t border-slate-500 pt-2">
