@@ -454,6 +454,9 @@ export default function WhatsAppAtendimentoPage() {
     // Um único grupo com acesso verificado pode ser aberto por link direto.
     if (c.id === conversaDiretaId && c.whatsapp_chat_tipo === 'grupo') return true
     if (c.whatsapp_chat_tipo === 'grupo') {
+      // A API já verifica acesso por grupo para cada usuário. Não esconder
+      // um grupo autorizado só porque outro atendente é o responsável.
+      if (eu?.role !== 'master') return true
       if (c.responsavel_id) return c.responsavel_id === eu?.id
       if (c.grupo_responsavel_efetivo_id) return c.grupo_responsavel_efetivo_id === eu?.id
       return c.grupo_pode_atender === true
