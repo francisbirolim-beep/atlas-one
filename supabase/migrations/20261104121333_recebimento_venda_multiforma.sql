@@ -354,9 +354,13 @@ BEGIN
     WHERE id=v_item.conta_id AND empresa_id=v_empresa AND venda_obra_id=p_venda_obra_id
     FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Parcela indisponível para estorno.'; END IF;
+    -- A rotina de recebimento concede abatimento em valor_desconto, SEM reduzir
+    -- o valor nominal do título. Estornar deve desfazer precisamente ambos
+    -- os acumuladores e preservar integralmente o valor negociado da venda.
     v_pago := round(coalesce(v_conta.valor_pago,0)-v_item.total_pago,2);
-    v_conta_valor := round(v_conta.valor+v_item.total_desconto,2);
-    IF v_pago < 0 OR v_pago + coalesce(v_conta.valor_desconto,0) > v_conta_valor+0.009 THEN
+    v_desc := round(coalesce(v_conta.valor_desconto,0)-v_item.total_desconto,2);
+    v_conta_valor := v_conta.valor;
+    IF v_pago < -0.009 OR v_desc < -0.009 OR v_pago + v_desc > v_conta_valor+0.009 THEN
       RAISE EXCEPTION 'A parcela foi alterada e não permite estorno seguro.' USING ERRCODE='22023';
     END IF;
     SELECT max(r.data_recebimento)
@@ -372,13 +376,13 @@ BEGIN
       AND a.tipo='conta' AND r.status NOT IN ('cancelado','estornado')
     ORDER BY r.data_recebimento DESC,r.created_at DESC LIMIT 1;
     UPDATE public.financeiro_contas_receber
-    SET valor=v_conta_valor,valor_pago=v_pago,
+    SET valor_pago=greatest(0,v_pago),valor_desconto=greatest(0,v_desc),
       status=CASE
-        WHEN v_pago+coalesce(valor_desconto,0)>=v_conta_valor-0.009 THEN 'pago'
+        WHEN v_pago+v_desc>=v_conta_valor-0.009 THEN 'pago'
         WHEN vencimento IS NOT NULL AND vencimento<current_date THEN 'vencido'
         ELSE 'aberto' END,
       data_pagamento=CASE
-        WHEN v_pago+coalesce(valor_desconto,0)>=v_conta_valor-0.009
+        WHEN v_pago+v_desc>=v_conta_valor-0.009
           THEN coalesce(v_data_pagamento,v_conta.data_pagamento)
         ELSE NULL END,
       -- Não manter no título a forma do recebimento cancelado.

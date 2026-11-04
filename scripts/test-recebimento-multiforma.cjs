@@ -49,6 +49,12 @@ assert.match(migration, /v_usuario,v_nome/)
 assert.match(migration, /FROM PUBLIC,anon/)
 assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.ajustar_recebimento_venda_auditado/)
 assert.match(migration, /v_novo := public\.registrar_recebimento_venda_multiforma/)
+// Estorno: reduzir o acumulado pago E o acumulado de descontos, sem inflar o preço da venda.
+assert.match(migration, /v_desc := round\(coalesce\(v_conta\.valor_desconto,0\)-v_item\.total_desconto,2\)/)
+assert.match(migration, /SET valor_pago=greatest\(0,v_pago\),valor_desconto=greatest\(0,v_desc\)/)
+assert.doesNotMatch(migration, /SET valor=v_conta_valor/)
+assert.doesNotMatch(migration, /v_conta\.valor\+v_item\.total_desconto/)
+
 assert.ok(!migration.includes('p_venda_id_placeholder'))
 
 const registration = read('app/api/vendas/financeiro/recebimento-multiforma/route.ts')
