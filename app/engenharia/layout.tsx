@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Calculator, History, LayoutDashboard, PackageOpen, Settings2, Wrench } from 'lucide-react'
+import { Beaker, Calculator, History, LayoutDashboard, PackageOpen, Settings2, Wrench } from 'lucide-react'
 
 export default function EngenhariaLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +9,9 @@ export default function EngenhariaLayout({ children }: { children: React.ReactNo
           <span className="mr-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Engenharia</span>
           <Link href="/engenharia" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800">
             <LayoutDashboard size={16} /> Painel da Engenharia
+          </Link>
+          <Link href="/engenharia/bancada-tipologias" className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+            <Beaker size={16} /> Bancada de Tipologias
           </Link>
           <Link href="/engenharia/editor-tecnico" className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-800 hover:bg-violet-100">
             <Wrench size={16} /> Editor Técnico
