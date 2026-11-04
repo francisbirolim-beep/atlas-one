@@ -1307,7 +1307,30 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const abas=ordemAbas.map(id=>ABAS_OBRA_PADRAO.find(a=>a.id===id)).filter((a):a is typeof ABAS_OBRA_PADRAO[number]=>Boolean(a))
 
   return <div className="min-h-screen bg-slate-50">
-    <header className="border-b bg-white">
+    {aba==='tipologias'?<header className="border-b bg-white">
+      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center justify-between gap-4 px-4 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link href={`/clientes/${clienteId}`} aria-label="Voltar ao cliente" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ArrowLeft size={19}/></Link>
+          <div><p className="text-xs text-slate-400">Obras <span className="px-1">›</span> Obra #{obra?.numero||numeroOrcamento(orcamento)} – {cliente.nome}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-3"><h1 className="text-xl font-bold text-slate-900">Obra #{obra?.numero||numeroOrcamento(orcamento)} – {cliente.nome}</h1>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">Vendido</span></div>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-700">
+          <div className="border-l pl-4"><span className="block text-slate-500">Cliente</span><b>{cliente.nome}</b></div>
+          <div className="border-l pl-4"><span className="block text-slate-500">Valor da venda</span><b className="text-base text-slate-900">{moeda(valorVenda)}</b></div>
+          <div className="border-l pl-4"><span className="block text-slate-500">Setor em consulta</span><b className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">Conferência técnica</b></div>
+          <details className="relative"><summary className="cursor-pointer list-none rounded-lg border border-blue-200 px-4 py-2 text-xs font-bold text-blue-800">Ações ▾</summary>
+            <div className="absolute right-0 z-30 mt-2 w-60 space-y-1 rounded-xl border bg-white p-2 shadow-xl">
+              <button type="button" onClick={()=>setModalRecebimento(true)} className="block w-full rounded-lg p-2 text-left text-xs hover:bg-slate-100">Registrar recebimento</button>
+              <button type="button" disabled={preparandoFluxo} onClick={()=>void prepararFluxoCompleto()} className="block w-full rounded-lg p-2 text-left text-xs hover:bg-slate-100 disabled:opacity-50">Preparar fluxo da obra</button>
+              <Link href={`/orcamento/${venda.orcamento_id}/composicao`} className="block rounded-lg p-2 text-xs hover:bg-slate-100">Abrir orçamento</Link>
+              <button type="button" onClick={()=>setAba('medida-final')} className="block w-full rounded-lg p-2 text-left text-xs hover:bg-slate-100">Medida Final</button>
+            </div>
+          </details>
+        </div>
+      </div>
+    </header>:<header className="border-b bg-white">
       <div className="mx-auto max-w-7xl px-4 py-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex gap-3">
@@ -1326,14 +1349,14 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           </div>
         </div>
       </div>
-    </header>
+    </header>}
 
-    <main className="mx-auto max-w-7xl px-4 py-5">
+    <main className={'mx-auto px-4 py-5 '+(aba==='tipologias'?'max-w-[1680px]':'max-w-7xl')}>
       {erro&&<div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>}
       {mensagemFluxo&&<div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{mensagemFluxo}</div>}
       {!venda.obra_id&&<VendaVincularObra vendaId={venda.id} clienteNome={cliente.nome} cidadeCliente={cliente.cidade} onVinculada={carregar}/>}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      {aba!=='tipologias'&&<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Kpi titulo="Valor da venda" valor={moeda(valorVenda)} acao={<button type="button" onClick={()=>{setAbrirEdicaoValorVenda(true);setAba('custos')}} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"><Pencil size={13}/>Conferir / corrigir valor</button>}/>
         <Kpi titulo="Recebido" valor={moeda(recebido)} detalhe={`${pct(recebido,valorVenda).toFixed(0)}% recebido`}/>
         <Kpi titulo="A receber" valor={moeda(aReceber)} destaque/>
@@ -1341,19 +1364,19 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <Kpi titulo="Custo realizado (parcial)" valor={custoRealizado>0?moeda(custoRealizado):'—'} detalhe={custoRealizado>0?cmvReal.toFixed(1)+'% da venda já lançado como custo':'Sem custo real registrado. Cotação não é compra.'}/>
         <Kpi titulo="Margem prevista" valor={custoPrevistoBase>0?margemPrevista.toFixed(1)+'%':'—'}/>
         <Kpi titulo="Markup" valor={markup>0?`${markup.toFixed(2)}x`:'—'}/>
-      </div>
+      </div>}
 
       {valorVendaDifereFinanceiro&&<div role="alert" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900">A venda está em {moeda(valorVenda)}, mas os títulos financeiros ativos somam {moeda(totalTitulosAtivos)}. Confira e concilie o Financeiro; nenhuma parcela ou recebimento foi alterado automaticamente.</div>}
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      {aba!=='tipologias'&&<div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
         <Progresso titulo="Venda" valor={100} detalhe="Orçamento confirmado e venda criada" ativo={painelEtapa==='venda'} onClick={()=>setPainelEtapa(painelEtapa==='venda'?null:'venda')}/>
         <Progresso titulo="Financeiro" valor={pct(Math.max(0,valorVenda-aReceber),valorVenda)} detalhe={`${moeda(recebido)} de ${moeda(valorVenda)}`} ativo={painelEtapa==='financeiro'} onClick={()=>setPainelEtapa(painelEtapa==='financeiro'?null:'financeiro')}/>
         <Progresso titulo="Compras" valor={progressoCompras} detalhe={totalAcompanhar?`${comprasEfetivadas} de ${totalAcompanhar} itens no Kanban comprados` : 'Sem lista de compras'} ativo={painelEtapa==='compras'} onClick={()=>setPainelEtapa(painelEtapa==='compras'?null:'compras')}/>
         <Progresso titulo="Mercadoria recebida" valor={progressoMercadoria} detalhe={totalAcompanhar?`${comprasRecebidas} de ${totalAcompanhar} itens no Kanban Recebido (não atesta NF/estoque)` : 'Sem lista de compras'} ativo={painelEtapa==='mercadoria'} onClick={()=>setPainelEtapa(painelEtapa==='mercadoria'?null:'mercadoria')}/>
         <Progresso titulo="Produção" valor={progressoProducao} detalhe={ordens.length?`${ordensConcluidas} de ${ordens.length} ordem(ns) concluídas`:(setorPorNome.producao?.nome||'Ainda não liberada')} ativo={painelEtapa==='producao'} onClick={()=>setPainelEtapa(painelEtapa==='producao'?null:'producao')}/>
         <Progresso titulo="Instalação" valor={progressoInstalacao} detalhe={fluxoVenda.totalPecas?String(fluxoVenda.quantidadeFinalizada)+' de '+String(fluxoVenda.totalPecas)+' peça(s) finalizadas; '+String(fluxoVenda.quantidadeInstalada)+' instaladas fisicamente':'Aguardando conferência das tipologias'} ativo={painelEtapa==='instalacao'} onClick={()=>setPainelEtapa(painelEtapa==='instalacao'?null:'instalacao')}/>
-      </div>
+      </div>}
 
-      {painelEtapa&&<section className="mt-4 overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
+      {aba!=='tipologias'&&painelEtapa&&<section className="mt-4 overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
         <div className="flex items-start justify-between gap-3 border-b border-blue-100 bg-blue-50/40 px-5 py-4">
           <div>
             <h2 className="font-bold text-slate-900">
@@ -1839,6 +1862,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           obraId={venda.obra_id}
           imagensProdutos={produtosMateriais}
           onAtualizar={carregar}
+          onAbrirMateriais={()=>setAba('materiais')}
         />}
 
         {aba==='medida-final'&&<Box titulo="Medida Final desta obra">
