@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import pdfParse from 'pdf-parse'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { consultarOpenCodePublicFree } from '@/lib/ai/opencode'
-import { consultarTrenaGratisComAlternativa } from '@/lib/ai/trenaVisionGratis'
+import { analisarComGatewayZeroCusto, ErroGatewayZeroCusto, limparDadosPessoaisRelatorio } from '@/lib/ai/gatewayZeroCustoTipologia'
 import { assinaturaTecnica, conferirCaso, type CasoTipologia } from '@/lib/bancadaTipologias'
 import { extrairCortesTexto, extrairRespostaIA, formulaHipotese, normalizarComponentes, tipoCroquiSeguro, type ComponenteCandidato } from '@/lib/bancadaCriacaoTipologia'
 import type { TipologiaFormulasCorte } from '@/lib/formulasCorteEngine'
@@ -86,35 +85,54 @@ Não invente desenhos de seção transversal e não infira folgas. A comparaçã
 async function analisarDocumento(doc: DocumentoLido, observacoes: string) {
   const diagnostico = diagnosticarRelatorio(doc.conteudo, doc.nome)
   const extraidos = diagnostico.componentes
-  const jaTemCortes = extraidos.some(c => c.comprimento_mm != null)
+  const jaTemCortes = extraidos.some(c => c.eixo && c.comprimento_mm != null)
   let respostaIA = ''
   let origemIA = 'leitura técnica local'
+  let statusIA: 'executada' | 'dispensada' | 'indisponivel' | 'documento_sem_cortes' = 'dispensada'
   let aviso = ''
-  try {
-    if (doc.mime.startsWith('image/')) {
-      const resposta = await consultarTrenaGratisComAlternativa({
+  if (diagnostico.estado === 'link_wvetro') {
+    statusIA = 'documento_sem_cortes'
+  } else if (jaTemCortes && !doc.mime.startsWith('image/')) {
+    statusIA = 'dispensada'
+  } else if (doc.mime.startsWith('image/') || doc.conteudo.trim().length >= 30) {
+    try {
+      const resposta = await analisarComGatewayZeroCusto({
         system: instrucaoIA,
-        prompt: 'Leia a imagem de referência da tipologia e seus componentes. Observações do projetista: ' + observacoes,
-        anexos: [{ nome: 'referencia.' + doc.extensao, mediaType: doc.mime, dados: doc.buffer.toString('base64') }],
+        prompt: doc.mime.startsWith('image/')
+          ? 'Identifique somente códigos e medidas visíveis nesta imagem. Observações: ' + observacoes
+          : 'Identifique SOMENTE códigos de perfis/acessórios e cortes comprovados no texto. Não deduza medidas. Se não houver lista técnica, devolva componentes: [].\\n' +
+            limparDadosPessoaisRelatorio(doc.conteudo.slice(0,13000)) +
+            '\\nObservações: ' + observacoes,
+        ...(doc.mime.startsWith('image/') ? {
+          imagem: { mime: doc.mime, base64: doc.buffer.toString('base64') },
+        } : {}),
       })
       respostaIA = resposta.resposta
-      origemIA = resposta.rota
-    } else if (doc.conteudo.trim() && !jaTemCortes && diagnostico.estado !== 'link_wvetro') {
-      const resposta = await consultarOpenCodePublicFree({
-        system: instrucaoIA,
-        prompt: 'Extraia somente cortes e componentes explicitamente identificados no PDF. Texto:\n' + doc.conteudo.slice(0,13000) + '\nObservações: ' + observacoes,
-      })
-      respostaIA = resposta?.resposta || ''
-      origemIA = resposta?.modelId || 'leitura local'
+      origemIA = 'Vercel AI Gateway gratuito: ' + resposta.modelo
+      statusIA = 'executada'
+    } catch (erro) {
+      statusIA = 'indisponivel'
+      aviso = erro instanceof ErroGatewayZeroCusto
+        ? erro.message
+        : 'Falha na análise por IA gratuita. A leitura local continua disponível.'
+      console.warn('[tipologias] Falha no serviço gratuito de IA',
+        erro instanceof ErroGatewayZeroCusto ? erro.codigo : 'falha_desconhecida')
     }
-  } catch {
-    aviso = 'A IA está temporariamente indisponível. A leitura técnica local e o salvamento do rascunho continuam disponíveis.'
+  } else {
+    statusIA = 'documento_sem_cortes'
   }
   const interpretado = extrairRespostaIA(respostaIA)
   const qualidade = (lista: ComponenteCandidato[]) =>
     lista.filter(c => c.eixo && c.comprimento_mm != null).length * 3 + lista.length
-  const componentes = qualidade(interpretado.componentes) > qualidade(extraidos)
-    ? interpretado.componentes : extraidos
+  // Em PDFs textuais, não admitir códigos inventados pelo modelo.
+  const propostaIA = doc.mime.startsWith('image/') ? interpretado.componentes :
+    interpretado.componentes.filter(c => {
+      const texto = doc.conteudo.toUpperCase()
+      return texto.includes(c.codigo.toUpperCase()) &&
+        (c.comprimento_mm == null || texto.includes(String(Math.trunc(c.comprimento_mm))))
+    })
+  const componentes = qualidade(propostaIA) > qualidade(extraidos)
+    ? propostaIA : extraidos
   const cortesCompletos = componentes.filter(c => c.eixo && c.comprimento_mm != null).length
   if (componentes.length && cortesCompletos === 0)
     aviso = [aviso, 'Nenhum dos componentes sugeridos tem corte e orientação completos. Identifique as medidas antes de validar.'].filter(Boolean).join(' ')
@@ -122,7 +140,7 @@ async function analisarDocumento(doc: DocumentoLido, observacoes: string) {
   return { componentes, descricao: interpretado.descricao,
     tipo_croqui: tipoCroquiSeguro(interpretado.tipo_croqui || observacoes),
     texto_extraido: doc.conteudo.slice(0,15000), origem_ia: origemIA, aviso,
-    estado_documento: diagnostico.estado,
+    estado_documento: diagnostico.estado, status_ia: statusIA,
     quantidade_cortes_completos: cortesCompletos,
     paginas: doc.paginas }
 }

@@ -16,6 +16,7 @@ type RespostaAnalise = {
   tipo_croqui: string
   texto_extraido: string
   origem_ia: string
+  status_ia?: 'executada' | 'dispensada' | 'indisponivel' | 'documento_sem_cortes'
   aviso: string
   estado_documento?: 'lista_corte' | 'orcamento_comercial' | 'link_wvetro' | 'pdf_digitalizado' | 'desconhecido'
   quantidade_cortes_completos?: number
@@ -204,13 +205,14 @@ export default function NovaTipologiaPage() {
           </label>
           <label className="flex items-start gap-2 text-xs text-slate-600">
             <input type="checkbox" className="mt-0.5" checked={consentimento} onChange={e => setConsentimento(e.target.checked)}/>
-            Autorizo o envio do documento selecionado ao serviço de IA configurado no Atlas para análise técnica. Conferirei os dados antes do cadastro.
+            Autorizo o envio dos dados técnicos ao provedor gratuito de IA configurado no Atlas, quando disponível. O serviço externo pode manter informações para melhorar seus modelos. Conferirei os dados antes do cadastro.
           </label>
           <button type="button" className={botao + ' w-full bg-indigo-700 text-white'} disabled={!arquivo || !consentimento || !!processando} onClick={() => void analisar()}>
             {processando === 'analisar' ? <Loader2 className="animate-spin" size={17}/> : <Sparkles size={17}/>} Analisar documento com IA
           </button>
           {analise && <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
             <p><b>Resultado:</b> {analise.estado_documento === 'link_wvetro' ? 'Atalho/Link, não é relatório técnico' : analise.origem_ia} · {analise.componentes.length} linhas sugeridas · {analise.quantidade_cortes_completos ?? analise.componentes.filter(c => c.eixo && c.comprimento_mm != null).length} cortes com orientação identificada.</p>
+            <p className="mt-1 font-semibold text-slate-700">IA: {analise.status_ia === 'executada' ? 'análise gratuita concluída' : analise.status_ia === 'dispensada' ? 'não necessária; leitura técnica local' : analise.status_ia === 'indisponivel' ? 'serviço gratuito indisponível — veja o motivo abaixo' : 'não executada: referência sem lista técnica'}.</p>
             {analise.componentes.length > 0 && <p className="mt-2 font-semibold text-amber-800">Esses materiais são apenas sugestões de leitura; nenhum está validado. Confira as imagens, os códigos e as medidas abaixo.</p>}
             {!analise.componentes.length && <p className="mt-2 font-semibold text-amber-800">Nenhum perfil confirmado. Você pode salvar o projeto como rascunho, sem cadastrar materiais fictícios.</p>}
             {analise.descricao && <p className="mt-1">{analise.descricao}</p>}
