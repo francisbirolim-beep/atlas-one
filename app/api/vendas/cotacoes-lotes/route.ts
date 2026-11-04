@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarCompras } from '@/lib/comprasServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import {auditarCotacaoMateriais} from '@/lib/tipologiaMateriaisConferenciaServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -12,7 +13,7 @@ const erro = (msg:string,status=400)=>NextResponse.json({error:msg},{status})
 const numero=(n:unknown)=>{const v=Number(n);return Number.isFinite(v)?v:0}
 function categoriaMaterial(c:unknown):Categoria {
   const x=String(c||'').toLocaleLowerCase('pt-BR')
-  if(x.includes('perfil'))return 'perfil'
+  if(x==='contramarco'||x.includes('perfil'))return 'perfil'
   if(x.includes('acess'))return 'acessorios'
   if(x.includes('vidro'))return 'vidro'
   return 'outros'
@@ -119,7 +120,7 @@ export async function POST(req:NextRequest) {
     const ids=Array.isArray(body.materialIds)
       ? Array.from(new Set<string>(body.materialIds.map((v:unknown)=>String(v||'').trim()).filter((v:string)=>uuid.test(v))))
       : []
-    if(!uuid.test(vendaId)||!categorias.includes(categoria)||ids.length>1000)
+    if(!uuid.test(vendaId)||!categorias.includes(categoria)||!ids.length||ids.length>1000)
       return erro('Venda, categoria ou seleção de materiais inválida.')
 
     const venda=await carregarVenda(usuario.empresa_id,vendaId)
@@ -131,7 +132,7 @@ export async function POST(req:NextRequest) {
       if(orcamento?.wvetro_fluxo?.numero)return erro('Perfis cortados do WVetro são da Produção. Importe e valide Barras Utilizadas em Compras para comprar barras inteiras.',409)
     }
     const {data:pacote,error:pacoteErr}=await supabaseAdmin.from('pacotes_tecnicos')
-      .select('id,status')
+      .select('id,status,snapshot_itens,origem,created_at')
       .eq('empresa_id',usuario.empresa_id).eq('orcamento_id',venda.orcamento_id)
       .neq('status','substituido').order('created_at',{ascending:false}).limit(1).maybeSingle()
     if(pacoteErr)throw pacoteErr
@@ -139,7 +140,7 @@ export async function POST(req:NextRequest) {
 
     const [materiaisResp,sobrasResp]=await Promise.all([
       supabaseAdmin.from('pacote_tecnico_materiais')
-        .select('id,produto_id,categoria,codigo,descricao,unidade,quantidade_ajustada,quantidade_tecnica,cor_ref,comprimento_corte_mm,comprimento_barra_mm')
+        .select('id,item_ref,produto_id,categoria,codigo,descricao,unidade,quantidade_ajustada,quantidade_tecnica,cor_ref,comprimento_corte_mm,comprimento_barra_mm,status_calculo,origem_calculo,wvetro_dados')
         .eq('empresa_id',usuario.empresa_id).eq('pacote_id',pacote.id).eq('excluido',false),
       supabaseAdmin.from('pacote_tecnico_separacoes')
         .select('material_id,tipo_origem,quantidade,status')
@@ -147,6 +148,21 @@ export async function POST(req:NextRequest) {
     ])
     if(materiaisResp.error)throw materiaisResp.error
     if(sobrasResp.error)throw sobrasResp.error
+
+    // Trava no servidor, independente do estado do botão na interface.
+    // Verifica a aprovação da composição ATUAL, inclusive edições posteriores.
+    const materiaisAtivos=materiaisResp.data||[]
+    const selecionados=materiaisAtivos.filter(m=>categoriaMaterial(m.categoria)===categoria&&ids.includes(m.id))
+    if(selecionados.length!==ids.length)
+      return erro('A seleção contém materiais inexistentes, excluídos ou de outra categoria. Atualize a lista.',409)
+    const pendencias=await auditarCotacaoMateriais({
+      empresaId:usuario.empresa_id,vendaId:venda.id,orcamentoId:venda.orcamento_id,
+      pacoteId:pacote.id,origemPacote:pacote.origem,criadoEm:pacote.created_at,itensPacote:Array.isArray(pacote.snapshot_itens)?pacote.snapshot_itens:[],
+      materiais:materiaisAtivos,selecionados,
+    })
+    if(pendencias.length)return erro('Cotação bloqueada: '+pendencias.slice(0,5).join(' | ')+
+      (pendencias.length>5?' | E outras '+(pendencias.length-5)+' pendências.':''),409)
+
     const usados=new Map<string,number>()
     for(const s of sobrasResp.data||[]){
       if(s.tipo_origem!=='sobra_estoque'||!s.material_id)continue
