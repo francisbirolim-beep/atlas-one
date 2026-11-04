@@ -5,7 +5,7 @@ import { Ruler } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 const LABEL: Record<string, string> = {
-  aguardando_liberacao: 'Aguardando liberação',
+  aguardando_liberacao: 'Aguardando confirmação das tipologias',
   liberado: 'Liberada para medir',
   em_medicao: 'Em medição',
   com_pendencia: 'Com pendência',
