@@ -87,6 +87,7 @@ type Cotacao = {
   forma_pagamento: string | null;
   observacoes: string | null;
   selecionada: boolean;
+  arquivo_path?: string | null;
 };
 type Produto = {
   id: string;
@@ -301,7 +302,12 @@ export default function ComprasPage() {
     [fornecedoresConvite, setFornecedoresConvite] = useState<string[]>([]),
     [convidando, setConvidando] = useState(false),
     [historicoWVetroAberto, setHistoricoWVetroAberto] = useState(false);
+  const [ultimoDocumentoCompra,setUltimoDocumentoCompra]=useState<string|null>(null);
+  const [cotacaoArquivo,setCotacaoArquivo]=useState<File|null>(null);
+  const [cotacaoLendo,setCotacaoLendo]=useState(false);
+  const [cotacaoAviso,setCotacaoAviso]=useState('');
   const searchParams = useSearchParams();
+  useEffect(()=>{setCotacaoArquivo(null);setCotacaoAviso('')},[selecionadaId]);
   useEffect(() => {
     void carregar();
   }, []);
@@ -524,7 +530,7 @@ export default function ComprasPage() {
     setSalvando(true);
     setErro("");
     try {
-      await requisicao("/api/compras/360", {
+      const resposta=await requisicao("/api/compras/360", {
         method: "POST",
         body: JSON.stringify({
           acao: "criar_necessidade",
@@ -532,6 +538,7 @@ export default function ComprasPage() {
           quantidade: Number(form.quantidade),
         }),
       });
+      setUltimoDocumentoCompra(resposta.necessidade?.id||null);
       setForm(vazio);
       setFiltroCategoriaProduto("todos");
       setBuscaProdutoCatalogo("");
@@ -560,13 +567,47 @@ export default function ComprasPage() {
       setSalvando(false);
     }
   }
+  async function lerCotacaoPdf(){
+    if(!cotacaoArquivo)return setErro('Selecione o PDF da cotação.')
+    try{
+      setCotacaoLendo(true);setErro('');setCotacaoAviso('')
+      const token=await tokenAtual()
+      const form=new FormData();form.append('arquivo',cotacaoArquivo);form.append('tipo','cotacao')
+      const res=await fetch('/api/compras/importar-documento',{method:'POST',
+        headers:{Authorization:'Bearer '+token},body:form})
+      const j=await res.json()
+      if(!res.ok)throw Error(j.error||'Falha na leitura do PDF')
+      const correspondencias=(j.itens||[]).filter((x:{produto?:{id?:string};preco_unitario?:number|null})=>
+        x.produto?.id===selecionada?.produto_id && x.preco_unitario!=null)
+      if(correspondencias.length===1){
+        setFormCotacao(v=>({...v,preco_unitario:String(correspondencias[0].preco_unitario),
+          ...(j.condicoes?.frete!=null?{frete:String(j.condicoes.frete)}:{}),
+          ...(j.condicoes?.pagamento?{forma_pagamento:String(j.condicoes.pagamento).slice(0,200)}:{})}))
+        setCotacaoAviso('Preço identificado pelo código do produto. Revise os valores extraídos antes de salvar.')
+      }else{
+        setCotacaoAviso('PDF analisado, mas o preço deste produto não foi identificado com segurança. Informe o valor manualmente; o PDF será anexado.')
+      }
+    }catch(e){setCotacaoAviso('Não foi possível extrair o preço; informe manualmente e anexe o PDF.');setErro(e instanceof Error?e.message:'Erro ao ler PDF')}
+    finally{setCotacaoLendo(false)}
+  }
+  async function abrirCotacaoPdf(cotacaoId:string){
+    try{
+      const token=await tokenAtual()
+      const r=await fetch('/api/compras/cotacao-anexo?cotacaoId='+encodeURIComponent(cotacaoId),{
+        headers:{Authorization:'Bearer '+token},cache:'no-store'})
+      const j=await r.json()
+      if(!r.ok)throw Error(j.error||'PDF indisponível')
+      const a=document.createElement('a');a.href=j.url;a.target='_blank';a.rel='noopener noreferrer'
+      document.body.appendChild(a);a.click();a.remove()
+    }catch(e){setErro(e instanceof Error?e.message:'Não foi possível abrir PDF')}
+  }
   async function adicionarCotacao(e: React.FormEvent) {
     e.preventDefault();
     if (!selecionada) return;
     setSalvando(true);
     setErro("");
     try {
-      await requisicao("/api/compras/360", {
+      const cotacaoSalva=await requisicao("/api/compras/360", {
         method: "POST",
         body: JSON.stringify({
           acao: "adicionar_cotacao",
@@ -579,6 +620,14 @@ export default function ComprasPage() {
             : null,
         }),
       });
+      if(cotacaoArquivo&&cotacaoSalva.cotacao?.id){
+        const token=await tokenAtual()
+        const form=new FormData();form.append('arquivo',cotacaoArquivo);form.append('cotacaoId',cotacaoSalva.cotacao.id)
+        const res=await fetch('/api/compras/cotacao-anexo',{method:'POST',
+          headers:{Authorization:'Bearer '+token},body:form})
+        if(!res.ok){const j=await res.json().catch(()=>({}));throw Error('Cotação salva, mas PDF não anexado: '+(j.error||'Tente novamente.'))}
+      }
+      setCotacaoArquivo(null);setCotacaoAviso('')
       setFormCotacao(cotacaoVazia);
       await carregar();
     } catch (e) {
@@ -712,6 +761,7 @@ export default function ComprasPage() {
             </button>
           </div>
         )}
+        {ultimoDocumentoCompra&&<div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><span>Necessidade registrada. A lista para conferência está disponível.</span><Link href={'/compras/documento/necessidade/'+ultimoDocumentoCompra} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-emerald-600 px-3 py-2 font-bold">Imprimir / Baixar PDF deste pedido</Link></div>}
         {carregando && <p className="text-sm text-slate-500">Carregando suas permissões de Compras...</p>}
         {dados?.acessos && !dados.acessos.consultar && dados.acessos.solicitar && (
           <section className="rounded-2xl border bg-white p-5 text-sm text-slate-700">
@@ -1012,6 +1062,7 @@ export default function ComprasPage() {
             setRevisando(false);
           }}
         >
+          <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs"><b>Pedido com vários materiais ou PDF?</b> Use o <Link href={'/compras/solicitacoes'+(form.cliente_id?'?cliente='+encodeURIComponent(form.cliente_id):'')} className="font-bold text-blue-800 underline">fluxo completo de compras (importar lista, incluir itens, imagens e conferência)</Link>. O formulário unitário avançado permanece disponível abaixo.</div>
           <form onSubmit={criar} className="space-y-4">
             {erro && (
               <div className="flex items-start justify-between rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -1437,6 +1488,7 @@ export default function ComprasPage() {
               salvando={salvando}
               podeSelecionar={!!dados?.acessos?.aprovar}
             />
+            {cotacoesSelecionadas.some(c=>c.arquivo_path)&&<div className="rounded-lg border border-blue-200 bg-white p-3 text-xs"><b>PDFs originais das cotações</b><div className="mt-2 flex flex-wrap gap-2">{cotacoesSelecionadas.filter(c=>c.arquivo_path).map(c=><button type="button" key={c.id} onClick={()=>void abrirCotacaoPdf(c.id)} className="rounded-lg border border-blue-200 px-3 py-2 font-semibold text-blue-800">Abrir PDF · {fornecedor(c.fornecedor_id)?.nome||'Fornecedor'}</button>)}</div></div>}
             {dados?.acessos?.cotar && <form
               onSubmit={adicionarCotacao}
               className="rounded-2xl border border-blue-200 bg-blue-50 p-4"
@@ -1444,6 +1496,7 @@ export default function ComprasPage() {
               <h3 className="font-semibold text-blue-950">
                 Adicionar ou atualizar cotação
               </h3>
+              <div className="mt-3 space-y-2 rounded-xl border bg-white p-3 text-xs"><b>PDF da cotação do fornecedor</b><div className="flex flex-wrap items-center gap-2"><input key={cotacaoArquivo===null?'limpo':'escolhido'} type="file" accept="application/pdf,.pdf" onChange={e=>setCotacaoArquivo(e.target.files?.[0]||null)} className="min-w-[210px] flex-1"/><button type="button" onClick={()=>void lerCotacaoPdf()} disabled={!cotacaoArquivo||cotacaoLendo||salvando} className="rounded-lg border border-blue-300 px-3 py-2 font-semibold text-blue-800 disabled:opacity-40">{cotacaoLendo?'Analisando PDF...':'Ler PDF e sugerir preços'}</button></div><p className="text-slate-600">É possível importar o preço, corrigir os valores manualmente e manter o PDF original anexado à cotação. Até 12 MB.</p>{cotacaoAviso&&<p role="status" className="text-blue-700">{cotacaoAviso}</p>}</div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="text-xs font-medium text-blue-900">
                   Fornecedor *
@@ -1709,6 +1762,7 @@ function Card({
           </span>
         </div>
       </button>
+      <Link href={'/compras/documento/necessidade/'+n.id} target="_blank" rel="noopener noreferrer" className="mt-3 flex w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-2 py-2 text-xs font-semibold text-blue-800">Imprimir / PDF · Conferência física</Link>
       {prox && podeAvancar && (
         <button
           disabled={salvando}

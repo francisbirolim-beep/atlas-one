@@ -15,7 +15,7 @@ export async function GET(req:NextRequest,{params}:{params:{clienteId:string}}){
   // e ate clientes diferentes. Nunca expor linhas de outro cliente neste endpoint.
   const {data:itens,error:ei}=await db.from('compras_solicitacao_itens')
    .select('id,solicitacao_id,descricao,quantidade_necessaria,unidade,status,cliente_id,obra_id,destino')
-   .eq('empresa_id',u.empresa_id).eq('destino','obra').eq('cliente_id',cliente.id)
+   .eq('empresa_id',u.empresa_id).in('destino',['obra','cliente_avulso']).eq('cliente_id',cliente.id)
    .order('created_at',{ascending:false}).limit(2500)
   if(ei)throw ei
   const ids=[...new Set((itens||[]).map(i=>i.solicitacao_id))]
@@ -50,7 +50,7 @@ export async function GET(req:NextRequest,{params}:{params:{clienteId:string}}){
     const total=compras.reduce((n,v)=>n+Number(v.linha.quantidade_obra||0),0)
     const situacao=i.status==='cancelado'?'cancelado':!compras.length?'aguardando_compra':
      i.quantidade_necessaria!=null&&total<Number(i.quantidade_necessaria)?'comprado_parcial':'comprado'
-    return {id:i.id,obra_nome:i.obra_id?obras.get(i.obra_id)||'Obra':'Obra',descricao:i.descricao,quantidade_necessaria:i.quantidade_necessaria,unidade:i.unidade,
+    return {id:i.id,obra_nome:i.destino==='cliente_avulso'?'Pedido avulso (sem obra)':i.obra_id?obras.get(i.obra_id)||'Obra':'Obra',descricao:i.descricao,quantidade_necessaria:i.quantidade_necessaria,unidade:i.unidade,
      status:situacao,compras:todos?compras.map(v=>({fornecedor:nomeFornecedor.get(v.cart!.fornecedor_id)||'Fornecedor',
       comprado_em:v.cart!.pedido_emitido_em,quantidade_obra:v.linha.quantidade_obra,quantidade_estoque:v.linha.quantidade_estoque,
       status:v.cart!.status})):[]}

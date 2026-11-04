@@ -129,17 +129,21 @@ export async function POST(req:NextRequest){
   for(let i=0;i<p.itens.length;i++){
    const it=p.itens[i],desc=str(it.descricao,500),q=quantidade(it.quantidade_necessaria)
    const destino=str(it.destino||p.destino,30)
-   const clienteId=destino==='obra'?str(it.cliente_id||p.cliente_id,80):null
+   const clienteId=destino==='obra'||destino==='cliente_avulso'?str(it.cliente_id||p.cliente_id,80):null
    const obraId=destino==='obra'?str(it.obra_id||p.obra_id,80):null
-   if(!['obra','estoque'].includes(destino))return falha(`Item ${i+1}: escolha obra ou estoque`)
+   if(!['obra','estoque','cliente_avulso'].includes(destino))return falha(`Item ${i+1}: escolha obra, cliente avulso ou estoque`)
    if(destino==='obra'&&(!uuid.test(clienteId||'')||!uuid.test(obraId||'')))return falha(`Item ${i+1}: escolha cliente e obra`)
+   if(destino==='cliente_avulso'&&(!uuid.test(clienteId||'')||obraId))return falha(`Item ${i+1}: escolha um cliente sem vincular obra`)
    if(!categorias.has(it.categoria)||desc.length<2)return falha(`Item ${i+1}: selecione a categoria e descreva o produto`)
    if(q!=null&&(!Number.isFinite(q)||q<=0))return falha(`Item ${i+1}: quantidade inválida`)
-   if(destino==='obra'&&q==null)return falha(`Item ${i+1}: informe a quantidade da obra`)
+   if(destino!=='estoque'&&q==null)return falha(`Item ${i+1}: informe a quantidade destinada ao cliente`)
    const foto=form.get('foto_'+i)
    if(foto&&(!(foto instanceof File)||foto.size>5*1024*1024||foto.size<1||!fotosValidas[foto.type]))return falha(`Item ${i+1}: foto deve ser JPG, PNG ou WEBP, até 5 MB`)
+   const produtoId=it.produto_id?str(it.produto_id,80):null
+   if(produtoId&&!uuid.test(produtoId))return falha(`Item ${i+1}: produto inválido`)
    itens.push({empresa_id:u.empresa_id,ordem:i+1,categoria:it.categoria,descricao:desc,
-    destino,cliente_id:clienteId,obra_id:obraId,
+    destino,cliente_id:clienteId,obra_id:obraId,produto_id:produtoId,
+    identificacao_status:produtoId?'validado':'pendente',
     quantidade_necessaria:q,unidade:str(it.unidade,20)||'UN',atualizado_por_id:u.id})
   }
   const obraIds=[...new Set(itens.filter(i=>i.destino==='obra').map(i=>i.obra_id as string))]
@@ -151,6 +155,28 @@ export async function POST(req:NextRequest){
    for(const item of itens){
     if(item.destino==='obra'&&mapa.get(item.obra_id)!==item.cliente_id)
      return falha(`Item ${item.ordem}: obra não pertence ao cliente selecionado`)
+   }
+  }
+  const clientesAvulsos=[...new Set(itens.filter(i=>i.destino==='cliente_avulso').map(i=>i.cliente_id).filter((id):id is string=>!!id))]
+  if(clientesAvulsos.length){
+   const {data:clientes,error}=await db.from('clientes').select('id').eq('empresa_id',u.empresa_id).in('id',clientesAvulsos)
+   if(error)throw error
+   if((clientes||[]).length!==clientesAvulsos.length)return falha('Há cliente avulso que não pertence à empresa.')
+  }
+  const produtosIds=[...new Set(itens.map(i=>i.produto_id).filter((id):id is string=>!!id))]
+  if(produtosIds.length){
+   const {data:produtos,error:ep}=await db.from('produtos').select('id,categoria,foto_url')
+     .eq('empresa_id',u.empresa_id).eq('ativo',true).in('id',produtosIds)
+   if(ep)throw ep
+   const porId=new Map((produtos||[]).map(p=>[p.id,p]))
+   for(const id of produtosIds)if(!porId.has(id))return falha('Há produto selecionado que não pertence ao catálogo ativo da empresa.')
+   const semFoto=produtosIds.filter(id=>['perfil','acessorio'].includes(porId.get(id)?.categoria||'')&&!porId.get(id)?.foto_url)
+   if(semFoto.length){
+    const {data:validas,error:ev}=await db.from('produto_imagens').select('produto_id')
+      .in('produto_id',semFoto).eq('ativo',true).eq('status_validacao','validada').limit(500)
+    if(ev)throw ev
+    const comFoto=new Set((validas||[]).map(v=>v.produto_id))
+    if(semFoto.some(id=>!comFoto.has(id)))return falha('Um perfil ou acessório selecionado está sem imagem validada. Corrija o cadastro antes de enviar.')
    }
   }
   const primeiro=itens[0]
@@ -270,15 +296,22 @@ export async function PATCH(req:NextRequest){
     return falha('Foto deve ser JPG, PNG ou WEBP, com até 5 MB')
 
    const destino=b.destino===undefined?item.destino:str(b.destino,20)
-   if(destino!=='obra'&&destino!=='estoque')return falha('Destino inválido')
-   const clienteId=destino==='obra'?(b.cliente_id===undefined?item.cliente_id:str(b.cliente_id,80)):null
+   if(destino!=='obra'&&destino!=='estoque'&&destino!=='cliente_avulso')return falha('Destino inválido')
+   const clienteId=destino!=='estoque'?(b.cliente_id===undefined?item.cliente_id:str(b.cliente_id,80)):null
    const obraId=destino==='obra'?(b.obra_id===undefined?item.obra_id:str(b.obra_id,80)):null
-   if(descricao.length<2||q!=null&&(!Number.isFinite(q)||q<=0)||(destino==='obra'&&q==null))return falha('Descrição ou quantidade inválida')
+   if(descricao.length<2||q!=null&&(!Number.isFinite(q)||q<=0)||(destino!=='estoque'&&q==null))return falha('Descrição ou quantidade inválida')
    if(destino==='obra'){
     if(!uuid.test(clienteId||'')||!uuid.test(obraId||''))return falha('Escolha cliente e obra')
     const {data:obra,error:eobra}=await db.from('obras').select('id').eq('empresa_id',u.empresa_id).eq('id',obraId).eq('cliente_id',clienteId).maybeSingle()
     if(eobra)throw eobra
     if(!obra)return falha('A obra não pertence ao cliente selecionado')
+   }
+   if(destino==='cliente_avulso'){
+    if(!uuid.test(clienteId||''))return falha('Selecione o cliente avulso')
+    const {data:cliente,error:ec}=await db.from('clientes').select('id')
+     .eq('empresa_id',u.empresa_id).eq('id',clienteId).maybeSingle()
+    if(ec)throw ec
+    if(!cliente)return falha('Cliente avulso não pertence à empresa')
    }
    const {data:usado,error:euso}=await db.from('compras_carrinho_itens').select('id').eq('empresa_id',u.empresa_id).eq('item_id',item.id).limit(1)
    if(euso)throw euso
