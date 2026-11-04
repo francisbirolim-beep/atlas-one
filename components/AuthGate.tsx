@@ -11,6 +11,7 @@ import Cadastro360RouteGuard from '@/components/system/Cadastro360RouteGuard'
 import PermissoesContextuais from '@/components/system/PermissoesContextuais'
 import ProducaoRouteGuard from '@/components/system/ProducaoRouteGuard'
 import SetorRouteGuard from '@/components/system/SetorRouteGuard'
+import { rotaReciboAutenticado } from '@/lib/reciboImpressaoRota'
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(true)
@@ -111,6 +112,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     </div>
   )
   if (!autenticado) return null
+  // Recibos são documentos independentes: não colocar dentro do AppShell,
+  // pois o cabeçalho, sidebar e dados do usuário apareciam na impressão A4.
+  // A sessão continua obrigatória e o mesmo SetorRouteGuard é mantido.
+  // O acesso aos dados continua autorizado pela API de financeiro.
+  if (rotaReciboAutenticado(pathname)) return <SetorRouteGuard><Cliente360RouteGuard>{children}</Cliente360RouteGuard></SetorRouteGuard>
   if (rotaBalcao) return <><BalcaoShell><SetorRouteGuard>{children}</SetorRouteGuard></BalcaoShell><PermissoesContextuais /></>
   return <><AppShell><SetorRouteGuard><ProducaoRouteGuard><Cadastro360RouteGuard><Cliente360RouteGuard>{children}</Cliente360RouteGuard></Cadastro360RouteGuard></ProducaoRouteGuard></SetorRouteGuard></AppShell><PermissoesContextuais /></>
 }

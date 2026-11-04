@@ -92,7 +92,7 @@ export default function ReciboVendaPage({params}:{params:Promise<{id:string;vend
   if(!dados||!ids)return <div className="min-h-screen bg-white p-10"><p className="text-red-600">{erro||'Recibo não encontrado.'}</p></div>
 
   const totalBaixado=dados.valor+dados.desconto
-  return <div className="min-h-screen bg-slate-100 py-8 print:bg-white print:py-0">
+  return <div className="min-h-screen bg-slate-100 py-8 print:min-h-0 print:bg-white print:py-0">
     <style jsx global>{`
       @media print {
         @page { size: A4; margin: 18mm; }
