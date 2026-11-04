@@ -115,13 +115,16 @@ async function analisarDocumento(doc: DocumentoLido, observacoes: string) {
     lista.filter(c => c.eixo && c.comprimento_mm != null).length * 3 + lista.length
   const componentes = qualidade(interpretado.componentes) > qualidade(extraidos)
     ? interpretado.componentes : extraidos
-  if (!componentes.length) aviso = [aviso, diagnostico.mensagem].filter(Boolean).join(' ')
-  else if (diagnostico.estado !== 'lista_corte')
-    aviso = [aviso, 'As linhas sugeridas precisam de conferência manual antes de validar qualquer corte.'].filter(Boolean).join(' ')
+  const cortesCompletos = componentes.filter(c => c.eixo && c.comprimento_mm != null).length
+  if (componentes.length && cortesCompletos === 0)
+    aviso = [aviso, 'Nenhum dos componentes sugeridos tem corte e orientação completos. Identifique as medidas antes de validar.'].filter(Boolean).join(' ')
+  aviso = [aviso, diagnostico.mensagem].filter(Boolean).join(' ')
   return { componentes, descricao: interpretado.descricao,
     tipo_croqui: tipoCroquiSeguro(interpretado.tipo_croqui || observacoes),
     texto_extraido: doc.conteudo.slice(0,15000), origem_ia: origemIA, aviso,
-    estado_documento: diagnostico.estado, paginas: doc.paginas }
+    estado_documento: diagnostico.estado,
+    quantidade_cortes_completos: cortesCompletos,
+    paginas: doc.paginas }
 }
 
 export async function POST(req: NextRequest) {

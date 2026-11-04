@@ -18,6 +18,7 @@ type RespostaAnalise = {
   origem_ia: string
   aviso: string
   estado_documento?: 'lista_corte' | 'orcamento_comercial' | 'link_wvetro' | 'pdf_digitalizado' | 'desconhecido'
+  quantidade_cortes_completos?: number
 }
 type ResultadoCriacao = { ok: boolean; formulaId: string; tipologiaId: string; pendentes: string[]; semImagem: string[]; aviso: string; incompleto?: boolean }
 
@@ -209,7 +210,9 @@ export default function NovaTipologiaPage() {
             {processando === 'analisar' ? <Loader2 className="animate-spin" size={17}/> : <Sparkles size={17}/>} Analisar documento com IA
           </button>
           {analise && <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
-            <p><b>Resultado:</b> {analise.estado_documento === 'link_wvetro' ? 'Atalho/Link, não é relatório técnico' : analise.origem_ia} · {analise.componentes.length} componentes propostos.</p>
+            <p><b>Resultado:</b> {analise.estado_documento === 'link_wvetro' ? 'Atalho/Link, não é relatório técnico' : analise.origem_ia} · {analise.componentes.length} linhas sugeridas · {analise.quantidade_cortes_completos ?? analise.componentes.filter(c => c.eixo && c.comprimento_mm != null).length} cortes com orientação identificada.</p>
+            {analise.componentes.length > 0 && <p className="mt-2 font-semibold text-amber-800">Esses materiais são apenas sugestões de leitura; nenhum está validado. Confira as imagens, os códigos e as medidas abaixo.</p>}
+            {!analise.componentes.length && <p className="mt-2 font-semibold text-amber-800">Nenhum perfil confirmado. Você pode salvar o projeto como rascunho, sem cadastrar materiais fictícios.</p>}
             {analise.descricao && <p className="mt-1">{analise.descricao}</p>}
             {analise.aviso && <p className="mt-2 text-amber-800">{analise.aviso}</p>}
             {!!analise.texto_extraido && <details className="mt-2"><summary className="cursor-pointer font-semibold">Ver texto original extraído</summary><pre className="max-h-40 overflow-auto whitespace-pre-wrap">{analise.texto_extraido}</pre></details>}
