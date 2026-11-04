@@ -83,8 +83,33 @@ export default function ReciboImpressao({
   }, [acaoInicial, dados.id, gerarPdf])
 
   const assinatura = dados.tipo === 'receber' && dados.id !== 'SIMULACAO' && dados.assinaturaDataUri
-  return <div className="mx-auto max-w-[820px] text-slate-900">
-    <style jsx global>{'@media print{@page{size:A4;margin:16mm}.no-print{display:none!important}body{background:white!important}.atlas-recibo-papel{box-shadow:none!important;border:0!important;padding:0!important}}'}</style>
+  return <div className="atlas-recibo-documento mx-auto w-full max-w-[190mm] text-slate-900">
+    <style jsx global>{`
+      @page { size: A4 portrait; margin: 12mm; }
+      @media print {
+        html, body { width: auto !important; height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; }
+        body { margin: 0 !important; padding: 0 !important; }
+        .no-print, .atlas-sidebar-shell, .atlas-topbar, .atlas-mobile-navigation, .atlas-mobile-favorites { display: none !important; }
+        .atlas-app-shell, .atlas-app-content, .atlas-app-main {
+          display: block !important; width: 100% !important; max-width: none !important;
+          height: auto !important; min-height: 0 !important; overflow: visible !important;
+          padding: 0 !important; margin: 0 !important; background: #fff !important;
+        }
+        .atlas-recibo-pagina, .atlas-recibo-documento {
+          display: block !important; width: 100% !important; max-width: none !important;
+          min-height: 0 !important; padding: 0 !important; margin: 0 !important;
+          background: #fff !important; box-shadow: none !important;
+        }
+        .atlas-recibo-papel {
+          width: 100% !important; max-width: none !important; min-height: 0 !important;
+          padding: 0 !important; margin: 0 !important; border: 0 !important;
+          box-shadow: none !important; background: #fff !important;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+        .atlas-recibo-papel header, .atlas-recibo-papel .atlas-recibo-item,
+        .atlas-recibo-papel .atlas-recibo-resumo { break-inside: avoid-page; page-break-inside: avoid; }
+      }
+    `}</style>
     <div className="no-print mb-4 flex flex-wrap items-center justify-end gap-2">
       {erroPdf && <span role="alert" className="w-full text-sm text-red-700">{erroPdf}</span>}
       <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800">
@@ -94,7 +119,7 @@ export default function ReciboImpressao({
         <Download size={16}/>{gerandoPdf ? 'Gerando PDF...' : 'Baixar PDF'}
       </button>
     </div>
-    <div ref={papelRef} className="atlas-recibo-papel min-h-[660px] bg-white p-8 shadow-sm print:min-h-0 print:p-0">
+    <div ref={papelRef} className="atlas-recibo-papel box-border min-h-[660px] w-full bg-white p-8 shadow-sm print:min-h-0 print:p-0">
       <header className="border-b-2 border-slate-900 pb-5">
         <p className="text-xs font-black uppercase tracking-widest text-slate-900">ESQUADRIFÁCIO</p>
         <p className="mt-1 text-xs text-slate-600">Soluções em Alumínio</p>
@@ -113,7 +138,7 @@ export default function ReciboImpressao({
       {dados.itens && dados.itens.length > 0 && <section className="mt-6">
         <h2 className="mb-3 text-sm font-bold text-slate-800">{dados.consolidado ? 'Recebimentos incluídos neste recibo' : 'Detalhamento do pagamento'}</h2>
         <div className="overflow-hidden rounded-xl border border-slate-200">
-          {dados.itens.map((item, indice) => <div key={item.id} className="border-b border-slate-200 p-3 text-xs last:border-0">
+          {dados.itens.map((item, indice) => <div key={item.id} className="atlas-recibo-item border-b border-slate-200 p-3 text-xs last:border-0">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div><b>Lançamento {indice + 1} · {item.data.slice(8,10)}/{item.data.slice(5,7)}/{item.data.slice(0,4)}</b>
                 {item.obra && <p className="mt-1 text-slate-600">Obra: {item.obra}</p>}
@@ -129,7 +154,7 @@ export default function ReciboImpressao({
           </div>)}
         </div>
       </section>}
-      <section className="mt-7 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
+      <section className="atlas-recibo-resumo mt-7 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{dados.tipo === 'pagar' ? 'Valor pago' : dados.consolidado ? 'Total efetivamente recebido' : 'Valor recebido neste lançamento'}</span>
           <b className="text-2xl text-slate-900">{r.movimento}</b>

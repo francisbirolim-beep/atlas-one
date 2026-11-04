@@ -38,7 +38,7 @@ export default function ReciboConsolidadoPage() {
     return () => { ativo = false }
   },[ids,clienteId])
 
-  return <main className="min-h-screen bg-slate-100 p-4 sm:p-8 print:bg-white print:p-0">
+  return <main className="atlas-recibo-pagina min-h-screen bg-slate-100 p-4 sm:p-8 print:min-h-0 print:bg-white print:p-0">
     <div className="no-print mx-auto mb-4 max-w-[820px]"><Link href={clienteId?`/clientes/${clienteId}`:'/financeiro/contas-receber'} className="text-sm font-semibold text-blue-700 underline">← Voltar ao cliente</Link></div>
     {carregando ? <p className="text-center text-sm text-slate-600">Conferindo os recebimentos selecionados...</p>
       : erro ? <p role="alert" className="mx-auto max-w-[820px] rounded-xl bg-red-50 p-4 text-sm text-red-700">{erro}</p>

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { MessageCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { rotaReciboAutenticado } from '@/lib/reciboImpressaoRota'
 
 export default function BotaoChatGlobal() {
   const pathname = usePathname()
@@ -43,7 +44,7 @@ export default function BotaoChatGlobal() {
     return()=>{ativo=false;if(canal)void supabase.removeChannel(canal)}
   },[])
 
-  if(pathname.startsWith('/whatsapp'))return null
+  if(pathname.startsWith('/whatsapp') || rotaReciboAutenticado(pathname))return null
 
   return (
     <Link href="/whatsapp" aria-label="Abrir WhatsApp Atlas" title="WhatsApp Atlas"
