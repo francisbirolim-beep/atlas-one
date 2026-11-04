@@ -20,15 +20,21 @@ export async function GET(request: NextRequest) {
     })
     if (resposta.ok) {
       const dados = await resposta.json() as CepEnderecoViaCep
-      if (!dados.erro && formatarCep(dados.cep || '')) {
-        return NextResponse.json({
-          cep: formatarCep(dados.cep || ''), rua: dados.logradouro || '',
-          bairro: dados.bairro || '', cidade: dados.localidade || '',
-          uf: dados.uf || '', origem: 'viacep',
-        })
+      if (dados.erro || !formatarCep(dados.cep || '')) {
+        // CEP declarado inexistente pelo ViaCEP: não aceitar um registro genérico
+        // de outro fornecedor como se fosse o CEP exato da rua.
+        return NextResponse.json({ error: 'CEP não encontrado na base postal. Confira os oito dígitos.' }, { status: 404 })
       }
+      return NextResponse.json({
+        cep: formatarCep(dados.cep || ''), rua: dados.logradouro || '',
+        bairro: dados.bairro || '', cidade: dados.localidade || '',
+        uf: dados.uf || '', origem: 'viacep',
+      })
     }
-  } catch { /* tenta BrasilAPI como contingência */ }
+    if (resposta.status === 400 || resposta.status === 404) {
+      return NextResponse.json({ error: 'CEP não encontrado na base postal.' }, { status: 404 })
+    }
+  } catch { /* apenas indisponibilidade da base principal permite contingência */ }
 
   try {
     const resposta = await fetch(`https://brasilapi.com.br/api/cep/v1/${digitos}`, {

@@ -5,7 +5,7 @@ import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { CalendarDays, Clock3, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
+import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
@@ -81,7 +81,7 @@ export default function ProspeccaoPage() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6">
           <div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-600">Comercial · Campo</p><h1 className="text-xl font-bold text-slate-900">Prospecção</h1><p className="text-sm text-slate-500">Obras encontradas, contatos e próximos passos.</p></div>
-          <Link href="/prospeccao/nova" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm"><Plus size={17}/> Nova prospecção</Link>
+          <div className="flex flex-wrap items-center gap-2"><Link href="/relatorios/prospeccao" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-bold text-blue-700"><FileText size={16}/> Relatório de prospecção</Link><Link href="/prospeccao/nova" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm"><Plus size={17}/> Nova prospecção</Link></div>
         </div>
       </header>
 
