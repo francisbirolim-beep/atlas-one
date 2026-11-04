@@ -8,7 +8,7 @@ export type DocumentoPdf={
  grupos:GrupoPdf[];total:number;totalRegistros:number;unidadeTotal:'R$'
 }
 const safe=(v:string)=>String(v||'—').replace(/[\u0000-\u001f]/g,' ')
-async function imagemCanvas(url:string,maxWidth=500){
+async function imagemCanvas(url:string,maxWidth=500,formato:'JPEG'|'PNG'='JPEG'){
  if(!url.startsWith('https://')&&!url.startsWith('/'))return null
  return new Promise<string|null>(resolve=>{
   const img=new Image()
@@ -23,9 +23,9 @@ async function imagemCanvas(url:string,maxWidth=500){
     canvas.height=Math.max(1,Math.round(img.naturalHeight*escala))
     const ctx=canvas.getContext('2d')
     if(!ctx){resolve(null);return}
-    ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height)
+    if(formato==='JPEG'){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height)}
     ctx.drawImage(img,0,0,canvas.width,canvas.height)
-    resolve(canvas.toDataURL('image/jpeg',0.84))
+    resolve(formato==='PNG'?canvas.toDataURL('image/png'):canvas.toDataURL('image/jpeg',0.84))
    }catch{resolve(null)}
   }
   img.onerror=()=>{window.clearTimeout(timer);resolve(null)}
@@ -40,7 +40,7 @@ export async function baixarPdfGerencial(info:DocumentoPdf){
  let pagina=0
  const moeda=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
  const colunas=info.colunas
- const logo=await imagemCanvas('/branding/esquadrifacio-logo-r-transparente-escuro.webp',700)
+ const logo=await imagemCanvas('/branding/esquadrifacio-logo-r-transparente-claro.webp',1280,'PNG')
  const fotosCache=new Map<string,string|null>()
  const fotos=[...new Set(info.grupos.map(g=>g.imagem).filter((x):x is string=>Boolean(x)))]
  for(let i=0;i<fotos.length;i+=8){
@@ -52,7 +52,7 @@ export async function baixarPdfGerencial(info:DocumentoPdf){
   doc.setFillColor(244,247,250);doc.rect(0,0,w,31,'F')
   doc.setTextColor(18,50,75);doc.setFont('helvetica','bold');doc.setFontSize(13)
   doc.text('ESQUADRIFÁCIO',left,11)
-  if(logo)try{doc.addImage(logo,'JPEG',right-55,2,55,10)}catch{}
+  if(logo)try{doc.addImage(logo,'PNG',right-63,2,63,11.6)}catch{}
   doc.setFontSize(15);doc.text(safe(info.titulo),left,21)
   doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(80,92,105)
   doc.text(safe('Período: '+info.periodo),left,27)
