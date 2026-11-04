@@ -45,6 +45,16 @@ export async function POST(req:NextRequest){
   if(!UUID.test(vendaId)||!UUID.test(recebimentoId))return falha('Venda ou recebimento inválido.')
   if(anterior===null||novo===null||novo===anterior)return falha('Informe um valor de pagamento válido e diferente do anterior.')
   if(justificativa.length<8||justificativa.length>500)return falha('Justificativa obrigatória (8 a 500 caracteres).')
+  // A correção legada atualiza somente o total. Não pode desalinhar o detalhamento
+  // de um recebimento com várias formas. Para esse caso usar estorno/substituição auditados.
+  const {data:recebimento,error:erroConsulta}=await supabaseAdmin.from('financeiro_recebimentos')
+    .select('id,forma').eq('empresa_id',u.empresa_id).eq('id',recebimentoId).maybeSingle()
+  if(erroConsulta)return falha('Não foi possível conferir a composição do recebimento.',503)
+  if(!recebimento)return falha('Recebimento não encontrado.',404)
+  const {count:linhasFormas,error:erroFormas}=await supabaseAdmin.from('financeiro_recebimento_formas')
+    .select('id',{head:true,count:'exact'}).eq('empresa_id',u.empresa_id).eq('recebimento_id',recebimentoId)
+  if(erroFormas&&!['42P01','PGRST205'].includes(erroFormas.code||''))return falha('Não foi possível validar as formas do recebimento.',503)
+  if(recebimento.forma==='multiplo'||Number(linhasFormas||0)>0)return falha('Este recebimento possui formas detalhadas. Utilize Alterar na aba Financeiro desta venda.',409)
   const token=(req.headers.get('authorization')||'').replace(/^Bearer\s+/i,'').trim()
   const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{auth:{persistSession:false,autoRefreshToken:false},

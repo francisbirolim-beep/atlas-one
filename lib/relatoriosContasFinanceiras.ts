@@ -9,7 +9,7 @@ export type TituloFinanceiro={
 }
 export type MovimentoFinanceiro={
  id:string;tipo:TipoConta;pessoa:string;data:string;valor:number;forma:string|null;
- referencia:string|null;tituloId:string|null
+ referencia:string|null;tituloId:string|null;formas?:Array<{forma:string;valor:number}>
 }
 export type Faixa='vencidas'|'ate7'|'ate30'|'mais30'|'semData'
 export type ResumoFinanceiro={

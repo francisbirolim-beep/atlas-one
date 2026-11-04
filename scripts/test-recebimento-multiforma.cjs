@@ -1,0 +1,85 @@
+'use strict'
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const vm = require('node:vm')
+const ts = require('typescript')
+
+const root = path.join(__dirname, '..')
+const read = (name) => fs.readFileSync(path.join(root, name), 'utf8')
+const source = read('lib/recebimentoFormas.ts')
+const js = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+}).outputText
+const helperExports = {}
+vm.runInNewContext(js, { exports: helperExports }, { filename: 'recebimentoFormas.js' })
+const { rotuloFormaRecebimento, detalhamentoRecebimento, FORMAS_RECEBIMENTO } = helperExports
+
+assert.equal(rotuloFormaRecebimento('multiplo'), 'Múltiplas formas')
+assert.equal(rotuloFormaRecebimento('pix'), 'PIX')
+assert.equal(rotuloFormaRecebimento('cartao_credito'), 'Cartão de crédito')
+assert.equal(rotuloFormaRecebimento('dinheiro'), 'Dinheiro')
+assert.ok(FORMAS_RECEBIMENTO.some(x => x.valor === 'cheque'))
+
+const meioPix = { forma: 'pix', valor: 1500 }
+const meioCartao = { forma: 'cartao_credito', valor: 2000 }
+const detalhamento = detalhamentoRecebimento([meioPix, meioCartao], 'multiplo', 3500)
+assert.equal(detalhamento.length, 2)
+assert.equal(detalhamento.reduce((s, linha) => s + linha.valor, 0), 3500)
+assert.equal(detalhamentoRecebimento([], 'dinheiro', 3500)[0].valor, 3500)
+assert.equal(detalhamentoRecebimento([], 'multiplo', 3500).length, 0)
+assert.equal(Math.round((11682.36 - 682.36) * 100) / 100, 11000)
+
+const migration = read('supabase/migrations/20261104142424_recebimento_venda_multiforma_20261104.sql')
+assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.financeiro_recebimento_formas/)
+assert.match(migration, /ALTER TABLE public\.financeiro_recebimento_formas ENABLE ROW LEVEL SECURITY/)
+assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.financeiro_recebimento_ajustes/)
+assert.match(migration, /ALTER TABLE public\.financeiro_recebimento_ajustes ENABLE ROW LEVEL SECURITY/)
+assert.match(migration, /public\.registrar_recebimento_venda_autorizado\(/)
+assert.match(migration, /public\.registrar_recebimento_venda_multiforma\(/)
+assert.match(migration, /SECURITY DEFINER/)
+assert.match(migration, /CREATE TRIGGER trg_recebimento_composicao_valor_imutavel/)
+assert.match(migration, /private\.bloquear_edicao_valor_recebimento_composto/)
+assert.match(migration, /WHERE id=p_recebimento_id AND empresa_id=v_empresa AND cliente_id=v_venda\.cliente_id/)
+assert.match(migration, /v_rec\.status IN \('cancelado','estornado'\)/)
+assert.match(migration, /SET status='cancelado'/)
+assert.match(migration, /INSERT INTO public\.financeiro_recebimento_ajustes/)
+assert.match(migration, /p_motivo text/)
+assert.match(migration, /v_usuario,v_nome/)
+assert.match(migration, /FROM PUBLIC,anon/)
+assert.match(migration, /GRANT EXECUTE ON FUNCTION public\.ajustar_recebimento_venda_auditado/)
+assert.match(migration, /v_novo := public\.registrar_recebimento_venda_multiforma/)
+// Estorno: reduzir o acumulado pago E o acumulado de descontos, sem inflar o preço da venda.
+assert.match(migration, /v_desc := round\(coalesce\(v_conta\.valor_desconto,0\)-v_item\.total_desconto,2\)/)
+assert.match(migration, /SET valor_pago=greatest\(0,v_pago\),valor_desconto=greatest\(0,v_desc\)/)
+assert.doesNotMatch(migration, /SET valor=v_conta_valor/)
+assert.doesNotMatch(migration, /v_conta\.valor\+v_item\.total_desconto/)
+
+assert.ok(!migration.includes('p_venda_id_placeholder'))
+
+const registration = read('app/api/vendas/financeiro/recebimento-multiforma/route.ts')
+const adjustments = read('app/api/vendas/financeiro/ajustar-recebimento/route.ts')
+const legacyCorrection = read('app/api/vendas/financeiro/corrigir-recebimento/route.ts')
+const receipt = read('app/clientes/[id]/vendas/[vendaId]/recibo/[recebimentoId]/page.tsx')
+const generalReceipt = read('components/financeiro/ReciboImpressao.tsx')
+const financeReport = read('app/api/relatorios/financeiro-contas/route.ts')
+const view = read('components/clientes/VendaObraCentral.tsx')
+assert.match(registration, /VERCEL_ENV==='preview'/)
+assert.match(adjustments, /VERCEL_ENV==='preview'/)
+assert.match(adjustments, /ajustar_recebimento_venda_auditado/)
+assert.match(legacyCorrection, /recebimento\.forma==='multiplo'/)
+assert.match(legacyCorrection, /fn_corrigir_recebimento_venda_master_v1/)
+assert.match(receipt, /RECIBO CANCELADO/)
+assert.match(receipt, /detalhamentoRecebimento\(/)
+assert.match(generalReceipt, /Detalhamento do pagamento/)
+assert.match(generalReceipt, /item\.formas\?\.length/)
+assert.match(generalReceipt, /descricaoFormaRecibo\(forma\.forma, forma\.parcelas\)/)
+assert.match(migration, /cartao_parcelas/)
+assert.match(migration, /financeiro_recebimento_formas_parcelas_ck/)
+assert.match(financeReport, /composicoes\.get/)
+assert.match(view, /Adicionar forma de pagamento/)
+assert.match(view, /Negociação e desconto geral da venda/)
+assert.match(view, /Motivo obrigatório/)
+assert.match(view, /recebimentosVenda\.filter\(r=>r\.status!=='cancelado'/)
+
+console.log('Recebimento multiforma: 34+ verificações unitárias e guardas de segurança aprovados.')
