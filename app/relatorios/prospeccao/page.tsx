@@ -7,6 +7,7 @@ import {usuarioAtual} from '@/lib/auth'
 import {listarProspeccoes,STATUS_PROSPECCAO,type Prospeccao} from '@/lib/prospeccao'
 import {baixarCsv} from '@/lib/relatorios'
 import type {Usuario} from '@/lib/tipos'
+import { LOGOTIPO_PDF_FUNDO_CLARO } from '@/lib/brandingRelatorios'
 
 const nomeStatus=(s:string)=>STATUS_PROSPECCAO.find(v=>v.id===s)?.label||s
 const dataBR=(s:string|null|undefined)=>s?new Date(s).toLocaleDateString('pt-BR'):'—'
@@ -30,7 +31,7 @@ function Grafico({titulo,dados,total}:{titulo:string;dados:[string,number][];tot
 async function carregarLogo():Promise<string|null>{
  return new Promise(resolve=>{const img=new Image();img.onload=()=>{
   try{const cv=document.createElement('canvas');cv.width=img.naturalWidth;cv.height=img.naturalHeight;cv.getContext('2d')?.drawImage(img,0,0);resolve(cv.toDataURL('image/png'))}catch{resolve(null)}
- };img.onerror=()=>resolve(null);img.src='/branding/esquadrifacio-logo-r-transparente-escuro.webp'})
+ };img.onerror=()=>resolve(null);img.src=LOGOTIPO_PDF_FUNDO_CLARO})
 }
 export default function RelatorioProspeccao(){
  const acesso=useRelatoriosAcesso().comercial
@@ -102,10 +103,16 @@ export default function RelatorioProspeccao(){
     doc.setFontSize(9);doc.setFont('helvetica','normal')
     doc.text('Período: '+dataBR(inicio+'T12:00:00')+' a '+dataBR(fim+'T12:00:00')+' | Total: '+filtrados.length+' | Abertas: '+abertos+' | Convertidas em cliente: '+convertidos,12,21)
     doc.text('Cidade: '+(cidade||'Todas')+' | Bairro: '+(bairro||'Todos')+' | Situação: '+(status?nomeStatus(status):'Todas'),12,28)
+    let logoInserido=false
     if(logo){try{
       const d=doc.getImageProperties(logo),h=Math.min(23,45/Math.max(1,d.width/d.height)),w=h*d.width/d.height
       doc.addImage(logo,'PNG',297-12-w,6,w,h)
-    }catch{/* PDF permanece utilizável se a imagem falhar */}}
+      logoInserido=true
+    }catch{/* O texto de identificação abaixo mantém a marca legível */}}
+    if(!logoInserido){
+      doc.setTextColor(22,49,77);doc.setFont('helvetica','bold');doc.setFontSize(12)
+      doc.text('ESQUADRIFÁCIO',285,14,{align:'right'})
+    }
     doc.setFontSize(8);doc.text('Página '+pagina,285,204,{align:'right'})
     doc.setDrawColor(220,228,238);doc.line(12,198,285,198)
    }
