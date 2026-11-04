@@ -1,6 +1,6 @@
 'use client'
 import {useEffect,useState} from 'react'
-import {useParams} from 'next/navigation'
+import {useParams,usePathname} from 'next/navigation'
 import {ImageOff,Printer} from 'lucide-react'
 import {supabase} from '@/lib/supabase'
 
@@ -9,7 +9,8 @@ type Material={id:string;item_ref?:string;produto_id?:string;codigo?:string;desc
 const grupos=[{id:'perfil',nome:'Perfis e cortes'},{id:'acessorio',nome:'Acessórios'},{id:'vidro',nome:'Vidros'},{id:'outro',nome:'Outros'}]
 const qtd=(v:any)=>Number(v||0).toLocaleString('pt-BR',{maximumFractionDigits:3})
 export default function FichasTipologias(){
- const {id:obraId}=useParams<{id:string}>()
+ const {id:escopoId}=useParams<{id:string}>()
+ const porVenda=usePathname().startsWith('/vendas/')
  const [itens,setItens]=useState<Item[]>([])
  const [materiais,setMateriais]=useState<Material[]>([])
  const [imagens,setImagens]=useState<Record<string,string>>({})
@@ -21,9 +22,14 @@ export default function FichasTipologias(){
    try{
     const qs=new URLSearchParams(window.location.search),pacoteId=qs.get('pacote')||''
     if(!/^[0-9a-f-]{36}$/i.test(pacoteId))throw Error('Pacote técnico inválido.')
-    const pr=await supabase.from('pacotes_tecnicos').select('id,orcamento_id,versao,snapshot_itens')
-     .eq('id',pacoteId).eq('obra_id',obraId).neq('status','substituido').maybeSingle()
-    if(pr.error||!pr.data)throw Error('Pacote técnico não encontrado para esta obra.')
+    const vr=porVenda?await supabase.from('vendas_obras').select('id,obra_id,orcamento_id').eq('id',escopoId).maybeSingle():null
+    if(porVenda&&(vr?.error||!vr?.data))throw Error('Venda não encontrada ou acesso negado.')
+    const obraId=porVenda?(vr?.data?.obra_id||null):escopoId
+    let consulta=supabase.from('pacotes_tecnicos').select('id,orcamento_id,versao,snapshot_itens')
+     .eq('id',pacoteId).neq('status','substituido')
+    consulta=porVenda?consulta.eq('orcamento_id',vr!.data!.orcamento_id):consulta.eq('obra_id',obraId!)
+    const pr=await consulta.maybeSingle()
+    if(pr.error||!pr.data)throw Error('Pacote técnico não encontrado nesta venda/obra.')
     const p=pr.data,snapshot=Array.isArray(p.snapshot_itens)?p.snapshot_itens as Item[]:[]
     const refs=qs.get('refs')?.split('|').filter(Boolean)||[]
     const selecionados=refs.length?snapshot.filter(x=>refs.includes(String(x.id||''))):snapshot
@@ -31,7 +37,7 @@ export default function FichasTipologias(){
     const [mr,or,ob]=await Promise.all([
      supabase.from('pacote_tecnico_materiais').select('*').eq('pacote_id',pacoteId).eq('excluido',false).order('ordem'),
      supabase.from('orcamentos').select('numero,cliente_nome,clientes(nome)').eq('id',p.orcamento_id).maybeSingle(),
-     supabase.from('obras').select('numero,nome').eq('id',obraId).maybeSingle()
+     obraId?supabase.from('obras').select('numero,nome').eq('id',obraId).maybeSingle():Promise.resolve({data:{numero:'—',nome:'Venda sem obra vinculada'},error:null})
     ])
     if(mr.error||or.error||ob.error)throw Error(mr.error?.message||or.error?.message||ob.error?.message||'Não foi possível carregar os dados.')
     const dados=((mr.data||[]) as Material[]).filter(m=>selecionados.some(i=>String(i.id||'')===String(m.item_ref||'')))
@@ -56,7 +62,7 @@ export default function FichasTipologias(){
    finally{if(ativo)setLoading(false)}
   }
   void carregar();return()=>{ativo=false}
- },[obraId])
+ },[escopoId,porVenda])
  function foto(m:Material){
   const raw=m.wvetro_dados||{}
   return (m.produto_id&&imagens['id:'+m.produto_id])||imagens['codigo:'+String(m.codigo||'').toUpperCase()]||

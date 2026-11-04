@@ -120,6 +120,38 @@ export async function GET(req:NextRequest){
  const pacoteId=str(req.nextUrl.searchParams.get('pacoteId'),80)
  const tipo=str(req.nextUrl.searchParams.get('tipo'),30)
  const itemRef=str(req.nextUrl.searchParams.get('itemRef'),150)
+ // Uma consulta para todos os cartões evita abrir cada tipologia ou fazer dezenas
+ // de requisições somente para mostrar o estado da conferência.
+ if(tipo==='resumo'){
+  if(!uuid.test(pacoteId))return bad('Pacote técnico inválido.')
+  const pacote=await contexto(req,vendaId,pacoteId)
+  if(!pacote?.pacote)return bad('Pacote técnico não encontrado.',404)
+  const itens=Array.isArray(pacote.pacote.snapshot_itens)?pacote.pacote.snapshot_itens:[]
+  const {data,error}=await supabaseAdmin.from('ai_aprendizado_entradas')
+   .select('created_at,criado_por_nome,metadados')
+   .eq('empresa_id',pacote.u.empresa_id)
+   .contains('metadados',{wvetro_conferencia:{venda_id:vendaId,pacote_id:pacoteId,tipo:'tipologia'}})
+   .order('created_at',{ascending:false}).limit(500)
+  if(error)return bad('Não foi possível consultar as validações.',500)
+  const ultimas=new Map<string,any>()
+  for(const registro of data||[]){
+   const ref=String(registro.metadados?.wvetro_conferencia?.item_ref||'')
+   if(ref&&!ultimas.has(ref))ultimas.set(ref,registro)
+  }
+  const situacoes:Record<string,{situacao:string;data?:string;responsavel?:string|null}>={}
+  for(const item of itens){
+   const ref=String(item?.id||'')
+   if(!ref)continue
+   const linhas=pacote.materiais.filter(m=>String(m.item_ref||'')===ref)
+   const registro=ultimas.get(ref)
+   const hash=registro?.metadados?.wvetro_conferencia?.hash_fonte
+   situacoes[ref]=!linhas.length?{situacao:'sem_materiais'}:!registro?{situacao:'pendente'}:{
+    situacao:hash===assinaturaTecnica(linhas)?'validada':'revisar',
+    data:registro.created_at,responsavel:registro.criado_por_nome
+   }
+  }
+  return NextResponse.json({situacoes},{headers:{'Cache-Control':'private,no-store'}})
+ }
  if(!uuid.test(pacoteId)||!['tipologia','materiais'].includes(tipo))return bad('Informe o pacote e o tipo para consultar a validação.')
  const validado=await contexto(req,vendaId,pacoteId,tipo,itemRef)
  if(!validado?.pacote)return bad('Pacote técnico não encontrado.',404)
