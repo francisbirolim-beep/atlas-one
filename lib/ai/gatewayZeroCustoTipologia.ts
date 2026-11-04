@@ -146,7 +146,9 @@ export async function analisarComGatewayZeroCusto(entrada: Entrada): Promise<Res
       })
       if (!resposta.ok) {
         ultimoErro = statusDeErro(resposta.status)
-        if (ultimoErro.codigo === 'acesso_negado' || ultimoErro.codigo === 'limite_gratuito') break
+        // Rate limit pode afetar somente um modelo gratuito: tentar outro também gratuito.
+        // HTTP 402 e autenticação negada são limites da conta, por isso param a busca.
+        if (ultimoErro.codigo === 'acesso_negado' || resposta.status === 402) break
         continue
       }
       const json = await resposta.json().catch(() => ({}))

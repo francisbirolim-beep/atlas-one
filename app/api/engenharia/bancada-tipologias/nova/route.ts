@@ -85,7 +85,7 @@ Não invente desenhos de seção transversal e não infira folgas. A comparaçã
 async function analisarDocumento(doc: DocumentoLido, observacoes: string) {
   const diagnostico = diagnosticarRelatorio(doc.conteudo, doc.nome)
   const extraidos = diagnostico.componentes
-  const jaTemCortes = extraidos.some(c => c.comprimento_mm != null)
+  const jaTemCortes = extraidos.some(c => c.eixo && c.comprimento_mm != null)
   let respostaIA = ''
   let origemIA = 'leitura técnica local'
   let statusIA: 'executada' | 'dispensada' | 'indisponivel' | 'documento_sem_cortes' = 'dispensada'
