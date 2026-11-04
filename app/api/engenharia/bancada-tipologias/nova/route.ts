@@ -8,6 +8,8 @@ import { consultarTrenaGratisComAlternativa } from '@/lib/ai/trenaVisionGratis'
 import { assinaturaTecnica, conferirCaso, type CasoTipologia } from '@/lib/bancadaTipologias'
 import { extrairCortesTexto, extrairRespostaIA, formulaHipotese, normalizarComponentes, tipoCroquiSeguro, type ComponenteCandidato } from '@/lib/bancadaCriacaoTipologia'
 import type { TipologiaFormulasCorte } from '@/lib/formulasCorteEngine'
+import { diagnosticarRelatorio, pareceAtalhoWeb, extrairComponentesRelatorio } from '@/lib/engenhariaImportacaoWvetro'
+import { textoCatalogoGeometrico } from '@/lib/ai/catalogoPdfTexto'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,9 +25,10 @@ const medidas = (v: unknown) => { const n = Number(v); return Number.isFinite(n)
 type DocumentoLido = {
   buffer: Buffer
   mime: string
-  extensao: 'pdf' | 'png' | 'jpg' | 'webp'
+  extensao: 'pdf' | 'png' | 'jpg' | 'webp' | 'url'
   conteudo: string
   paginas: number
+  nome: string
 }
 async function lerDocumento(arquivo: FormDataEntryValue | null): Promise<DocumentoLido | null> {
   if (!(arquivo instanceof File) || !arquivo.size) return null
@@ -35,13 +38,41 @@ async function lerDocumento(arquivo: FormDataEntryValue | null): Promise<Documen
   const ehPng = buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
   const ehJpg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
   const ehWebp = buffer.subarray(0,4).toString() === 'RIFF' && buffer.subarray(8,12).toString() === 'WEBP'
-  if (!ehPdf && !ehPng && !ehJpg && !ehWebp) throw new Error('Arquivo inválido. Use PDF, PNG, JPG ou WebP.')
+  // Arquivos .webloc/.url e atalhos recebidos do Mac não são PDFs técnicos.
+  // Guardamos a referência sem tentar acessar links privados ou credenciais do W.Vetro.
+  const inicio = buffer.subarray(0, 4096).toString('utf8')
+  if (!ehPdf && !ehPng && !ehJpg && !ehWebp && pareceAtalhoWeb(arquivo.name, inicio)) {
+    return { buffer, nome: arquivo.name, mime: 'text/plain', extensao:'url',
+      conteudo: inicio, paginas:0 }
+  }
+  if (!ehPdf && !ehPng && !ehJpg && !ehWebp) {
+    throw new Error('O item escolhido não é PDF nem imagem. No W.Vetro, abra o relatório e selecione Imprimir/Exportar → Salvar como PDF. Também é possível salvar a tipologia como rascunho sem arquivo.')
+  }
   if (ehPdf) {
     const pdf = await pdfParse(buffer, { max: 70 })
     if (pdf.numpages > 70) throw new Error('O PDF deve ter até 70 páginas.')
-    return { buffer, mime: 'application/pdf', extensao: 'pdf', conteudo: String(pdf.text || '').replace(/\0/g,' ').slice(0,50000), paginas: pdf.numpages }
+    let texto = String(pdf.text || '').replace(/\0/g,' ').slice(0,50000)
+    const lidas = extrairComponentesRelatorio(texto)
+    if (!pareceAtalhoWeb(arquivo.name,texto) &&
+       (!lidas.length || !lidas.some(c => c.eixo && c.comprimento_mm != null))) {
+      // PDFs do W.Vetro usam colunas com posições. O texto corrido costuma fundir
+      // rótulos, quantidades e cortes; reconstruímos as linhas pelas coordenadas.
+      try {
+        const geometrico = await pdfParse(buffer, { max: 70, pagerender: async (pagina: any) => {
+          const conteudo = await pagina.getTextContent({ normalizeWhitespace: false })
+          return textoCatalogoGeometrico(conteudo.items || [])
+        } })
+        const linhas = String(geometrico.text || '').replace(/\0/g,' ').slice(0,50000)
+        const qualidade = (lista: ComponenteCandidato[]) =>
+          lista.filter(c=>c.eixo && c.comprimento_mm != null).length * 5 +
+          lista.filter(c=>c.comprimento_mm != null).length * 3 + lista.length
+        if (qualidade(extrairComponentesRelatorio(linhas)) > qualidade(lidas)) texto = linhas
+      } catch { /* manter o texto original, sem perder o PDF */ }
+    }
+    return { buffer, nome: arquivo.name, mime: 'application/pdf', extensao: 'pdf',
+      conteudo: texto, paginas: pdf.numpages }
   }
-  return { buffer, mime: ehPng ? 'image/png' : ehJpg ? 'image/jpeg' : 'image/webp',
+  return { buffer, nome: arquivo.name, mime: ehPng ? 'image/png' : ehJpg ? 'image/jpeg' : 'image/webp',
     extensao: ehPng ? 'png' : ehJpg ? 'jpg' : 'webp', conteudo: '', paginas: 1 }
 }
 
@@ -53,9 +84,11 @@ Quando não houver código legível, omita o componente. Quando não houver comp
 Não invente desenhos de seção transversal e não infira folgas. A comparação humana é obrigatória.`
 
 async function analisarDocumento(doc: DocumentoLido, observacoes: string) {
-  const extraidos = extrairCortesTexto(doc.conteudo)
+  const diagnostico = diagnosticarRelatorio(doc.conteudo, doc.nome)
+  const extraidos = diagnostico.componentes
+  const jaTemCortes = extraidos.some(c => c.comprimento_mm != null)
   let respostaIA = ''
-  let origemIA = 'leitura local'
+  let origemIA = 'leitura técnica local'
   let aviso = ''
   try {
     if (doc.mime.startsWith('image/')) {
@@ -66,7 +99,7 @@ async function analisarDocumento(doc: DocumentoLido, observacoes: string) {
       })
       respostaIA = resposta.resposta
       origemIA = resposta.rota
-    } else if (doc.conteudo.trim()) {
+    } else if (doc.conteudo.trim() && !jaTemCortes && diagnostico.estado !== 'link_wvetro') {
       const resposta = await consultarOpenCodePublicFree({
         system: instrucaoIA,
         prompt: 'Extraia somente cortes e componentes explicitamente identificados no PDF. Texto:\n' + doc.conteudo.slice(0,13000) + '\nObservações: ' + observacoes,
@@ -75,14 +108,20 @@ async function analisarDocumento(doc: DocumentoLido, observacoes: string) {
       origemIA = resposta?.modelId || 'leitura local'
     }
   } catch {
-    aviso = 'Leitor de IA indisponível. O arquivo permanece disponível para análise manual.'
+    aviso = 'A IA está temporariamente indisponível. A leitura técnica local e o salvamento do rascunho continuam disponíveis.'
   }
   const interpretado = extrairRespostaIA(respostaIA)
-  const componentes = interpretado.componentes.length ? interpretado.componentes : extraidos
-  if (!componentes.length) aviso = [aviso, 'Não foi possível confirmar cortes pelo arquivo. Preencha a lista de componentes manualmente.'].filter(Boolean).join(' ')
-  return { componentes, descricao: interpretado.descricao, tipo_croqui: tipoCroquiSeguro(interpretado.tipo_croqui || observacoes),
+  const qualidade = (lista: ComponenteCandidato[]) =>
+    lista.filter(c => c.eixo && c.comprimento_mm != null).length * 3 + lista.length
+  const componentes = qualidade(interpretado.componentes) > qualidade(extraidos)
+    ? interpretado.componentes : extraidos
+  if (!componentes.length) aviso = [aviso, diagnostico.mensagem].filter(Boolean).join(' ')
+  else if (diagnostico.estado !== 'lista_corte')
+    aviso = [aviso, 'As linhas sugeridas precisam de conferência manual antes de validar qualquer corte.'].filter(Boolean).join(' ')
+  return { componentes, descricao: interpretado.descricao,
+    tipo_croqui: tipoCroquiSeguro(interpretado.tipo_croqui || observacoes),
     texto_extraido: doc.conteudo.slice(0,15000), origem_ia: origemIA, aviso,
-    paginas: doc.paginas }
+    estado_documento: diagnostico.estado, paginas: doc.paginas }
 }
 
 export async function POST(req: NextRequest) {
@@ -115,8 +154,9 @@ export async function POST(req: NextRequest) {
     return responderErro('Existem códigos ou quantidades de materiais incompletos. Corrija todos os componentes antes de salvar.', 422)
   }
   if (nome.length < 4 || !largura || !altura) return responderErro('Informe nome, largura e altura reais do primeiro projeto.')
-  if (!componentes.length) return responderErro('Adicione ao menos um componente identificado; sem perfil confirmado não é possível criar a receita.')
-  if (componentes.filter(c => c.tipo === 'perfil').length === 0) return responderErro('Adicione pelo menos um perfil à receita técnica.')
+  // O laboratório pode nascer vazio: foto, link ou PDF comercial não devem
+  // bloquear o cadastro da tipologia. Peças sem identificação nunca são ativadas.
+  const incompleto = componentes.filter(c => c.tipo === 'perfil').length === 0
   const fonte = valor(dados.fonte, 200) || 'Foto ou PDF de referência'
   let doc: DocumentoLido | null = null
   try { doc = await lerDocumento(form.get('arquivo')) } catch (e) {
@@ -124,10 +164,13 @@ export async function POST(req: NextRequest) {
   }
 
   const codigos = Array.from(new Set(componentes.map(c => c.codigo)))
-  const { data: catalogo, error: erroCatalogo } = await supabaseAdmin.from('produtos')
-    .select('codigo,nome,categoria,foto_url,ativo')
-    .eq('empresa_id', usuario.empresa_id)
-    .in('codigo', codigos).limit(250)
+  const buscaCatalogo = codigos.length
+    ? await supabaseAdmin.from('produtos')
+      .select('codigo,nome,categoria,foto_url,ativo')
+      .eq('empresa_id', usuario.empresa_id)
+      .in('codigo', codigos).limit(250)
+    : { data: [], error: null }
+  const { data: catalogo, error: erroCatalogo } = buscaCatalogo
   if (erroCatalogo) return responderErro('Não foi possível conferir o catálogo de materiais.', 500)
   const encontrados = new Map((catalogo || []).map(p => [String(p.codigo || '').toUpperCase(), p]))
   const pendentes = codigos.filter(c => !encontrados.has(c))
@@ -167,7 +210,10 @@ export async function POST(req: NextRequest) {
     croqui_parametrico: { tipo: tipo_croqui, largura_mm: largura, altura_mm: altura, versao: 1 },
     componentes_identificados: componentes, candidatos_catalogo: pendentes, componentes_sem_imagem: semImagem,
     anexo_origem_privado: caminho, empresa_id: usuario.empresa_id,
-    aviso: 'Todas as fórmulas foram propostas com base em uma única referência e NÃO estão validadas.',
+    estado_inicial: incompleto ? 'aguardando_componentes' : 'com_componentes_a_conferir',
+    aviso: incompleto
+      ? 'Tipologia salva sem perfis confirmados. Anexe a lista de corte e complete os códigos e imagens antes de validar.'
+      : 'Todas as fórmulas foram propostas com base em uma única referência e NÃO estão validadas.',
   }
   const receita = await supabaseAdmin.from('engenharia_tipologia_formulas_corte')
     .insert({ tipologia_id: tipologia.id, configuracao_chave: 'laboratorio_inicial',
@@ -198,7 +244,9 @@ export async function POST(req: NextRequest) {
   const assinar = createHash('sha256').update(assinaturaTecnica(definicao) + JSON.stringify(acessorios)).digest('hex')
   const registro = await supabaseAdmin.from('ai_aprendizado_entradas').insert({
     empresa_id: usuario.empresa_id, tipo: doc ? 'arquivo' : 'regra', titulo: 'Tipologia · ' + nome,
-    descricao: 'Fonte inicial e hipóteses de engenharia, aguardando conferência humana.',
+    descricao: incompleto
+      ? 'Rascunho de tipologia aguardando arquivos técnicos, códigos e lista de corte.'
+      : 'Fonte inicial e hipóteses de engenharia, aguardando conferência humana.',
     fonte_nome: fonte, status: 'aguardando_validacao',
     mime_type: doc?.mime || null, tamanho_bytes: doc?.buffer.length || null,
     storage_path: caminho, texto_extraido: doc?.conteudo || null,
@@ -212,7 +260,8 @@ export async function POST(req: NextRequest) {
   if (registro.error || !registro.data?.id) {
     // Falha ao salvar evidência não apaga o laboratório já criado; alerta explícito ao operador.
     return NextResponse.json({ ok: true, formulaId, tipologiaId: tipologia.id, pendentes, semImagem,
-      aviso: 'Receita criada, mas a evidência não pôde ser registrada. Envie novamente o documento antes de validar.' },
+      aviso: 'Rascunho criado, mas a evidência não pôde ser registrada. Envie novamente o documento antes de validar.',
+      incompleto },
       { headers: { 'Cache-Control': 'private,no-store' } })
   }
   // Códigos não encontrados entram na fila oficial de candidatos, nunca como produtos ativos.
@@ -237,8 +286,11 @@ export async function POST(req: NextRequest) {
     if (erroCandidatos) candidatosPendentes = pendentes.length
   }
   return NextResponse.json({ ok: true, formulaId, tipologiaId: tipologia.id, pendentes, semImagem,
+    incompleto,
     aviso: candidatosPendentes
-      ? 'Tipologia criada em desenvolvimento. Há códigos pendentes cuja fila de cadastro não pôde ser gravada; informe o suporte antes de validar.'
-      : 'Tipologia criada SOMENTE em desenvolvimento; fórmulas, croqui e catálogo aguardam validação.' },
+      ? 'Tipologia salva em desenvolvimento. Há códigos pendentes cuja fila de cadastro não pôde ser gravada; informe o suporte antes de validar.'
+      : incompleto
+        ? 'Rascunho salvo no Atlas! Envie a lista de cortes e cadastre os perfis antes de validar. Nada foi enviado à produção.'
+        : 'Tipologia criada SOMENTE em desenvolvimento; fórmulas, croqui e catálogo aguardam validação.' },
     { headers: { 'Cache-Control': 'private,no-store' } })
 }

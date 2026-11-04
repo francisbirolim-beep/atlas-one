@@ -178,6 +178,20 @@ export default function BancadaTipologiasPage() {
     Number(folgaH) !== original.folgas?.altura_mm
   ))
 
+  function adicionarPerfilLaboratorio() {
+    setRascunho(atual => atual ? {
+      ...atual,
+      pecas: [...atual.pecas, {
+        codigo: '', descricao: 'Perfil a identificar', eixo: 'L',
+        formula: 'Largura', formula_quantidade: '1',
+        composicao_desconto: 'Hipótese em desenvolvimento, aguardando referência técnica.',
+      }],
+    } : atual)
+  }
+  function removerPerfilLaboratorio(index: number) {
+    setRascunho(atual => atual ? { ...atual,
+      pecas: atual.pecas.filter((_,indice) => indice !== index) } : atual)
+  }
   function mudarPeca(index: number, campo: keyof PecaFormula, valor: string) {
     setRascunho(atual => {
       if (!atual) return atual
@@ -333,15 +347,27 @@ export default function BancadaTipologiasPage() {
           </div>)}
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-bold">Fórmulas abertas de cada peça</h3>
+          <div>
+            <h3 className="font-bold">Fórmulas abertas de cada peça</h3>
+            {!rascunho.pecas.length && <p className="mt-1 text-sm text-amber-800">Rascunho ainda sem perfis. Anexe a lista técnica ou cadastre os perfis abaixo para começar a simular.</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+          {!original?.ativo && <button type="button" className={botao + ' border border-slate-300 text-slate-800'} onClick={adicionarPerfilLaboratorio}>+ Adicionar perfil</button>}
           <button className={botao + ' bg-indigo-700 text-white'} disabled={!!ocupado} onClick={() => executar('revisao', salvarRevisao)}>
             {ocupado === 'revisao' ? <Loader2 size={15} className="animate-spin"/> : <Save size={15}/>} Criar nova versão de teste
           </button>
+          </div>
         </div>
         <div className="mt-3 space-y-3">
           {rascunho.pecas.map((p, i) => <div key={i} className="grid items-end gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-[76px_minmax(120px,1fr)_minmax(160px,1.3fr)_minmax(160px,1.3fr)]">
             <ImagemProdutoTecnico codigo={p.codigo || p.grupo || ''} produto={produtos.find(prod => prod.codigo === p.codigo) || null} pequeno/>
             <div className="min-w-0"><strong className="block text-sm">{p.codigo || p.grupo || 'Peça ' + (i + 1)}</strong><span className="block truncate text-xs text-slate-500">{p.descricao || p.grupo || 'Componente'}</span></div>
+            {!original?.ativo && <div className="grid gap-2 md:col-span-full md:grid-cols-[1fr_1.5fr_115px_auto]">
+              <label className="text-xs font-semibold text-slate-600">Código do perfil<input className={campo + ' mt-1 font-mono'} value={p.codigo || ''} onChange={e => mudarPeca(i, 'codigo', e.target.value.toUpperCase())} placeholder="Ex.: SU001"/></label>
+              <label className="text-xs font-semibold text-slate-600">Descrição<input className={campo + ' mt-1'} value={p.descricao || ''} onChange={e => mudarPeca(i, 'descricao', e.target.value)}/></label>
+              <label className="text-xs font-semibold text-slate-600">Eixo<select className={campo + ' mt-1'} value={p.eixo || 'L'} onChange={e => mudarPeca(i, 'eixo', e.target.value)}><option value="L">Largura</option><option value="H">Altura</option></select></label>
+              <button type="button" className={botao + ' border border-red-200 text-red-700'} onClick={() => removerPerfilLaboratorio(i)}>Remover</button>
+            </div>}
             <label className="text-xs font-semibold text-slate-600">Corte / comprimento
               <input className={campo + ' mt-1 font-mono'} value={p.formula || p.formula_L || ''} onChange={e => mudarPeca(i, p.formula_L && !p.formula ? 'formula_L' : 'formula', e.target.value)}/>
             </label>
