@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { podeUnificarClientes } from '@/lib/clienteUnificacaoAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,7 +23,7 @@ function digitos(valor: unknown) {
 async function carregarCliente(id: string, empresaId: string) {
   const { data, error } = await supabaseAdmin
     .from('clientes')
-    .select('id,nome,apelido,cpf_cnpj,whatsapp,telefone,email,cidade,bairro,endereco,origem,created_at')
+    .select('id,nome,apelido,cpf_cnpj,whatsapp,telefone,email,cidade,bairro,endereco,origem,created_at,updated_at,ativo')
     .eq('id', id)
     .eq('empresa_id', empresaId)
     .maybeSingle()
@@ -61,7 +63,7 @@ export async function GET(req: NextRequest) {
 
       const { data, error } = await supabaseAdmin
         .from('clientes')
-        .select('id,nome,apelido,cpf_cnpj,whatsapp,telefone,email,cidade,bairro')
+        .select('id,nome,apelido,cpf_cnpj,whatsapp,telefone,email,cidade,bairro,updated_at,ativo')
         .eq('empresa_id', usuario.empresa_id)
         .order('nome')
         .limit(1500)
@@ -133,7 +135,7 @@ export async function GET(req: NextRequest) {
     if (ids.length > 0) {
       const { data: dadosClientes, error: erroClientes } = await supabaseAdmin
         .from('clientes')
-        .select('id,nome,apelido,cpf_cnpj,whatsapp,telefone,email,cidade,bairro,endereco,origem,created_at')
+        .select('id,nome,apelido,cpf_cnpj,whatsapp,telefone,email,cidade,bairro,endereco,origem,created_at,updated_at,ativo')
         .eq('empresa_id', usuario.empresa_id)
         .in('id', ids)
       if (erroClientes) throw erroClientes
@@ -213,6 +215,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (acao === 'mesclar') {
+      if (!await podeUnificarClientes(usuario)) {
+        return NextResponse.json({ error: 'Sem permissão para unificar cadastros de clientes.' }, { status: 403 })
+      }
       const origemId = String(body.origemClienteId || pendencia.cliente_id || '').trim()
       const destinoId = String(body.destinoClienteId || '').trim()
       if (!origemId || !destinoId || origemId === destinoId) {
@@ -225,11 +230,33 @@ export async function POST(req: NextRequest) {
       ])
       if (!origem || !destino) return NextResponse.json({ error: 'Um dos clientes não pertence à empresa ou não existe.' }, { status: 404 })
 
-      const { data, error } = await supabaseAdmin.rpc('mesclar_clientes', {
+      if (pendencia.cliente_id !== origemId) {
+        return NextResponse.json({ error: 'Origem diferente da pendência. Atualize a tela.' }, { status: 409 })
+      }
+      const motivo = String(body.motivo || '').trim()
+      if (motivo.length < 8 || motivo.length > 500 || body.confirmou !== true) {
+        return NextResponse.json({ error: 'É obrigatório justificar e confirmar a unificação.' }, { status: 400 })
+      }
+      if (origem.ativo === false || destino.ativo === false ||
+          !origem.updated_at || !destino.updated_at ||
+          origem.updated_at !== body.origemAtualizadoEm ||
+          destino.updated_at !== body.destinoAtualizadoEm) {
+        return NextResponse.json({ error: 'Os cadastros mudaram. Atualize a prévia antes de unificar.' }, { status: 409 })
+      }
+      const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
+      // A RPC usa auth.uid() do usuario real; nunca chamar com chave service_role.
+      const clienteAutenticado = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { global: { headers: { Authorization: 'Bearer ' + token } },
+          auth: { persistSession: false, autoRefreshToken: false } },
+      )
+      const { data, error } = await clienteAutenticado.rpc('unificar_clientes_seguro', {
         p_origem: origemId,
         p_destino: destinoId,
-        p_usuario_id: usuario.id,
-        p_usuario_nome: usuario.nome,
+        p_motivo: motivo,
+        p_origem_atualizado_em: origem.updated_at,
+        p_destino_atualizado_em: destino.updated_at,
       })
       if (error) throw error
 

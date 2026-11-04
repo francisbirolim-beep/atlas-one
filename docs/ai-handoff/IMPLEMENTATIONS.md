@@ -1,3 +1,8 @@
+## 2026-11-03 — Deduplicacao de clientes (isolada, nao publicada)
+- Busca remota contextual de clientes com estatisticas no orcamento rapido e balcao, gestao inline permitida, confirmacao e motivos.
+- Permissao `mesclar` explicita, RPC transacional candidata para homologacao com origem preservada inativa e atualizacao de vinculos operacionais por empresa, auditoria e comparacao de timestamps/CPF.
+- Consultas de origens unificadas no Cliente 360 e bloqueio de reativacao da origem. Relatorio paginado de unificacoes e CSV/print. Testes estaticos e TypeScript aprovados; banco nao alterado.
+
 ## 2026-11-03 — Corrigir vínculo cliente/obra diretamente no Kanban Comercial
 
 - Novo formulário recolhível na área Cliente e local da obra do modal: pesquisa, seleção do cadastro correto, comparação de origem/destino, seleção de obra de destino, justificativa e confirmação explícita pelo Master.

@@ -1,3 +1,15 @@
+## 2026-11-03 — Cadastros de clientes: busca contextual, inativacao e unificacao segura (BRANCH ISOLADA, NAO PUBLICADA)
+
+- Branch `feat/clientes-deduplicacao-20261103`, baseada em `origin/main` 9b0e8709. Nada implantado no dominio ou banco real.
+- Busca de clientes por texto do servidor em Novo Orcamento Balcao e Pedido de Orcamento Obra, sem carregar lista de 1000 clientes no navegador. Mostra apelido, CPF/CNPJ, contato, cidade, cadastro e contagens exatas de orcamentos, orcamentos de balcao, obras, vendas e assistencias (contagem indisponivel nao vira zero).
+- Cada resultado permite selecionar, abrir Cliente 360, inativar (permissao especifica preexistente) ou unificar (nova permissao `mesclar`, opt-in a usuarios nao Master). Justificativa de 8 a 500 caracteres, comparacao lado a lado e confirmacao explicita.
+- Migration ADITIVA `20261103233500_clientes_unificacao_segura.sql` candidata em homologacao. RPC transacional usa empresa/autenticacao/permissao, lock, versao dos dois registros, compara CPF/CNPJ e transfere vinculos de tabelas operacionais por empresa; qualquer conflito invalida toda a transacao. Origem fica inativa e apontada ao destino, nunca e excluida. Dados e auditorias preservados.
+- A guia Cadastro no Cliente 360 exibe os registros anteriores unidos, com os contatos, enderecos e observacoes legados, como consulta RLS sem sobrescrever campos do principal. Trigger candidato impede reativar a origem ja mesclada.
+- Relatorio de unificacoes em `/relatorios/clientes-unificacoes` com paginacao, filtro, CSV e PDF/impressao, a partir da trilha existente `cliente_mesclagens` e `cadastros_status_auditoria`, com acesso protegido. Vinculado a Cadastros e Central de Relatorios.
+- A mesclagem de Cadastros/Pendencias usa agora a mesma RPC segura com JWT do usuario, justificativa, confirmacao e controle de atualizacao dos dois clientes; o motor legado destrutivo nao e mais chamado no fluxo.
+- Verificacoes locais: `npm run typecheck`, `node scripts/test-clientes-unificacao-segura.cjs`, `node scripts/test-cadastros-rbac-20261015.cjs` e `node scripts/test-cliente360-cadastro.cjs` aprovados. Build Next.js completo aprovado com variaveis ficticias de compilacao; sem acesso ao banco de producao.
+- Ainda PENDENTES: migracao e testes de conflito/rollback em banco de homologacao, teste visual mobile e desktop, regressao operacional de documentos, W.Vetro e financeiro, e autorizacao expressa para publicar. NENHUMA unificacao real foi executada.
+
 ## 2026-11-03 — Kanban Comercial: corrigir cliente vinculado ao orçamento
 
 - Adicionada ao modal do card a ação **Trocar cliente vinculado** (somente Master), com busca de Cliente 360 ativo, prévia do ID/nome realmente associado e seleção explícita da obra no cadastro de destino.

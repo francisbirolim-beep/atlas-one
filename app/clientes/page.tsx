@@ -33,6 +33,7 @@ export default function Clientes() {
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>('ativos')
   const [podeInativar, setPodeInativar] = useState(false)
   const [podeReativar, setPodeReativar] = useState(false)
+  const [podeUnificar, setPodeUnificar] = useState(false)
   const [pendente, setPendente] = useState<ClienteComStatus | null>(null)
   const [motivo, setMotivo] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -47,6 +48,7 @@ export default function Clientes() {
       if (montado) {
         setPodeInativar(podeAcaoCadastro(acesso, 'clientes', 'inativar'))
         setPodeReativar(podeAcaoCadastro(acesso, 'clientes', 'reativar'))
+        setPodeUnificar(podeAcaoCadastro(acesso, 'clientes', 'mesclar'))
       }
     })()
     return () => { montado = false }
@@ -128,7 +130,7 @@ export default function Clientes() {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-4">
         <div className="flex items-center gap-4"><Link href="/" className="rounded-lg p-2 transition hover:bg-slate-100"><ArrowLeft size={20}/></Link><img src="/icons/icon-mark.png" alt="" className="h-8 w-8"/><div><h1 className="text-lg font-bold text-slate-800">Clientes</h1><p className="text-sm text-slate-500">{ativos} ativos · {inativos} inativos</p></div></div>
-        <div className="flex items-center gap-2"><Link href="/cadastros/pendencias" className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800"><ClipboardList size={16}/>Pendências</Link><Link href="/clientes/novo" className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-4 py-2 text-sm font-medium text-white"><UserPlus size={16}/>Novo cliente</Link></div>
+        <div className="flex items-center gap-2">{podeUnificar && <Link href="/relatorios/clientes-unificacoes" className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-navy">Relatório de unificações</Link>}<Link href="/cadastros/pendencias" className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800"><ClipboardList size={16}/>Pendências</Link><Link href="/clientes/novo" className="flex items-center gap-1.5 rounded-lg bg-brand-navy px-4 py-2 text-sm font-medium text-white"><UserPlus size={16}/>Novo cliente</Link></div>
       </div>
     </header>
     <main className="mx-auto max-w-5xl px-4 py-6">
