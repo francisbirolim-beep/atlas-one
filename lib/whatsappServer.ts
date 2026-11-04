@@ -1376,10 +1376,12 @@ export async function listarConversasAtendimento(
     : autorizadas.filter(item => {
         const conversa = item.conversa
         if (conversa.whatsapp_chat_tipo === 'grupo') {
-          // Caixa pessoal do Master não é a listagem geral dos grupos.
+          // A caixa pessoal do Master continua limitada aos grupos atribuídos.
           if (usuario.role === 'master') return conversa.responsavel_id === usuario.id
-          return conversa.responsavel_id === usuario.id ||
-            (!conversa.responsavel_id && item.grupo?.atender === true)
+          // Para os demais usuários, uma permissão de grupo autoriza a VISUALIZAÇÃO
+          // independentemente do responsável atual. Ações continuam verificadas
+          // separadamente no servidor conforme o nível do grupo.
+          return item.grupo?.visualizar === true
         }
         if (conversa.responsavel_id === usuario.id) return true
         if (conversa.status === 'finalizado') return respondidas.has(conversa.id)
