@@ -101,13 +101,13 @@ export async function GET(req:NextRequest){
   }else{
    const [balcao,obras]=await Promise.all([
     paginar('balcao_vendas','id,numero,status,cliente_id,cliente_nome,finalizada_em,total',u.empresa_id),
-    tipo==='vendas-cliente'?paginar('vendas_obras','id,numero,status,cliente_id,valor_venda,confirmado_em,excluida_em',u.empresa_id):Promise.resolve([])
+    tipo==='vendas-cliente'?paginar('vendas_obras_data_comercial','id,numero,status,cliente_id,valor_venda,confirmado_em,data_comercial,excluida_em',u.empresa_id):Promise.resolve([])
    ])
    const validas=balcao.filter(v=>v.status==='finalizada')
     .filter(v=>data(v.finalizada_em)>=inicio&&data(v.finalizada_em)<=fim)
    if(tipo==='vendas-cliente'){
     const obrasValidas=obras.filter(v=>v.status!=='cancelada'&&v.status!=='cancelado'&&!v.excluida_em&&v.confirmado_em)
-     .filter(v=>data(v.confirmado_em)>=inicio&&data(v.confirmado_em)<=fim)
+     .filter(v=>data(v.data_comercial)>=inicio&&data(v.data_comercial)<=fim)
     const ids=[...validas.map(v=>str(v.cliente_id)),...obrasValidas.map(v=>str(v.cliente_id))]
     const clientes=await porIds('clientes','id,nome,cpf_cnpj','id',ids,u.empresa_id)
     const m=new Map(clientes.map(c=>[c.id,c]))
@@ -120,7 +120,7 @@ export async function GET(req:NextRequest){
     }
     for(const v of obrasValidas){
      const c=m.get(v.cliente_id)
-     linhas.push({id:'obra-'+v.id,data:data(v.confirmado_em),pessoa:str(c?.nome)||'Cliente não identificado',
+     linhas.push({id:'obra-'+v.id,data:data(v.data_comercial),pessoa:str(c?.nome)||'Cliente não identificado',
       pessoaId:str(v.cliente_id)||'obra:'+str(v.id),documento:str(c?.cpf_cnpj),
       referencia:'Venda/obra #'+str(v.numero||'—'),produto:'',produtoId:'',
       codigo:'',unidade:'',quantidade:1,valor:numero(v.valor_venda),canal:'Obra',

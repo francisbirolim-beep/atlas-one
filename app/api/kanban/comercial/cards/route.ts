@@ -9,12 +9,13 @@ const setorId = 'fazer-orcamento-msanfyvj'
 const acoes = {
   retirar: 'comercial.orcamento.retirar_card',
   restaurar: 'comercial.orcamento.restaurar_card',
+  corrigirDataVenda: 'comercial.orcamento.corrigir_data_venda',
 } as const
 const erro = (mensagem: string, status = 400) => NextResponse.json({ erro: mensagem }, { status, headers: { 'Cache-Control': 'no-store' } })
 const uuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
 
 type Usuario = NonNullable<Awaited<ReturnType<typeof autenticarTenant>>>
-async function permitido(u: Usuario, acao: 'retirar' | 'restaurar') {
+async function permitido(u: Usuario, acao: keyof typeof acoes) {
   return usuarioTemDelegacaoExplicitaServer({
     usuarioId: u.id, role: u.role, empresaId: u.empresa_id,
     setorId, acaoId: acoes[acao],
@@ -25,9 +26,9 @@ export async function GET(req: NextRequest) {
   const u = await autenticarTenant(req)
   if (!u) return erro('Sessão inválida.', 401)
   try {
-    const [podeRetirar, podeRestaurar] = await Promise.all([permitido(u, 'retirar'), permitido(u, 'restaurar')])
+    const [podeRetirar, podeRestaurar, podeCorrigirDataVenda] = await Promise.all([permitido(u, 'retirar'), permitido(u, 'restaurar'), permitido(u, 'corrigirDataVenda')])
     if (req.nextUrl.searchParams.get('retirados') !== '1') {
-      return NextResponse.json({ podeRetirar, podeRestaurar }, { headers: { 'Cache-Control': 'no-store' } })
+      return NextResponse.json({ podeRetirar, podeRestaurar, podeCorrigirDataVenda }, { headers: { 'Cache-Control': 'no-store' } })
     }
     if (!podeRestaurar) return erro('Sem permissão para consultar cards retirados.', 403)
     const { data, error } = await db.from('orcamentos')

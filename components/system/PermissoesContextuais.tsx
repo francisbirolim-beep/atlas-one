@@ -77,7 +77,7 @@ export default function PermissoesContextuais() {
   // nesta tela. Edição de preço, PDFs etc. pertencem ao módulo completo.
   const acoesDaTela = moduloAtual
     ? pathname === '/kanban/comercial'
-      ? moduloAtual.acoes.filter(acao => acao.id === 'comercial.orcamento.retirar_card' || acao.id === 'comercial.orcamento.restaurar_card')
+      ? moduloAtual.acoes.filter(acao => acao.id === 'comercial.orcamento.retirar_card' || acao.id === 'comercial.orcamento.restaurar_card' || acao.id === 'comercial.orcamento.corrigir_data_venda')
       : moduloAtual.acoes
     : []
   const usuarioSelecionado = usuarios.find(entrada => entrada.usuario.id === usuarioId)

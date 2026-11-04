@@ -22,6 +22,7 @@ export const ACOES_CMV_DELEGACAO_EXPLICITA = [
  'financeiro.cmv.recebimentos_conferir_terceiros',
  'comercial.orcamento.retirar_card',
  'comercial.orcamento.restaurar_card',
+ 'comercial.orcamento.corrigir_data_venda',
  'compras.geral.corrigir_imagem_produto',
  'compras.geral.inativar_produto',
 ] as const
@@ -114,6 +115,7 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('comercial.orcamento.aprovar','Confirmar venda','Aprovar/confirmar orçamento vendido.'),
     a('comercial.orcamento.retirar_card','Retirar card duplicado/incorreto','Retirar um card do Kanban comercial, com motivo e histórico; não exclui o orçamento.'),
     a('comercial.orcamento.restaurar_card','Restaurar card retirado','Recolocar no Kanban um card retirado, com motivo e histórico.'),
+    a('comercial.orcamento.corrigir_data_venda','Corrigir data de venda','Alterar a competência da venda em cards Vendido, com motivo e histórico auditável.'),
   ]),
   m('venda-balcao','venda-balcao','Venda balcão','PDV, orçamento balcão e consulta de preço.','comercial',[
     a('comercial.balcao.consultar_preco','Consultar preço','Consultar produtos e preços.'),
