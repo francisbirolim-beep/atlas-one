@@ -15,15 +15,15 @@ type Registro={
 const endpoint='/api/vendas/wvetro/conferencia-documental'
 const qtd=(n:unknown)=>Number(n??0).toLocaleString('pt-BR',{maximumFractionDigits:3})
 
-export default function VendaConferenciaDocumentalWVetro({vendaId,pacoteId,tipo,itemRef,compacto=false}:{
- vendaId:string;pacoteId:string|null;tipo:'tipologia'|'materiais';itemRef?:string;compacto?:boolean
+export default function VendaConferenciaDocumentalWVetro({vendaId,pacoteId,tipo,itemRef,compacto=false,iniciarAberto=false,onValidacaoRegistrada}:{
+ vendaId:string;pacoteId:string|null;tipo:'tipologia'|'materiais';itemRef?:string;compacto?:boolean;iniciarAberto?:boolean;onValidacaoRegistrada?:()=>void
 }){
  const [master,setMaster]=useState(false)
  const [arquivo,setArquivo]=useState<File|null>(null)
  const [preview,setPreview]=useState<{itens:Linha[];paginas:number;hash:string;hashFonte:string;pendencias:string[];aviso:string;trecho:string}|null>(null)
  const [registros,setRegistros]=useState<Registro[]>([])
  const [pdfOriginalUrl,setPdfOriginalUrl]=useState<string|null>(null)
- const [aberto,setAberto]=useState(false)
+ const [aberto,setAberto]=useState(iniciarAberto)
  const [ocupado,setOcupado]=useState(false)
  const [motivo,setMotivo]=useState('')
  const [identidadeConfirmada,setIdentidadeConfirmada]=useState(false)
@@ -31,6 +31,7 @@ export default function VendaConferenciaDocumentalWVetro({vendaId,pacoteId,tipo,
  const [erro,setErro]=useState('')
  const [blobUrl,setBlobUrl]=useState<string|null>(null)
  useEffect(()=>{void usuarioAtual().then(u=>setMaster(u?.role==='master'))},[])
+ useEffect(()=>{if(iniciarAberto)setAberto(true)},[iniciarAberto])
  useEffect(()=>{
   if(!arquivo){setBlobUrl(null);return}
   const link=URL.createObjectURL(arquivo);setBlobUrl(link)
@@ -88,6 +89,7 @@ export default function VendaConferenciaDocumentalWVetro({vendaId,pacoteId,tipo,
     setMensagem(j.mensagem||'Conferência registrada.')
     setArquivo(null);setPreview(null);setMotivo('');setIdentidadeConfirmada(false)
     await carregar()
+    onValidacaoRegistrada?.()
    }
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao analisar o PDF.')}
   finally{setOcupado(false)}

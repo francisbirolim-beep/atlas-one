@@ -5,6 +5,7 @@ const ler = (p) => fs.readFileSync(path.join(process.cwd(),p),'utf8')
 const api = ler('app/api/vendas/wvetro/conferencia-documental/route.ts')
 const ui = ler('components/clientes/VendaConferenciaDocumentalWVetro.tsx')
 const fichas = ler('app/obras/[id]/tipologias/fichas/page.tsx')
+const fichasVenda = ler('app/vendas/[id]/tipologias/fichas/page.tsx')
 const tipologias = ler('components/clientes/VendaTipologiasMateriais.tsx')
 const obra = ler('components/clientes/VendaObraCentral.tsx')
 for (const exp of [
@@ -35,12 +36,18 @@ for(const exp of [
  /identidadeConfirmada/,
 ])assert.match(ui,exp)
 for(const exp of [
- /Imprimir fichas/,
+ /Imprimir \{selecionadasImpressao\.length/,
  /fichas\?pacote=/,
- /Selecionar esta tipologia para impress[ãa]o/,
+ /Selecionar todas as tipologias para impress[ãa]o/,
+ /Selecionar \$\{it\.ambiente/,
+ /Conferir \/ PDF/,
+ /linkFicha\(\[ref\]\)/,
  /VendaConferenciaDocumentalWVetro/,
 ])assert.match(tipologias,exp)
-for(const exp of [/breakAfter:'page'/,/Perfis e cortes/,/Acess[óo]rios/,/Vidros/,/Imagem/])assert.match(fichas,exp)
+for(const exp of [/breakAfter:'page'/,/Perfis e cortes/,/Acess[óo]rios/,/Vidros/,/Imagem/,/porVenda/,/orcamento_id/])assert.match(fichas,exp)
+assert.match(fichasVenda,/FichasTipologias|page'/)
+assert.match(api,/tipo==='resumo'/)
+assert.match(api,/assinaturaTecnica\(linhas\)/)
 assert.match(obra,/tipo="materiais"/)
 assert.match(obra,/obraId=\{venda\.obra_id\}/)
 console.log('PASS: conferência PDF por tipologia/obra, histórico supervisionado, revisão, imagens, impressão e segurança.')
