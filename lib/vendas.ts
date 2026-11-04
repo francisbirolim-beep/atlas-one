@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { criarMedicaoDoOrcamento } from './medicaoFinal'
 import { Cliente, OrcamentoRapido, Usuario } from './tipos'
 import { CampoConfiguravel, camposDoContexto } from './camposConfiguraveis'
 
@@ -224,6 +225,18 @@ export async function iniciarProcessoVenda(
 
   if (error) return { success: false, error: error.message }
   const resultado = Array.isArray(data) ? data[0] : data
+
+  // A venda confirmada já deve aparecer na Central de Medida Final, aguardando
+  // a conferência das tipologias. A criação é idempotente por orçamento/tipo,
+  // e nunca libera a medição nem a fabricação automaticamente.
+  // Uma falha isolada aqui não desfaz uma venda já confirmada no banco;
+  // a aba da obra também recupera medições pendentes de vendas antigas.
+  try {
+    const medicao = await criarMedicaoDoOrcamento(orcamentoId, usuario, 'tipologia')
+    if (!medicao) console.warn('Venda confirmada, mas a Medida Final ficou pendente de preparação:', orcamentoId)
+  } catch (erro) {
+    console.warn('Venda confirmada; Medida Final será recuperada ao abrir a obra:', erro)
+  }
 
   return {
     success: true,
