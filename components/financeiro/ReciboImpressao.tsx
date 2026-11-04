@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, Printer } from 'lucide-react'
 import { type ReciboInfo, textoRecibo } from '@/lib/financeiroRecibos'
+import { rotuloFormaRecebimento, descricaoFormaRecebimento } from '@/lib/recebimentoFormas'
 
 type AcaoRecibo = 'imprimir' | 'pdf' | null
 
@@ -83,13 +84,15 @@ export default function ReciboImpressao({
         {dados.obra && <p><b>Referente à obra:</b> {dados.obra}</p>}
         {dados.descricao && <p><b>Observações:</b> {dados.descricao}</p>}
         <p><b>Data do pagamento:</b> {r.data}</p>
-        <p><b>Forma de pagamento:</b> {dados.forma || 'Não informada'}</p>
+        <p><b>Forma de pagamento:</b> {dados.tipo==='receber'?rotuloFormaRecebimento(dados.forma):dados.forma||'Não informada'}</p>
+        {!!dados.formas?.length&&<div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><b className="text-xs">Composição deste recebimento</b>{dados.formas.map((f,i)=><div key={i} className="mt-2 flex items-center justify-between gap-3 text-sm"><span>{descricaoFormaRecebimento(f)}</span><b>{Number(f.valor).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</b></div>)}</div>}
       </section>
       <section className="mt-7 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{dados.tipo === 'pagar' ? 'Valor pago' : 'Valor recebido neste lançamento'}</span>
           <b className="text-2xl text-slate-900">{r.movimento}</b>
         </div>
+        {dados.tipo==='receber'&&Number(dados.desconto||0)>0&&<p className="flex justify-between gap-4 text-sm"><span>Desconto / abatimento (não recebido em dinheiro)</span><b>{Number(dados.desconto).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</b></p>}
         <p className="flex justify-between gap-4 text-sm"><span>Valor total dos títulos considerados</span><b>{r.original}</b></p>
         <p className="flex justify-between gap-4 text-sm"><span>Saldo atual em aberto (consulta)</span><b>{r.saldo}</b></p>
       </section>

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { FileText, Loader2, Printer, Upload } from 'lucide-react'
 import { adicionarDocumentoCliente } from '@/lib/cliente360'
 import { supabase } from '@/lib/supabase'
+import { rotuloFormaRecebimento, descricaoFormaRecebimento, type DetalheFormaRecebimento } from '@/lib/recebimentoFormas'
 
 type Recebimento={
   id:string
@@ -12,6 +13,7 @@ type Recebimento={
   valor?:number|null
   desconto?:number|null
   forma?:string|null
+  formas?:DetalheFormaRecebimento[]
   referencia?:string|null
   observacoes?:string|null
   status?:string|null
@@ -76,10 +78,10 @@ export default function VendaNotasRecibos({
         return <div key={r.id} className="rounded-xl border p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-2"><b className="text-sm">{moeda(r.valor)} recebido</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.forma||'Forma não informada'}</span></div>
+              <div className="flex flex-wrap items-center gap-2"><b className={'text-sm '+(r.status==='cancelado'?'text-red-700 line-through':'text-slate-900')}>{moeda(r.valor)} {r.status==='cancelado'?'recebimento cancelado':'recebido'}</b>{desconto>0&&<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">{moeda(desconto)} desconto</span>}<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold uppercase text-emerald-700">{r.formas&&r.formas.length>1?'Múltiplas formas':rotuloFormaRecebimento(r.forma)}</span></div>
               <p className="mt-1 text-xs text-slate-500">Recebido em {dataBR(r.data_recebimento)}{desconto>0?` · Total baixado ${moeda(Number(r.valor||0)+desconto)}`:''}</p>
               <p className="mt-1 text-xs text-slate-400">Lançado no Atlas em {dataHoraBR(r.created_at)}{r.criado_por_nome?` por ${r.criado_por_nome}`:''}</p>
-              {r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}
+              {r.formas&&r.formas.length>1&&<div className="mt-2 rounded-lg bg-slate-50 p-2 text-xs text-slate-700">{r.formas.map((f,i)=><div key={i} className="flex justify-between gap-3"><span>{descricaoFormaRecebimento(f)}</span><b>{moeda(f.valor)}</b></div>)}</div>}{r.referencia&&<p className="mt-2 text-xs text-slate-500">Referência/comprovante: {r.referencia}</p>}
               {r.observacoes&&<p className="mt-1 text-xs text-slate-500">Observações: {r.observacoes}</p>}
             </div>
             <Link target="_blank" href={`/clientes/${clienteId}/vendas/${vendaId}/recibo/${r.id}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><Printer size={13}/>Gerar / imprimir recibo</Link>

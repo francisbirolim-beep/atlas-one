@@ -65,7 +65,12 @@ export async function GET(req:NextRequest){
   const valorOriginal=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Number(c.valor||0),0)
   const saldo=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
   const recebidoNaObra=filtroObra?(alocs.data||[]).filter(a=>a.tipo==='conta'&&(a.obra_id||'sem-obra')===filtroObra).reduce((v,a)=>v+Number(a.valor||0),0):Number(rec.valor)
-  const recibo:ReciboInfo={tipo:'receber',id,nome:cli.data.nome,documento:cli.data.cpf_cnpj,obra:obra?.data?.nome|| (idsObras.length>1&&!filtroObra?'Recebimento de múltiplas obras — consulte os extratos individualizados':'Sem obra vinculada'),descricao:rec.observacoes||null,referencia:rec.referencia,data:rec.data_recebimento,forma:rec.forma,valorOriginal:valorOriginal||Number(rec.valor),valorMovimento:recebidoNaObra,saldo,assinaturaDataUri:assinaturaReciboAutorizada()}
+  const formasResp=['multiplo','cartao_credito'].includes(rec.forma||'')?await supabaseAdmin.from('financeiro_recebimento_formas').select('forma,valor,parcelas,ordem').eq('empresa_id',u.empresa_id).eq('recebimento_id',id).order('ordem'):null
+  if(rec.forma==='multiplo'&&(formasResp?.error||!(formasResp?.data||[]).length))return bad('As formas deste recebimento não estão disponíveis. Confira o financeiro antes de imprimir.',409)
+  const formas=(formasResp?.data||[]).map(f=>({forma:f.forma,valor:Number(f.valor),parcelas:f.parcelas==null?null:Number(f.parcelas)}))
+  if(formas.length&&Math.abs(formas.reduce((a,f)=>a+f.valor,0)-Number(rec.valor))>0.009)return bad('As formas não conferem com o valor recebido. Confira o financeiro.',409)
+  const desconto=(alocs.data||[]).filter(a=>a.tipo==='desconto').reduce((sum,a)=>sum+Number(a.valor||0),0)
+  const recibo:ReciboInfo={tipo:'receber',id,nome:cli.data.nome,documento:cli.data.cpf_cnpj,obra:obra?.data?.nome|| (idsObras.length>1&&!filtroObra?'Recebimento de múltiplas obras — consulte os extratos individualizados':'Sem obra vinculada'),descricao:rec.observacoes||null,referencia:rec.referencia,data:rec.data_recebimento,forma:rec.forma,valorOriginal:valorOriginal||Number(rec.valor),valorMovimento:recebidoNaObra,saldo,formas,desconto:Math.max(Number(rec.valor_desconto||0),desconto),assinaturaDataUri:assinaturaReciboAutorizada()}
   return NextResponse.json({ok:true,recibo})
  }catch(e){console.error('recibo financeiro',e);return bad('Não foi possível carregar os dados do recibo.',500)}
 }

@@ -9,9 +9,10 @@ import {baixarCSV,csvFinanceiro,isoLocal,noPeriodo,periodoRapido,type PeriodoFin
 import { tokenAtual } from '@/lib/auth'
 import type { ContaReceberCliente360 } from '@/lib/cliente360'
 import { saldoParcela } from '@/lib/cliente360Recebimentos'
+import { rotuloFormaRecebimento, descricaoFormaRecebimento, type DetalheFormaRecebimento } from '@/lib/recebimentoFormas'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
-type RecebimentoGeral = { id:string; cliente_id?:string|null; cliente_nome?:string|null; cliente_cpf_cnpj?:string|null; cliente_cidade?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
+type RecebimentoGeral = { formas?:DetalheFormaRecebimento[]; composicaoInconsistente?:boolean; id:string; cliente_id?:string|null; cliente_nome?:string|null; cliente_cpf_cnpj?:string|null; cliente_cidade?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
 
 function moeda(valor: number) {
   return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -106,7 +107,7 @@ export default function ContasReceberPage() {
     ['TOTAL','','','','','','','',valorFiltrado,'',saldoFiltrado,''],
     [],['RECEBIMENTOS REGISTRADOS NO PERÍODO'],
     ['Data recebimento','Cliente','Forma','Valor efetivo','Desconto','Referência'],
-    ...recebimentosFiltrados.map(r=>[dataBR(r.data_recebimento),r.cliente_nome,r.forma,Number(r.valor||0),Number(r.desconto||0),r.referencia]),
+    ...recebimentosFiltrados.map(r=>[dataBR(r.data_recebimento),r.cliente_nome,r.formas?.length?r.formas.map(f=>descricaoFormaRecebimento(f)+': '+moeda(f.valor)).join(' + '):rotuloFormaRecebimento(r.forma),Number(r.valor||0),Number(r.desconto||0),r.referencia]),
     ['TOTAL RECEBIDO','','',recebimentosFiltrados.reduce((a,r)=>a+Number(r.valor||0),0)]
   ]))
 
@@ -211,7 +212,7 @@ export default function ContasReceberPage() {
                   return <tr key={r.id} className="border-b last:border-0">
                     <td className="p-3 font-semibold text-slate-800">{dataBR(r.data_recebimento)}</td>
                     <td className="p-3">{r.cliente_id?<Link href={`/clientes/${r.cliente_id}`} className="font-semibold text-brand-navy hover:underline">{r.cliente_nome||'Cliente'}</Link>:(r.cliente_nome||'Cliente')}</td>
-                    <td className="p-3 uppercase">{r.forma||'—'}</td>
+                    <td className="p-3"><b className="text-xs">{rotuloFormaRecebimento(r.forma)}</b>{r.composicaoInconsistente?<p className="mt-1 text-xs font-semibold text-red-700">Composição a conferir</p>:r.formas&&r.formas.length>1?<div className="mt-1 space-y-0.5 text-xs text-slate-600">{r.formas.map((f,i)=><p key={i}>{descricaoFormaRecebimento(f)}: <b>{moeda(f.valor)}</b></p>)}</div>:null}</td>
                     <td className="p-3 text-right font-semibold text-emerald-700">{moeda(Number(r.valor||0))}</td>
                     <td className="p-3 text-right font-semibold text-amber-700">{moeda(desconto)}</td>
                     <td className="p-3 text-right font-bold text-slate-900">{moeda(Number(r.valor||0)+desconto)}</td>

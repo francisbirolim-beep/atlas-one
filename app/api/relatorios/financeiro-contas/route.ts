@@ -3,6 +3,7 @@ import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autorizarRelatorio } from '@/lib/relatoriosPermissoesServer'
 import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
+import { rotuloFormaRecebimento, descricaoFormaRecebimento } from '@/lib/recebimentoFormas'
 import { hojeSaoPaulo, normalizarTitulo, previsaoMensal, rankingDevedores, resumirTitulos, type MovimentoFinanceiro, type TipoConta } from '@/lib/relatoriosContasFinanceiras'
 
 export const runtime='nodejs'
@@ -51,11 +52,29 @@ export async function GET(req:NextRequest){
    id:t.id,tipo:'pagar' as TipoConta,pessoa:t.pessoa,data:t.dataPagamento!,valor:dinheiro(t.pago),
    forma:t.forma,referencia:t.documento,tituloId:t.id
   }))
-  const movimentosReceber:MovimentoFinanceiro[]=recebimentos.filter(r=>!['cancelado','estornado'].includes(String(r.status||'')) && r.data_recebimento).map(r=>({
-   id:String(r.id),tipo:'receber' as TipoConta,pessoa:String(r.cliente_nome||'Cliente não informado'),
-   data:String(r.data_recebimento),valor:dinheiro(r.valor),forma:String(r.forma||'')||null,
-   referencia:String(r.referencia||'')||null,tituloId:null
-  }))
+  const multiformaIds=recebimentos.filter(r=>['multiplo','cartao_credito'].includes(String(r.forma||'')) && !['cancelado','estornado'].includes(String(r.status||''))).map(r=>String(r.id))
+  const composicoes=new Map<string,Array<{forma:string;valor:number;parcelas?:number|null}>>()
+  for(let i=0;i<multiformaIds.length;i+=80){
+   const {data,error}=await supabaseAdmin.from('financeiro_recebimento_formas').select('recebimento_id,forma,valor,parcelas,ordem')
+    .eq('empresa_id',usuario.empresa_id).in('recebimento_id',multiformaIds.slice(i,i+80)).order('ordem')
+   if(error)throw error
+   for(const f of data||[]){
+    const lista=composicoes.get(f.recebimento_id)||[]
+    lista.push({forma:f.forma,valor:dinheiro(f.valor),parcelas:f.parcelas==null?null:Number(f.parcelas)})
+    composicoes.set(f.recebimento_id,lista)
+   }
+  }
+  const movimentosReceber:MovimentoFinanceiro[]=recebimentos.filter(r=>!['cancelado','estornado'].includes(String(r.status||'')) && r.data_recebimento).map(r=>{
+   const formas=composicoes.get(String(r.id))||[]
+   const inconsistente=r.forma==='multiplo'&&Math.abs(formas.reduce((a,f)=>a+f.valor,0)-dinheiro(r.valor))>0.009
+   return {
+    id:String(r.id),tipo:'receber' as TipoConta,pessoa:String(r.cliente_nome||'Cliente não informado'),
+    data:String(r.data_recebimento),valor:dinheiro(r.valor),
+    forma:inconsistente?'Múltiplas formas (composição a conferir)':formas.length?formas.map(f=>descricaoFormaRecebimento(f)+': '+f.valor.toFixed(2)).join(' + '):rotuloFormaRecebimento(String(r.forma||'')),
+    formas:inconsistente?[]:formas,
+    referencia:String(r.referencia||'')||null,tituloId:null
+   }
+  })
   const hoje=hojeSaoPaulo()
   const dados={
    ok:true,periodo:{inicio,fim,hoje},permissoes:{pagar:podePagar,receber:podeReceber},
