@@ -1,7 +1,5 @@
 -- Data comercial da venda: independente da criação e da movimentação do card.
 -- Não reescreve datas históricas; a referência anterior permanece como fallback.
-begin;
-
 alter table public.orcamentos add column if not exists data_venda date;
 create index if not exists orcamentos_kanban_data_venda_idx
  on public.orcamentos(empresa_id,coluna_id,data_venda) where kanban_retirado_em is null;
@@ -116,4 +114,3 @@ left join public.orcamentos o on o.id=v.orcamento_id and o.empresa_id=v.empresa_
 revoke all on public.vendas_obras_data_comercial from public,anon,authenticated;
 grant select on public.vendas_obras_data_comercial to service_role;
 
-commit;
