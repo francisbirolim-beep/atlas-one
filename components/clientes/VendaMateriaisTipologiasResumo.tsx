@@ -1,8 +1,9 @@
 'use client'
 
 import {useEffect,useMemo,useState} from 'react'
-import {AlertTriangle,CheckCircle2,ImageOff,Loader2,RefreshCw} from 'lucide-react'
-import {tokenAtual} from '@/lib/auth'
+import {AlertTriangle,CheckCircle2,ImageOff,Loader2,RefreshCw,Pencil,Replace,Trash2,X} from 'lucide-react'
+import {tokenAtual,usuarioAtual} from '@/lib/auth'
+import VendaMaterialEdicaoRapida,{type AcaoMaterial} from '@/components/clientes/VendaMaterialEdicaoRapida'
 import {otimizarPerfis,agruparCompraDeBarras,type CortePerfil} from '@/lib/aproveitamentoPerfis'
 import {consolidarMateriaisTipologias,type MaterialResumoTipologia} from '@/lib/materiaisTipologiasResumo'
 
@@ -31,6 +32,12 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
  const [atualizando,setAtualizando]=useState(false)
  const [erro,setErro]=useState('')
  const [fotosPorCodigo,setFotosPorCodigo]=useState<Record<string,string>>({})
+ const [master,setMaster]=useState(false)
+ const [escolha,setEscolha]=useState<{acao:AcaoMaterial;ids:string[]}|null>(null)
+ const [edicao,setEdicao]=useState<{acao:AcaoMaterial;id:string}|null>(null)
+ const [aviso,setAviso]=useState('')
+ useEffect(()=>{let ativo=true;void usuarioAtual().then(u=>{if(ativo)setMaster(u?.role==='master')}).catch(()=>{});
+  return()=>{ativo=false}},[])
  const refs=useMemo(()=>itens.filter(i=>i.id).map(i=>String(i.id)),[itens])
  const refAtiva=refs.includes(refSelecionada)?refSelecionada:refs[0]||''
  const totais=useMemo(()=>consolidarMateriaisTipologias(materiais),[materiais])
@@ -116,6 +123,23 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
   return()=>{ativo=false}
  },[vendaId,pacoteId,materiais])
 
+ const materialPorId=useMemo(()=>new Map(materiais.map(m=>[m.id,m])),[materiais])
+ const nomeTipologia=(ref?:string|null)=>{
+  const i=itens.find(it=>String(it.id||'')===String(ref||''))
+  return i?.ambiente||i?.descricao||i?.tipo_esquadria||('Tipologia '+(ref||'não identificada'))
+ }
+ function iniciarAcao(acao:AcaoMaterial,ids:string[]){
+  if(!master||!pacoteId)return
+  setAviso('');setErro('')
+  const registros=ids.filter(id=>materialPorId.has(id))
+  if(registros.length===1)setEdicao({acao,id:registros[0]})
+  else if(registros.length>1)setEscolha({acao,ids:registros})
+ }
+ async function aposEdicao(){
+  setEdicao(null)
+  setAviso('Alteração registrada. A composição e os totais serão atualizados; confira e aprove novamente a tipologia antes de liberar Compras.')
+  await atualizar()
+ }
  async function atualizar(){
   setAtualizando(true)
   try{await onAtualizar()}catch(e){setErro(e instanceof Error?e.message:'Não foi possível recarregar a composição.')}
@@ -153,7 +177,7 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
   </div>
   <div className="overflow-x-auto rounded-xl border">
    <table className="w-full min-w-[800px] text-left text-xs">
-    <thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Imagem</th><th className="p-3">Código / material</th><th className="p-3">Categoria</th><th className="p-3">Cor</th><th className="p-3">Medida / corte</th><th className="p-3 text-right">Quantidade</th><th className="p-3">Unidade</th>{visao==='total'&&<th className="p-3">Tipologias</th>}</tr></thead>
+    <thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Imagem</th><th className="p-3">Código / material e ações</th><th className="p-3">Categoria</th><th className="p-3">Cor</th><th className="p-3">Medida / corte</th><th className="p-3 text-right">Quantidade</th><th className="p-3">Unidade</th>{visao==='total'&&<th className="p-3">Tipologias</th>}</tr></thead>
     <tbody>{linhasExibidas.map(m=>{
      const imagem=fotoDaLinha(m.materialIds)
      const imagemObrigatoria=['perfis','acessorios'].includes(grupo(m.categoria))
@@ -162,12 +186,25 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
        {imagem?<img src={imagem} alt={'Imagem do produto '+(m.codigo||m.descricao)} className="h-full w-full object-contain p-1"/>:
         <span className={'flex flex-col items-center gap-0.5 text-center text-[9px] '+(imagemObrigatoria?'text-amber-800':'text-slate-400')}><ImageOff size={17}/>{imagemObrigatoria?'Imagem pendente':'Sem imagem'}</span>}
       </div></td>
-      <td className="p-3"><b className="font-mono text-slate-900">{m.codigo||'Sem código'}</b><p className="mt-1 text-slate-600">{m.descricao}</p></td>
+      <td className="p-3"><b className="font-mono text-slate-900">{m.codigo||'Sem código'}</b><p className="mt-1 text-slate-600">{m.descricao}</p>
+       {master&&<div className="mt-2 flex flex-wrap gap-1.5">
+        <button type="button" onClick={()=>iniciarAcao('ajustar',m.materialIds)} title="Editar quantidade, acabamento ou medidas deste material"
+         aria-label={'Editar '+(m.codigo||m.descricao)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 font-bold text-blue-800 hover:bg-blue-100">
+         <Pencil size={13}/>Editar</button>
+        <button type="button" onClick={()=>iniciarAcao('substituir',m.materialIds)} title="Substituir por produto do catálogo"
+         aria-label={'Substituir '+(m.codigo||m.descricao)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 font-semibold text-slate-700 hover:bg-slate-50">
+         <Replace size={13}/>Substituir</button>
+        <button type="button" onClick={()=>iniciarAcao('excluir',m.materialIds)} title="Excluir da tipologia com justificativa"
+         aria-label={'Excluir '+(m.codigo||m.descricao)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1.5 font-semibold text-red-700 hover:bg-red-50">
+         <Trash2 size={13}/>Excluir</button>
+       </div>}
+      </td>
       <td className="p-3">{m.categoria==='contramarco'?'Contramarco':m.categoria==='perfil'?'Perfil':m.categoria==='acessorio'?'Acessório':m.categoria==='vidro'?'Vidro':'Outro'}</td>
       <td className="p-3">{m.cor||'—'}</td>
       <td className="p-3">{m.corteMm?fmt(m.corteMm)+' mm (corte)':m.barraMm?fmt(m.barraMm)+' mm (referência)':'—'}</td>
       <td className="p-3 text-right font-bold">{fmt(m.quantidade)}</td><td className="p-3">{m.unidade}</td>
       {visao==='total'&&<td className="p-3">{m.tipologias.length||'—'}</td>}
+
      </tr>
     })}
     {!linhasExibidas.length&&<tr><td colSpan={visao==='total'?8:7} className="p-6 text-center text-slate-500">Nenhum material desta categoria na seleção atual.</td></tr>}</tbody>
@@ -189,6 +226,7 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
    {!!simulacaoBarras.pendencias.length&&<div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"><b>Pendências de cálculo:</b>{simulacaoBarras.pendencias.slice(0,10).map((p,i)=><p key={i}>{p}</p>)}</div>}
   </details>
   <p className="text-[11px] text-slate-500">Quantidade técnica já registrada por tipologia, sem multiplicação adicional. O total reúne somente o mesmo código/produto, categoria, acabamento, unidade e comprimento. <b>Peças de corte não são barras para pedido.</b></p>
+  {aviso&&<p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">{aviso}</p>}
   {erro&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{erro}</p>}
   {!consultando&&!!pendentes&&<p className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><AlertTriangle size={16} className="shrink-0"/>{pendentes} tipologia(s) sem aprovação técnica válida. Qualquer edição após a aprovação exige nova conferência.</p>}
   {!!semVinculo.length&&<p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{semVinculo.length} material(is) sem vínculo reconhecido com uma tipologia. Confira antes de liberar a composição.</p>}
@@ -206,5 +244,34 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
     </button>
    </div>
   </div>
+  {escolha&&<div role="dialog" aria-modal="true" aria-label="Escolher tipologia para editar material"
+   className="fixed inset-0 z-[180] flex items-center justify-center bg-slate-950/65 p-3">
+   <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+    <div className="flex items-center justify-between border-b p-4">
+     <div><h3 className="text-base font-bold">Escolha o registro da tipologia</h3>
+      <p className="mt-1 text-xs text-slate-500">Esta linha reúne mais de um registro. Selecione apenas o material que deseja alterar.</p></div>
+     <button type="button" onClick={()=>setEscolha(null)} aria-label="Fechar seleção" className="rounded-lg border p-2"><X size={17}/></button>
+    </div>
+    <div className="max-h-[55dvh] space-y-2 overflow-y-auto p-4">
+     {escolha.ids.map(id=>{
+      const material=materialPorId.get(id)
+      if(!material)return null
+      return <button type="button" key={id} onClick={()=>{setEdicao({acao:escolha.acao,id});setEscolha(null)}}
+       className="flex w-full items-center gap-3 rounded-lg border p-3 text-left hover:border-blue-300 hover:bg-blue-50">
+       {fotoDaLinha([id])?<img src={fotoDaLinha([id])!} alt={'Imagem '+(material.codigo||material.descricao)} className="h-12 w-12 object-contain"/>:
+        <ImageOff size={22} className="text-amber-600"/>}
+       <span><b className="text-xs">{nomeTipologia(material.item_ref)}</b>
+        <span className="block text-xs text-slate-600">{material.codigo||'Sem código'} · {material.descricao}</span>
+        <span className="block text-xs text-slate-600">Qtd. {material.quantidade_ajustada??material.quantidade_tecnica??0} {material.unidade}
+         {material.comprimento_corte_mm?' · Corte '+fmt(material.comprimento_corte_mm)+' mm':''}</span></span>
+      </button>
+     })}
+    </div>
+   </div>
+  </div>}
+  {edicao&&pacoteId&&materialPorId.has(edicao.id)&&<VendaMaterialEdicaoRapida
+   key={edicao.id+'-'+edicao.acao} acao={edicao.acao} material={materialPorId.get(edicao.id)!}
+   pacoteId={pacoteId} vendaId={vendaId} nomeTipologia={nomeTipologia(materialPorId.get(edicao.id)?.item_ref)}
+   imagemAtual={fotoDaLinha([edicao.id])} onCancelar={()=>setEdicao(null)} onSalvo={aposEdicao}/>}
  </section>
 }
