@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Beaker, CheckCircle2, ClipboardCheck, FileText, Loader2, Save, Upload, Wrench } from 'lucide-react'
+import { ArrowLeft, Beaker, CheckCircle2, ClipboardCheck, FileText, Loader2, Plus, Save, Upload, Wrench, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
 import { listarTodasFormulasCorte, criarVersaoTesteFormulaCorte, salvarFormulaCorte, type RegistroFormulaCorte } from '@/lib/engenhariaFormulasCorte'
 import { calcularFormulasCorte, type PecaFormula, type ResultadoPeca } from '@/lib/formulasCorteEngine'
 import { conferirCaso, compararSimulacoes, listaCortesTexto, type CasoTipologia } from '@/lib/bancadaTipologias'
 import { simularBarras } from '@/lib/planoCorteBancada'
+import { conferirAcessorios, lerListaAcessorios } from '@/lib/bancadaAcessorios'
 import { calcularAcessoriosTecnicos } from '@/lib/formulasAcessoriosEngine'
 import { listarProdutos } from '@/lib/produtos'
 import ImagemProdutoTecnico from '@/components/engenharia/ImagemProdutoTecnico'
@@ -20,10 +21,11 @@ type ExemploSalvo = {
   created_at: string
   usuario: string
   tem_pdf: boolean
-  caso: CasoTipologia
+  caso: CasoTipologia | null
   fonte: string
   formula_assinatura: string
   conferencia: { ok: boolean; avaliados: number; conformes: number }
+  conferencia_acessorios?: { ok: boolean; conferidos: number; conformes: number; erro?: string }
 }
 
 function numero(v: number | null | undefined) {
@@ -56,8 +58,10 @@ export default function BancadaTipologiasPage() {
   const [fonte, setFonte] = useState('')
   const [nome, setNome] = useState('')
   const [lista, setLista] = useState('')
+  const [listaAcessorios, setListaAcessorios] = useState('')
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [textoPdf, setTextoPdf] = useState('')
+  const [consentimentoPdfIA, setConsentimentoPdfIA] = useState(false)
   const [exemplos, setExemplos] = useState<ExemploSalvo[]>([])
   const [ocupado, setOcupado] = useState('')
   const [erro, setErro] = useState('')
@@ -72,7 +76,8 @@ export default function BancadaTipologiasPage() {
         const [registros, catalogo] = await Promise.all([listarTodasFormulasCorte(), listarProdutos()])
         setFormulas(registros)
         setProdutos(catalogo)
-        const primeiro = registros.find(x => x.status === 'em_validacao' && !x.ativo) || registros[0]
+        const pedido = new URLSearchParams(window.location.search).get('formulaId')
+        const primeiro = registros.find(x => x.id === pedido) || registros.find(x => x.status === 'em_validacao' && !x.ativo) || registros[0]
         if (primeiro) setId(primeiro.id)
       } catch (e) { setErro(mensagemErro(e)) }
       finally { setCarregando(false) }
@@ -88,6 +93,7 @@ export default function BancadaTipologiasPage() {
     setFolgaL(String(original?.folgas?.largura_mm ?? 4))
     setFolgaH(String(original?.folgas?.altura_mm ?? 4))
     setLista('')
+    setListaAcessorios('')
     setArquivo(null)
     setTextoPdf('')
     setNome('')
@@ -157,10 +163,14 @@ export default function BancadaTipologiasPage() {
     if (!definicao || !lista.trim()) return { atual: null as CasoTipologia | null, erro: '' }
     try {
       return { atual: { nome: nome || 'Projeto de referência', largura_mm: Number(largura), altura_mm: Number(altura),
-        opcoes, folgas: definicao.folgas, cortes: listaCortesTexto(lista) }, erro: '' }
+        opcoes, folgas: definicao.folgas, cortes: listaCortesTexto(lista),
+        acessorios: listaAcessorios.trim() ? lerListaAcessorios(listaAcessorios) : [] }, erro: '' }
     } catch (e) { return { atual: null, erro: mensagemErro(e) } }
-  }, [definicao, lista, nome, largura, altura, opcoes])
+  }, [definicao, lista, listaAcessorios, nome, largura, altura, opcoes])
   const conferencia = useMemo(() => caso.atual && definicao ? conferirCaso(definicao, caso.atual) : null, [caso.atual, definicao])
+  const conferenciaAcessorios = useMemo(() => caso.atual && definicao && rascunho
+    ? conferirAcessorios(definicao, rascunho.acessorios || [], caso.atual) : null,
+    [caso.atual, definicao, rascunho])
   const modificado = Boolean(rascunho && original && (
     JSON.stringify(rascunho.pecas) !== JSON.stringify(original.pecas) ||
     JSON.stringify(rascunho.acessorios) !== JSON.stringify(original.acessorios) ||
@@ -208,11 +218,37 @@ export default function BancadaTipologiasPage() {
     setTextoPdf(resp.texto || '')
     setSucesso('PDF extraído para conferência manual. Cole ou ajuste as linhas na lista de referência.')
   }
+  async function interpretarPdfComIA() {
+    if (!arquivo || !consentimentoPdfIA) throw Error('Selecione um arquivo e autorize a análise por IA.')
+    if (lista.trim()) throw Error('A lista de cortes já está preenchida. Revise-a antes de substituí-la para não perder correções.')
+    const sessao = await supabase.auth.getSession()
+    const token = sessao.data.session?.access_token
+    if (!token) throw Error('Faça login novamente.')
+    const form = new FormData()
+    form.set('acao', 'analisar')
+    form.set('consentimentoIA', 'sim')
+    form.set('arquivo', arquivo)
+    form.set('observacoes', 'Comparar a lista de corte desta medida com a receita selecionada.')
+    const resp = await fetch('/api/engenharia/bancada-tipologias/nova', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: form,
+    })
+    const data = await resp.json().catch(() => ({}))
+    if (!resp.ok) throw Error(data.error || 'Não foi possível interpretar o PDF.')
+    const cortes = (Array.isArray(data.componentes) ? data.componentes : []).filter((p: {
+      tipo: string; eixo: string; comprimento_mm: number | null
+    }) => p.tipo === 'perfil' && (p.eixo === 'L' || p.eixo === 'H') && p.comprimento_mm != null)
+    if (!cortes.length) throw Error('Nenhuma lista completa foi reconhecida com segurança. Use a extração de texto e preencha manualmente.')
+    setLista(cortes.map((p: {codigo:string;eixo:string;comprimento_mm:number;quantidade:number}) =>
+      [p.codigo,p.eixo,p.comprimento_mm,p.quantidade].join(';')).join('\n'))
+    setTextoPdf(data.texto_extraido || '')
+    setSucesso('IA sugeriu ' + cortes.length + ' linhas. Confira código, eixo, comprimento e quantidade antes de registrar.')
+  }
   async function registrarCaso() {
     if (!original || !caso.atual || !conferencia || caso.erro) throw Error(caso.erro || 'Preencha a lista de corte.')
     if (modificado) throw Error('Primeiro salve as fórmulas alteradas numa nova versão isolada.')
     const resp = await chamada('registrar', { caso: JSON.stringify(caso.atual), fonte }, arquivo)
-    setSucesso('Projeto registrado. ' + (resp.conferencia.ok ? 'Cortes coincidem, pronto para aprovação.' : 'Existem divergências para corrigir.'))
+    setSucesso('Projeto registrado. ' + (resp.conferencia.ok && resp.comparacaoAcessorios?.ok !== false
+      ? 'Listas coincidem. Confira e aprove a referência.' : 'Existem diferenças de cortes ou acessórios para corrigir.'))
     await carregarExemplos(id)
   }
   async function validarCaso(casoId: string) {
@@ -258,7 +294,7 @@ export default function BancadaTipologiasPage() {
           <h1 className="mt-2 text-2xl font-extrabold text-slate-900">Bancada de Projetos de Tipologia</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">Simule cortes, compare perfis, documente orçamentos W Vetro com medidas diferentes e valide uma versão segura antes da liberação operacional.</p>
         </div>
-        <Link className={botao + ' bg-slate-900 text-white'} href="/engenharia/editor-tecnico"><Wrench size={16}/> Editor Técnico completo</Link>
+        <div className="flex flex-wrap gap-2"><Link className={botao + ' bg-indigo-700 text-white'} href="/engenharia/bancada-tipologias/nova"><Plus size={16}/> Nova Tipologia</Link><Link className={botao + ' bg-slate-900 text-white'} href="/engenharia/editor-tecnico"><Wrench size={16}/> Editor Técnico completo</Link></div>
       </header>
       {erro && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{erro}</div>}
       {sucesso && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{sucesso}</div>}
@@ -317,6 +353,25 @@ export default function BancadaTipologiasPage() {
             {(p.condicoes?.length || p.mapa_codigo || p.formula_por_variavel) && <p className="text-xs text-amber-800 md:col-span-full">Esta peça também tem condições ou códigos por variante. Edite esses detalhes no Editor Técnico completo antes de validar.</p>}
           </div>)}
         </div>
+        {!!rascunho.acessorios?.length && <>
+          <h3 className="mt-6 font-bold text-slate-900">Acessórios e quantidades calculadas</h3>
+          <p className="mt-1 text-xs text-slate-500">As imagens vêm do cadastro central. Quantidades propostas devem ser comparadas com cada orçamento antes da validação.</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {rascunho.acessorios.map((a,i) => {
+              const resultado = acessorios.find(x => x.index === i)
+              return <div key={i} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+                <ImagemProdutoTecnico codigo={a.codigo} produto={produtos.find(p => p.codigo === a.codigo) || null} permitirEdicao />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold">{a.codigo} · {a.descricao || 'Acessório'}</p>
+                  <label className="mt-2 block text-xs font-semibold text-slate-600">Fórmula de quantidade
+                    <input className={campo + ' mt-1 font-mono'} value={a.formula_quantidade || ''} onChange={e => mudarAcessorio(i, e.target.value)}/>
+                  </label>
+                  <p className="mt-1 text-xs text-slate-600">Quantidade simulada: <b>{numero(resultado?.valor)}</b>{resultado?.erro ? ' · ' + resultado.erro : ''}</p>
+                </div>
+              </div>
+            })}
+          </div>
+        </>}
         {modificado && <p className="mt-3 text-sm font-semibold text-amber-800">Alterações em simulação local. Salve como nova versão para registrar exemplos, sem alterar a fórmula operacional.</p>}
       </section>}
 
@@ -365,20 +420,38 @@ export default function BancadaTipologiasPage() {
             <input className={campo + ' mt-1'} type="file" accept=".pdf,application/pdf" onChange={arquivoAlterado}/>
           </label>
         </div>
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <button className={botao + ' border border-slate-300'} disabled={!arquivo || !!ocupado || !id} onClick={() => executar('extrair', extrairPdf)}><FileText size={16}/> Extrair texto do PDF</button>
-          <span className="text-xs text-slate-500">PDF não preenche fórmulas automaticamente. Todas as medidas precisam ser verificadas.</span>
+          <button className={botao + ' border border-indigo-200 text-indigo-800'} disabled={!arquivo || !consentimentoPdfIA || !!ocupado || !id || !!lista.trim()} onClick={() => executar('interpretar', interpretarPdfComIA)}><Sparkles size={16}/> Sugerir cortes com IA</button>
+          <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" className="mt-0.5" checked={consentimentoPdfIA} onChange={e => setConsentimentoPdfIA(e.target.checked)}/> Autorizo enviar este PDF à IA configurada no Atlas para interpretação técnica.</label>
+          <span className="w-full text-xs text-slate-500">A IA não valida fórmulas nem substitui cortes conferidos. Revise todas as linhas antes de registrar.</span>
         </div>
         {!!textoPdf && <details className="mt-3 rounded-xl bg-slate-50 p-3"><summary className="cursor-pointer text-sm font-semibold">Texto extraído do PDF para conferência</summary><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap text-xs">{textoPdf}</pre></details>}
         <label className="mt-4 block text-sm font-semibold">Lista de corte de referência — uma peça por linha
           <textarea className={campo + ' mt-1 min-h-36 font-mono'} value={lista} onChange={e => setLista(e.target.value)} placeholder={'CÓDIGO;EIXO;COMPRIMENTO;QUANTIDADE\nSU001;L;1796;2\nSU053;H;2196;2'}/>
         </label>
         <p className="mt-1 text-xs text-slate-500">Formato: CÓDIGO;EIXO (L/H ou vazio);COMPRIMENTO em mm;QUANTIDADE. Use ponto ou vírgula decimal. Não misture quantidade de barras compradas com quantidade de peças cortadas.</p>
+        {!!rascunho?.acessorios?.length && <>
+          <label className="mt-4 block text-sm font-semibold">Lista de acessórios conferida no W.Vetro — um código por linha
+            <textarea className={campo + ' mt-1 min-h-28 font-mono'} value={listaAcessorios}
+              onChange={e => setListaAcessorios(e.target.value)}
+              placeholder={'CÓDIGO;QUANTIDADE\nAC001;4\nAC099;2'} />
+          </label>
+          <p className="mt-1 text-xs text-slate-500">Compare todas as quantidades. Referências sem acessórios não poderão ser aprovadas se a receita contiver acessórios.</p>
+        </>}
         {caso.erro && <p className="mt-3 text-sm text-red-700">{caso.erro}</p>}
         {conferencia && <div className={'mt-3 rounded-xl p-3 text-sm ' + (conferencia.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900')}>
           <strong>{conferencia.ok ? 'Todas as peças coincidem' : 'Existem diferenças a conferir'}</strong> · {conferencia.conformes}/{conferencia.avaliados} linhas iguais, tolerância 0,5 mm.
           {conferencia.erro && <p>{conferencia.erro}</p>}
           {conferencia.desvios.filter(d => d.estado !== 'conforme').slice(0, 12).map((d,i) => <p key={i}>{d.codigo} {d.eixo || ''}: esperado {numero(d.esperado_mm)} mm × {numero(d.esperado_quantidade)}, Atlas {numero(d.calculado_mm)} mm × {numero(d.calculado_quantidade)} ({d.estado.replaceAll('_',' ')})</p>)}
+        </div>}
+        {conferenciaAcessorios && !!rascunho?.acessorios?.length && <div className={'mt-3 rounded-xl p-3 text-sm ' +
+          (conferenciaAcessorios.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900')}>
+          <b>{conferenciaAcessorios.ok ? 'Acessórios conferidos' : 'Acessórios ainda não conformes'}</b>
+          {' · '}{conferenciaAcessorios.conformes}/{conferenciaAcessorios.conferidos} códigos coincidentes.
+          {conferenciaAcessorios.erro && <p>{conferenciaAcessorios.erro}</p>}
+          {conferenciaAcessorios.diferencas.filter(a => !a.conforme).slice(0,12).map((a,i) =>
+            <p key={i}>{a.codigo}: W.Vetro {numero(a.esperado)}, Atlas {numero(a.calculado)}</p>)}
         </div>}
         <button className={botao + ' mt-4 bg-blue-700 text-white'} disabled={!caso.atual || !!ocupado || !fonte.trim() || modificado} onClick={() => executar('registrar', registrarCaso)}>
           {ocupado === 'registrar' ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Registrar exemplo e comparação
@@ -397,11 +470,11 @@ export default function BancadaTipologiasPage() {
             <div className="min-w-0">
               <p className="font-semibold">{e.caso?.nome || 'Projeto'} <span className="text-sm text-slate-500">({numero(e.caso?.largura_mm)} × {numero(e.caso?.altura_mm)} mm)</span></p>
               <p className="text-xs text-slate-600">{e.fonte} · {e.usuario || 'Responsável'} · {new Date(e.created_at).toLocaleDateString('pt-BR')}</p>
-              <p className={'text-xs font-semibold ' + (e.status === 'concluido' ? 'text-emerald-700' : 'text-amber-800')}>{e.status === 'concluido' ? 'Referência validada' : 'Aguardando conferência'} · {e.conferencia?.conformes || 0}/{e.conferencia?.avaliados || 0} linhas conformes na gravação</p>
+              <p className={'text-xs font-semibold ' + (e.status === 'concluido' ? 'text-emerald-700' : 'text-amber-800')}>{!e.caso?.cortes?.length ? 'Documento de origem: falta lista de corte confirmada' : e.status === 'concluido' ? 'Referência validada' : 'Aguardando conferência'} · {e.conferencia?.conformes || 0}/{e.conferencia?.avaliados || 0} linhas conformes na gravação</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {e.tem_pdf && <button className={botao + ' border border-slate-200'} onClick={() => executar('pdf_'+e.id, () => abrirPdf(e.id))}><FileText size={15}/> PDF</button>}
-              {e.status !== 'concluido' && <button className={botao + ' bg-slate-900 text-white'} disabled={!!ocupado || modificado} onClick={() => executar('validar_'+e.id, () => validarCaso(e.id))}><CheckCircle2 size={16}/> Aprovar cortes</button>}
+              {e.tem_pdf && <button className={botao + ' border border-slate-200'} onClick={() => executar('pdf_'+e.id, () => abrirPdf(e.id))}><FileText size={15}/> Referência</button>}
+              {e.status !== 'concluido' && !!e.caso?.cortes?.length && <button className={botao + ' bg-slate-900 text-white'} disabled={!!ocupado || modificado} onClick={() => executar('validar_'+e.id, () => validarCaso(e.id))}><CheckCircle2 size={16}/> Aprovar cortes</button>}
             </div>
           </div>)}
         </div>

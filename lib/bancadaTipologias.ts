@@ -14,6 +14,7 @@ export type CasoTipologia = {
   opcoes: OpcoesEscolhidas
   folgas: FolgasEncaixe
   cortes: CorteReferencia[]
+  acessorios?: Array<{ codigo: string; quantidade: number }>
 }
 
 export type DesvioCorte = {
