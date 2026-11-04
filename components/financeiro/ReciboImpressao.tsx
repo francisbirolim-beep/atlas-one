@@ -13,6 +13,11 @@ export default function ReciboImpressao({
   acaoInicial?: AcaoRecibo
 }) {
   const r = textoRecibo(dados)
+  // Observações legadas podem repetir a anotação automática de desconto.
+  // O desconto permanece registrado na linha financeira abaixo, uma única vez.
+  const observacoes = dados.tipo === 'receber'
+    ? dados.descricao?.replace(/(?:Desconto concedido nesta baixa:\s*R\$\s*[0-9.,]+\s*)+/gi, ' ').trim()
+    : dados.descricao
   const moeda = (v:number) => Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
   const papelRef = useRef<HTMLDivElement>(null)
   const acaoExecutada = useRef(false)
@@ -101,7 +106,7 @@ export default function ReciboImpressao({
         <p><b>{dados.tipo === 'pagar' ? 'Beneficiário / recebedor' : 'Recebemos de'}:</b> {dados.nome}</p>
         {dados.documento && <p><b>CPF/CNPJ:</b> {dados.documento}</p>}
         {dados.obra && <p><b>Referente à obra:</b> {dados.obra}</p>}
-        {dados.descricao && <p><b>Observações:</b> {dados.descricao}</p>}
+        {observacoes && <p><b>Observações:</b> {observacoes}</p>}
         <p><b>{dados.consolidado ? 'Data do último recebimento' : dados.tipo === 'pagar' ? 'Data do pagamento' : 'Data do recebimento'}:</b> {r.data}</p>
         {!dados.consolidado && <p><b>Forma de pagamento:</b> {descricaoFormaRecibo(dados.forma, dados.itens?.[0]?.cartaoParcelas)}</p>}
       </section>
@@ -120,7 +125,7 @@ export default function ReciboImpressao({
             <div className="mt-2 space-y-1 border-t border-dashed pt-2">
               {item.formas?.length ? item.formas.map((forma, i) => <div key={i} className="flex justify-between gap-3"><span>{descricaoFormaRecibo(forma.forma, forma.parcelas)}</span><b>{moeda(forma.valor)}</b></div>) : <p>{descricaoFormaRecibo(item.forma, item.cartaoParcelas)}</p>}
             </div>
-            {!!item.desconto && item.desconto > 0 && <p className="mt-2 text-amber-800">Abatimento (não recebido em dinheiro): {moeda(item.desconto)}</p>}
+            {!!item.desconto && item.desconto > 0 && <p className="mt-2 flex justify-between gap-3 text-amber-800"><span>Desconto concedido</span><b>{moeda(item.desconto)}</b></p>}
           </div>)}
         </div>
       </section>}
