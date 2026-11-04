@@ -20,6 +20,7 @@ import { nomesClientesCompativeis } from '@/lib/wvetroClienteIdentidade'
 import { intervalosHistoricosClienteWVetro } from '@/lib/wvetroBuscaHistoricaCliente'
 import type { Usuario } from '@/lib/tipos'
 import VendasCliente360 from '@/components/clientes/VendasCliente360'
+import Cliente360KanbanObras from '@/components/clientes/Cliente360KanbanObras'
 import ComprasClienteCards from '@/components/compras/ComprasClienteCards'
 import CadastroCliente360 from '@/components/clientes/CadastroCliente360'
 import ClienteOrigensUnificadas from '@/components/clientes/ClienteOrigensUnificadas'
@@ -416,6 +417,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
             {pode('abrir_assistencia',true)&&<Link href={`/assistencia?cliente=${cliente.id}`} className="flex min-h-[140px] flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm transition hover:border-rose-300 hover:shadow-md"><span className="w-fit rounded-xl bg-rose-50 p-2.5 text-rose-600"><Wrench size={22}/></span><span><b className="block text-sm text-slate-900">Assistência técnica</b><span className="mt-1 block text-xs text-slate-500">Registrar um atendimento</span></span></Link>}
             {pode('pedido_compra',true)&&<Link href={`/compras/solicitacoes?cliente=${encodeURIComponent(cliente.id)}`} className="flex min-h-[140px] flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm transition hover:border-emerald-300 hover:shadow-md"><span className="w-fit rounded-xl bg-emerald-50 p-2.5 text-emerald-600"><Receipt size={22}/></span><span><b className="block text-sm text-slate-900">Pedido de compra</b><span className="mt-1 block text-xs text-slate-500">Solicitar material para a obra</span></span></Link>}
           </div>
+          {pode('obras')&&<Cliente360KanbanObras clienteId={cliente.id} podeVerVendas={pode('vendas')} onAbrirObras={()=>setAba('obras')}/>}
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
             <Box titulo="Atividades recentes" acao={pode('historico')&&<button type="button" onClick={()=>setAba('historico')} className="text-xs font-bold text-blue-600">Ver histórico completo ↗</button>}>
               <div className="divide-y">
