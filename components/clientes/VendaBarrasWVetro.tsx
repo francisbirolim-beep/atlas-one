@@ -31,8 +31,8 @@ const qtd=(v:number)=>Number(v||0).toLocaleString('pt-BR')
 const val=(v:string|number|null|undefined)=>String(v??'')
 const api='/api/vendas/wvetro/barras'
 
-export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,modo='lista'}:{
- vendaId:string;numeroWvetro:string;onAbrirCorte:()=>void;modo?:'lista'|'kanban'
+export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,modo='lista',somenteReferencia=false}:{
+ vendaId:string;numeroWvetro:string;onAbrirCorte:()=>void;modo?:'lista'|'kanban';somenteReferencia?:boolean
 }){
  const [lista,setLista]=useState<Linha[]>([])
  const [historico,setHistorico]=useState<Array<{evento:string;justificativa?:string;validado_por_nome?:string;created_at:string}>>([])
@@ -178,22 +178,23 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
    </div>
    <div className="flex flex-wrap items-center gap-2">
     {modo==='lista'&&lista.length>0&&<Link target="_blank" href={'/compras/barras/'+vendaId+'?conferencia=estoque'+(selecionadas.length?'&barras='+selecionadas.join(','):'')} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white"><FileDown size={13}/>Conferir estoque / Imprimir PDF</Link>}
-    {modo==='lista'&&<button type="button" onClick={onAbrirCorte} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700">Ver lista de corte na Produção</button>}
+    {modo==='lista'&&<button type="button" onClick={onAbrirCorte} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700">Imprimir plano de corte (consulta)</button>}
     <button type="button" disabled={ocupado} onClick={()=>void carregar()} className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700"><RefreshCw size={13}/>Atualizar</button>
    </div>
   </div>
   {erro&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{erro}</p>}
   {msg&&<p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">{msg}</p>}
-  {!lista.length&&modo==='lista'&&<div className="rounded-xl border bg-white p-4">
+  {modo==='lista'&&<div className="rounded-xl border bg-white p-4">
    <b className="text-sm text-slate-800">Importar relatório Barras Utilizadas do WVetro</b>
    <p className="mt-1 text-xs text-slate-500">Abra o orçamento no WVetro, selecione “BARRAS UTILIZADAS” e envie o PDF. O Atlas verifica o número do orçamento antes de importar. Nenhuma compra é criada sem validação.</p>
+   {lista.length>0&&<p className="mt-1 text-xs font-bold text-amber-800">Já existe uma importação para esta venda. O novo PDF será analisado apenas para comparação: ele não sobrescreve barras, estoque, rascunhos ou pedidos. Corrija os registros existentes com justificativa.</p>}
    <div className="mt-3 flex flex-wrap items-center gap-3">
     <input ref={fileInput} type="file" accept=".pdf,application/pdf" onChange={e=>{setArquivo(e.target.files?.[0]||null);setPreview([]);setEdicoes([])}} className="max-w-full text-xs"/>
     <button type="button" disabled={!arquivo||ocupado} onClick={()=>void analisar()} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">{ocupado?'Conferindo...':'Analisar PDF das barras'}</button>
    </div>
   </div>}
   {modo==='lista'&&preview.length>0&&<div className="rounded-xl border bg-white p-4">
-   <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-slate-800">Conferência do relatório antes da importação</b><button disabled={ocupado} onClick={()=>void importar()} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><ShieldCheck size={14}/>Validar e registrar {edicoes.length} linha(s)</button></div>
+   <div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-slate-800">Conferência do relatório antes da importação</b><button onClick={()=>void importar()} disabled={ocupado||lista.length>0} className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><ShieldCheck size={14}/> {lista.length>0?'Já importado: corrija no histórico':'Validar e registrar '+edicoes.length+' linha(s)'}</button></div>
    <p className="my-2 text-[11px] text-slate-500">Ao corrigir qualquer campo, informe o motivo. O relatório original é preservado como referência de aprendizado.</p>
    <div className="overflow-x-auto"><table className="w-full min-w-[1050px] text-xs">
     <thead className="bg-slate-100"><tr><th className="p-2 text-left">Código</th><th>Descrição</th><th>Acabamento</th><th>Tipo</th><th>Qtd. BR</th><th>Barra (mm)</th><th>Justificativa da correção</th><th>Aprendizado</th></tr></thead>
@@ -208,7 +209,7 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
     </tr>)}</tbody>
    </table></div>
   </div>}
-  {modo==='lista'&&lista.length>0&&<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white p-3">
+  {modo==='lista'&&!somenteReferencia&&lista.length>0&&<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white p-3">
    <div className="flex flex-wrap items-center gap-2">
     <button type="button" onClick={alternarTodos} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold text-slate-700">{todosSelecionados?'Desmarcar todos':'Selecionar todos'}</button>
     <span className="text-xs font-semibold text-slate-600">{selecionadas.length} de {lista.length} material(is) selecionado(s)</span>
@@ -219,7 +220,7 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
    <div className="border-b bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">Relação de barras comerciais da obra · {lista.length} linhas · {qtd(total)} barras</div>
    <table className="w-full min-w-[1100px] text-left text-xs">
     <thead className="bg-slate-100 text-slate-700"><tr>
-     <th className="p-2"><input aria-label="Selecionar todas as barras da obra" type="checkbox" checked={todosSelecionados} onChange={alternarTodos}/></th><th className="p-2">Imagem do perfil</th><th className="p-2">Código</th><th className="p-2">Descrição</th>
+     <th className="p-2">{somenteReferencia?'Ref.':<input aria-label="Selecionar todas as barras da obra" type="checkbox" checked={todosSelecionados} onChange={alternarTodos}/>}</th><th className="p-2">Imagem do perfil</th><th className="p-2">Código</th><th className="p-2">Descrição</th>
      <th className="p-2">Acabamento / cor</th><th className="p-2">Tipo</th>
      <th className="p-2 text-right">Qtd. de barras (BR)</th>
      <th className="p-2 text-right">Comprimento barra</th>
@@ -227,7 +228,7 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
      <th className="p-2">Conferência</th><th className="p-2">Ações</th>
     </tr></thead>
     <tbody>{lista.map(row=><tr key={row.id} className="border-t align-top">
-     <td className="p-2"><input type="checkbox" aria-label={'Selecionar perfil '+row.codigo} checked={selecionadas.includes(row.id)} onChange={()=>alternarItem(row.id)}/></td>
+     <td className="p-2">{somenteReferencia?'—':<input type="checkbox" aria-label={'Selecionar perfil '+row.codigo} checked={selecionadas.includes(row.id)} onChange={()=>alternarItem(row.id)}/>}</td>
      <td className="p-2"><div className={'flex w-[92px] flex-col items-center gap-1 rounded-lg border p-1 '+(!row.imagem_url?'border-amber-300 bg-amber-50':'border-slate-200')}>
       {row.imagem_url?<img src={row.imagem_url} alt={'Imagem técnica do perfil '+row.codigo} className="h-12 w-12 object-contain"/>:<ImageOff size={18} className="text-amber-500"/>}
       {!row.imagem_url&&<span className="text-center text-[10px] font-semibold text-amber-700">Imagem pendente</span>}
@@ -250,7 +251,7 @@ export default function VendaBarrasWVetro({vendaId,numeroWvetro,onAbrirCorte,mod
       </div>}
      </td>
     </tr>)}</tbody>
-    <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={6} className="p-3">Total para compra</td><td className="p-3 text-right">{qtd(total)} BR</td><td colSpan={5} className="p-3 text-right">{lista.filter(x=>x.status_validacao==='pendente').length} linha(s) aguardando validação</td></tr></tfoot>
+    <tfoot className="bg-slate-100 font-bold"><tr><td colSpan={6} className="p-3">{somenteReferencia?'Total do relatório WVetro (antes do estoque)':'Total para compra'}</td><td className="p-3 text-right">{qtd(total)} BR</td><td colSpan={5} className="p-3 text-right">{lista.filter(x=>x.status_validacao==='pendente').length} linha(s) aguardando validação</td></tr></tfoot>
    </table>
   </div>}
   {modo==='kanban'&&!lista.some(x=>Boolean(x.validado_em))&&<div className="rounded-xl border border-dashed bg-white p-4 text-xs text-slate-600">Nenhum perfil liberado para Compras. Confira o estoque, selecione os materiais e valide na aba Materiais.</div>}

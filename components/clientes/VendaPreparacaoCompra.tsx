@@ -1,9 +1,11 @@
 'use client'
 import {useCallback,useEffect,useMemo,useState} from 'react'
 import Link from 'next/link'
-import {CheckCircle2,FileDown,ImageOff,Loader2,Plus,RefreshCw,Save,ShoppingCart,Trash2} from 'lucide-react'
+import {CheckCircle2,FileDown,FileUp,ImageOff,Loader2,Plus,RefreshCw,Save,ShoppingCart,Trash2} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import type {ItemPreCompra,CategoriaPreCompra} from '@/lib/preparacaoCompraMateriaisServer'
+import type {MaterialResumoTipologia} from '@/lib/materiaisTipologiasResumo'
+import {calcularBarrasConsolidadasObra} from '@/lib/barrasConsolidadasObra'
 
 type Rascunho={id:string;chave_item:string;categoria:CategoriaPreCompra;origem:string;codigo:string;descricao:string;
  cor:string;medida:string;unidade:string;quantidade_necessaria:number;quantidade_estoque:number;
@@ -15,12 +17,14 @@ const nomes:Record<CategoriaPreCompra,string>={perfil:'Perfis · barras',acessor
 const numero=(x:unknown)=>Number(x||0).toLocaleString('pt-BR',{maximumFractionDigits:3})
 const n=(s:string)=>Number(s.replace(',','.'))
 const api='/api/vendas/materiais/preparacao'
-export default function VendaPreparacaoCompra({vendaId,obraId,pacoteId,solicitarSync=0}:{
- vendaId:string;obraId?:string|null;pacoteId?:string|null;solicitarSync?:number
+export default function VendaPreparacaoCompra({vendaId,obraId,pacoteId,solicitarSync=0,onAbrirImportacaoPdf,materiaisTecnicos=[]}:{
+ vendaId:string;obraId?:string|null;pacoteId?:string|null;solicitarSync?:number;
+ onAbrirImportacaoPdf?:()=>void;materiaisTecnicos?:MaterialResumoTipologia[]
 }){
  const [dados,setDados]=useState<Dados|null>(null)
  const [edicoes,setEdicoes]=useState<Record<string,Edicao>>({})
  const [categoria,setCategoria]=useState<CategoriaPreCompra>('perfil')
+ const [perdaCorteMm,setPerdaCorteMm]=useState(0)
  const [ocupado,setOcupado]=useState<string|null>(null)
  const [carregando,setCarregando]=useState(false)
  const [erro,setErro]=useState('')
@@ -66,6 +70,18 @@ export default function VendaPreparacaoCompra({vendaId,obraId,pacoteId,solicitar
     produtoId:dados?.manuaisImagens?.[s.chave_item]?.produtoId||null}))
   return [...base,...manuais]
  },[dados,categoria])
+ const sugestaoCortes=useMemo(()=>calcularBarrasConsolidadasObra(materiaisTecnicos,{perdaCorteMm}),[materiaisTecnicos,perdaCorteMm])
+ const sugestoesPerfil=useMemo(()=>{
+  const mapa=new Map<string,typeof sugestaoCortes.barras>()
+  const chave=(codigo:string,cor:string)=>[codigo,cor].map(v=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()).join('|')
+  for(const b of sugestaoCortes.barras){
+   const id=chave(b.codigo,b.cor||'')
+   const itens=mapa.get(id)||[]
+   itens.push(b);mapa.set(id,itens)
+  }
+  return mapa
+ },[sugestaoCortes])
+ const chavePerfil=(codigo:string,cor:string)=>[codigo,cor].map(v=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()).join('|')
  const rascunhos=useMemo(()=>new Map((dados?.rascunhos||[]).map(s=>[s.chave_item,s])),[dados])
  const linhasConferidas=linhas.filter(i=>{
   const s=rascunhos.get(i.chave)
@@ -154,12 +170,25 @@ export default function VendaPreparacaoCompra({vendaId,obraId,pacoteId,solicitar
    <button type="button" onClick={()=>void carregar()} disabled={carregando||Boolean(ocupado)}
     className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-40"><RefreshCw size={13}/>Atualizar necessidades</button>
   </div>
+  {categoria==='perfil'&&<div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/50 p-3">
+   <div><b className="text-xs text-blue-900">Conferência de barras com otimização de todas as tipologias</b>
+    <p className="mt-1 text-[11px] text-slate-600">{sugestaoCortes.totalPecas} peças de corte → {sugestaoCortes.totalBarras} barras estimadas, antes do estoque. Veja a sugestão de cada perfil abaixo, confira e aplique apenas se adequada.</p>
+   </div>
+   <label className="flex items-center gap-2 text-xs font-bold text-slate-700">Perda de serra (mm)
+    <input type="number" min="0" max="50" step="0.5" value={perdaCorteMm}
+     onChange={e=>{const v=Number(e.target.value);if(Number.isFinite(v)&&v>=0&&v<=50)setPerdaCorteMm(v)}}
+     className="w-20 rounded border bg-white px-2 py-1 text-right"/>
+   </label>
+   {!!sugestaoCortes.pendencias.length&&<p className="w-full text-xs font-semibold text-amber-800">Atenção: {sugestaoCortes.pendencias.length} referência(s) sem dados suficientes para otimização. Resolva antes de liberar a compra.</p>}
+  </div>}
   <div className="mt-3 flex flex-wrap gap-2">
+   {onAbrirImportacaoPdf&&<button type="button" onClick={onAbrirImportacaoPdf}
+    className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800"><FileUp size={13}/>Importar ou comparar PDF de barras WVetro</button>}
    {obraId&&<Link target="_blank" href={'/obras/'+obraId+'/materiais/pdf?'+(pacoteId?'pacote='+pacoteId+'&':'')+'grupo=perfis'}
     className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"><FileDown size={13}/>Imprimir plano de corte (consulta)</Link>}
-   <Link target="_blank" href={'/vendas/'+vendaId+'/materiais/conferencia?categoria=perfil'}
+   <Link target="_blank" href={'/vendas/'+vendaId+'/materiais/conferencia?categoria=perfil&perdaCorteMm='+perdaCorteMm}
     className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"><FileDown size={13}/>Imprimir relação de barras · conferência</Link>
-   <Link target="_blank" href={'/vendas/'+vendaId+'/materiais/conferencia?categoria='+categoria}
+   <Link target="_blank" href={'/vendas/'+vendaId+'/materiais/conferencia?categoria='+categoria+'&perdaCorteMm='+perdaCorteMm}
     className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"><FileDown size={13}/>Imprimir lista de {nomes[categoria].toLowerCase()} · conferência</Link>
   </div>
   {carregando&&<p role="status" className="mt-3 flex items-center gap-1 text-xs text-blue-700"><Loader2 size={13} className="animate-spin"/>Atualizando materiais...</p>}
@@ -182,6 +211,8 @@ export default function VendaPreparacaoCompra({vendaId,obraId,pacoteId,solicitar
     <thead className="bg-slate-50 text-slate-600"><tr><th className="p-2">Imagem</th><th className="p-2">Material</th><th className="p-2 text-right">Necessidade</th>
      <th className="p-2 text-right">No estoque</th><th className="p-2 text-right">Comprar</th><th className="p-2">Conferi</th><th className="p-2">Motivo / observação</th><th className="p-2">Ações</th></tr></thead>
     <tbody>{linhas.map(i=>{
+     const opcoesPerfil=i.categoria==='perfil'?sugestoesPerfil.get(chavePerfil(i.codigo,i.cor))||[]:[]
+     const sugerida=opcoesPerfil.length===1?opcoesPerfil[0]:null
      const salvo=rascunhos.get(i.chave)
      const ed=edicoes[i.chave]
      const desatualizado=salvo&&salvo.fonte_hash!==i.fonteHash
@@ -192,6 +223,16 @@ export default function VendaPreparacaoCompra({vendaId,obraId,pacoteId,solicitar
       <td className="p-2"><div className="font-mono font-bold">{i.codigo}</div><div className="max-w-[210px] font-semibold">{i.descricao}</div>
        <div className="text-[10px] text-slate-500">{i.cor}{i.medida?' · '+i.medida:''}</div>
        {i.origem==='manual'&&<div className="text-[10px] font-bold text-blue-700">Extra somente na compra</div>}
+       {sugerida&&<div className="mt-2 rounded border border-blue-200 bg-blue-50 p-2 text-[11px] text-blue-900">
+        <b>Sugestão do corte global: {numero(sugerida.quantidadeBarras)} BR de {numero(sugerida.comprimentoBarraMm)} mm</b>
+        <span className="block">{numero(sugerida.quantidadePecas)} peça(s) de {sugerida.tipologias.length} tipologia(s); não desconta estoque.</span>
+        <button type="button" disabled={enviado||Boolean(ocupado)} onClick={()=>{
+         const estoque=Number(ed?.estoque||0)
+         mudar(i.chave,{comprar:String(Math.max(0,sugerida.quantidadeBarras-estoque)),
+          conferido:false,justificativa:'Revisão da otimização global de cortes da obra, com conferência de estoque.'})
+        }} className="mt-1 rounded border border-blue-300 bg-white px-2 py-1 font-bold text-blue-800 disabled:opacity-40">Usar sugestão na preparação</button>
+       </div>}
+       {opcoesPerfil.length>1&&<div className="mt-1 text-[10px] font-bold text-amber-800">Mais de um comprimento/produto para este código/cor; confira cada barra na visão Total da obra antes de ajustar.</div>}
        {desatualizado&&<div className="mt-1 font-bold text-amber-700">Tipologia alterada; reconferir</div>}
        {i.categoria==='perfil'&&i.origem==='tipologia'&&i.necessidade===0&&<div className="mt-1 text-[10px] font-bold text-amber-800">Perfil novo: confira o corte para definir quantas barras comprar.</div>}
        {enviado&&<div className="mt-1 font-bold text-emerald-700">Enviado para Compras</div>}

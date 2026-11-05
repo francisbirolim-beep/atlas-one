@@ -1795,13 +1795,19 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           />
         </Box>}
         {aba==='materiais'&&<Box titulo="Preparação da compra · Estoque conferido e pedidos por categoria">
-          <VendaPreparacaoCompra vendaId={venda.id} obraId={venda.obra_id} pacoteId={pacoteTecnicoId} solicitarSync={sincronizacaoListaCompraKey}/>
+          <VendaPreparacaoCompra vendaId={venda.id} obraId={venda.obra_id} pacoteId={pacoteTecnicoId} solicitarSync={sincronizacaoListaCompraKey}
+           materiaisTecnicos={materiaisTecnicos} onAbrirImportacaoPdf={()=>{
+            const alvo=document.getElementById('materiais-barras-wvetro')
+            const painel=alvo?.closest('details')
+            if(painel)painel.open=true
+            alvo?.scrollIntoView({behavior:'smooth',block:'start'})
+           }}/>
         </Box>}
         {aba==='materiais'&&<details className="rounded-xl border border-slate-200 bg-white p-4">
-          <summary className="cursor-pointer text-sm font-bold text-slate-700">Histórico de barras W.Vetro · fluxo anterior (somente para acompanhamento)</summary>
+          <summary className="cursor-pointer text-sm font-bold text-slate-700">Importação e histórico do PDF Barras Utilizadas · WVetro</summary>
           <div id="materiais-barras-wvetro" className="mt-3">
-            <p className="mb-2 text-xs text-amber-800">O fluxo abaixo é anterior à Preparação de Compras. Não envie novamente pedidos já registrados na Central de Compras.</p>
-            <VendaBarrasWVetro modo="lista" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>venda.obra_id&&window.open('/obras/'+venda.obra_id+'/materiais/pdf?'+(pacoteTecnicoId?'pacote='+pacoteTecnicoId+'&':'')+'grupo=perfis','_blank','noopener,noreferrer')}/>
+            <p className="mb-2 text-xs text-amber-800">Use este quadro para importar e comparar o PDF Barras Utilizadas com conferência e aprendizado supervisionado. Os ajustes da quantidade a comprar continuam no quadro Preparação de compras acima; não faça envio duplicado pelo fluxo anterior.</p>
+            <VendaBarrasWVetro modo="lista" somenteReferencia vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>venda.obra_id&&window.open('/obras/'+venda.obra_id+'/materiais/pdf?'+(pacoteTecnicoId?'pacote='+pacoteTecnicoId+'&':'')+'grupo=perfis','_blank','noopener,noreferrer')}/>
           </div>
         </details>}
 

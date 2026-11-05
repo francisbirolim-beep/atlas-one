@@ -4,7 +4,7 @@ import {useEffect,useMemo,useState} from 'react'
 import {AlertTriangle,CheckCircle2,ImageOff,Loader2,RefreshCw,Pencil,Replace,Trash2,X} from 'lucide-react'
 import {tokenAtual,usuarioAtual} from '@/lib/auth'
 import VendaMaterialEdicaoRapida,{type AcaoMaterial} from '@/components/clientes/VendaMaterialEdicaoRapida'
-import {otimizarPerfis,agruparCompraDeBarras,type CortePerfil} from '@/lib/aproveitamentoPerfis'
+import {calcularBarrasConsolidadasObra} from '@/lib/barrasConsolidadasObra'
 import {consolidarMateriaisTipologias,type MaterialResumoTipologia} from '@/lib/materiaisTipologiasResumo'
 
 type Material=MaterialResumoTipologia & {wvetro_dados?:Record<string,any>|null}
@@ -25,6 +25,7 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
  onAbrirTipologias:()=>void;onPrepararCotacao:()=>void;onAbrirBarras:()=>void
 }){
  const [visao,setVisao]=useState<'tipologia'|'total'>('tipologia')
+ const [perdaCorteMm,setPerdaCorteMm]=useState(0)
  const [refSelecionada,setRefSelecionada]=useState('')
  const [categoria,setCategoria]=useState<Categoria>('todos')
  const [situacoes,setSituacoes]=useState<Record<string,{situacao:Estado}>>({})
@@ -64,7 +65,7 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
  },[codigosFotos])
  const detalhe=useMemo(()=>materiais.filter(m=>m.item_ref===refAtiva),[materiais,refAtiva])
  const linhas=visao==='total'?totais:consolidarMateriaisTipologias(detalhe)
- const linhasExibidas=linhas.filter(m=>categoria==='todos'||grupo(m.categoria)===categoria)
+ const linhasExibidas=linhas.filter(m=>(categoria==='todos'||grupo(m.categoria)===categoria)&&!(visao==='total'&&grupo(m.categoria)==='perfis'))
  const imagemPorId=useMemo(()=>{
   const mapa=new Map<string,string>()
   for(const m of materiais){
@@ -75,27 +76,13 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
   return mapa
  },[materiais,imagensProdutos,fotosPorCodigo])
  const fotoDaLinha=(ids:string[])=>ids.map(id=>imagemPorId.get(id)).find(Boolean)||null
- const simulacaoBarras=useMemo(()=>{
-  const lista=materiais.filter(m=>['perfil','contramarco'].includes(m.categoria))
-  const pendencias:string[]=[]
-  const cortes:CortePerfil[]=[]
-  let pecas=0
-  for(const m of lista){
-   const qt=Number(m.quantidade_ajustada??m.quantidade_tecnica??0)
-   if(!Number.isFinite(qt)||qt<0||!Number.isInteger(qt)){pendencias.push((m.codigo||m.descricao)+': quantidade de corte inválida.');continue}
-   if(!qt)continue
-   if(!m.produto_id||!m.codigo||!m.comprimento_corte_mm||!m.comprimento_barra_mm){
-    pendencias.push((m.codigo||m.descricao)+': cadastro ou medida de corte/barra incompleta.');continue
-   }
-   pecas+=qt
-   if(pecas>2500)return {barras:[],pendencias:['Mais de 2.500 cortes. Utilize o plano de produção para cálculo detalhado.']}
-   cortes.push({id:m.id,material_id:m.id,item_ref:m.item_ref,produto_id:m.produto_id,codigo:m.codigo,
-    cor_ref:m.cor_ref,comprimento_mm:Number(m.comprimento_corte_mm),quantidade:qt,
-    comprimento_barra_mm:Number(m.comprimento_barra_mm)})
-  }
-  const calculado=otimizarPerfis(cortes,[],{perdaCorteMm:0,minimoSobraReaproveitavelMm:300})
-  return {barras:agruparCompraDeBarras(calculado),pendencias:[...pendencias,...calculado.pendencias]}
- },[materiais])
+ const simulacaoBarras=useMemo(()=>calcularBarrasConsolidadasObra(materiais,{perdaCorteMm}),[materiais,perdaCorteMm])
+ const calculados=new Set(simulacaoBarras.idsCalculados)
+ // Se faltam dimensões/produtos, o perfil permanece visível como pendência,
+ // sem converter indevidamente a quantidade de cortes em barras comerciais.
+ const naoCalculados=visao==='total'?consolidarMateriaisTipologias(
+  materiais.filter(m=>['perfil','contramarco'].includes(m.categoria)&&!calculados.has(m.id))
+ ):[]
  const imagemBarra=(id:string)=>fotoDaLinha(materiais.filter(m=>m.produto_id===id).map(m=>m.id))
  const semImagem=totais.filter(m=>['perfis','acessorios'].includes(grupo(m.categoria))&&!fotoDaLinha(m.materialIds))
  const completas=refs.filter(ref=>situacoes[ref]?.situacao==='validada').length
@@ -175,10 +162,53 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
    {categorias.map(c=><button key={c.id} type="button" onClick={()=>setCategoria(c.id)} aria-pressed={categoria===c.id}
     className={'rounded-full border px-3 py-1.5 text-[11px] font-bold '+(categoria===c.id?'border-blue-600 bg-blue-50 text-blue-800':'text-slate-600')}>{c.nome}</button>)}
   </div>
+  {visao==='total'&&(categoria==='todos'||categoria==='perfis')&&<div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3">
+   <div className="flex flex-wrap items-center justify-between gap-3">
+    <div>
+     <b className="text-sm text-blue-900">Barras brutas otimizadas · obra inteira</b>
+     <p className="mt-1 text-xs text-slate-700">{simulacaoBarras.totalPecas} peças de corte de todas as tipologias → <b>{simulacaoBarras.totalBarras} barras inteiras estimadas</b>, antes da conferência de estoque.</p>
+    </div>
+    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">Perda por corte (mm)
+     <input type="number" min="0" max="50" step="0.5" value={perdaCorteMm}
+      onChange={e=>{const n=Number(e.target.value);if(Number.isFinite(n)&&n>=0&&n<=50)setPerdaCorteMm(n)}}
+      className="w-20 rounded-lg border bg-white px-2 py-1.5 text-right"/>
+    </label>
+   </div>
+   <p className="mt-2 text-[11px] text-slate-600">A perda inicia em 0 mm para não presumir a espessura da serra. Configure a perda real antes da conferência. O aproveitamento é uma estimativa e não movimenta estoque nem altera cortes.</p>
+   {simulacaoBarras.pendencias.length>0&&<div role="alert" className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800"><b>{simulacaoBarras.pendencias.length} pendência(s) impedem calcular todas as barras:</b>{simulacaoBarras.pendencias.slice(0,5).map((x,i)=><p key={i}>{x}</p>)}</div>}
+  </div>}
   <div className="overflow-x-auto rounded-xl border">
    <table className="w-full min-w-[800px] text-left text-xs">
     <thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Imagem</th><th className="p-3">Código / material e ações</th><th className="p-3">Categoria</th><th className="p-3">Cor</th><th className="p-3">Medida / corte</th><th className="p-3 text-right">Quantidade</th><th className="p-3">Unidade</th>{visao==='total'&&<th className="p-3">Tipologias</th>}</tr></thead>
-    <tbody>{linhasExibidas.map(m=>{
+    <tbody>
+    {visao==='total'&&(categoria==='todos'||categoria==='perfis')&&simulacaoBarras.barras.map(b=><tr key={'barra:'+b.chave} className="border-t bg-blue-50/30 align-middle">
+     <td className="p-2"><div className="grid h-14 w-14 place-items-center rounded-lg border bg-white">
+      {fotoDaLinha(b.materialIds)?<img src={fotoDaLinha(b.materialIds)!} alt={'Perfil '+b.codigo} className="h-12 w-12 object-contain"/>:<span className="text-center text-[9px] text-amber-800"><ImageOff className="mx-auto" size={18}/>Imagem pendente</span>}
+     </div></td>
+     <td className="p-3"><b className="font-mono text-slate-900">{b.codigo}</b><p className="mt-1 text-slate-600">{b.descricao}</p>
+      <div className="mt-1 text-[11px] font-bold text-blue-800">Total otimizado da obra · {b.quantidadePecas} peça(s) de corte</div>
+      <details className="mt-2 text-[11px] text-slate-600"><summary className="cursor-pointer font-semibold text-blue-700">Ver cortes e tipologias ({b.cortes.length} medida(s))</summary>
+       <div className="mt-1 space-y-1">{b.cortes.map(c=><p key={c.comprimentoMm}>{fmt(c.quantidade)} peça(s) × {fmt(c.comprimentoMm)} mm · {c.tipologias.length} tipologia(s)</p>)}</div>
+      </details>
+      {master&&<div className="mt-2 flex flex-wrap gap-1.5">
+       <button type="button" onClick={()=>iniciarAcao('ajustar',b.materialIds)} className="rounded-lg border border-blue-200 bg-white px-2 py-1.5 font-bold text-blue-800"><Pencil size={13} className="mr-1 inline"/>Editar corte de origem</button>
+      </div>}
+     </td>
+     <td className="p-3">Perfil · barra bruta</td><td className="p-3">{b.cor||'—'}</td>
+     <td className="p-3">{fmt(b.comprimentoBarraMm)} mm (barra)</td>
+     <td className="p-3 text-right text-sm font-bold text-blue-900">{fmt(b.quantidadeBarras)}</td>
+     <td className="p-3 font-bold">BR</td><td className="p-3">{b.tipologias.length||'—'}</td>
+    </tr>)}
+    {visao==='total'&&(categoria==='todos'||categoria==='perfis')&&naoCalculados.map(m=><tr key={'pendente:'+m.chave} className="border-t bg-amber-50 align-middle">
+     <td className="p-2">{fotoDaLinha(m.materialIds)?<img src={fotoDaLinha(m.materialIds)!} alt={'Perfil '+(m.codigo||m.descricao)} className="h-12 w-12 object-contain"/>:<ImageOff size={19} className="text-amber-700"/>}</td>
+     <td className="p-3"><b className="font-mono">{m.codigo||'Sem código'}</b><p>{m.descricao}</p><b className="text-amber-800">Não calculado · conferir medidas/cadastro</b>
+      {master&&<button type="button" onClick={()=>iniciarAcao('ajustar',m.materialIds)} className="ml-2 rounded border px-2 py-1 text-blue-700">Editar registro de origem</button>}
+     </td><td className="p-3">Perfil pendente</td><td className="p-3">{m.cor||'—'}</td>
+     <td className="p-3">{m.corteMm?fmt(m.corteMm)+' mm (corte)':'Corte pendente'}</td>
+     <td className="p-3 text-right font-bold">{fmt(m.quantidade)}</td><td className="p-3">{m.unidade} (peças)</td>
+     <td className="p-3">{m.tipologias.length||'—'}</td>
+    </tr>)}
+    {linhasExibidas.map(m=>{
      const imagem=fotoDaLinha(m.materialIds)
      const imagemObrigatoria=['perfis','acessorios'].includes(grupo(m.categoria))
      return <tr key={m.chave} className="border-t align-middle">
@@ -202,30 +232,32 @@ export default function VendaMateriaisTipologiasResumo({itens,materiais,imagensP
       <td className="p-3">{m.categoria==='contramarco'?'Contramarco':m.categoria==='perfil'?'Perfil':m.categoria==='acessorio'?'Acessório':m.categoria==='vidro'?'Vidro':'Outro'}</td>
       <td className="p-3">{m.cor||'—'}</td>
       <td className="p-3">{m.corteMm?fmt(m.corteMm)+' mm (corte)':m.barraMm?fmt(m.barraMm)+' mm (referência)':'—'}</td>
-      <td className="p-3 text-right font-bold">{fmt(m.quantidade)}</td><td className="p-3">{m.unidade}</td>
+      <td className="p-3 text-right font-bold">{fmt(m.quantidade)}</td><td className="p-3">{visao==='tipologia'&&grupo(m.categoria)==='perfis'&&m.corteMm?'peças de corte':m.unidade}</td>
       {visao==='total'&&<td className="p-3">{m.tipologias.length||'—'}</td>}
 
      </tr>
     })}
-    {!linhasExibidas.length&&<tr><td colSpan={visao==='total'?8:7} className="p-6 text-center text-slate-500">Nenhum material desta categoria na seleção atual.</td></tr>}</tbody>
+    {!linhasExibidas.length&&!(visao==='total'&&(categoria==='todos'||categoria==='perfis')&&(simulacaoBarras.barras.length||naoCalculados.length))&&<tr><td colSpan={visao==='total'?8:7} className="p-6 text-center text-slate-500">Nenhum material desta categoria na seleção atual.</td></tr>}</tbody>
    </table>
   </div>
   <details className="rounded-xl border bg-white p-4">
-   <summary className="cursor-pointer text-sm font-bold text-slate-900">Prévia automática de barras calculadas dos cortes</summary>
-   <p className="mt-2 text-xs text-slate-600">Atualizada com a composição técnica vigente. Simulação com perda de corte 0 mm, sem reservar sobras nem consultar estoque. Não substitui o relatório comercial Barras Utilizadas do WVetro.</p>
+   <summary className="cursor-pointer text-sm font-bold text-slate-900">Detalhamento técnico das barras otimizadas (consulta)</summary>
+   <p className="mt-2 text-xs text-slate-600">Aproveitamento calculado com os cortes de todas as tipologias, separado por perfil, acabamento e comprimento comercial. Não considera estoque até a conferência e não substitui o relatório WVetro.</p>
    <div className="mt-3 overflow-x-auto rounded-lg border">
     <table className="w-full min-w-[570px] text-left text-xs">
-     <thead className="bg-slate-50"><tr><th className="p-2">Imagem</th><th className="p-2">Perfil / código</th><th className="p-2">Cor</th><th className="p-2">Barra</th><th className="p-2 text-right">Barras estimadas</th></tr></thead>
-     <tbody>{simulacaoBarras.barras.map(b=><tr className="border-t" key={b.produto_id+'|'+b.cor_ref+'|'+b.comprimento_barra_mm}>
-      <td className="p-2">{imagemBarra(b.produto_id)?<img className="h-12 w-12 object-contain" src={imagemBarra(b.produto_id)!} alt={'Perfil '+b.codigo}/>:<span className="inline-flex items-center gap-1 text-amber-700"><ImageOff size={15}/>Imagem pendente</span>}</td>
-      <td className="p-2 font-bold">{b.codigo}</td><td className="p-2">{b.cor_ref||'—'}</td><td className="p-2">{fmt(b.comprimento_barra_mm)} mm</td><td className="p-2 text-right font-bold">{fmt(b.quantidade)} BR</td>
+     <thead className="bg-slate-50"><tr><th className="p-2">Imagem</th><th className="p-2">Perfil / código</th><th className="p-2">Cor</th><th className="p-2">Barra comercial</th><th className="p-2 text-right">Peças</th><th className="p-2 text-right">Barras estimadas</th></tr></thead>
+     <tbody>{simulacaoBarras.barras.map(b=><tr className="border-t" key={b.chave}>
+      <td className="p-2">{fotoDaLinha(b.materialIds)?<img className="h-12 w-12 object-contain" src={fotoDaLinha(b.materialIds)!} alt={'Perfil '+b.codigo}/>:<span className="inline-flex items-center gap-1 text-amber-700"><ImageOff size={15}/>Imagem pendente</span>}</td>
+      <td className="p-2 font-bold">{b.codigo}</td><td className="p-2">{b.cor||'—'}</td>
+      <td className="p-2">{fmt(b.comprimentoBarraMm)} mm</td>
+      <td className="p-2 text-right">{fmt(b.quantidadePecas)}</td><td className="p-2 text-right font-bold">{fmt(b.quantidadeBarras)} BR</td>
      </tr>)}
-     {!simulacaoBarras.barras.length&&<tr><td colSpan={5} className="p-3 text-center text-slate-500">Nenhuma barra pode ser calculada a partir dos cortes cadastrados.</td></tr>}</tbody>
+     {!simulacaoBarras.barras.length&&<tr><td colSpan={6} className="p-3 text-center text-slate-500">Nenhuma barra calculada. Confira cortes e dimensões.</td></tr>}</tbody>
     </table>
    </div>
    {!!simulacaoBarras.pendencias.length&&<div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"><b>Pendências de cálculo:</b>{simulacaoBarras.pendencias.slice(0,10).map((p,i)=><p key={i}>{p}</p>)}</div>}
   </details>
-  <p className="text-[11px] text-slate-500">Quantidade técnica já registrada por tipologia, sem multiplicação adicional. O total reúne somente o mesmo código/produto, categoria, acabamento, unidade e comprimento. <b>Peças de corte não são barras para pedido.</b></p>
+  <p className="text-[11px] text-slate-500">Por tipologia: quantidades de peças e medidas de corte. Total da obra: barras comerciais brutas estimadas por otimização global; acessórios e vidros continuam consolidados por suas unidades. <b>A conferência da compra é independente do plano de corte.</b></p>
   {aviso&&<p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">{aviso}</p>}
   {erro&&<p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{erro}</p>}
   {!consultando&&!!pendentes&&<p className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><AlertTriangle size={16} className="shrink-0"/>{pendentes} tipologia(s) sem aprovação técnica válida. Qualquer edição após a aprovação exige nova conferência.</p>}

@@ -4,6 +4,7 @@ import {autenticarCompras} from '@/lib/comprasServer'
 import {obterComprasAcessos} from '@/lib/comprasPermissoesServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {fontePreparacaoCompra,type CategoriaPreCompra} from '@/lib/preparacaoCompraMateriaisServer'
+import {calcularBarrasConsolidadasObra} from '@/lib/barrasConsolidadasObra'
 import {auditarCotacaoMateriais} from '@/lib/tipologiaMateriaisConferenciaServer'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -39,7 +40,15 @@ export async function GET(req:NextRequest){
    const produto=(produtos.data||[]).find(p=>p.codigo===m.codigo)
    manuaisImagens[m.chave_item]={imagemUrl:produto?.foto_url||null,produtoId:produto?.id||null}
   }
+  // A prévia de barras vem dos cortes da obra inteira e NÃO é quantidade
+  // técnica editável nem rascunho de compra. Serve para conferência/impressão.
+  const perdaInformada=Number(req.nextUrl.searchParams.get('perdaCorteMm')||0)
+  const perdaCorteMm=Number.isFinite(perdaInformada)&&perdaInformada>=0&&perdaInformada<=50?perdaInformada:0
+  const previa=calcularBarrasConsolidadasObra(ctx.fonte.materiais,{perdaCorteMm})
   return NextResponse.json({ok:true,itens:ctx.fonte.itens,rascunhos:r.data||[],manuaisImagens,
+   previaBarras:{itens:previa.barras.map(b=>({codigo:b.codigo,cor:b.cor,quantidadeBarras:b.quantidadeBarras,
+    comprimentoBarraMm:b.comprimentoBarraMm,quantidadePecas:b.quantidadePecas,
+    tipologias:b.tipologias.length})),pendencias:previa.pendencias,perdaCorteMm},
    aviso:[!ctx.fonte.temBarrasWvetro?'Sem relatório comercial de barras W.Vetro. Nunca estimar compra usando quantidade de peças cortadas.':null,
     ctx.fonte.perfisSemBarra.length?ctx.fonte.perfisSemBarra.length+' perfil(is) adicionados na tipologia sem equivalência em Barras Utilizadas. Calcule a quantidade de barras na conferência antes de comprar.':null
    ].filter(Boolean).join(' ')||null},
