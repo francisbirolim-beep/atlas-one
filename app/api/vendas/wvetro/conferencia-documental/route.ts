@@ -1,3 +1,4 @@
+import {assinaturaTecnica} from '@/lib/tipologiaMateriaisConferenciaServer'
 import {createHash} from 'crypto'
 import {NextRequest,NextResponse} from 'next/server'
 import pdfParse from 'pdf-parse'
@@ -11,14 +12,6 @@ const uuid=/^[0-9a-f-]{36}$/i
 const bad=(error:string,status=400)=>NextResponse.json({error},{status,headers:{'Cache-Control':'private,no-store'}})
 const str=(v:unknown,len=350)=>String(v??'').trim().slice(0,len)
 const norm=(v:unknown)=>str(v,500).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,'')
-// A assinatura permite detectar uma alteração técnica posterior à aprovação.
-function assinaturaTecnica(materiais:any[]) {
- const linhas=materiais.map(m=>[
-  m.id,m.item_ref,m.categoria,m.codigo,m.descricao,m.cor_ref,m.unidade,
-  m.quantidade_ajustada,m.comprimento_corte_mm,m.comprimento_barra_mm,
- ]).sort((a,b)=>String(a[0]).localeCompare(String(b[0])))
- return createHash('sha256').update(JSON.stringify(linhas)).digest('hex')
-}
 const contexto=async(req:NextRequest,vendaId:string,pacoteId?:string,tipo?:string,itemRef?:string)=>{
  const u=await autenticarTenant(req)
  if(!u||!uuid.test(vendaId))return null

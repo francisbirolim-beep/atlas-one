@@ -4,6 +4,7 @@ import {autenticarTenant} from '@/lib/tenantServer'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
 import {analisarPdfBarrasWVetro, type BarraWVetro} from '@/lib/wvetroBarrasPdfServer'
 import {usuarioPodeAcaoServer} from '@/lib/acessoUsuarioServer'
+import {auditarCotacaoMateriais} from '@/lib/tipologiaMateriaisConferenciaServer'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -30,6 +31,35 @@ async function contexto(req:NextRequest,vendaId:string,write:boolean){
  const orc=Array.isArray(venda.orcamentos)?venda.orcamentos[0]:venda.orcamentos as any
  const numeroWvetro=txt(orc?.wvetro_fluxo?.numero||orc?.wvetro_fluxo?.numero_wvetro,40)
  return {usuario,venda,numeroWvetro}
+}
+/** Antes de liberar barras comerciais, exige composição conferida e desenho
+ * técnico do perfil, sem transformar cortes em pedido automaticamente. */
+async function conferirLiberacaoBarras(
+ ctx:NonNullable<Awaited<ReturnType<typeof contexto>>>,linhas:any[]
+):Promise<string[]>{
+ const {data:pacote,error:pe}=await supabaseAdmin.from('pacotes_tecnicos')
+  .select('id,origem,created_at,snapshot_itens')
+  .eq('empresa_id',ctx.usuario.empresa_id).eq('orcamento_id',ctx.venda.orcamento_id)
+  .neq('status','substituido').order('created_at',{ascending:false}).limit(1).maybeSingle()
+ if(pe)throw pe
+ if(!pacote)return ['Pacote técnico indisponível. Gere e confira a composição das tipologias antes das compras.']
+ const {data:mat,error:me}=await supabaseAdmin.from('pacote_tecnico_materiais')
+  .select('id,item_ref,produto_id,categoria,codigo,descricao,unidade,quantidade_ajustada,cor_ref,comprimento_corte_mm,comprimento_barra_mm,status_calculo,origem_calculo,wvetro_dados')
+  .eq('empresa_id',ctx.usuario.empresa_id).eq('pacote_id',pacote.id).eq('excluido',false).limit(2000)
+ if(me)throw me
+ const materiais=mat||[]
+ const codigos=new Set(linhas.map(l=>normalizar(l.codigo)))
+ const selecionados=materiais.filter(m=>['perfil','contramarco'].includes(m.categoria)&&codigos.has(normalizar(m.codigo)))
+ const cobertos=new Set(selecionados.map(m=>normalizar(m.codigo)))
+ const faltantes=[...codigos].filter(c=>!cobertos.has(c))
+ const erros=faltantes.map(c=>'Barra '+c+' não está vinculada a um perfil da composição técnica.')
+ erros.push(...await auditarCotacaoMateriais({
+  empresaId:ctx.usuario.empresa_id,vendaId:ctx.venda.id,orcamentoId:ctx.venda.orcamento_id,
+  pacoteId:pacote.id,origemPacote:pacote.origem,criadoEm:pacote.created_at,
+  itensPacote:Array.isArray(pacote.snapshot_itens)?pacote.snapshot_itens:[],
+  materiais,selecionados,
+ }))
+ return erros
 }
 function chaveOrigem(item:BarraWVetro){
  return createHash('sha256').update([item.codigo,item.tipo,item.tratamento,item.tamanho_mm].map(normalizar).join('|')).digest('hex')
@@ -187,6 +217,11 @@ export async function PATCH(req:NextRequest){
    .eq('empresa_id',ctx.usuario.empresa_id).eq('venda_obra_id',vendaId).in('id',ids)
   if(le)return erro('Não foi possível conferir a seleção de compra.',500)
   if((linhas||[]).length!==ids.length)return erro('A seleção não pertence integralmente a esta obra. Atualize a lista.',409)
+  try{
+   const pendencias=await conferirLiberacaoBarras(ctx,linhas||[])
+   if(pendencias.length)return erro('Barras não liberadas: '+pendencias.slice(0,5).join(' | '),409)
+  }catch(e){console.error('[WVetro barras][Conferência]',e);return erro('Não foi possível validar a composição para compras.',500)}
+
   let enviadas=0,jaEmCompras=0
   const eventos:any[]=[]
   for(const antiga of linhas||[]){
@@ -271,6 +306,13 @@ export async function PATCH(req:NextRequest){
   const origem=etapas.indexOf(row.status_compra),destino=etapas.indexOf(status)
   if(origem<0||destino<0||origem===destino)return erro('Etapa inválida.')
   if(!row.validado_em)return erro('Confira o estoque e valide o material na aba Materiais antes de movimentar no Kanban.',409)
+  if(row.status_compra==='necessidade'&&status==='cotacao'){
+   try{
+    const pendencias=await conferirLiberacaoBarras(ctx,[row])
+    if(pendencias.length)return erro('Cotação bloqueada: '+pendencias.slice(0,5).join(' | '),409)
+   }catch(e){console.error('[WVetro barras][Conferência cotação]',e);return erro('Não foi possível validar a composição para cotação.',500)}
+  }
+
   if(destino>origem+1||destino<origem)return erro('Movimente somente para a próxima etapa. Reversões precisam de conferência específica.',409)
   patch={status_compra:status}
   evento='mudanca_etapa'

@@ -3,10 +3,12 @@
 import VendaBarrasWVetro from '@/components/clientes/VendaBarrasWVetro'
 import ObraEntradasManuais from '@/components/clientes/ObraEntradasManuais'
 import VendaListaCompraWVetro from '@/components/clientes/VendaListaCompraWVetro'
+import VendaPreparacaoCompra from '@/components/clientes/VendaPreparacaoCompra'
 import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
 import VendaTipologiasMateriais from '@/components/clientes/VendaTipologiasMateriais'
+import VendaMateriaisTipologiasResumo from '@/components/clientes/VendaMateriaisTipologiasResumo'
 import VendaConferenciaDocumentalWVetro from '@/components/clientes/VendaConferenciaDocumentalWVetro'
 import VendaMedidaFinal from '@/components/clientes/VendaMedidaFinal'
 import VendaMedidaStatus from '@/components/clientes/VendaMedidaStatus'
@@ -326,6 +328,25 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
     tentouMaterializarVenda.current=venda.id
     void sincronizarMateriaisWVetro(true)
   },[carregando,venda?.id,pacoteTecnicoId])
+
+  // A aba de materiais usa a mesma composição das tipologias. Recarregue ao
+  // entrar na aba ou voltar para a janela, sem materializar ou sobrescrever dados.
+  useEffect(()=>{
+    if(aba!=='materiais'||!pacoteTecnicoId)return
+    let ativo=true
+    const recarregar=()=>{
+      if(!ativo)return
+      void atualizarComposicaoTipologia().catch((e:unknown)=>{
+        if(ativo)setMensagemMateriais(e instanceof Error?e.message:'Falha ao recarregar materiais.')
+      })
+    }
+    recarregar()
+    const aoFoco=()=>recarregar()
+    const aoVisivel=()=>{if(document.visibilityState==='visible')recarregar()}
+    window.addEventListener('focus',aoFoco)
+    document.addEventListener('visibilitychange',aoVisivel)
+    return()=>{ativo=false;window.removeEventListener('focus',aoFoco);document.removeEventListener('visibilitychange',aoVisivel)}
+  },[aba,pacoteTecnicoId])
 
   async function atualizarComposicaoTipologia(){
     if(!pacoteTecnicoId)return
@@ -1756,10 +1777,39 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         </>}
         {aba==='materiais'&&venda.obra_id&&<ObraEntradasManuais obraId={venda.obra_id} clienteId={clienteId}/>}
 
-        {aba==='materiais'&&<Box titulo="Lista de materiais para comprar · Barras Utilizadas WVetro">
-          <VendaBarrasWVetro modo="lista" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>{setEditorCortesAberto(false);setAba('producao')}}/>
-          <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Perfis desta obra em barras inteiras, não peças do plano de corte. Imprima a conferência do estoque, corrija a quantidade, selecione todos ou individualmente e clique em Validar para que apareçam em Falta comprar na aba Compras. O plano de corte continua em Produção.</p>
+        {aba==='materiais'&&<Box titulo="Composição técnica · Tipologias e total da obra">
+          <VendaMateriaisTipologiasResumo
+            itens={itens}
+            materiais={materiaisTecnicos}
+            pacoteId={pacoteTecnicoId}
+            vendaId={venda.id}
+            imagensProdutos={produtosMateriais}
+            onAtualizar={carregar}
+            onAbrirTipologias={()=>setAba('tipologias')}
+            onAbrirBarras={()=>document.getElementById('materiais-preparacao-compra')?.scrollIntoView({behavior:'smooth',block:'start'})}
+            onPrepararCotacao={()=>{
+              const editor=document.getElementById('materiais-editor-tecnico') as HTMLDetailsElement|null
+              if(editor)editor.open=true
+              editor?.scrollIntoView({behavior:'smooth',block:'start'})
+            }}
+          />
         </Box>}
+        {aba==='materiais'&&<Box titulo="Preparação da compra · Estoque conferido e pedidos por categoria">
+          <VendaPreparacaoCompra vendaId={venda.id} obraId={venda.obra_id} pacoteId={pacoteTecnicoId} solicitarSync={sincronizacaoListaCompraKey}
+           materiaisTecnicos={materiaisTecnicos} onAbrirImportacaoPdf={()=>{
+            const alvo=document.getElementById('materiais-barras-wvetro')
+            const painel=alvo?.closest('details')
+            if(painel)painel.open=true
+            alvo?.scrollIntoView({behavior:'smooth',block:'start'})
+           }}/>
+        </Box>}
+        {aba==='materiais'&&<details className="rounded-xl border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-bold text-slate-700">Importação e histórico do PDF Barras Utilizadas · WVetro</summary>
+          <div id="materiais-barras-wvetro" className="mt-3">
+            <p className="mb-2 text-xs text-amber-800">Use este quadro para importar e comparar o PDF Barras Utilizadas com conferência e aprendizado supervisionado. Os ajustes da quantidade a comprar continuam no quadro Preparação de compras acima; não faça envio duplicado pelo fluxo anterior.</p>
+            <VendaBarrasWVetro modo="lista" somenteReferencia vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>venda.obra_id&&window.open('/obras/'+venda.obra_id+'/materiais/pdf?'+(pacoteTecnicoId?'pacote='+pacoteTecnicoId+'&':'')+'grupo=perfis','_blank','noopener,noreferrer')}/>
+          </div>
+        </details>}
 
         {aba==='materiais'&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
@@ -1781,8 +1831,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             </div>
 
             {Boolean(orcamento?.wvetro_fluxo?.numero)&&
-              <VendaListaCompraWVetro vendaId={venda.id} solicitarSync={sincronizacaoListaCompraKey}/>}
-            <details className="mt-4 rounded-xl border border-slate-200 bg-white" {...(orcamento?.wvetro_fluxo?.numero?{}:{open:true})}>
+              <VendaListaCompraWVetro vendaId={venda.id} solicitarSync={sincronizacaoListaCompraKey} onPrepararBarras={()=>document.getElementById('materiais-preparacao-compra')?.scrollIntoView({behavior:'smooth',block:'start'})}/>}
+            <details id="materiais-editor-tecnico" className="mt-4 rounded-xl border border-slate-200 bg-white" {...(orcamento?.wvetro_fluxo?.numero?{}:{open:true})}>
               <summary className="cursor-pointer px-4 py-3 text-xs font-bold text-slate-700">Composição técnica e peças de corte — editor existente (não é lista de compra)</summary>
               <div className="px-4 pb-4">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
