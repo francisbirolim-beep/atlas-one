@@ -139,6 +139,12 @@ async function run(){
   {id:'2',empresa_id:'E',criado_por_id:'B',created_at:'2026-10-10T15:00:00Z',valor_estimado:900,status:'convertido'},
   {id:'3',empresa_id:'OTHER',criado_por_id:'A',created_at:'2026-10-10T15:00:00Z',valor_estimado:500,status:'convertido'},
  ]
+ // O ticket médio usa vendas confirmadas, não o status convertido do orçamento.
+ tables.vendas_obras_data_comercial=[
+  {id:'v1',empresa_id:'E',orcamento_id:'1',data_comercial:'2026-10-10',valor_venda:100,status:'confirmada',excluida_em:null},
+  {id:'v2',empresa_id:'E',orcamento_id:'2',data_comercial:'2026-10-10',valor_venda:900,status:'confirmada',excluida_em:null},
+  {id:'v3',empresa_id:'OTHER',orcamento_id:'3',data_comercial:'2026-10-10',valor_venda:500,status:'confirmada',excluida_em:null},
+ ]
  const resumo=load('lib/relatoriosResumoServer.ts',{'./supabaseAdmin':{supabaseAdmin:db}})
  v=await resumo.carregarResumoComercial({inicio:'2026-10-01',fim:'2026-10-31'},user,true)
  check(v.totalOrcamentos===1&&v.valorOrcado===100&&v.ticketMedio===100)
