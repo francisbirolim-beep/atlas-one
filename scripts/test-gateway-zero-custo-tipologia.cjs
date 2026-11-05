@@ -62,6 +62,8 @@ async function run() {
       e.codigo==='sem_modelo_gratuito')
     assert.equal(calls.length,2,'Nenhuma chamada paga nem OCR indisponível')
     delete process.env.VERCEL_OIDC_TOKEN
+    const cabecalho = await analisarComGatewayZeroCusto({system:'Teste',prompt:'Leia'}, 'oidc-de-teste')
+    assert.equal(cabecalho.modelo, gratis.id)
     await assert.rejects(analisarComGatewayZeroCusto({system:'Teste',prompt:'Leia'}),
       e=>e.codigo==='autenticacao_indisponivel')
   } finally {
