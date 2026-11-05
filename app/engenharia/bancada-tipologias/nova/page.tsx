@@ -16,9 +16,12 @@ type RespostaAnalise = {
   tipo_croqui: string
   texto_extraido: string
   origem_ia: string
+  status_ia?: 'executada' | 'dispensada' | 'indisponivel' | 'documento_sem_cortes'
   aviso: string
+  estado_documento?: 'lista_corte' | 'orcamento_comercial' | 'link_wvetro' | 'pdf_digitalizado' | 'desconhecido'
+  quantidade_cortes_completos?: number
 }
-type ResultadoCriacao = { ok: boolean; formulaId: string; tipologiaId: string; pendentes: string[]; semImagem: string[]; aviso: string }
+type ResultadoCriacao = { ok: boolean; formulaId: string; tipologiaId: string; pendentes: string[]; semImagem: string[]; aviso: string; incompleto?: boolean }
 
 const campo = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-600'
 const botao = 'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed'
@@ -73,6 +76,7 @@ export default function NovaTipologiaPage() {
   const [observacoes, setObservacoes] = useState('')
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [imagemLocal, setImagemLocal] = useState('')
+  const [pdfLocal, setPdfLocal] = useState('')
   const [componentes, setComponentes] = useState<ComponenteCandidato[]>([])
   const [analise, setAnalise] = useState<RespostaAnalise | null>(null)
   const [consentimento, setConsentimento] = useState(false)
@@ -94,9 +98,11 @@ export default function NovaTipologiaPage() {
     })()
   }, [])
   useEffect(() => {
-    if (!arquivo || !arquivo.type.startsWith('image/')) { setImagemLocal(''); return }
+    if (!arquivo || !(arquivo.type.startsWith('image/') || arquivo.type === 'application/pdf' ||
+      /\.pdf$/i.test(arquivo.name))) { setImagemLocal(''); setPdfLocal(''); return }
     const url = URL.createObjectURL(arquivo)
-    setImagemLocal(url)
+    setImagemLocal(arquivo.type.startsWith('image/') ? url : '')
+    setPdfLocal(arquivo.type.startsWith('image/') ? '' : url)
     return () => URL.revokeObjectURL(url)
   }, [arquivo])
 
@@ -147,7 +153,8 @@ export default function NovaTipologiaPage() {
     finally { setProcessando('') }
   }
   async function criar() {
-    if (!revisado || !componentesValidos.some(c => c.tipo === 'perfil')) throw new Error('Confira as medidas, fotos e perfis antes de criar.')
+    if (componentesValidos.length !== componentes.length) throw new Error('Há componentes com código, quantidade ou medida inválidos. Corrija-os antes de salvar.')
+    if (componentesValidos.length && !revisado) throw new Error('Confira os componentes identificados antes de salvar.')
     setErro(''); setProcessando('criar')
     try {
       const resposta = await chamada('criar', {
@@ -174,9 +181,9 @@ export default function NovaTipologiaPage() {
       <div className="flex items-center gap-2 text-emerald-700"><CheckCircle2/><h2 className="text-xl font-bold">Laboratório da tipologia criado</h2></div>
       <p className="mt-2 text-sm text-slate-700">{criado.aviso}</p>
       <p className="mt-2 text-sm text-slate-600">Códigos ainda não cadastrados: <b>{criado.pendentes.length ? criado.pendentes.join(', ') : 'nenhum'}</b>. Componentes sem foto confirmada: <b>{criado.semImagem.length ? criado.semImagem.join(', ') : 'nenhum'}</b>.</p>
-      <p className="mt-3 text-sm text-slate-600">O próximo PDF, com outra largura e altura, deve ser anexado à receita criada. Compare cortes, ajuste os descontos e valide três medidas diferentes.</p>
+      <p className="mt-3 text-sm text-slate-600">{criado.incompleto ? 'Você já pode anexar novas referências na bancada, mesmo antes de identificar os perfis. Para editar a lista de componentes, use o Editor Técnico ou a própria bancada de testes.' : 'O próximo PDF, com outra largura e altura, deve ser anexado à receita criada. Compare cortes, ajuste os descontos e valide três medidas diferentes.'}</p>
       <div className="mt-5 flex flex-wrap gap-3">
-        <Link className={botao + ' bg-indigo-700 text-white'} href={'/engenharia/bancada-tipologias?formulaId=' + encodeURIComponent(criado.formulaId)}>Abrir motor de fórmulas e testes</Link>
+        <Link className={botao + ' bg-indigo-700 text-white'} href={'/engenharia/bancada-tipologias?formulaId=' + encodeURIComponent(criado.formulaId)}>{criado.incompleto ? 'Completar projeto na bancada' : 'Abrir motor de fórmulas e testes'}</Link>
         <Link className={botao + ' border border-slate-300'} href="/cadastro/produtos">Completar imagens do catálogo</Link>
       </div>
     </section> : <>
@@ -193,17 +200,21 @@ export default function NovaTipologiaPage() {
           <label className="block text-xs font-semibold">Origem / orçamento<input className={campo + ' mt-1'} value={origem} onChange={e => setOrigem(e.target.value)} placeholder="W Vetro — orçamento 1234"/></label>
           <label className="block text-xs font-semibold">O que você sabe desta tipologia?<textarea className={campo + ' mt-1 min-h-24'} value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Linha de alumínio, folhas, persiana, folgas conhecidas, detalhes de montagem..."/></label>
           <label className="block text-xs font-semibold"><span className="inline-flex items-center gap-2"><FileImage size={16}/> Foto, imagem do projeto ou PDF do W Vetro</span>
-            <input className={campo + ' mt-1'} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" onChange={alterarArquivo}/>
+            <input className={campo + ' mt-1'} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.webloc,.url,application/pdf,image/png,image/jpeg,image/webp" onChange={alterarArquivo}/>
+            <span className="mt-1 block text-xs font-normal text-slate-500">No W.Vetro, abra o relatório de corte e escolha Imprimir/Exportar → Salvar como PDF. Um atalho para o site não contém a lista de perfis.</span>
           </label>
           <label className="flex items-start gap-2 text-xs text-slate-600">
             <input type="checkbox" className="mt-0.5" checked={consentimento} onChange={e => setConsentimento(e.target.checked)}/>
-            Autorizo o envio do documento selecionado ao serviço de IA configurado no Atlas para análise técnica. Conferirei os dados antes do cadastro.
+            Autorizo o envio dos dados técnicos ao provedor gratuito de IA configurado no Atlas, quando disponível. O serviço externo pode manter informações para melhorar seus modelos. Conferirei os dados antes do cadastro.
           </label>
           <button type="button" className={botao + ' w-full bg-indigo-700 text-white'} disabled={!arquivo || !consentimento || !!processando} onClick={() => void analisar()}>
             {processando === 'analisar' ? <Loader2 className="animate-spin" size={17}/> : <Sparkles size={17}/>} Analisar documento com IA
           </button>
           {analise && <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
-            <p><b>Leitura:</b> {analise.origem_ia} · {analise.componentes.length} componentes propostos.</p>
+            <p><b>Resultado:</b> {analise.estado_documento === 'link_wvetro' ? 'Atalho/Link, não é relatório técnico' : analise.origem_ia} · {analise.componentes.length} linhas sugeridas · {analise.quantidade_cortes_completos ?? analise.componentes.filter(c => c.eixo && c.comprimento_mm != null).length} cortes com orientação identificada.</p>
+            <p className="mt-1 font-semibold text-slate-700">IA: {analise.status_ia === 'executada' ? 'análise gratuita concluída' : analise.status_ia === 'dispensada' ? 'não necessária; leitura técnica local' : analise.status_ia === 'indisponivel' ? 'serviço gratuito indisponível — veja o motivo abaixo' : 'não executada: referência sem lista técnica'}.</p>
+            {analise.componentes.length > 0 && <p className="mt-2 font-semibold text-amber-800">Esses materiais são apenas sugestões de leitura; nenhum está validado. Confira as imagens, os códigos e as medidas abaixo.</p>}
+            {!analise.componentes.length && <p className="mt-2 font-semibold text-amber-800">Nenhum perfil confirmado. Você pode salvar o projeto como rascunho, sem cadastrar materiais fictícios.</p>}
             {analise.descricao && <p className="mt-1">{analise.descricao}</p>}
             {analise.aviso && <p className="mt-2 text-amber-800">{analise.aviso}</p>}
             {!!analise.texto_extraido && <details className="mt-2"><summary className="cursor-pointer font-semibold">Ver texto original extraído</summary><pre className="max-h-40 overflow-auto whitespace-pre-wrap">{analise.texto_extraido}</pre></details>}
@@ -213,7 +224,8 @@ export default function NovaTipologiaPage() {
           <div className="flex items-center justify-between gap-2"><h2 className="text-lg font-bold">2. Croqui original do Atlas</h2><span className="text-xs text-slate-500">Visualização dinâmica</span></div>
           <CroquiProprio tipo={tipo || nome} largura={Number(largura)} altura={Number(altura)}/>
           {imagemLocal && <details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-semibold">Comparar com imagem de referência</summary><img src={imagemLocal} alt="Referência enviada, não reproduzida no croqui" className="mt-2 max-h-72 w-full object-contain"/></details>}
-          {arquivo && !imagemLocal && <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><FileText size={17}/> {arquivo.name}</div>}
+          {pdfLocal && <details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-semibold">Conferir páginas do PDF original</summary><iframe title="PDF de referência" src={pdfLocal} className="mt-3 h-80 w-full rounded-lg border"/></details>}
+          {arquivo && !imagemLocal && <div className="flex min-w-0 items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><FileText size={17} className="shrink-0"/><span className="min-w-0 truncate" title={arquivo.name}>{arquivo.name.length > 80 ? arquivo.name.slice(0,77) + '...' : arquivo.name}</span></div>}
           <p className="text-xs text-slate-500">O desenho muda com largura, altura e modelo. A seção exata dos perfis exige imagem técnica vinculada ao código no catálogo.</p>
         </section>
       </div>
@@ -246,9 +258,9 @@ export default function NovaTipologiaPage() {
         </div>}
         <p className="mt-3 text-xs text-amber-800">Perfis sem cadastro ou foto ficam identificados como pendência técnica. O Atlas não atribui a um código a foto de outro perfil, nem cria produto ativo com imagem presumida.</p>
         <label className="mt-5 flex items-start gap-2 text-sm text-slate-700"><input className="mt-1" type="checkbox" checked={revisado} onChange={e=>setRevisado(e.target.checked)}/>
-          Conferi a tipologia, as dimensões e os códigos disponíveis. Entendo que as fórmulas são hipóteses a testar com outros PDFs e não serão usadas na produção.</label>
-        <button type="button" className={botao + ' mt-4 bg-slate-900 text-white'} disabled={!revisado || !!processando || !nome.trim() || !componentesValidos.some(c=>c.tipo==='perfil')} onClick={() => void criar()}>
-          {processando === 'criar' ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} Criar tipologia no laboratório
+          Conferi os componentes apresentados. Entendo que as fórmulas são hipóteses para testar com outros PDFs e não serão usadas na produção.</label>
+        <button type="button" className={botao + ' mt-4 bg-slate-900 text-white'} disabled={(!!componentesValidos.length && !revisado) || !!processando || nome.trim().length < 4 || componentesValidos.length !== componentes.length || !Number(largura) || !Number(altura)} onClick={() => void criar()}>
+          {processando === 'criar' ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {componentesValidos.some(c=>c.tipo==='perfil') ? 'Criar tipologia no laboratório' : 'Salvar rascunho sem perfis identificados'}
         </button>
       </section>
     </>}
