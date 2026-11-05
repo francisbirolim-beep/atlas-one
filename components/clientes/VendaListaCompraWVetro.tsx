@@ -9,7 +9,7 @@ const qtd=(n:number)=>n.toLocaleString('pt-BR',{maximumFractionDigits:3})
 const grupos:{id:CategoriaCompraWVetro;nome:string}[]=[
  {id:'perfil',nome:'Perfis · barras inteiras'},{id:'acessorio',nome:'Acessórios consolidados'},{id:'vidro',nome:'Vidros por medida'},
 ]
-export default function VendaListaCompraWVetro({vendaId,solicitarSync}:{vendaId:string;solicitarSync:number}){
+export default function VendaListaCompraWVetro({vendaId,solicitarSync,onPrepararBarras}:{vendaId:string;solicitarSync:number;onPrepararBarras?:()=>void}){
  const [dados,setDados]=useState<Resultado|null>(null)
  const [carregando,setCarregando]=useState(false)
  const [erro,setErro]=useState('')
@@ -47,6 +47,7 @@ export default function VendaListaCompraWVetro({vendaId,solicitarSync}:{vendaId:
    {dados?.aviso&&<p role="alert" className="mb-3 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><AlertTriangle size={15} className="shrink-0"/>{dados.aviso}</p>}
    {dados?.sincronizado&&<p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">Lista comercial consultada agora. Alterações ainda não aplicadas à obra.</p>}
    {dados&&<>
+    {onPrepararBarras&&<div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900"><span>Os valores abaixo são a referência original W.Vetro. Ajuste o que realmente vai comprar no quadro Preparação de compras, sem modificar o plano de corte.</span><button type="button" onClick={onPrepararBarras} className="rounded-lg bg-blue-700 px-3 py-2 font-bold text-white">Abrir preparação de compra</button></div>}
     <div className="grid gap-2 sm:grid-cols-3">
      {grupos.map(g=><button type="button" key={g.id} onClick={()=>setCategoria(g.id)}
       className={'rounded-lg border p-3 text-left text-xs '+(categoria===g.id?'border-emerald-600 bg-emerald-50 text-emerald-900':'border-slate-200 text-slate-700')}>
@@ -84,7 +85,7 @@ export default function VendaListaCompraWVetro({vendaId,solicitarSync}:{vendaId:
       </tbody>
      </table>
     </div>
-    <p className="mt-3 text-[11px] text-slate-500">Conferência comercial somente leitura. Itens e ajustes da composição técnica anterior estão preservados. Para substituir itens de compra, é necessária uma validação específica que preserve materiais editados e compras existentes.</p>
+    <p className="mt-3 text-[11px] text-slate-500">Referência W.Vetro somente leitura. A preparação de compra acima permite registrar estoque, ajustar ou zerar a quantidade a pedir sem tocar nas tipologias ou peças cortadas.</p>
    </>}
   </div>
  </section>
