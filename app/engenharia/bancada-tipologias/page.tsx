@@ -254,9 +254,17 @@ export default function BancadaTipologiasPage() {
       metadados_editor: { ...rascunho.metadados_editor, origem_bancada_id: original.id },
     })
     if (!salvo) throw Error('Versão de teste criada, mas falhou ao salvar. Confira no Editor Técnico.')
+    let historico = 'Historico ainda nao transferido.'
+    try {
+      const copia = await chamada('copiar_exemplos', { destinoFormulaId: salvo.id })
+      historico = String(copia.copiados || 0) + ' exemplos preservados, aguardando nova conferencia.'
+    } catch (e) {
+      historico = 'Nao foi possivel copiar os exemplos: ' + mensagemErro(e) +
+        ' A nova versao foi preservada e continua inativa.'
+    }
     setFormulas(anteriores => [...anteriores, salvo])
     setId(salvo.id)
-    setSucesso('Nova versão isolada salva. A fórmula original continua intocada.')
+    setSucesso('Nova versao isolada salva. A formula original continua intocada. ' + historico)
   }
   async function extrairPdf() {
     if (!arquivo) throw Error('Selecione um PDF do orçamento ou da lista de corte.')
