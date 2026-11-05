@@ -191,6 +191,25 @@ export function extrairComponentesRelatorio(texto: string): ComponenteCandidato[
   }
   return Array.from(unicos.values()).slice(0,200)
 }
+export function extrairDadosOrientativo(texto: string): {
+  largura_mm: number | null; altura_mm: number | null; orcamento: string;
+  folga_largura_mm: number | null; folga_altura_mm: number | null
+} {
+  const fonte = String(texto || '')
+  const dimensoes = fonte.match(/\bLargura\s+(\d{3,5})\s+Altura\s+(\d{3,5})\b/i)
+  const orcamento = fonte.match(/\bOR[ÇC]AMENTO\s+Nro:?\s*(\d+)\b/i)
+  const folgaL = fonte.match(/FOLGA NA LARGURA PARA ENCAIXE DA ESQUADRIA\s+(\d+(?:[,.]\d+)?)/i)
+  const folgaH = fonte.match(/FOLGA NA ALTURA PARA ENCAIXE DA ESQUADRIA\s+(\d+(?:[,.]\d+)?)/i)
+  const valor = (v?: string) => v ? Number(v.replace(',', '.')) : null
+  return {
+    largura_mm: dimensoes ? Number(dimensoes[1]) : null,
+    altura_mm: dimensoes ? Number(dimensoes[2]) : null,
+    orcamento: orcamento?.[1] || '',
+    folga_largura_mm: valor(folgaL?.[1]),
+    folga_altura_mm: valor(folgaH?.[1]),
+  }
+}
+
 export function diagnosticarRelatorio(texto: string, nome = ''): DiagnosticoImportacao {
   const bruto=String(texto || '')
   if (pareceAtalhoWeb(nome,bruto)) return {
