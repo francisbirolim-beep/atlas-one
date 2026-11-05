@@ -40,7 +40,7 @@ const inteiro = (texto: string): number | null => {
 }
 const eixo = (texto: string): 'L' | 'H' | '' => {
   const v = normalizar(texto.trim())
-  if (['L', 'POS', 'POSICAO', 'HORIZONTAL', 'LARGURA'].includes(v)) return 'L'
+  if (['L', 'HORIZONTAL', 'LARGURA'].includes(v)) return 'L'
   if (['H', 'VERTICAL', 'ALTURA'].includes(v)) return 'H'
   return ''
 }
