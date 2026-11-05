@@ -3,6 +3,7 @@
 import VendaBarrasWVetro from '@/components/clientes/VendaBarrasWVetro'
 import ObraEntradasManuais from '@/components/clientes/ObraEntradasManuais'
 import VendaListaCompraWVetro from '@/components/clientes/VendaListaCompraWVetro'
+import VendaPreparacaoCompra from '@/components/clientes/VendaPreparacaoCompra'
 import VendaListaCorteWVetro from '@/components/clientes/VendaListaCorteWVetro'
 import VendaCotacoesIA from '@/components/clientes/VendaCotacoesIA'
 import VendaCotacaoItensModal from '@/components/clientes/VendaCotacaoItensModal'
@@ -1785,7 +1786,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             imagensProdutos={produtosMateriais}
             onAtualizar={carregar}
             onAbrirTipologias={()=>setAba('tipologias')}
-            onAbrirBarras={()=>document.getElementById('materiais-barras-wvetro')?.scrollIntoView({behavior:'smooth',block:'start'})}
+            onAbrirBarras={()=>document.getElementById('materiais-preparacao-compra')?.scrollIntoView({behavior:'smooth',block:'start'})}
             onPrepararCotacao={()=>{
               const editor=document.getElementById('materiais-editor-tecnico') as HTMLDetailsElement|null
               if(editor)editor.open=true
@@ -1793,12 +1794,16 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             }}
           />
         </Box>}
-        {aba==='materiais'&&<Box titulo="Lista de materiais para comprar · Barras Utilizadas WVetro">
-          <div id="materiais-barras-wvetro">
-          <VendaBarrasWVetro modo="lista" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>{setEditorCortesAberto(false);setAba('producao')}}/>
-          <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">Perfis desta obra em barras inteiras, não peças do plano de corte. Imprima a conferência do estoque, corrija a quantidade, selecione todos ou individualmente e clique em Validar para que apareçam em Falta comprar na aba Compras. O plano de corte continua em Produção.</p>
-          </div>
+        {aba==='materiais'&&<Box titulo="Preparação da compra · Estoque conferido e pedidos por categoria">
+          <VendaPreparacaoCompra vendaId={venda.id} obraId={venda.obra_id} pacoteId={pacoteTecnicoId} solicitarSync={sincronizacaoListaCompraKey}/>
         </Box>}
+        {aba==='materiais'&&<details className="rounded-xl border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-bold text-slate-700">Histórico de barras W.Vetro · fluxo anterior (somente para acompanhamento)</summary>
+          <div id="materiais-barras-wvetro" className="mt-3">
+            <p className="mb-2 text-xs text-amber-800">O fluxo abaixo é anterior à Preparação de Compras. Não envie novamente pedidos já registrados na Central de Compras.</p>
+            <VendaBarrasWVetro modo="lista" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>venda.obra_id&&window.open('/obras/'+venda.obra_id+'/materiais/pdf?'+(pacoteTecnicoId?'pacote='+pacoteTecnicoId+'&':'')+'grupo=perfis','_blank','noopener,noreferrer')}/>
+          </div>
+        </details>}
 
         {aba==='materiais'&&(()=>{
           const grupoPdf=categoriaMaterialAberta==='perfil'?'perfis':categoriaMaterialAberta==='acessorios'?'acessorios':categoriaMaterialAberta==='vidro'?'vidros':null
@@ -1820,7 +1825,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             </div>
 
             {Boolean(orcamento?.wvetro_fluxo?.numero)&&
-              <VendaListaCompraWVetro vendaId={venda.id} solicitarSync={sincronizacaoListaCompraKey}/>}
+              <VendaListaCompraWVetro vendaId={venda.id} solicitarSync={sincronizacaoListaCompraKey} onPrepararBarras={()=>document.getElementById('materiais-preparacao-compra')?.scrollIntoView({behavior:'smooth',block:'start'})}/>}
             <details id="materiais-editor-tecnico" className="mt-4 rounded-xl border border-slate-200 bg-white" {...(orcamento?.wvetro_fluxo?.numero?{}:{open:true})}>
               <summary className="cursor-pointer px-4 py-3 text-xs font-bold text-slate-700">Composição técnica e peças de corte — editor existente (não é lista de compra)</summary>
               <div className="px-4 pb-4">
