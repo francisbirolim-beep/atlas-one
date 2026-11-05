@@ -17,10 +17,10 @@ export type DiagnosticoImportacao = {
 
 const normalizar = (valor: string) => String(valor || '').normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').toUpperCase()
-const codigo = (valor: string) => {
+const codigo = (valor: string, exigirNumero = true) => {
   const limpo = String(valor || '').trim().toUpperCase()
   // Não confundir URL, número de pedido, telefone e identificadores de tela com perfis.
-  if (!/^[A-Z][A-Z0-9._/-]{1,39}$/.test(limpo) || !/\d/.test(limpo)) return ''
+  if (!/^[A-Z][A-Z0-9._/-]{1,39}$/.test(limpo) || (exigirNumero && !/\d/.test(limpo))) return ''
   if (/^(HTTP|HTTPS|WWW|URL|CLIENTE|ORCAMENTO|PEDIDO|CELULAR|TELEFONE|CNPJ|CPF|DATA|ITEM|VALOR|CEP)[0-9._-]/.test(limpo)) return ''
   return limpo.replaceAll('/', '-')
 }
@@ -40,7 +40,7 @@ const inteiro = (texto: string): number | null => {
 }
 const eixo = (texto: string): 'L' | 'H' | '' => {
   const v = normalizar(texto.trim())
-  if (['L', 'HORIZONTAL', 'LARGURA'].includes(v)) return 'L'
+  if (['L', 'POS', 'POSICAO', 'HORIZONTAL', 'LARGURA'].includes(v)) return 'L'
   if (['H', 'VERTICAL', 'ALTURA'].includes(v)) return 'H'
   return ''
 }
@@ -97,6 +97,22 @@ function leituraColunas(partes: string[], campos: Campos): ComponenteCandidato |
     eixo: campos.axis >= 0 ? eixo(partes[campos.axis]) : '',
     comprimento_mm: comprimento, quantidade: qtde }
 }
+// O relatório "Orientativo de Montagem" do W.Vetro possui uma coluna
+// Figura que fica vazia na extração de texto. Isso desloca os índices e
+// transforma o código em descrição. Ler a linha técnica inteira evita depender
+// do alinhamento de colunas e conserva código sem número, como TMC.
+function leituraLinhaPerfilWvetro(linha: string): ComponenteCandidato | null {
+  const m = linha.match(/^\s*([A-Z][A-Z0-9._/-]{1,39})\s+(.+?)\s+(\d{1,4})\s+(\d{1,5}(?:[.,]\d{1,3})?)\s+(\d{1,3}\s*\/\s*\d{1,3})\s+([LH])(?:\s+[\d.,]+)?\s*$/i)
+  if (!m) return null
+  const cod = codigo(m[1], false)
+  const qtde = inteiro(m[3])
+  const comprimento = numero(m[4])
+  const orientacao = eixo(m[6])
+  if (!cod || !qtde || qtde > 500 || comprimento == null ||
+      comprimento < 10 || comprimento > 20000 || !orientacao) return null
+  return { codigo: cod, tipo: 'perfil', descricao: m[2].trim() || cod,
+    eixo: orientacao, comprimento_mm: comprimento, quantidade: qtde }
+}
 function leituraPosicional(partes: string[]): ComponenteCandidato | null {
   if (partes.length < 3 || partes.length > 9) return null
   const cod = codigo(partes[0])
@@ -132,11 +148,27 @@ export function extrairComponentesRelatorio(texto: string): ComponenteCandidato[
   const linhas = String(texto || '').split(/\r?\n/).slice(0,2000)
   const detectados: ComponenteCandidato[] = []
   let cols: Campos | null = null
+  let tabelaPerfis = false
   for (const linha of linhas) {
+    const cabecalhoTexto = normalizar(linha).trim()
+    if (/^PERFIL$/.test(cabecalhoTexto)) {
+      tabelaPerfis = true
+      cols = null
+      continue
+    }
+    if (/^(ACESSORIOS|VIDRO|SERVICOS)\b/.test(cabecalhoTexto)) {
+      tabelaPerfis = false
+      cols = null
+      continue
+    }
     const partes=segmentar(linha)
     if (partes.length < 3) continue
     const possivel=cabecalho(partes)
-    if (possivel) {cols=possivel;continue}
+    if (possivel) {cols=possivel; tabelaPerfis = true; continue}
+    if (tabelaPerfis) {
+      const linhaWvetro = leituraLinhaPerfilWvetro(linha)
+      if (linhaWvetro) { detectados.push(linhaWvetro); continue }
+    }
     // Quando existe cabeçalho, respeitar a ordem das colunas. Não usar o parser
     // posicional como fallback: uma linha inválida do orçamento não é um perfil.
     const componente=cols ? leituraColunas(partes,cols) : leituraPosicional(partes)
