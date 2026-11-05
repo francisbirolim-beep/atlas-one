@@ -55,7 +55,7 @@ export function inferirFormulasPorCasos(
       return cortes.length === 1 ? { c, item: cortes[0] } : null
     })
     const validos = dados.filter((d): d is NonNullable<typeof d> => d !== null)
-    const base = { codigo, eixo, formula: null as string | null,
+    const base = { codigo, eixo: eixo as 'L' | 'H', formula: null as string | null,
       formula_quantidade: null as string | null, amostras: validos.length,
       estado: 'pendente' as const, motivo: '' }
     if (validos.length !== amostras.length) {
