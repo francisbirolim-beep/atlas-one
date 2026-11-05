@@ -38,6 +38,12 @@ jobs:
       - name: W.Vetro technical regression
         run: npm run test:wvetro-comparador
 
+      - name: W.Vetro orientativo parsing regression
+        run: node scripts/test-orientativo-montagem-wvetro.cjs
+
+      - name: Supervised formula learning from independent measurements
+        run: node scripts/test-bancada-aprendizado-formulas.cjs
+
       - name: Supplier quotation deterministic comparison
         run: npm run test:cotacao-ia
 

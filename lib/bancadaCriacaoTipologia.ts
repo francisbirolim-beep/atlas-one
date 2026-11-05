@@ -8,6 +8,8 @@ export type ComponenteCandidato = {
   eixo: 'L' | 'H' | ''
   comprimento_mm: number | null
   quantidade: number
+  unidade?: string
+  observacao?: string
 }
 
 const codigoSeguro = /^[A-Z0-9][A-Z0-9_.-]{0,39}$/
@@ -24,10 +26,16 @@ export function normalizarComponentes(entrada: unknown): ComponenteCandidato[] {
     const eixo = eixoBruto === 'L' || eixoBruto === 'H' ? eixoBruto : ''
     const comprimento = item.comprimento_mm == null || item.comprimento_mm === '' ? null : Number(String(item.comprimento_mm).replace(',', '.'))
     const quantidade = Number(item.quantidade ?? 1)
-    if (!codigoSeguro.test(codigo) || !Number.isSafeInteger(quantidade) || quantidade < 1 || quantidade > 500) continue
+    // Acessorios podem ter quantidade fracionaria (fita em metros, silicone em tubos).
+    if (!codigoSeguro.test(codigo) || !Number.isFinite(quantidade) || quantidade <= 0 ||
+      (tipo === 'perfil' ? !Number.isSafeInteger(quantidade) || quantidade > 500 : quantidade > 10000)) continue
     if (comprimento !== null && (!Number.isFinite(comprimento) || comprimento <= 0 || comprimento > 20000)) continue
     resultado.push({ codigo, descricao: limpar(item.descricao || item.nome || codigo), tipo, eixo,
-      comprimento_mm: comprimento, quantidade })
+      comprimento_mm: comprimento, quantidade,
+      ...(tipo === 'acessorio' ? {
+        unidade: limpar(item.unidade || 'UN', 8).toUpperCase(),
+        observacao: limpar(item.observacao, 160),
+      } : {}) })
   }
   return resultado
 }

@@ -7,7 +7,7 @@ import { analisarComGatewayZeroCusto, ErroGatewayZeroCusto, limparDadosPessoaisR
 import { assinaturaTecnica, conferirCaso, type CasoTipologia } from '@/lib/bancadaTipologias'
 import { extrairCortesTexto, extrairRespostaIA, formulaHipotese, normalizarComponentes, tipoCroquiSeguro, type ComponenteCandidato } from '@/lib/bancadaCriacaoTipologia'
 import type { TipologiaFormulasCorte } from '@/lib/formulasCorteEngine'
-import { diagnosticarRelatorio, pareceAtalhoWeb, extrairComponentesRelatorio } from '@/lib/engenhariaImportacaoWvetro'
+import { diagnosticarRelatorio, pareceAtalhoWeb, extrairComponentesRelatorio, extrairDadosOrientativo } from '@/lib/engenhariaImportacaoWvetro'
 import { textoCatalogoGeometrico } from '@/lib/ai/catalogoPdfTexto'
 
 export const runtime = 'nodejs'
@@ -82,7 +82,7 @@ Responda apenas JSON com:
 Quando não houver código legível, omita o componente. Quando não houver comprimento comprovado, use null.
 Não invente desenhos de seção transversal e não infira folgas. A comparação humana é obrigatória.`
 
-async function analisarDocumento(doc: DocumentoLido, observacoes: string, oidcTokenDaRequisicao?: string) {
+async function analisarDocumento(doc: DocumentoLido, observacoes: string, permitirIA: boolean, oidcTokenDaRequisicao?: string) {
   const diagnostico = diagnosticarRelatorio(doc.conteudo, doc.nome)
   const extraidos = diagnostico.componentes
   const jaTemCortes = extraidos.some(c => c.eixo && c.comprimento_mm != null)
@@ -94,6 +94,9 @@ async function analisarDocumento(doc: DocumentoLido, observacoes: string, oidcTo
     statusIA = 'documento_sem_cortes'
   } else if (jaTemCortes && !doc.mime.startsWith('image/')) {
     statusIA = 'dispensada'
+  } else if (!permitirIA) {
+    statusIA = 'dispensada'
+    aviso = 'Leitura local realizada. A IA externa não foi autorizada; nenhum dado foi enviado.'
   } else if (doc.mime.startsWith('image/') || doc.conteudo.trim().length >= 30) {
     try {
       const resposta = await analisarComGatewayZeroCusto({
@@ -137,7 +140,7 @@ async function analisarDocumento(doc: DocumentoLido, observacoes: string, oidcTo
   if (componentes.length && cortesCompletos === 0)
     aviso = [aviso, 'Nenhum dos componentes sugeridos tem corte e orientação completos. Identifique as medidas antes de validar.'].filter(Boolean).join(' ')
   aviso = [aviso, diagnostico.mensagem].filter(Boolean).join(' ')
-  return { componentes, descricao: interpretado.descricao,
+  return { dados_orientativo: extrairDadosOrientativo(doc.conteudo), componentes, descricao: interpretado.descricao,
     tipo_croqui: tipoCroquiSeguro(interpretado.tipo_croqui || observacoes),
     texto_extraido: doc.conteudo.slice(0,15000), origem_ia: origemIA, aviso,
     estado_documento: diagnostico.estado, status_ia: statusIA,
@@ -153,12 +156,13 @@ export async function POST(req: NextRequest) {
   const acao = valor(form.get('acao'), 30)
 
   if (acao === 'analisar') {
-    if (form.get('consentimentoIA') !== 'sim') return responderErro('Confirme o envio deste documento ao serviço de análise por IA.', 422)
+    // A leitura local e permitida sem consentimento para envio a IA externa.
+    const permitirIA = form.get('consentimentoIA') === 'sim'
     try {
       const doc = await lerDocumento(form.get('arquivo'))
       if (!doc) return responderErro('Selecione a foto ou o PDF da tipologia.')
       // OIDC é injetado pela Vercel na requisição da função, não exposto ao cliente.
-      const resultado = await analisarDocumento(doc, valor(form.get('observacoes'), 1600),
+      const resultado = await analisarDocumento(doc, valor(form.get('observacoes'), 1600), permitirIA,
         req.headers.get('x-vercel-oidc-token') || undefined)
       return NextResponse.json(resultado, { headers: { 'Cache-Control': 'private,no-store' } })
     } catch (e) {
