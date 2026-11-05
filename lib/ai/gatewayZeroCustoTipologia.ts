@@ -76,10 +76,10 @@ async function carregarModelosGratuitos(): Promise<ModeloCatalogo[]> {
   }
 }
 
-function tokenGateway(): string {
-  // Token OIDC é injetado automaticamente nas funções Vercel. Nunca é enviado
-  // ao navegador, retornado na API ou registrado nos logs.
-  return String(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || '').trim()
+function tokenGateway(oidcTokenDaRequisicao?: string): string {
+  // Em Vercel Functions, o OIDC chega pelo cabeçalho x-vercel-oidc-token
+  // da Request, e não necessariamente em process.env. Fica apenas no servidor.
+  return String(process.env.AI_GATEWAY_API_KEY || oidcTokenDaRequisicao || process.env.VERCEL_OIDC_TOKEN || '').trim()
 }
 
 function respostaTexto(data: any): string {
@@ -104,14 +104,14 @@ function statusDeErro(status: number): ErroGatewayZeroCusto {
     'O serviço de IA gratuito não respondeu corretamente (HTTP ' + status + ').')
 }
 
-export async function analisarComGatewayZeroCusto(entrada: Entrada): Promise<RespostaGatewayZeroCusto> {
+export async function analisarComGatewayZeroCusto(entrada: Entrada, oidcTokenDaRequisicao?: string): Promise<RespostaGatewayZeroCusto> {
   const modalidade: 'text' | 'image' = entrada.imagem ? 'image' : 'text'
   const modelos = escolherModelosGratuitos(await carregarModelosGratuitos(), modalidade)
   if (!modelos.length) throw new ErroGatewayZeroCusto('sem_modelo_gratuito',
     modalidade === 'image'
       ? 'Não há um modelo gratuito de leitura de imagens disponível no momento. Envie um PDF com texto ou informe os perfis manualmente.'
       : 'Não há modelos gratuitos de texto disponíveis no catálogo atual. A leitura local continua disponível.')
-  const token = tokenGateway()
+  const token = tokenGateway(oidcTokenDaRequisicao)
   if (!token) throw new ErroGatewayZeroCusto('autenticacao_indisponivel',
     'A autenticação do serviço gratuito de IA não está disponível no servidor do Atlas.')
 
