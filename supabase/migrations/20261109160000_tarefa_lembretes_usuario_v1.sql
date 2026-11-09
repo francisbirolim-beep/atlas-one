@@ -25,7 +25,7 @@ create policy tarefa_lembretes_usuario_select
     and exists (
       select 1 from public.tarefas t
       where t.id = tarefa_id and t.usuario_id = auth.uid()
-        and t.empresa_id = empresa_id
+        and t.empresa_id = public.tarefa_lembretes_usuario.empresa_id
     )
   );
 
@@ -36,7 +36,7 @@ create policy tarefa_lembretes_usuario_insert
     and exists (
       select 1 from public.tarefas t
       where t.id = tarefa_id and t.usuario_id = auth.uid()
-        and t.empresa_id = empresa_id
+        and t.empresa_id = public.tarefa_lembretes_usuario.empresa_id
     )
   );
 
@@ -48,7 +48,7 @@ create policy tarefa_lembretes_usuario_update
     and exists (
       select 1 from public.tarefas t
       where t.id = tarefa_id and t.usuario_id = auth.uid()
-        and t.empresa_id = empresa_id
+        and t.empresa_id = public.tarefa_lembretes_usuario.empresa_id
     )
   )
   with check (
@@ -56,7 +56,7 @@ create policy tarefa_lembretes_usuario_update
     and exists (
       select 1 from public.tarefas t
       where t.id = tarefa_id and t.usuario_id = auth.uid()
-        and t.empresa_id = empresa_id
+        and t.empresa_id = public.tarefa_lembretes_usuario.empresa_id
     )
   );
 
