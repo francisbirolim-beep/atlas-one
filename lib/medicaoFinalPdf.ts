@@ -479,8 +479,10 @@ async function gerarPdfMedicaoFinalPersonalizado(
     const linhasQuadro = checklistLinhas.slice(0, 32)
     const linhasRestantes = checklistLinhas.slice(32)
     const hChecklist = Math.max(42, 27 + linhasQuadro.length * linhaH + 12)
-    const hCroqui = layout.exibirCroqui ? 29 : 0
-    const hNumeros = Math.max(3.5, layout.fonteMedidasPt * 0.5) * 3 + 8
+    // Os rótulos de largura ficam NA LATERAL do croqui e os de altura LOGO ABAIXO.
+    // O espaço reservado não depende do tamanho da fonte: ajustar não reordena os rótulos.
+    const hCroqui = layout.exibirCroqui ? 34 : 0
+    const hNumeros = layout.exibirCroqui ? 0 : Math.max(3.5, layout.fonteMedidasPt * 0.5) * 3 + 8
     const hEsquerda = 5 + hCroqui + hNumeros
     const hPrincipal = Math.max(hChecklist, hEsquerda)
 
@@ -518,37 +520,66 @@ async function gerarPdfMedicaoFinalPersonalizado(
     doc.text(tituloLinhas, 15, y)
     y += tituloH
 
-    // Os valores permanecem impressos mesmo com o croqui oculto.
-    const medidas = [
-      ['Cima', item.largura_cima_mm], ['Esq.', item.altura_esquerda_mm],
-      ['Meio', item.largura_meio_mm], ['Meio', item.altura_meio_mm],
-      ['Baixo', item.largura_baixo_mm], ['Dir.', item.altura_direita_mm],
-    ] as const
+    // Mesmo ao diminuir o croqui ou ampliar a fonte, as cotas nunca passam
+    // para uma lista abaixo do desenho: as 3 larguras ficam à direita,
+    // e as 3 alturas ficam alinhadas nas 3 posições logo abaixo do croqui.
     const inicioEsquerda = y + 4
-    let inicioNumeros = inicioEsquerda
+    doc.setFont('helvetica', 'bold')
+    const escreverCota = (rotulo: string, x: number, posicaoY: number, larguraMaxima: number) => {
+      doc.setFontSize(layout.fonteMedidasPt)
+      // A fonte se ajusta somente quando a cota não cabe no espaço reservado;
+      // o ponto de ancoragem nunca muda, e nenhuma cota invade o checklist.
+      const larguraTexto = doc.getTextWidth(rotulo)
+      const escala = Math.min(1, Math.max(1, larguraMaxima) / Math.max(larguraTexto, 0.1))
+      doc.setFontSize(layout.fonteMedidasPt * escala)
+      doc.text(rotulo, x, posicaoY)
+    }
     if (layout.exibirCroqui) {
       const cw = layout.larguraCroquiMm
       const cx = 22 + (60 - cw) / 2
+      const ch = 23
+      const cy = inicioEsquerda
       doc.setDrawColor(55, 68, 78); doc.setLineWidth(.5)
-      doc.rect(cx, inicioEsquerda, cw, 23)
+      doc.rect(cx, cy, cw, ch)
       const folhas = Number(String(item.folhas || item.descricao?.match(/(\d+)\s*folhas?/i)?.[1] || '').match(/\d+/)?.[0] || 1)
       const divisores = Math.max(1, Math.min(8, folhas))
       for (let parte = 1; parte < divisores; parte++) {
-        doc.line(cx + cw * parte / divisores, inicioEsquerda, cx + cw * parte / divisores, inicioEsquerda + 23)
+        doc.line(cx + cw * parte / divisores, cy, cx + cw * parte / divisores, cy + ch)
       }
-      inicioNumeros = inicioEsquerda + 27
+      // Mesmas âncoras do desenho original. O tamanho do croqui afeta apenas
+      // a posição relativa das cotas, nunca a sua ordem ou orientação.
+      const lateralX = cx + cw + 3
+      const larguraLateral = Math.max(1, 100 - lateralX)
+      ;([
+        ['Cima', item.largura_cima_mm, cy + 3],
+        ['Meio', item.largura_meio_mm, cy + ch / 2 + 1],
+        ['Baixo', item.largura_baixo_mm, cy + ch - 1],
+      ] as const).forEach(([rotulo, valor, posicaoY]) => {
+        escreverCota(`${rotulo} ${texto(valor)} mm`, lateralX, posicaoY, larguraLateral)
+      })
+      const larguraColuna = Math.max(1, cw / 3 - 1)
+      ;([
+        ['Esq.', item.altura_esquerda_mm, 0],
+        ['Meio', item.altura_meio_mm, 0.36],
+        ['Dir.', item.altura_direita_mm, 0.70],
+      ] as const).forEach(([rotulo, valor, fracao]) => {
+        escreverCota(`${rotulo} ${texto(valor)} mm`, cx + cw * fracao, cy + ch + 5, larguraColuna)
+      })
     } else {
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(7)
+      // Ao ocultar o croqui, mantém todas as seis cotas legíveis no espaço vazio.
+      doc.setFontSize(7)
       doc.text('MEDIDAS DO VÃO (mm)', 20, inicioEsquerda + 2)
-      inicioNumeros += 6
-    }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(layout.fonteMedidasPt)
-    const passoNumeros = Math.max(3.5, layout.fonteMedidasPt * .5)
-    for (let i = 0; i < medidas.length; i++) {
-      const [etiqueta, valor] = medidas[i]
-      const coluna = i % 2
-      const linha = Math.floor(i / 2)
-      doc.text(`${etiqueta} ${texto(valor)} mm`, coluna ? 59 : 20, inicioNumeros + linha * passoNumeros, { maxWidth: 38 })
+      const medidas = [
+        ['Cima', item.largura_cima_mm], ['Esq.', item.altura_esquerda_mm],
+        ['Meio', item.largura_meio_mm], ['Meio', item.altura_meio_mm],
+        ['Baixo', item.largura_baixo_mm], ['Dir.', item.altura_direita_mm],
+      ] as const
+      const inicioNumeros = inicioEsquerda + 6
+      const passoNumeros = Math.max(3.5, layout.fonteMedidasPt * .5)
+      medidas.forEach(([rotulo, valor], i) => {
+        escreverCota(`${rotulo} ${texto(valor)} mm`, i % 2 ? 59 : 20,
+          inicioNumeros + Math.floor(i / 2) * passoNumeros, 38)
+      })
     }
 
     const xq = 101
