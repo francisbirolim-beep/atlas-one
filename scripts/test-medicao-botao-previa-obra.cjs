@@ -1,0 +1,22 @@
+/** Regressão: o botão da aba Medida Final não deve depender de uma medição identificada. */
+const fs = require('node:fs')
+const assert = require('node:assert/strict')
+const ts = require('typescript')
+const source = fs.readFileSync('components/clientes/VendaMedidaFinal.tsx', 'utf8')
+const sf = ts.createSourceFile('VendaMedidaFinal.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+const errors = sf.parseDiagnostics || []
+assert.equal(errors.length, 0, 'TSX de Medida Final deve continuar válido')
+const id = 'atlas-medida-final-previa-a4-obra'
+assert.equal(source.split(id).length - 1, 1, 'deve existir um botão primário de prévia com identificador estável')
+const start = source.indexOf('<button id="'+id+'"')
+const end = source.indexOf('</button>', start)
+assert.ok(start > 0 && end > start, 'botão de prévia no cabeçalho')
+const tag = source.slice(start, end)
+assert.match(tag, /onClick=\{abrirPreviaDaObra\}/, 'botão abre a prévia da obra')
+assert.doesNotMatch(tag, /medicaoTipologia &&/, 'botão não depende da existência de medicaoTipologia')
+assert.match(tag, /Prévia PDF A4 \/ Editar layout/, 'mesmo nome conhecido pelo usuário')
+assert.match(source, /const medicaoParaPrevia = medicaoTipologia \|\| resumo\.find\(/, 'compatibilidade com medição antiga')
+assert.match(source, /Esta obra ainda não tem uma Medida Final/, 'caso vazio tem mensagem, não esconde botão')
+assert.match(source, /Abrir \/ conferir/, 'botão existente de conferência preservado')
+assert.match(source, /<EditorLayoutA4 medicao=\{dadosPrevia\.medicao\}/, 'editor mantém integração existente')
+console.log('PASS: prévia A4 sempre visível na obra, com fallback legado e conferência preservada.')
