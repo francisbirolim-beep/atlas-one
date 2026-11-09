@@ -124,10 +124,10 @@ async function customerByPhone(empresaId: string, telefone: string) {
 async function customerByName(empresaId: string, nome: string) {
   const normaliza = (value: unknown) => String(value || "")
     .normalize("NFD")
-    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("pt-BR")
     .trim()
-    .replace(/\\s+/g, " ");
+    .replace(/\s+/g, " ");
   const target = normaliza(nome);
   if (!target) return null;
   const { data } = await db.from("clientes")
