@@ -15,7 +15,7 @@ create or replace function public.atendimento_whatsapp_registrar_mensagem_orcame
 )
 returns table (intake_id uuid, appended boolean)
 language plpgsql
-security definer
+security invoker
 set search_path = public, pg_temp
 as $$
 declare
