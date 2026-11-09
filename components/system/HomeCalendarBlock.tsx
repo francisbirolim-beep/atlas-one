@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, X } from 'lucide-react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, RotateCcw, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
-import { criarEvento, listarEventosDoUsuario, listarUsuariosConvidaveis, type EventoComConvite } from '@/lib/eventos'
+import { concluirEventoUsuario, criarEvento, listarConclusoesEventosUsuario, listarEventosDoUsuario, listarUsuariosConvidaveis, reabrirEventoUsuario, type EventoComConvite } from '@/lib/eventos'
 import type { Usuario } from '@/lib/tipos'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -27,6 +27,9 @@ function hora(iso: string) {
 export default function HomeCalendarBlock() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [eventos, setEventos] = useState<EventoComConvite[]>([])
+  const [conclusoes, setConclusoes] = useState<Record<string, string>>({})
+  const [mostrarConcluidos, setMostrarConcluidos] = useState(false)
+  const [alterandoId, setAlterandoId] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [mes, setMes] = useState(() => { const d = new Date(); d.setDate(1); return d })
   const [diaSelecionado, setDiaSelecionado] = useState(() => new Date())
@@ -46,9 +49,10 @@ export default function HomeCalendarBlock() {
       if (!ativo) return
       setUsuario(u)
       if (!u) { setCarregando(false); return }
-      const lista = await listarEventosDoUsuario(u.id)
+      const [lista, concluidas] = await Promise.all([listarEventosDoUsuario(u.id), listarConclusoesEventosUsuario(u.id)])
       if (!ativo) return
       setEventos(lista)
+      setConclusoes(concluidas)
       setCarregando(false)
     })
     return () => { ativo = false }
@@ -71,11 +75,13 @@ export default function HomeCalendarBlock() {
 
   const eventosDoDia = eventos
     .filter(e => e.meuStatus !== 'recusado')
+    .filter(e => mostrarConcluidos || !conclusoes[e.id])
     .filter(e => mesmoDia(new Date(e.data_inicio), diaSelecionado))
     .sort((a, b) => new Date(a.data_inicio).getTime() - new Date(b.data_inicio).getTime())
+  const concluidosDoDia = eventos.filter(e => e.meuStatus !== 'recusado' && conclusoes[e.id] && mesmoDia(new Date(e.data_inicio), diaSelecionado)).length
 
   function temEvento(dia: Date) {
-    return eventos.some(e => e.meuStatus !== 'recusado' && mesmoDia(new Date(e.data_inicio), dia))
+    return eventos.some(e => e.meuStatus !== 'recusado' && !conclusoes[e.id] && mesmoDia(new Date(e.data_inicio), dia))
   }
 
   async function abrirModal() {
@@ -113,6 +119,26 @@ export default function HomeCalendarBlock() {
     setSalvando(false)
   }
 
+  async function alternarConclusao(evento: EventoComConvite) {
+    if (!usuario || alterandoId) return
+    setAlterandoId(evento.id)
+    const jaConcluido = Boolean(conclusoes[evento.id])
+    const resultado = jaConcluido
+      ? await reabrirEventoUsuario(evento.id, usuario.id)
+      : await concluirEventoUsuario(evento.id, usuario.id)
+    if (!resultado) {
+      alert(jaConcluido ? 'Não foi possível reabrir este compromisso.' : 'Não foi possível concluir este compromisso.')
+    } else {
+      setConclusoes(prev => {
+        const copia = { ...prev }
+        if (jaConcluido) delete copia[evento.id]
+        else copia[evento.id] = typeof resultado === 'string' ? resultado : new Date().toISOString()
+        return copia
+      })
+    }
+    setAlterandoId(null)
+  }
+
   function alternarConvidado(id: string) {
     setConvidados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
@@ -144,13 +170,27 @@ export default function HomeCalendarBlock() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-3">
-            <div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-slate-200">{mesmoDia(diaSelecionado, new Date()) ? 'Hoje' : new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long' }).format(diaSelecionado)}</p><span className="text-[10px] text-slate-400">{eventosDoDia.length} compromisso(s)</span></div>
+            <div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-slate-700">{mesmoDia(diaSelecionado, new Date()) ? 'Hoje' : new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long' }).format(diaSelecionado)}</p><span className="text-[10px] text-slate-400">{eventosDoDia.filter(e => !conclusoes[e.id]).length} pendente(s)</span></div>
+            <label className="mb-2 flex cursor-pointer items-center gap-2 text-[11px] text-slate-600">
+              <input type="checkbox" checked={mostrarConcluidos} onChange={e => setMostrarConcluidos(e.target.checked)} className="accent-emerald-600" />
+              Mostrar concluídos ({concluidosDoDia})
+            </label>
             {carregando ? <p className="py-5 text-sm text-slate-400">Carregando...</p> : eventosDoDia.length === 0 ? <p className="py-5 text-sm text-slate-500">Nenhum compromisso neste dia.</p> : (
               <div className="space-y-2">
                 {eventosDoDia.slice(0, 5).map(evento => (
-                  <div key={evento.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                    <div className="flex items-start justify-between gap-2"><p className="text-sm font-medium text-slate-800">{evento.titulo}</p><span className="shrink-0 text-[10px] text-blue-700">{hora(evento.data_inicio)}</span></div>
-                    {evento.local && <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500"><MapPin size={10}/>{evento.local}</p>}
+                  <div key={evento.id} className={`rounded-lg border border-slate-200 px-3 py-2.5 ${conclusoes[evento.id] ? 'bg-emerald-50/50' : 'bg-white'}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className={`break-words text-sm font-medium ${conclusoes[evento.id] ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{evento.titulo}</p>
+                        {evento.local && <p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500"><MapPin size={10}/>{evento.local}</p>}
+                      </div>
+                      <span className="shrink-0 text-[10px] text-blue-700">{hora(evento.data_inicio)}</span>
+                    </div>
+                    <button type="button" disabled={alterandoId === evento.id} onClick={() => void alternarConclusao(evento)}
+                      className={`mt-2 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-50 ${conclusoes[evento.id] ? 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}>
+                      {conclusoes[evento.id] ? <RotateCcw size={12}/> : <Check size={12}/>}
+                      {conclusoes[evento.id] ? 'Reabrir compromisso' : 'Marcar como concluído'}
+                    </button>
                   </div>
                 ))}
               </div>
