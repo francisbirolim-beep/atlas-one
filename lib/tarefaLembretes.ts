@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import type { TarefaPessoal } from './tipos'
 
 export type EstadoLembreteTarefa = {
   tarefa_id: string
@@ -9,12 +10,31 @@ export type EstadoLembreteTarefa = {
 
 export const INTERVALO_REAVISO_TAREFA_MS = 15 * 60 * 1000
 
+/** Consulta leve: somente tarefas abertas, sem carregar todo o histórico pessoal. */
+export async function listarTarefasAbertasParaLembrete(usuarioId: string): Promise<TarefaPessoal[] | null> {
+  const { data, error } = await supabase
+    .from('tarefas')
+    .select('*')
+    .eq('usuario_id', usuarioId)
+    .is('concluida_em', null)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  if (error) {
+    console.error('Falha ao consultar tarefas pendentes para avisos:', error)
+    return null
+  }
+  return data as TarefaPessoal[]
+}
+
 /** Um adiamento sobrevive ao fechamento do navegador e vale para todos os dispositivos. */
-export async function listarEstadosLembretesTarefas(usuarioId: string): Promise<Record<string, EstadoLembreteTarefa> | null> {
+export async function listarEstadosLembretesTarefas(usuarioId: string, tarefasIds: string[]): Promise<Record<string, EstadoLembreteTarefa> | null> {
+  if (!tarefasIds.length) return {}
   const { data, error } = await supabase
     .from('tarefa_lembretes_usuario')
     .select('tarefa_id, usuario_id, ultimo_aviso_em, adiada_ate')
     .eq('usuario_id', usuarioId)
+    .in('tarefa_id', tarefasIds)
 
   if (error) {
     console.error('Falha ao consultar avisos de tarefas:', error)
