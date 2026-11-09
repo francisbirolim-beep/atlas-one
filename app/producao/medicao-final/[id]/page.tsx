@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import {
   ArrowLeft, Ruler, Plus, Pencil, Trash2, X, Save, Check, Keyboard, Camera,
@@ -22,6 +23,7 @@ import { listarTipologias } from '@/lib/tipologias'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import { obterRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import ContramarcoFlow from '@/components/medicao-final/ContramarcoFlow'
+const EditorLayoutA4 = dynamic(() => import('@/components/medicao-final/EditorLayoutA4'), { ssr: false })
 
 let tiposCache: Tipologia[] = []
 
@@ -70,6 +72,7 @@ export default function DetalheMedicaoFinal() {
   const [importandoPdf, setImportandoPdf] = useState(false)
   const [erroImportarPdf, setErroImportarPdf] = useState('')
   const [processandoConferencia, setProcessandoConferencia] = useState(false)
+  const [editorLayoutAberto, setEditorLayoutAberto] = useState(false)
 
   const master = usuario?.role === 'master'
   const ehContramarco = medicao?.tipo_medicao === 'contramarco'
@@ -588,6 +591,7 @@ export default function DetalheMedicaoFinal() {
         </div>
       </header>
 
+      {editorLayoutAberto && <EditorLayoutA4 medicao={medicao} itens={itens} fechar={() => setEditorLayoutAberto(false)} />}
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -596,6 +600,12 @@ export default function DetalheMedicaoFinal() {
           >
             <Plus size={16} /> Adicionar tipologia
           </button>
+          {master && !ehContramarco && (
+            <button type="button" onClick={() => setEditorLayoutAberto(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-brand-navy hover:bg-slate-50">
+              <Pencil size={16} /> Editar layout A4
+            </button>
+          )}
           {itens.length > 0 && (
             <button
               onClick={() => gerarPdfMedicaoFinal(medicao, itens)}

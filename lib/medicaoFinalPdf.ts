@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf'
 import type { MedicaoFinal, MedicaoItem } from './tipos'
 import { carregarChecklistMedicaoV2, camposDoItemV2, valorRespostaItemV2, statusItemChecklistV2 } from './medicaoChecklistV2'
 import { tokenAtual } from './auth'
+import { carregarLayoutMedicaoA4, LAYOUT_MEDICAO_A4_PADRAO, type LayoutMedicaoA4 } from './medicaoFinalLayoutA4'
 
 type IdentificacaoPdf = { cliente_nome?: string | null; nome_obra?: string | null; numero_orcamento?: string | null }
 
@@ -319,10 +320,15 @@ async function gerarPdfContramarcos(
   return doc
 }
 
-export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[], salvar = true) {
+export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: MedicaoItem[], salvar = true, layoutOverride?: LayoutMedicaoA4) {
   const identificacao = await identificacaoPdf(medicao)
   if (medicao.tipo_medicao === 'contramarco') {
     return gerarPdfContramarcos(medicao, itens, identificacao, salvar)
+  }
+  // O desenho antigo permanece exatamente igual até o Master salvar outro padrão A4.
+  const layout = layoutOverride || await carregarLayoutMedicaoA4()
+  if (JSON.stringify(layout) !== JSON.stringify(LAYOUT_MEDICAO_A4_PADRAO)) {
+    return gerarPdfMedicaoFinalPersonalizado(medicao, itens, identificacao, layout, salvar)
   }
   const dados = await carregarChecklistMedicaoV2(medicao.id)
     .catch(() => ({ itens: [], campos: [], respostas: [], fotos: [] }))
@@ -412,5 +418,235 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
   doc.setFontSize(6); doc.text(`Gerado pelo Atlas One em ${new Date().toLocaleString('pt-BR')}`, 15, y)
 
   if (salvar) doc.save(`medida-final-${medicao.cliente_nome.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || medicao.id}.pdf`)
+  return doc
+}
+
+/** Renderizador A4 opt-in: somente usado quando o administrador salva um layout diferente do original. */
+async function gerarPdfMedicaoFinalPersonalizado(
+  medicao: MedicaoFinal,
+  itens: MedicaoItem[],
+  identificacao: IdentificacaoPdf,
+  layout: LayoutMedicaoA4,
+  salvar: boolean,
+) {
+  const dados = await carregarChecklistMedicaoV2(medicao.id)
+    .catch(() => ({ itens: [], campos: [], respostas: [], fotos: [] }))
+  const concluidos = itens.filter(item => statusItemChecklistV2(item, dados.campos, dados.respostas) === 'concluida')
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const paginaLimite = 279
+  let y = 14
+  let itensNaPagina = 0
+
+  function cabecalho() {
+    doc.setTextColor(0, 0, 0)
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14)
+    doc.text('ATLAS ONE — MEDIÇÃO FINAL', 15, y); y += 7
+    doc.setFontSize(8.5)
+    doc.text(`Cliente: ${texto(identificacao.cliente_nome || medicao.cliente_nome)}`, 15, y, { maxWidth: 60 })
+    doc.text(`Obra: ${texto(identificacao.nome_obra)}`, 78, y, { maxWidth: 65 })
+    doc.text(`Orçamento: ${identificacao.numero_orcamento ? 'Nº ' + identificacao.numero_orcamento : '-'}`, 150, y, { maxWidth: 45 })
+    y += 7
+    doc.setDrawColor(220, 224, 228); doc.line(15, y, 195, y); y += 6
+  }
+
+  function novaPagina() {
+    doc.addPage()
+    y = 14
+    itensNaPagina = 0
+    cabecalho()
+  }
+
+  cabecalho()
+
+  for (let index = 0; index < concluidos.length; index++) {
+    const item = concluidos[index]
+    const campos = camposDoItemV2(dados.campos, item, dados.respostas)
+    const checklist = linhasChecklist(item, campos, dados.respostas)
+    const largura = menor([item.largura_baixo_mm, item.largura_meio_mm, item.largura_cima_mm])
+    const altura = menor([item.altura_direita_mm, item.altura_meio_mm, item.altura_esquerda_mm])
+    const producao = `${texto(largura)} x ${texto(altura)} mm`
+    const titulo = `${index + 1}. ${texto(item.descricao || item.tipo_esquadria)} | ${texto(item.ambiente)} | ${texto(item.quantidade)} un.`
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+    const tituloLinhas = doc.splitTextToSize(titulo, 180) as string[]
+    const tituloH = tituloLinhas.length * 4 + 3
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(layout.fonteChecklistPt)
+    const checklistLinhas = checklist.flatMap(linha => doc.splitTextToSize(linha, 87) as string[])
+    const linhaH = Math.max(3.6, layout.fonteChecklistPt * 0.54)
+    // O checklist pode ser muito grande. Continuações ganham suas próprias folhas A4;
+    // nenhum quadro pode ultrapassar o limite de impressão ou cortar respostas.
+    const linhasQuadro = checklistLinhas.slice(0, 32)
+    const linhasRestantes = checklistLinhas.slice(32)
+    const hChecklist = Math.max(42, 27 + linhasQuadro.length * linhaH + 12)
+    const hCroqui = layout.exibirCroqui ? 29 : 0
+    const hNumeros = Math.max(3.5, layout.fonteMedidasPt * 0.5) * 3 + 8
+    const hEsquerda = 5 + hCroqui + hNumeros
+    const hPrincipal = Math.max(hChecklist, hEsquerda)
+
+    const fotosCampo = dados.fotos.filter(f => f.item_id === item.id)
+      .map(f => ({ url: f.url, legenda: f.legenda || f.categoria || 'Foto de campo' }))
+    const fotos = [
+      ...(item.foto_larguras_url ? [{ url: item.foto_larguras_url, legenda: 'Trena — largura' }] : []),
+      ...(item.foto_alturas_url ? [{ url: item.foto_alturas_url, legenda: 'Trena — altura' }] : []),
+      ...campos.filter(c => c.tipo_valor === 'foto').flatMap(c => {
+        const url = valorRespostaItemV2(item, c, dados.respostas)
+        return typeof url === 'string' && /^https?:\/\//.test(url) ? [{ url, legenda: c.nome }] : []
+      }),
+      ...Object.entries(item.campos_extras || {}).filter(([, v]) => /^https?:\/\//.test(String(v)))
+        .map(([chave, valor]) => ({ url: String(valor), legenda: chave.replace(/_/g, ' ') })),
+      ...fotosCampo,
+    ]
+    const fotosUnicas = fotos.filter((foto, i) => fotos.findIndex(f => f.url === foto.url) === i)
+    const alturaLinhaFotos = layout.alturaFotoMm + 5
+    const alturaFotos = fotosUnicas.length ? Math.ceil(fotosUnicas.length / layout.fotosPorLinha) * alturaLinhaFotos : 0
+    const alerta = Math.max(
+      diferenca([item.largura_baixo_mm, item.largura_meio_mm, item.largura_cima_mm]),
+      diferenca([item.altura_direita_mm, item.altura_meio_mm, item.altura_esquerda_mm]),
+    ) >= 15
+    const avisoH = alerta ? 7 : 0
+    const blocoPrevisto = tituloH + hPrincipal + 3 + avisoH + alturaFotos + 8
+    // Nunca comprimir componentes para forçar a quantidade desejada na página.
+    // Caso o bloco não caiba inteiro, garantir ao menos o cabeçalho, medidas e a primeira foto.
+    const minimoBloco = tituloH + hPrincipal + avisoH + (fotosUnicas.length ? alturaLinhaFotos : 0) + 11
+    if (itensNaPagina >= layout.itensPorPagina ||
+        (y + blocoPrevisto > paginaLimite && y + minimoBloco > paginaLimite)) {
+      novaPagina()
+    }
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+    doc.text(tituloLinhas, 15, y)
+    y += tituloH
+
+    // Os valores permanecem impressos mesmo com o croqui oculto.
+    const medidas = [
+      ['Cima', item.largura_cima_mm], ['Esq.', item.altura_esquerda_mm],
+      ['Meio', item.largura_meio_mm], ['Meio', item.altura_meio_mm],
+      ['Baixo', item.largura_baixo_mm], ['Dir.', item.altura_direita_mm],
+    ] as const
+    const inicioEsquerda = y + 4
+    let inicioNumeros = inicioEsquerda
+    if (layout.exibirCroqui) {
+      const cw = layout.larguraCroquiMm
+      const cx = 22 + (60 - cw) / 2
+      doc.setDrawColor(55, 68, 78); doc.setLineWidth(.5)
+      doc.rect(cx, inicioEsquerda, cw, 23)
+      const folhas = Number(String(item.folhas || item.descricao?.match(/(\d+)\s*folhas?/i)?.[1] || '').match(/\d+/)?.[0] || 1)
+      const divisores = Math.max(1, Math.min(8, folhas))
+      for (let parte = 1; parte < divisores; parte++) {
+        doc.line(cx + cw * parte / divisores, inicioEsquerda, cx + cw * parte / divisores, inicioEsquerda + 23)
+      }
+      inicioNumeros = inicioEsquerda + 27
+    } else {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7)
+      doc.text('MEDIDAS DO VÃO (mm)', 20, inicioEsquerda + 2)
+      inicioNumeros += 6
+    }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(layout.fonteMedidasPt)
+    const passoNumeros = Math.max(3.5, layout.fonteMedidasPt * .5)
+    for (let i = 0; i < medidas.length; i++) {
+      const [etiqueta, valor] = medidas[i]
+      const coluna = i % 2
+      const linha = Math.floor(i / 2)
+      doc.text(`${etiqueta} ${texto(valor)} mm`, coluna ? 59 : 20, inicioNumeros + linha * passoNumeros, { maxWidth: 38 })
+    }
+
+    const xq = 101
+    const wq = 94
+    doc.setDrawColor(210, 218, 223); doc.rect(xq, y, wq, hPrincipal)
+    doc.setFillColor(234, 247, 240); doc.rect(xq, y, wq, 15, 'F')
+    doc.setTextColor(0, 0, 0)
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5); doc.text('MEDIDA DE PRODUÇÃO', xq + 3, y + 5)
+    doc.setFontSize(10); doc.text(producao, xq + 3, y + 12)
+    doc.setFontSize(7); doc.text('CHECKLIST', xq + 3, y + 21)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(layout.fonteChecklistPt)
+    let yChecklist = y + 27
+    for (const linha of linhasQuadro) {
+      doc.text(linha, xq + 4, yChecklist, { maxWidth: wq - 8 })
+      yChecklist += linhaH
+    }
+    doc.setFillColor(247, 249, 250); doc.rect(xq, y + hPrincipal - 9, wq, 9, 'F')
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8)
+    doc.text(`Medido por: ${texto(item.medido_por_nome)}`, xq + 3, y + hPrincipal - 3.5, { maxWidth: 57 })
+    doc.setFont('helvetica', 'normal')
+    doc.text(item.medido_em ? new Date(item.medido_em).toLocaleString('pt-BR') : '-',
+      xq + wq - 3, y + hPrincipal - 3.5, { align: 'right' })
+    y += hPrincipal + 3
+
+    if (alerta) {
+      doc.setTextColor(190, 30, 30); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.5)
+      doc.text('ALERTA: diferença do vão >= 15 mm — VERIFICAR / ADICIONAR CANTONEIRA.', 15, y)
+      doc.setTextColor(0, 0, 0); y += 7
+    }
+
+    while (linhasRestantes.length) {
+      novaPagina()
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+      doc.text(`Checklist — continuação da medição ${index + 1}: ${texto(item.ambiente)}`, 15, y, { maxWidth: 180 })
+      y += 8
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(layout.fonteChecklistPt)
+      const capacidade = Math.max(1, Math.floor((paginaLimite - y - 5) / linhaH))
+      for (const linha of linhasRestantes.splice(0, capacidade)) {
+        doc.text(linha, 18, y, { maxWidth: 175 })
+        y += linhaH
+      }
+      y += 4
+    }
+
+    const gap = 3
+    const porLinha = layout.fotosPorLinha
+    const larguraFoto = (180 - gap * (porLinha - 1)) / porLinha
+    for (let indiceFoto = 0; indiceFoto < fotosUnicas.length; indiceFoto += porLinha) {
+      if (y + layout.alturaFotoMm + 6 > paginaLimite) {
+        novaPagina()
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7)
+        doc.text(`Fotos — ${index + 1}. ${texto(item.ambiente)} (continuação)`, 15, y)
+        y += 6
+      }
+      const linha = fotosUnicas.slice(indiceFoto, indiceFoto + porLinha)
+      for (let coluna = 0; coluna < linha.length; coluna++) {
+        const foto = linha[coluna]
+        const x = 15 + coluna * (larguraFoto + gap)
+        doc.setDrawColor(215, 220, 224)
+        doc.rect(x, y, larguraFoto, layout.alturaFotoMm)
+        const imagem = await carregarImagem(foto.url)
+        if (imagem) {
+          try {
+            const info = doc.getImageProperties(imagem)
+            const escala = Math.min((larguraFoto - 3) / info.width, (layout.alturaFotoMm - 7) / info.height)
+            const iw = info.width * escala
+            const ih = info.height * escala
+            doc.addImage(imagem, formatoImagem(imagem), x + (larguraFoto - iw) / 2,
+              y + 1.5 + (layout.alturaFotoMm - 7 - ih) / 2, iw, ih, undefined, 'FAST')
+          } catch { /* Uma imagem inválida não impede a emissão do documento. */ }
+        }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5)
+        doc.text(foto.legenda, x + larguraFoto / 2, y + layout.alturaFotoMm - 2, { align: 'center', maxWidth: larguraFoto - 2 })
+      }
+      y += alturaLinhaFotos
+    }
+    if (y + 8 > paginaLimite) novaPagina()
+    doc.setDrawColor(225, 228, 231); doc.line(15, y + 2, 195, y + 2)
+    y += 8
+    itensNaPagina++
+  }
+
+  if (!concluidos.length) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
+    doc.text('Nenhuma tipologia concluída para emissão.', 15, y)
+    y += 9
+  }
+  if (y > 263) novaPagina()
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+  doc.text('CONFIRMAÇÃO FINAL', 15, y); y += 5
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7)
+  const descricao = layout.exibirCroqui ? 'Croquis, medidas, checklist e evidências' : 'Medidas, checklist e evidências'
+  doc.text(`${concluidos.length} tipologia(s) concluída(s) de ${itens.length}. ${descricao} vinculadas para conferência.`, 15, y)
+  y += 5
+  doc.setFontSize(6)
+  doc.text(`Gerado pelo Atlas One em ${new Date().toLocaleString('pt-BR')}`, 15, y)
+  if (salvar) {
+    doc.save(`medida-final-${medicao.cliente_nome.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || medicao.id}.pdf`)
+  }
   return doc
 }
