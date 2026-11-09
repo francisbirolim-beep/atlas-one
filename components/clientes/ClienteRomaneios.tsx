@@ -49,6 +49,7 @@ export default function ClienteRomaneios({clienteId,clienteNome,obras,podeEditar
   const [carregando,setCarregando] = useState(true)
   const [buscando,setBuscando] = useState(false)
   const [salvando,setSalvando] = useState(false)
+  const [gerandoPdf,setGerandoPdf] = useState(false)
   const [erro,setErro] = useState('')
   const [sucesso,setSucesso] = useState('')
   const produtosPorId = useMemo(() => new Map(catalogo.map(p=>[p.id,p])),[catalogo])
@@ -169,20 +170,70 @@ export default function ClienteRomaneios({clienteId,clienteNome,obras,podeEditar
   }
 
   async function imprimir() {
-    if(!atual?.id){setErro('Salve o romaneio antes de imprimir.');return}
-    if(semFoto){setErro('Cadastre a foto dos materiais antes de imprimir.');return}
-    if(atual.itens.length>MAX_ITENS_A4){setErro('Quantidade de linhas excede a capacidade de uma folha A4.');return}
-    const folha=document.getElementById('romaneio-documento')
-    if(!folha){setErro('Não foi possível localizar a folha para impressão.');return}
-    const imagens=[...folha.querySelectorAll('img')]
-    try {await Promise.all(imagens.map(img=>img.decode()))}
-    catch {setErro('Uma foto não carregou. Verifique a conexão e tente imprimir novamente.');return}
-    if(folha.scrollHeight>folha.clientHeight+2){
-      setErro('O conteúdo não cabe em uma única folha A4. Reduza os textos ou divida o lote em dois romaneios.')
-      return
+    if(!atual?.id){setErro('Salve o romaneio antes de gerar o PDF.');return}
+    if(semFoto){setErro('Cadastre a foto de todos os materiais antes de gerar o PDF.');return}
+    if(!atual.itens.length||atual.itens.length>MAX_ITENS_A4) {
+      setErro('O romaneio deve ter de 1 a '+MAX_ITENS_A4+' itens por folha A4.');return
     }
+    if(gerandoPdf)return
+    // Abre a janela imediatamente ao clique para evitar o bloqueio de pop-ups do Safari.
+    const janela = window.open('', '_blank')
+    if(janela){
+      janela.document.title = 'Preparando romaneio A4'
+      janela.document.body.innerHTML = '<p style="font:16px Arial;padding:30px">Gerando PDF A4 da Esquadrifácio...</p>'
+    }
+    setGerandoPdf(true)
     setErro('')
-    window.print()
+    try {
+      const { gerarRomaneioPdfA4 } = await import('@/lib/romaneioPdfA4')
+      const pdf = await gerarRomaneioPdfA4({
+        numero,
+        tipo: atual.tipo,
+        dataEmissao: dataBR(atual.data_emissao),
+        cliente: atual.cliente_nome_impresso,
+        obra: atual.obra_nome_impresso,
+        endereco: atual.endereco_obra,
+        destino: atual.destino,
+        cor: atual.cor,
+        codigoCor: atual.codigo_cor,
+        acabamento: atual.acabamento,
+        status: ESTADOS.find(s=>s.id===atual.status)?.nome||atual.status,
+        observacoes: atual.observacoes,
+        entreguePor: atual.entregue_por,
+        recebidoPor: atual.recebido_por,
+        itens: atual.itens.map(item=>{
+          const produto=produtosPorId.get(item.produto_id)
+          if(!produto?.foto_url) throw new Error('Foto obrigatória ausente no cadastro do material.')
+          return {
+            codigo: produto.codigo||'',
+            nome: produto.nome||'',
+            fotoUrl: produto.foto_url,
+            medida: item.medida,
+            quantidade: item.quantidade,
+            observacao: item.observacao,
+          }
+        }),
+      })
+      const url=URL.createObjectURL(pdf)
+      if(janela&&!janela.closed) {
+        janela.location.replace(url)
+      } else {
+        const link=document.createElement('a')
+        link.href=url
+        link.download=numero+'.pdf'
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        setSucesso('O PDF A4 foi baixado. Abra o arquivo e imprima em tamanho real.')
+      }
+      // URL permanece acessível para o leitor de PDF do Safari.
+      window.setTimeout(()=>URL.revokeObjectURL(url),5*60*1000)
+    } catch(e) {
+      if(janela&&!janela.closed) janela.close()
+      setErro(e instanceof Error?e.message:'Não foi possível gerar o PDF A4.')
+    } finally {
+      setGerandoPdf(false)
+    }
   }
 
   return <div className="romaneios-container space-y-4">
@@ -215,8 +266,8 @@ export default function ClienteRomaneios({clienteId,clienteNome,obras,podeEditar
           <div className="flex gap-2">
             {podeEditar&&<button disabled={salvando} onClick={()=>void salvar()} type="button"
               className="inline-flex items-center gap-2 rounded-lg bg-brand-navy px-4 py-2 text-xs font-bold text-white disabled:opacity-50"><Save size={14}/>{salvando?'Salvando...':'Salvar'}</button>}
-            <button type="button" onClick={imprimir} className="inline-flex items-center gap-1 rounded-lg border border-brand-teal px-3 py-2 text-xs font-bold text-brand-teal">
-              <Printer size={14}/>Imprimir / Salvar PDF</button>
+            <button type="button" onClick={()=>void imprimir()} disabled={gerandoPdf} className="inline-flex items-center gap-1 rounded-lg border border-brand-teal px-3 py-2 text-xs font-bold text-brand-teal disabled:opacity-50">
+              <Printer size={14}/>{gerandoPdf?'Preparando PDF A4...':'Abrir PDF A4 / Imprimir'}</button>
           </div>
         </div>
         <fieldset disabled={!podeEditar} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 disabled:opacity-80">
