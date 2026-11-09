@@ -77,6 +77,8 @@ export default function TaskReminderToast() {
         if (!ativo || !gravado) return
         avisoRef.current = candidata
         setTarefa(candidata)
+      } catch (erro) {
+        console.error('Não foi possível atualizar os lembretes da sessão:', erro)
       } finally {
         consultandoRef.current = false
       }
@@ -93,7 +95,7 @@ export default function TaskReminderToast() {
         if (notificacao.categoria === 'tarefas') void atualizar()
       })
       intervalo = setInterval(() => void atualizar(), 30_000)
-    })
+    }).catch(erro => console.error('Falha ao iniciar lembretes de tarefas:', erro))
     const aoVoltar = () => { if (document.visibilityState === 'visible') void atualizar() }
     const aoFoco = () => void atualizar()
     const aoAtualizar = () => {
