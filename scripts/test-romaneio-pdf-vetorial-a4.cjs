@@ -15,7 +15,7 @@ const nomes=[
 async function main(){
  for(const n of [6,10]){
   const itens=nomes.slice(0,n).map((nome,i)=>({codigo:'PF-00'+(i+1),nome,fotoUrl:'teste',medida:'6000 mm',quantidade:i+1,observacao:'Conferido / pintura'}))
-  const dados={numero:'ROM-000001',tipo:'pintura',dataEmissao:'09/11/2026',cliente:'JEFFERSON LUCAS',obra:'Casa condomínio monte Carlo',endereco:'Rua Arlindo Silverio, S/n',destino:'META PERFIL',cor:'CAMBARA',codigoCor:'cod.0',acabamento:'Fosco',status:'Aguardando envio',observacoes:'Conferir as medidas, quantidades e cor antes de encaminhar o material.',entreguePor:'Francis',recebidoPor:'Pintura',itens}
+  const dados={numero:'ROM-000001',tipo:'pintura',dataEmissao:'09/11/2026',cliente:'JEFFERSON LUCAS',obra:'Casa condomínio monte Carlo',endereco:'Rua Arlindo Silverio, S/n',destino:'META PERFIL',cor:'CAMBARA',codigoCor:'cod.0',acabamento:'Fosco',status:'Aguardando envio',observacoes:n===6?'':'Texto personalizado informado no campo de observações gerais.',entreguePor:'Francis',recebidoPor:'Pintura',itens}
   const blob=montarRomaneioPdfA4(dados,{logo,itens:itens.map(()=>logo)})
   const bytes=Buffer.from(await blob.arrayBuffer())
   assert.equal(bytes.subarray(0,4).toString(),'%PDF')
