@@ -143,51 +143,71 @@ export function montarRomaneioPdfA4(d: DadosRomaneioA4, imagens: ImagensRomaneio
     creator: 'Atlas One',
   })
 
-  fotoEnquadrada(doc, imagens.logo, M + 1, 8, 69, 22.5)
+  // Cabeçalho compacto aprovado: identificação única, sem repetição dos dados da obra.
+  fotoEnquadrada(doc, imagens.logo, M + 0.5, 7.2, 65, 22)
   caixaTexto(doc, d.tipo === 'pintura' ? 'ROMANEIO DE PINTURA' : 'ROMANEIO DE MATERIAIS',
-    77, 8, DIREITA - 77, 14.5, { font: 16, min: 10.5, align: 'right', bold: true, color: MARINHO })
-  caixaTexto(doc, d.numero + '  •  ' + d.dataEmissao, 86, 23, 115, 7,
-    {font: 9, min: 7, align: 'right', bold: true, color: MARINHO})
+    M + 70, 8, LARGURA - 70, 19, {font: 16, min: 10.5, align: 'right', bold: true, color: MARINHO})
   preenchimento(doc, VERDE)
-  doc.rect(M, 33.6, LARGURA, 2.1, 'F')
+  doc.rect(M, 31.4, LARGURA, 1.5, 'F')
 
-  preenchimento(doc, FUNDO)
-  doc.rect(M, 38.2, LARGURA, 10, 'F')
-  preenchimento(doc, VERDE)
-  doc.rect(M, 38.2, 1.7, 10, 'F')
-  caixaTexto(doc, 'CLIENTE: ' + texto(d.cliente), M + 2.4, 39, 57.5, 8.2,
-    { font: 7.8, min: 6.2, bold: true, color: MARINHO })
-  caixaTexto(doc, 'OBRA: ' + texto(d.obra), M + 60, 39, 90, 8.2,
-    {font: 7.8, min: 6.2, bold: true, color: MARINHO})
-  caixaTexto(doc, 'STATUS: ' + texto(d.status), M + 150, 39, 41.5, 8.2,
-    {font: 7.4, min: 5.8, bold: true, align: 'right', color: MARINHO})
-
-  const x1 = M, x2 = M + 98, cw = 94
-  ;[x1, x2].forEach((x, i) => {
-    doc.setDrawColor(...BORDA)
-    doc.setLineWidth(0.3)
-    doc.roundedRect(x, 52, cw, 39, 1.5, 1.5, 'S')
-    preenchimento(doc, MARINHO)
-    doc.rect(x, 52, cw, 7, 'F')
-    caixaTexto(doc, i === 0 ? 'IDENTIFICAÇÃO DA OBRA' :
-      (d.tipo === 'pintura' ? 'INSTRUÇÕES PARA PINTURA' : 'INSTRUÇÕES DE ENVIO'),
-      x + 2, 52.4, cw - 4, 5.7, {font: 8.1, min: 7.1, bold: true, color: BRANCO})
+  // Faixa única: Cliente | Obra | Nº Romaneio | Data. Informação não se repete abaixo.
+  preenchimento(doc, [238, 242, 246])
+  doc.roundedRect(M, 35.8, LARGURA, 17.8, 1.8, 1.8, 'F')
+  const campos = [
+    {rotulo:'CLIENTE', valor:d.cliente, x:M + 2, w:53.5},
+    {rotulo:'OBRA', valor:d.obra, x:M + 57, w:69.5},
+    {rotulo:'ROMANEIO', valor:d.numero, x:M + 129, w:29},
+    {rotulo:'DATA', valor:d.dataEmissao, x:M + 161, w:29},
+  ]
+  campos.forEach((campo, i)=>{
+    if(i>0){
+      doc.setDrawColor(...BORDA)
+      doc.setLineWidth(0.25)
+      doc.line(campo.x-2, 39, campo.x-2, 50.7)
+    }
+    caixaTexto(doc, campo.rotulo, campo.x, 36.7, campo.w, 5.1,
+      {font:7.1, min:6.6, color:MARINHO, bold:true})
+    caixaTexto(doc, campo.valor, campo.x, 42, campo.w, 10.6,
+      {font:9.2, min:6.5, color:MARINHO, bold:true})
   })
-  caixaComRotulo(doc, 'Cliente', d.cliente, x1, 59, cw, 10)
-  caixaComRotulo(doc, 'Obra', d.obra, x1, 69, cw, 10)
-  caixaComRotulo(doc, 'Endereço', d.endereco || 'Não informado', x1, 79, cw, 10)
-  caixaComRotulo(doc, 'Destino', d.destino, x2, 59, cw, 7.5)
-  caixaComRotulo(doc, 'COR', d.cor || 'Não informada', x2, 66.5, cw, 7.5, true)
-  caixaComRotulo(doc, 'Código da cor', d.codigoCor, x2, 74, cw, 7.5)
-  caixaComRotulo(doc, 'Acabamento', d.acabamento, x2, 81.5, cw, 7.5)
 
-  caixaTexto(doc, 'RELAÇÃO DOS MATERIAIS', M, 94.4, 127, 7.2,
-    {font: 10.7, min: 9.5, bold: true, color: MARINHO})
-  caixaTexto(doc, d.itens.length + ' itens cadastrados', M + 135, 94.4, 57, 7.2,
-    {font: 8, min: 7.5, bold: true, color: VERDE, align: 'right'})
+  // Destaque da pintura, preservando destino e cor sem usar uma segunda caixa de cliente/obra.
+  doc.setDrawColor(...VERDE)
+  doc.setLineWidth(0.4)
+  doc.roundedRect(M, 57.2, LARGURA, 24.3, 1.8, 1.8, 'S')
+  preenchimento(doc, MARINHO)
+  doc.rect(M, 57.2, 42, 24.3, 'F')
+  preenchimento(doc, VERDE)
+  doc.rect(M+41.6, 57.2, 1.5, 24.3, 'F')
+  caixaTexto(doc, d.tipo==='pintura' ? 'DADOS DA PINTURA' : 'DADOS DO ENVIO',
+    M+3, 59, 36, 20, {font:12, min:8.6, bold:true, color:BRANCO})
+
+  const pintura = [
+    {rotulo:'COR', valor:d.cor, x:M + 45, w:52, destaque:true},
+    {rotulo:'CÓDIGO', valor:d.codigoCor, x:M + 99, w:29, destaque:false},
+    {rotulo:'ACABAMENTO', valor:d.acabamento, x:M + 130, w:29, destaque:false},
+    {rotulo:'DESTINO', valor:d.destino, x:M + 161, w:29, destaque:false},
+  ]
+  pintura.forEach((campo,i)=>{
+    if (i>0){
+      doc.setDrawColor(...BORDA)
+      doc.setLineWidth(0.25)
+      doc.line(campo.x-1.7, 60.5, campo.x-1.7, 78.5)
+    }
+    caixaTexto(doc, campo.rotulo, campo.x, 59, campo.w, 7,
+      {font:7.3, min:6.5, bold:true, color:MARINHO})
+    caixaTexto(doc, campo.valor, campo.x, 66, campo.w, 12,
+      {font:campo.destaque?13:8.9, min:6.4, bold:true, color:campo.destaque?VERDE:MARINHO})
+  })
+
+  caixaTexto(doc, 'RELAÇÃO DOS MATERIAIS', M, 84, 126, 6.5,
+    {font:10.8, min:9.5, bold:true, color:MARINHO})
+  caixaTexto(doc, d.itens.length+' itens cadastrados', M+133, 84, 59, 6.5,
+    {font:8, min:7.2, bold:true, color:VERDE, align:'right'})
 
   const xs = [M, M + 11, M + 37, M + 102, M + 130, M + 145, DIREITA]
-  const thY = 103, thH = 8, trH = 10.8
+  // Altura dinâmica: seis fotos maiores, dez linhas compactas. Sem quebra nem corte em A4.
+  const thY = 92, thH = 8, trH = Math.min(18.5, 116 / d.itens.length)
   preenchimento(doc, MARINHO)
   doc.rect(M, thY, LARGURA, thH, 'F')
   const nomes = ['Nº', 'Foto', 'Perfil / Produto', 'Medida', 'Qtd.', 'Observações']
@@ -205,7 +225,11 @@ export function montarRomaneioPdfA4(d: DadosRomaneioA4, imagens: ImagensRomaneio
     caixaTexto(doc, i + 1, xs[0] + 0.4, y + 0.5, xs[1] - xs[0] - 0.8, trH - 1,
       {font: 8.3, min: 8, align: 'center', color: MARINHO})
     fotoEnquadrada(doc, imagens.itens[i], xs[1] + 1.4, y + 0.7, xs[2] - xs[1] - 2.8, trH - 1.4)
-    caixaTexto(doc, [item.codigo, item.nome].filter(Boolean).join('\n'),
+    const codigo = String(item.codigo||'').trim()
+    const nome = String(item.nome||'').trim()
+    const descricao = codigo && nome.toUpperCase().startsWith(codigo.toUpperCase())
+      ? nome : [codigo,nome].filter(Boolean).join('\n')
+    caixaTexto(doc, descricao,
       xs[2] + 1, y + 0.6, xs[3] - xs[2] - 2, trH - 1.2,
       {font: 8, min: 6.5, bold: false, color: MARINHO})
     caixaTexto(doc, item.medida, xs[3] + 0.6, y + 0.5, xs[4] - xs[3] - 1.2, trH - 1,
@@ -215,41 +239,52 @@ export function montarRomaneioPdfA4(d: DadosRomaneioA4, imagens: ImagensRomaneio
     caixaTexto(doc, item.observacao, xs[5] + 0.8, y + 0.6, xs[6] - xs[5] - 1.6, trH - 1.2,
       {font: 7.5, min: 6.1, align: 'center'})
   }
-  if (thY + thH + trH * d.itens.length > 221) throw new Error('Itens excederam o espaço de uma folha A4.')
-
+  const fimTabela = thY + thH + trH * d.itens.length
+  if (fimTabela > 218) throw new Error('Itens excederam o espaço de uma folha A4.')
+  const resumoY = fimTabela + 3.4
   preenchimento(doc, FUNDO)
-  doc.rect(M, 228, LARGURA, 10, 'F')
+  doc.roundedRect(M, resumoY, LARGURA, 10, 1.5, 1.5, 'F')
   preenchimento(doc, VERDE)
-  doc.rect(M, 228, 1.7, 10, 'F')
+  doc.rect(M, resumoY, 1.7, 10, 'F')
   const total = d.itens.reduce((n, x) => n + Number(x.quantidade || 0), 0)
   caixaTexto(doc, 'TOTAL: ' + total.toLocaleString('pt-BR') + ' unidades / peças',
-    M + 3, 229, 68, 8, {font: 9, min: 7.5, bold: true, color: MARINHO})
-  caixaTexto(doc, 'COR PARA PINTURA: ' + texto(d.cor) + (d.codigoCor ? ' (' + d.codigoCor + ')' : ''),
-    M + 75, 229, 115.5, 8, {font: 8.7, min: 7.2, bold: true, align: 'right', color: MARINHO})
+    M + 3, resumoY + 1, 70, 8, {font:9.2, min:7.5, bold:true, color:MARINHO})
+  caixaTexto(doc, 'COR PARA PINTURA: ' + texto(d.cor) +
+    (d.codigoCor ? ' ('+d.codigoCor+')' : ''), M + 76, resumoY + 1, 114, 8,
+    {font:8.6, min:7, bold:true, align:'right', color:MARINHO})
 
+  const obsY = resumoY + 13
   doc.setDrawColor(...BORDA)
-  doc.roundedRect(M, 241, LARGURA, 16.5, 1.5, 1.5, 'S')
-  caixaTexto(doc, 'OBSERVAÇÕES GERAIS', M + 2, 242.3, LARGURA - 4, 5,
-    {font: 7.7, min: 7, bold: true, color: MARINHO})
-  caixaTexto(doc, d.observacoes || 'Conferir as medidas, quantidades e cor antes de encaminhar o material.',
-    M + 2, 247, LARGURA - 4, 8, {font: 7.8, min: 6.5})
+  doc.roundedRect(M, obsY, LARGURA, 17.2, 1.5, 1.5, 'S')
+  caixaTexto(doc, 'OBSERVAÇÕES GERAIS', M + 2, obsY + 1, LARGURA - 4, 5,
+    {font:8.1, min:7.2, bold:true, color:MARINHO})
+  // Sem texto padrão: a observação impressa é EXATAMENTE o conteúdo digitado.
+  if (d.observacoes?.trim()) {
+    caixaTexto(doc, d.observacoes, M + 2, obsY + 6.2, LARGURA - 4, 9,
+      {font:7.9, min:6.3})
+  }
 
-  caixaTexto(doc, 'Enviado por: ' + (d.entreguePor || ''), M, 261, 90, 7,
-    {font: 8, min: 6.4, color: MARINHO})
-  caixaTexto(doc, 'Recebido por: ' + (d.recebidoPor || ''), M + 100, 261, 92, 7,
-    {font: 8, min: 6.4, color: MARINHO})
-  linhaHorizontal(doc, M + 1, M + 90, 277, [92, 105, 120])
-  linhaHorizontal(doc, M + 101, DIREITA - 1, 277, [92, 105, 120])
-  caixaTexto(doc, 'Assinatura / conferência', M, 277.5, 91, 5.2,
-    {font: 7.2, min: 7, align: 'center'})
-  caixaTexto(doc, 'Assinatura / conferência', M + 101, 277.5, 91, 5.2,
-    {font: 7.2, min: 7, align: 'center'})
+  const assinaturaY = obsY + 21.5
+  caixaTexto(doc, 'Enviado por: ' + (d.entreguePor || ''), M, assinaturaY, 91, 6.3,
+    {font:8.1, min:6.4, color:MARINHO})
+  caixaTexto(doc, 'Recebido por: ' + (d.recebidoPor || ''), M+100, assinaturaY, 92, 6.3,
+    {font:8.1, min:6.4, color:MARINHO})
+  linhaHorizontal(doc, M + 1, M + 90, assinaturaY + 14.5, [92,105,120])
+  linhaHorizontal(doc, M + 101, DIREITA - 1, assinaturaY + 14.5, [92,105,120])
+  caixaTexto(doc, 'Assinatura / conferência', M, assinaturaY + 15, 91, 5.2,
+    {font:7.2, min:7, align:'center'})
+  caixaTexto(doc, 'Assinatura / conferência', M + 101, assinaturaY + 15, 91, 5.2,
+    {font:7.2, min:7, align:'center'})
+  if (assinaturaY + 21 > 284) {
+    throw new Error('O rodapé excedeu o espaço do A4.')
+  }
+
   preenchimento(doc, MARINHO)
-  doc.rect(M, 286.5, LARGURA, 1.1, 'F')
-  caixaTexto(doc, 'ESQUADRIFÁCIO · SOLUÇÕES EM ALUMÍNIO', M, 288, 107, 5.2,
-    {font: 7.1, min: 6.7, color: MARINHO, bold: true})
-  caixaTexto(doc, 'Romaneio ' + d.numero + ' · Página 1/1', M + 112, 288, 80, 5.2,
-    {font: 7.1, min: 6.7, color: MARINHO, bold: true, align: 'right'})
+  doc.rect(M, 285, LARGURA, 1.1, 'F')
+  caixaTexto(doc, 'ESQUADRIFÁCIO · SOLUÇÕES EM ALUMÍNIO', M, 286.7, 107, 5.2,
+    {font:7.1, min:6.7, color:MARINHO, bold:true})
+  caixaTexto(doc, 'Romaneio ' + d.numero + ' · Página 1/1', M + 112, 286.7, 80, 5.2,
+    {font:7.1, min:6.7, color:MARINHO, bold:true, align:'right'})
   if (doc.getNumberOfPages() !== 1) throw new Error('O romaneio não coube em uma página A4.')
   return doc.output('blob')
 }

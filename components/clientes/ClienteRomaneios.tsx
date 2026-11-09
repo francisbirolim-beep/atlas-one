@@ -335,35 +335,30 @@ export default function ClienteRomaneios({clienteId,clienteNome,obras,podeEditar
         <article id="romaneio-documento" className="rom-pagina bg-white text-slate-900 shadow-xl">
           <header className="rom-header">
             <img src="/logo.png" alt="Esquadrifácio — Soluções em Alumínio"/>
-            <div className="rom-header-titulo"><strong>{titulo}</strong><span>{numero} · {dataBR(atual.data_emissao)}</span></div>
+            <div className="rom-header-titulo"><strong>{titulo}</strong></div>
           </header>
           <div className="rom-faixa">
-            <span>CLIENTE: <b>{atual.cliente_nome_impresso||'—'}</b></span>
-            <span>OBRA: <b>{atual.obra_nome_impresso||'—'}</b></span>
-            <span>STATUS: <b>{ESTADOS.find(s=>s.id===atual.status)?.nome}</b></span>
+            <div><small>CLIENTE</small><b>{atual.cliente_nome_impresso||'—'}</b></div>
+            <div><small>OBRA</small><b>{atual.obra_nome_impresso||'—'}</b></div>
+            <div><small>ROMANEIO</small><b>{numero}</b></div>
+            <div><small>DATA</small><b>{dataBR(atual.data_emissao)}</b></div>
           </div>
-          <div className="rom-dados">
-            <section><h4>IDENTIFICAÇÃO DA OBRA</h4>
-              <p><small>Cliente</small><b>{atual.cliente_nome_impresso||'—'}</b></p>
-              <p><small>Obra</small><b>{atual.obra_nome_impresso||'—'}</b></p>
-              <p><small>Endereço</small><b>{atual.endereco_obra||'Não informado'}</b></p>
-            </section>
-            <section><h4>INSTRUÇÕES PARA {atual.tipo==='pintura'?'PINTURA':'ENVIO'}</h4>
-              <p><small>Destino</small><b>{atual.destino||'—'}</b></p>
-              <p className="rom-cor"><small>COR</small><b>{atual.cor||'NÃO DEFINIDA'}</b></p>
-              <p><small>Código da cor</small><b>{atual.codigo_cor||'—'}</b></p>
-              <p><small>Acabamento</small><b>{atual.acabamento||'—'}</b></p>
-            </section>
+          <div className="rom-pintura">
+            <div className="rom-pintura-titulo">{atual.tipo==='pintura'?'DADOS DA PINTURA':'DADOS DO ENVIO'}</div>
+            <div className="rom-pintura-campo rom-pintura-cor"><small>COR</small><b>{atual.cor||'—'}</b></div>
+            <div className="rom-pintura-campo"><small>CÓDIGO</small><b>{atual.codigo_cor||'—'}</b></div>
+            <div className="rom-pintura-campo"><small>ACABAMENTO</small><b>{atual.acabamento||'—'}</b></div>
+            <div className="rom-pintura-campo"><small>DESTINO</small><b>{atual.destino||'—'}</b></div>
           </div>
           <div className="rom-itens-cabecalho">
             <h4>RELAÇÃO DOS MATERIAIS</h4><b>{atual.itens.length} itens cadastrados</b>
           </div>
           <table className="rom-tabela"><colgroup><col style={{width:'7%'}}/><col style={{width:'16%'}}/><col style={{width:'32%'}}/><col style={{width:'13%'}}/><col style={{width:'9%'}}/><col style={{width:'23%'}}/></colgroup>
             <thead><tr><th>Nº</th><th>Foto</th><th>Perfil / Produto</th><th>Medida</th><th>Qtd.</th><th>Observações</th></tr></thead>
-            <tbody>{atual.itens.map((item,i)=>{const p=produtosPorId.get(item.produto_id);return <tr key={item.produto_id}>
+            <tbody>{atual.itens.map((item,i)=>{const p=produtosPorId.get(item.produto_id);const mostrarCodigo=!!p?.codigo&&!p?.nome?.toUpperCase().startsWith(p.codigo.toUpperCase());return <tr key={item.produto_id} style={{height:Math.min(18.5,116/Math.max(1,atual.itens.length))+'mm'}}>
               <td>{i+1}</td><td>{p?.foto_url?<img src={p.foto_url} alt={p.nome}/>:
                 <span className="rom-sem-foto">SEM FOTO</span>}</td>
-              <td className="rom-descricao"><b>{p?.codigo||'—'}</b><span>{p?.nome||'Material não localizado'}</span></td>
+              <td className="rom-descricao">{mostrarCodigo&&<b>{p?.codigo}</b>}<span>{p?.nome||'Material não localizado'}</span></td>
               <td>{item.medida||'—'}</td><td className="rom-qtd">{item.quantidade||'—'}</td>
               <td>{item.observacao||'—'}</td>
             </tr>})}
@@ -375,7 +370,7 @@ export default function ClienteRomaneios({clienteId,clienteNome,obras,podeEditar
               <b>TOTAL: {atual.itens.reduce((t,i)=>t+Number(i.quantidade||0),0)} unidades / peças</b>
               <span><strong>COR PARA PINTURA:</strong> {atual.cor||'Não informada'} {atual.codigo_cor?'('+atual.codigo_cor+')':''}</span>
             </div>
-            <div className="rom-observacoes"><b>OBSERVAÇÕES GERAIS</b><p>{atual.observacoes||'Conferir as medidas, quantidades e cor antes de encaminhar o material.'}</p></div>
+            <div className="rom-observacoes"><b>OBSERVAÇÕES GERAIS</b><p>{atual.observacoes||''}</p></div>
             <div className="rom-assinaturas"><div><span>Enviado por: {atual.entregue_por}</span><i/>Assinatura / conferência</div><div><span>Recebido por: {atual.recebido_por}</span><i/>Assinatura / conferência</div></div>
           </div>
           <footer className="rom-footer"><span>ESQUADRIFÁCIO · SOLUÇÕES EM ALUMÍNIO</span><span>Romaneio {numero} · Página 1/1</span></footer>
