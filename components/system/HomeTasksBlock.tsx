@@ -57,6 +57,14 @@ export default function HomeTasksBlock() {
     return () => window.removeEventListener('atlas:nova-tarefa', abrir)
   }, [usuario])
 
+  // O aviso global pode concluir uma tarefa; manter o painel sincronizado.
+  useEffect(() => {
+    if (!usuario) return
+    const atualizar = () => { void listarTarefas(usuario.id).then(setTarefas) }
+    window.addEventListener('atlas:tarefas-atualizadas', atualizar)
+    return () => window.removeEventListener('atlas:tarefas-atualizadas', atualizar)
+  }, [usuario])
+
   const abertas = useMemo(() => tarefas
     .filter(t => !t.concluida_em)
     .sort((a, b) => {
@@ -86,7 +94,12 @@ export default function HomeTasksBlock() {
   async function concluir(tarefa: TarefaPessoal) {
     setTarefas(prev => prev.map(t => t.id === tarefa.id ? { ...t, concluida_em: new Date().toISOString() } : t))
     const ok = await concluirTarefa(tarefa.id)
-    if (!ok) setTarefas(prev => prev.map(t => t.id === tarefa.id ? tarefa : t))
+    if (!ok) {
+      setTarefas(prev => prev.map(t => t.id === tarefa.id ? tarefa : t))
+      alert('Não foi possível concluir a tarefa. Tente novamente.')
+    } else {
+      window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
+    }
   }
 
   async function salvar() {
@@ -110,6 +123,7 @@ export default function HomeTasksBlock() {
       }
     }
 
+    window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
     setTitulo('')
     setPrioridade('normal')
     setModal(false)

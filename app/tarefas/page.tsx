@@ -173,6 +173,7 @@ export default function Tarefas() {
       const t = await criarTarefa(usuario.id, novaEm, tituloNovo.trim(), descNova.trim() || undefined, dataNova || null)
       if (t) setTarefas((prev) => [...prev, t])
     }
+    window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
     setNovaEm(null)
   }
 
@@ -195,6 +196,7 @@ export default function Tarefas() {
       const ok = await concluirTarefa(t.id)
       if (ok) setTarefas((prev) => prev.map((x) => (x.id === t.id ? { ...x, concluida_em: new Date().toISOString() } : x)))
     }
+    window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
     setSelecionada(null)
   }
 
@@ -203,6 +205,7 @@ export default function Tarefas() {
     const ok = await excluirTarefa(t.id)
     if (ok) {
       setTarefas((prev) => prev.filter((x) => x.id !== t.id))
+      window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
       setSelecionada(null)
     }
   }
