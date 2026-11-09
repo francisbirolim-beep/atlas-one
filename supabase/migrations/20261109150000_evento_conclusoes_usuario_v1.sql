@@ -28,7 +28,7 @@ create policy evento_conclusoes_usuario_select
     and exists (
       select 1 from public.eventos e
       where e.id = evento_id
-        and e.empresa_id = empresa_id
+        and e.empresa_id = public.evento_conclusoes_usuario.empresa_id
         and (e.usuario_id = auth.uid() or private.is_convidado_evento(e.id))
     )
   );
@@ -42,7 +42,7 @@ create policy evento_conclusoes_usuario_insert
     and exists (
       select 1 from public.eventos e
       where e.id = evento_id
-        and e.empresa_id = empresa_id
+        and e.empresa_id = public.evento_conclusoes_usuario.empresa_id
         and (e.usuario_id = auth.uid() or private.is_convidado_evento(e.id))
     )
   );
@@ -56,7 +56,7 @@ create policy evento_conclusoes_usuario_delete
     and exists (
       select 1 from public.eventos e
       where e.id = evento_id
-        and e.empresa_id = empresa_id
+        and e.empresa_id = public.evento_conclusoes_usuario.empresa_id
         and (e.usuario_id = auth.uid() or private.is_convidado_evento(e.id))
     )
   );
