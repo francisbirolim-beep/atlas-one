@@ -158,3 +158,56 @@ export async function criarEventoRecorrente(
 
   return { ...base, recorrencia_tipo: tipo, recorrencia_valor: valor }
 }
+
+/**
+ * Conclusões individuais de eventos: o compromisso continua existindo para
+ * organizador e convidados; apenas some das pendências daquele usuário.
+ */
+export async function listarConclusoesEventosUsuario(usuarioId: string): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from('evento_conclusoes_usuario')
+    .select('evento_id, concluida_em')
+    .eq('usuario_id', usuarioId)
+
+  if (error) {
+    console.error('Erro ao consultar conclusões pessoais da agenda:', error)
+    return {}
+  }
+
+  return Object.fromEntries((data || []).map(item => [item.evento_id as string, item.concluida_em as string]))
+}
+
+export async function concluirEventoUsuario(eventoId: string, usuarioId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('evento_conclusoes_usuario')
+    .insert({ evento_id: eventoId, usuario_id: usuarioId })
+    .select('concluida_em')
+    .single()
+
+  if (!error && data) return data.concluida_em as string
+
+  // Duas abas podem concluir o mesmo compromisso quase simultaneamente.
+  if (error?.code === '23505') {
+    const { data: existente, error: erroConsulta } = await supabase
+      .from('evento_conclusoes_usuario')
+      .select('concluida_em')
+      .eq('evento_id', eventoId)
+      .eq('usuario_id', usuarioId)
+      .maybeSingle()
+    if (!erroConsulta && existente) return existente.concluida_em as string
+  }
+
+  console.error('Erro ao concluir compromisso para o usuário:', error)
+  return null
+}
+
+export async function reabrirEventoUsuario(eventoId: string, usuarioId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('evento_conclusoes_usuario')
+    .delete()
+    .eq('evento_id', eventoId)
+    .eq('usuario_id', usuarioId)
+
+  if (error) console.error('Erro ao reabrir compromisso para o usuário:', error)
+  return !error
+}
