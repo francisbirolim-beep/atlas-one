@@ -591,7 +591,7 @@ export default function DetalheMedicaoFinal() {
         </div>
       </header>
 
-      {editorLayoutAberto && <EditorLayoutA4 medicao={medicao} itens={itens} fechar={() => setEditorLayoutAberto(false)} />}
+      {editorLayoutAberto && <EditorLayoutA4 medicao={medicao} itens={itens} obraId={(medicao as MedicaoFinal & { obra_id?: string | null }).obra_id || null} podeEditar={master} fechar={() => setEditorLayoutAberto(false)} />}
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
