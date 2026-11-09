@@ -153,6 +153,19 @@ export default function VendaMedidaFinal({ clienteId, vendaId, obraId, orcamento
     (filtro === 'conferencia' && m.conferir > 0))
 
   const medicaoTipologia = resumo.find(m => m.orcamento_id === orcamentoId && (m.tipo_medicao || 'tipologia') === 'tipologia')
+  // A prévia da obra não pode desaparecer por ausência de orcamento_id em
+  // medições antigas: preferir a medição deste orçamento, depois a da obra.
+  // Não alterar a regra de liberação de tipologias (medicaoTipologia).
+  const medicaoParaPrevia = medicaoTipologia || resumo.find(m => (m.tipo_medicao || 'tipologia') === 'tipologia')
+
+  function abrirPreviaDaObra() {
+    if (!medicaoParaPrevia) {
+      setErro('Esta obra ainda não tem uma Medida Final de tipologias para pré-visualizar. Use Iniciar / continuar Medida Final para preparar a medição.')
+      return
+    }
+    void abrirPreviaA4(medicaoParaPrevia.id)
+  }
+
   const aguardandoConferencia = !medicaoTipologia || ['aguardando_liberacao', 'a_medir', ''].includes(medicaoTipologia.status_operacional || '')
   const listaTipologias = temItensVendidos
     ? itensVendidos.map((it, indice) => ({
@@ -228,12 +241,13 @@ export default function VendaMedidaFinal({ clienteId, vendaId, obraId, orcamento
           <p className="text-xs text-slate-500">Acompanhe as peças, confira as fotos e continue de onde parou.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {medicaoTipologia && <button type="button" onClick={() => void abrirPreviaA4(medicaoTipologia.id)}
+          <button id="atlas-medida-final-previa-a4-obra" type="button" onClick={abrirPreviaDaObra}
             disabled={!!abrindoPrevia || carregando}
+            title="Abrir prévia A4 e ajustar a disposição do croqui, medidas e fotos desta obra"
             className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800 disabled:opacity-50">
-            {abrindoPrevia === medicaoTipologia.id ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+            {abrindoPrevia ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
             Prévia PDF A4 / Editar layout
-          </button>}
+          </button>
           <Link href={`/producao/medicao-final/cliente/${clienteId}`} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">
             Central de Medida Final do cliente
           </Link>
