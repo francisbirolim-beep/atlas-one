@@ -23,6 +23,7 @@ import type { Usuario } from '@/lib/tipos'
 import VendasCliente360 from '@/components/clientes/VendasCliente360'
 import Cliente360KanbanObras from '@/components/clientes/Cliente360KanbanObras'
 import ComprasClienteCards from '@/components/compras/ComprasClienteCards'
+import ClienteRomaneios from '@/components/clientes/ClienteRomaneios'
 import CadastroCliente360 from '@/components/clientes/CadastroCliente360'
 import ClienteOrigensUnificadas from '@/components/clientes/ClienteOrigensUnificadas'
 import {
@@ -39,7 +40,7 @@ import {
 } from '@/lib/cliente360'
 
 interface Props { clienteId: string }
-type Aba = 'cadastro'|'visao'|'orcamentos'|'vendas'|'obras'|'financeiro'|'medicoes'|'assistencias'|'compras'|'documentos'|'historico'|'observacoes'
+type Aba = 'cadastro'|'visao'|'orcamentos'|'vendas'|'obras'|'financeiro'|'medicoes'|'assistencias'|'compras'|'romaneios'|'documentos'|'historico'|'observacoes'
 
 type Orcamento = {
   id:string
@@ -237,7 +238,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
       const dados=await resp.json()
       if(!resp.ok)throw new Error(dados.error||'Não foi possível carregar o Cliente 360.')
       setAcesso(dados.acesso)
-      setAba(atual=>podeCliente360(dados.acesso,atual) ? atual : (['visao','cadastro','orcamentos','vendas','obras','financeiro','medicoes','assistencias','compras','documentos','historico','observacoes'] as Aba[]).find(a=>podeCliente360(dados.acesso,a)) || 'visao')
+      setAba(atual=>podeCliente360(dados.acesso,atual) ? atual : (['visao','cadastro','orcamentos','vendas','obras','financeiro','medicoes','assistencias','compras','romaneios','documentos','historico','observacoes'] as Aba[]).find(a=>podeCliente360(dados.acesso,a)) || 'visao')
       setCliente(dados.cliente);setObs(dados.cliente.observacoes||'');setObras(dados.obras)
       setOrcamentos(dados.orcamentos.filter((o:Orcamento)=>o.modo_entrada!=='wvetro_api_vinculado'))
       setWvetroHistorico(dados.wvetroHistorico.filter((h:HistoricoWVetroComercial)=>nomesClientesCompativeis(h.cliente_nome_origem,dados.cliente.nome)))
@@ -390,7 +391,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
   if(carregando)return <div className="min-h-screen bg-slate-50 p-8 text-slate-400">Carregando Cliente 360...</div>
   if(!cliente)return <div className="min-h-screen bg-slate-50 p-8 text-red-500">{erro||'Cliente não encontrado.'}</div>
 
-  const abas:{id:Aba;label:string}[]=[{id:'visao',label:'Visão geral'},{id:'orcamentos',label:'Orçamentos'},{id:'vendas',label:'Vendas'},{id:'obras',label:'Obras'},{id:'financeiro',label:'Financeiro'},{id:'medicoes',label:'Medições'},{id:'assistencias',label:'Assistências'},{id:'compras',label:'Compras'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'},{id:'observacoes',label:'Observações'},{id:'cadastro',label:'Cadastro'}]
+  const abas:{id:Aba;label:string}[]=[{id:'visao',label:'Visão geral'},{id:'orcamentos',label:'Orçamentos'},{id:'vendas',label:'Vendas'},{id:'obras',label:'Obras'},{id:'financeiro',label:'Financeiro'},{id:'medicoes',label:'Medições'},{id:'assistencias',label:'Assistências'},{id:'compras',label:'Compras'},{id:'romaneios',label:'Romaneios'},{id:'documentos',label:'Documentos'},{id:'historico',label:'Histórico'},{id:'observacoes',label:'Observações'},{id:'cadastro',label:'Cadastro'}]
 
   return <div className="min-h-screen bg-slate-50">
     <div className="flex flex-wrap justify-end gap-2 border-b bg-emerald-50/70 px-4 py-2">
@@ -466,6 +467,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
 
         {aba==='compras'&&pode('compras')&&<Box titulo="Compras do cliente"><div className="space-y-2">{compras.map(c=><div key={c.id} className="flex flex-wrap justify-between gap-3 rounded-xl border p-3"><div><b>{c.descricao||c.categoria||'Necessidade de compra'}</b><p className="text-xs text-slate-500">{c.obra_nome||'Sem obra'} · {c.quantidade||0} {c.unidade||''} · prioridade {c.prioridade||'normal'}</p></div><span className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">{status(c.status)}</span></div>)}{!compras.length&&<p className="text-sm text-slate-400">Nenhuma necessidade do fluxo anterior.</p>}</div><ComprasClienteCards clienteId={clienteId}/></Box>}
 
+        {aba==='romaneios'&&pode('romaneios')&&<ClienteRomaneios clienteId={clienteId} clienteNome={cliente.nome} obras={obras} podeEditar={pode('romaneios',true)}/>}
         {aba==='documentos'&&pode('documentos')&&<div className="grid gap-5 xl:grid-cols-[340px_1fr]"><Box titulo="Adicionar documento"><fieldset disabled={!pode('documentos',true)} className="space-y-3"><input value={documentoForm.titulo} onChange={e=>setDocumentoForm(f=>({...f,titulo:e.target.value}))} className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="Título"/><select value={documentoForm.obraId} onChange={e=>setDocumentoForm(f=>({...f,obraId:e.target.value}))} className="w-full rounded-lg border px-3 py-2 text-sm"><option value="">Cliente geral</option>{obras.map(o=><option key={o.id} value={o.id}>{o.nome}</option>)}</select><label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed p-3 text-sm text-slate-500"><Upload size={15}/>{arquivo?.name||'Escolher arquivo'}<input type="file" className="hidden" onChange={e=>setArquivo(e.target.files?.[0]||null)}/></label><textarea value={documentoForm.observacoes} onChange={e=>setDocumentoForm(f=>({...f,observacoes:e.target.value}))} className="w-full rounded-lg border p-3 text-sm" rows={3}/>{pode('documentos',true)&&<button disabled={!arquivo||!documentoForm.titulo.trim()||salvando} onClick={salvarDocumento} className="w-full rounded-lg bg-brand-navy py-2 text-sm font-bold text-white disabled:opacity-40">Salvar</button>}</fieldset></Box><Box titulo="Documentos"><div className="space-y-2">{documentos.map(d=><a key={d.id} href={d.url} target="_blank" rel="noreferrer" className="block rounded-xl border p-3"><b>{d.titulo}</b><p className="text-xs text-slate-500">{d.nome_arquivo||'Arquivo'} · {dataBR(d.created_at)}</p></a>)}</div></Box></div>}
 
         {aba==='historico'&&pode('historico')&&<div className="space-y-5"><Box titulo="Histórico operacional W.Vetro"><div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">Somente consulta. Lotes e instalações históricas não entram no Kanban, Produção ativa, Engenharia ou agenda de instalação do Atlas.</div><div className="space-y-2">{wvetroOperacional.map(o=>{const instalacao=o.tipo_registro==='instalacao';const orcs=Array.isArray(o.orcamentos_wvetro)?o.orcamentos_wvetro:[];return <div key={o.id} className="rounded-xl border bg-white p-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><b>{instalacao?'Instalação':'Lote de produção'} W.Vetro #{o.numero_wvetro||'—'}</b><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${instalacao?'bg-violet-100 text-violet-700':'bg-indigo-100 text-indigo-700'}`}>{instalacao?'INSTALAÇÃO HISTÓRICA':'PRODUÇÃO HISTÓRICA'}</span></div><p className="mt-1 text-xs text-slate-500">{dataBR(o.data_programacao||o.data_inicio)}{o.equipe_nome?` · Equipe ${o.equipe_nome}`:''}{orcs.length?` · Orçamento(s) ${orcs.join(', ')}`:''}</p>{o.observacao&&<p className="mt-1 text-xs text-slate-400">{o.observacao}</p>}</div><div className="text-right text-xs text-slate-500">{o.quantidade_prevista!=null&&<div>Previsto: <b className="text-slate-700">{Number(o.quantidade_prevista)}</b></div>}{o.quantidade_realizada!=null&&<div>Realizado: <b className="text-slate-700">{Number(o.quantidade_realizada)}</b></div>}</div></div></div>})}{!wvetroOperacional.length&&<p className="text-sm text-slate-400">Nenhum histórico operacional W.Vetro vinculado com segurança a este cliente.</p>}</div></Box><Box titulo="Últimas movimentações"><div className="space-y-4">{eventos.map((e,i)=><div key={e.id} className="flex gap-3"><div className="mt-1 h-3 w-3 shrink-0 rounded-full bg-brand-navy"/><div><b className="text-sm">{e.titulo}</b><p className="text-xs text-slate-500">{new Date(e.data).toLocaleString('pt-BR')}{e.detalhe?` · ${e.detalhe}`:''}</p></div></div>)}</div></Box></div>}
