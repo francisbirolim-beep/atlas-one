@@ -5,9 +5,9 @@ import Link from 'next/link'
 import { AlarmClock, Check, Clock3, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { assinarNovasNotificacoes } from '@/lib/notificacoes'
-import { concluirTarefa, listarTarefas } from '@/lib/tarefas'
+import { concluirTarefa } from '@/lib/tarefas'
 import {
-  lembreteTarefaVencido, listarEstadosLembretesTarefas, salvarLembreteTarefa,
+  lembreteTarefaVencido, listarEstadosLembretesTarefas, listarTarefasAbertasParaLembrete, salvarLembreteTarefa,
 } from '@/lib/tarefaLembretes'
 import type { TarefaPessoal } from '@/lib/tipos'
 
@@ -55,12 +55,10 @@ export default function TaskReminderToast() {
       if (!ativo || !usuarioId || !navigator.onLine || consultandoRef.current) return
       consultandoRef.current = true
       try {
-        const [lista, estados] = await Promise.all([
-          listarTarefas(usuarioId), listarEstadosLembretesTarefas(usuarioId),
-        ])
+        const abertas = await listarTarefasAbertasParaLembrete(usuarioId)
+        if (!ativo || !abertas) return
+        const estados = await listarEstadosLembretesTarefas(usuarioId, abertas.map(t => t.id))
         if (!ativo || !estados) return // A migration precisa estar aplicada para um adiamento confiável.
-
-        const abertas = lista.filter(t => !t.concluida_em)
         if (avisoRef.current) {
           const atual = abertas.find(t => t.id === avisoRef.current?.id)
           if (atual) return
@@ -158,7 +156,7 @@ export default function TaskReminderToast() {
       <div className="flex items-start gap-3">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700"><AlarmClock size={20}/></span>
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-extrabold uppercase tracking-wide text-amber-700">Tarefa pendente</p>
+          <p className="text-[11px] font-extrabold uppercase tracking-wide text-amber-700">{(Date.now() - new Date(tarefa.atribuida_em || tarefa.created_at || 0).getTime()) < 5 * 60_000 ? 'Nova tarefa recebida' : 'Lembrete de tarefa'}</p>
           <p className="mt-0.5 break-words text-sm font-semibold">{tarefa.titulo}</p>
           {tarefa.solicitante_nome && <p className="mt-1 text-xs text-slate-500">Enviada por {tarefa.solicitante_nome}</p>}
           <p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><Clock3 size={13}/>{dataTarefa(tarefa.data_hora)}</p>
