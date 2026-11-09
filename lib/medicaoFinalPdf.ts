@@ -470,9 +470,34 @@ async function gerarPdfMedicaoFinalPersonalizado(
     const tituloLinhas = doc.splitTextToSize(titulo, 180) as string[]
     const tituloH = tituloLinhas.length * 4 + 3
 
+    // A fonte escolhida vale para TODAS as seis cotas. Em vez de reduzir
+    // as cotas inferiores individualmente, reservar a largura necessária
+    // dentro do A4 e deslocar o bloco do checklist quando indispensável.
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(layout.fonteMedidasPt)
+    const cotasLaterais = [
+      `Cima ${texto(item.largura_cima_mm)} mm`,
+      `Meio ${texto(item.largura_meio_mm)} mm`,
+      `Baixo ${texto(item.largura_baixo_mm)} mm`,
+    ]
+    const cotasInferiores = [
+      `Esq. ${texto(item.altura_esquerda_mm)} mm`,
+      `Meio ${texto(item.altura_meio_mm)} mm`,
+      `Dir. ${texto(item.altura_direita_mm)} mm`,
+    ]
+    const larguraCotasLaterais = Math.max(...cotasLaterais.map(cota => doc.getTextWidth(cota)))
+    const largurasInferiores = cotasInferiores.map(cota => doc.getTextWidth(cota))
+    const separacaoCotasMm = 2
+    const larguraLinhaInferior = largurasInferiores.reduce((soma, largura) => soma + largura, 0) + separacaoCotasMm * 2
+    const larguraDesenho = layout.larguraCroquiMm
+    const xq = layout.exibirCroqui
+      ? Math.max(101, 15 + larguraDesenho + 3 + larguraCotasLaterais + 3, 15 + larguraLinhaInferior + 2)
+      : 101
+    const wq = 195 - xq
+
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(layout.fonteChecklistPt)
-    const checklistLinhas = checklist.flatMap(linha => doc.splitTextToSize(linha, 87) as string[])
+    const checklistLinhas = checklist.flatMap(linha => doc.splitTextToSize(linha, wq - 7) as string[])
     const linhaH = Math.max(3.6, layout.fonteChecklistPt * 0.54)
     // O checklist pode ser muito grande. Continuações ganham suas próprias folhas A4;
     // nenhum quadro pode ultrapassar o limite de impressão ou cortar respostas.
@@ -525,18 +550,16 @@ async function gerarPdfMedicaoFinalPersonalizado(
     // e as 3 alturas ficam alinhadas nas 3 posições logo abaixo do croqui.
     const inicioEsquerda = y + 4
     doc.setFont('helvetica', 'bold')
-    const escreverCota = (rotulo: string, x: number, posicaoY: number, larguraMaxima: number) => {
+    // O mesmo tamanho de fonte é aplicado simultaneamente em largura e altura.
+    const escreverCota = (rotulo: string, x: number, posicaoY: number) => {
       doc.setFontSize(layout.fonteMedidasPt)
-      // A fonte se ajusta somente quando a cota não cabe no espaço reservado;
-      // o ponto de ancoragem nunca muda, e nenhuma cota invade o checklist.
-      const larguraTexto = doc.getTextWidth(rotulo)
-      const escala = Math.min(1, Math.max(1, larguraMaxima) / Math.max(larguraTexto, 0.1))
-      doc.setFontSize(layout.fonteMedidasPt * escala)
       doc.text(rotulo, x, posicaoY)
     }
     if (layout.exibirCroqui) {
       const cw = layout.larguraCroquiMm
-      const cx = 22 + (60 - cw) / 2
+      // Desloca o desenho para a esquerda, se necessário, para não cortar as
+      // larguras laterais. O tamanho selecionado para o croqui não é alterado.
+      const cx = Math.max(15, Math.min(22 + (60 - cw) / 2, xq - cw - larguraCotasLaterais - 6))
       const ch = 23
       const cy = inicioEsquerda
       doc.setDrawColor(55, 68, 78); doc.setLineWidth(.5)
@@ -549,21 +572,27 @@ async function gerarPdfMedicaoFinalPersonalizado(
       // Mesmas âncoras do desenho original. O tamanho do croqui afeta apenas
       // a posição relativa das cotas, nunca a sua ordem ou orientação.
       const lateralX = cx + cw + 3
-      const larguraLateral = Math.max(1, 100 - lateralX)
-      ;([
-        ['Cima', item.largura_cima_mm, cy + 3],
-        ['Meio', item.largura_meio_mm, cy + ch / 2 + 1],
-        ['Baixo', item.largura_baixo_mm, cy + ch - 1],
-      ] as const).forEach(([rotulo, valor, posicaoY]) => {
-        escreverCota(`${rotulo} ${texto(valor)} mm`, lateralX, posicaoY, larguraLateral)
+      cotasLaterais.forEach((rotulo, indice) => {
+        const posicoes = [cy + Math.max(3, layout.fonteMedidasPt * 0.35), cy + ch / 2 + 1, cy + ch - 1]
+        escreverCota(rotulo, lateralX, posicoes[indice])
       })
-      const larguraColuna = Math.max(1, cw / 3 - 1)
-      ;([
-        ['Esq.', item.altura_esquerda_mm, 0],
-        ['Meio', item.altura_meio_mm, 0.36],
-        ['Dir.', item.altura_direita_mm, 0.70],
-      ] as const).forEach(([rotulo, valor, fracao]) => {
-        escreverCota(`${rotulo} ${texto(valor)} mm`, cx + cw * fracao, cy + ch + 5, larguraColuna)
+      // Conservar Esq./Meio/Dir. na linha inferior do croqui. Se a fonte
+      // exigir mais espaço, redistribuir as TRÊS posições horizontalmente,
+      // sem diminuir individualmente a altura de cada número.
+      const alvos = [cx, cx + cw * 0.36, cx + cw * 0.70]
+      const posicoes = [alvos[0]]
+      for (let i = 1; i < 3; i++) {
+        posicoes.push(Math.max(alvos[i], posicoes[i - 1] + largurasInferiores[i - 1] + separacaoCotasMm))
+      }
+      const excedente = Math.max(0, posicoes[2] + largurasInferiores[2] - (xq - 2))
+      const ajustadas = posicoes.map(posicao => posicao - excedente)
+      if (ajustadas[0] < 15) {
+        ajustadas[0] = 15
+        ajustadas[1] = 15 + largurasInferiores[0] + separacaoCotasMm
+        ajustadas[2] = ajustadas[1] + largurasInferiores[1] + separacaoCotasMm
+      }
+      cotasInferiores.forEach((rotulo, indice) => {
+        escreverCota(rotulo, ajustadas[indice], cy + ch + 5)
       })
     } else {
       // Ao ocultar o croqui, mantém todas as seis cotas legíveis no espaço vazio.
@@ -578,12 +607,10 @@ async function gerarPdfMedicaoFinalPersonalizado(
       const passoNumeros = Math.max(3.5, layout.fonteMedidasPt * .5)
       medidas.forEach(([rotulo, valor], i) => {
         escreverCota(`${rotulo} ${texto(valor)} mm`, i % 2 ? 59 : 20,
-          inicioNumeros + Math.floor(i / 2) * passoNumeros, 38)
+          inicioNumeros + Math.floor(i / 2) * passoNumeros)
       })
     }
 
-    const xq = 101
-    const wq = 94
     doc.setDrawColor(210, 218, 223); doc.rect(xq, y, wq, hPrincipal)
     doc.setFillColor(234, 247, 240); doc.rect(xq, y, wq, 15, 'F')
     doc.setTextColor(0, 0, 0)
