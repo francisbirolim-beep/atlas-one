@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, ClipboardCheck, Loader2, Plus, RefreshCw, Ruler } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import { CheckCircle2, ClipboardCheck, Eye, FileText, Loader2, Plus, RefreshCw, Ruler } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { usuarioAtual } from '@/lib/auth'
-import { criarMedicaoDoOrcamento, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
+import { buscarMedicao, criarMedicaoDoOrcamento, listarItensMedicao, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
 import { liberarMedicaoFinal } from '@/lib/medicaoFinalV2'
 import { medicaoRequerConferencia } from '@/lib/medicaoComprovacao'
-import type { ItemEsquadria, MedicaoItem } from '@/lib/tipos'
+import type { ItemEsquadria, MedicaoFinal, MedicaoItem } from '@/lib/tipos'
+
+const EditorLayoutA4 = dynamic(() => import('@/components/medicao-final/EditorLayoutA4'), { ssr: false })
 
 type MedicaoDaObra = {
   id: string
@@ -54,6 +57,9 @@ export default function VendaMedidaFinal({ clienteId, vendaId, obraId, orcamento
   const [erro, setErro] = useState('')
   const [conferidas, setConferidas] = useState<Set<number>>(() => new Set())
   const [liberando, setLiberando] = useState(false)
+  const [usuarioMaster, setUsuarioMaster] = useState(false)
+  const [abrindoPrevia, setAbrindoPrevia] = useState<string | null>(null)
+  const [dadosPrevia, setDadosPrevia] = useState<{ medicao: MedicaoFinal; itens: MedicaoItem[] } | null>(null)
   const temItensVendidos = itensVendidos.length > 0
 
   function registrarRetorno(medicaoId: string) {
@@ -103,6 +109,36 @@ export default function VendaMedidaFinal({ clienteId, vendaId, obraId, orcamento
   }, [clienteId, obraId, orcamentoId, temItensVendidos])
 
   useEffect(() => { void carregar() }, [carregar])
+  useEffect(() => {
+    let ativo = true
+    usuarioAtual().then(u => { if (ativo) setUsuarioMaster(u?.role === 'master') })
+    return () => { ativo = false }
+  }, [])
+
+  async function abrirPreviaA4(medicaoId: string) {
+    if (abrindoPrevia) return
+    setAbrindoPrevia(medicaoId)
+    setErro('')
+    try {
+      const [medicaoCompleta, itensCompletos] = await Promise.all([
+        buscarMedicao(medicaoId), listarItensMedicao(medicaoId),
+      ])
+      if (!medicaoCompleta || medicaoCompleta.cliente_id !== clienteId) {
+        throw new Error('Não foi possível acessar a Medida Final desta obra.')
+      }
+      if (medicaoCompleta.tipo_medicao === 'contramarco') {
+        throw new Error('O layout A4 personalizável está disponível para medidas finais de tipologias.')
+      }
+      if (!itensCompletos.length) {
+        throw new Error('Esta medição ainda não possui tipologias cadastradas para gerar a prévia.')
+      }
+      setDadosPrevia({ medicao: medicaoCompleta, itens: itensCompletos })
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível gerar a prévia A4 desta obra.')
+    } finally {
+      setAbrindoPrevia(null)
+    }
+  }
 
   const resumo = useMemo(() => medicoes.map(m => {
     const pecas = itens.filter(i => i.medicao_id === m.id)
@@ -184,12 +220,20 @@ export default function VendaMedidaFinal({ clienteId, vendaId, obraId, orcamento
 
   return (
     <div className="space-y-4">
+      {dadosPrevia && <EditorLayoutA4 medicao={dadosPrevia.medicao} itens={dadosPrevia.itens}
+        obraId={obraId} podeEditar={usuarioMaster} fechar={() => setDadosPrevia(null)} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-800">Medições vinculadas a esta obra</p>
           <p className="text-xs text-slate-500">Acompanhe as peças, confira as fotos e continue de onde parou.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {medicaoTipologia && <button type="button" onClick={() => void abrirPreviaA4(medicaoTipologia.id)}
+            disabled={!!abrindoPrevia || carregando}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800 disabled:opacity-50">
+            {abrindoPrevia === medicaoTipologia.id ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+            Prévia PDF A4 / Editar layout
+          </button>}
           <Link href={`/producao/medicao-final/cliente/${clienteId}`} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">
             Central de Medida Final do cliente
           </Link>
@@ -215,7 +259,8 @@ export default function VendaMedidaFinal({ clienteId, vendaId, obraId, orcamento
         filtradas.length === 0 ? <p className="rounded-lg border border-dashed p-4 text-sm text-slate-500">Nenhuma medição encontrada neste filtro para esta obra.</p> :
         <div className="grid gap-3 md:grid-cols-2">
           {filtradas.map(m => (
-            <Link key={m.id} href={`/producao/medicao-final/${m.id}`} onClick={() => registrarRetorno(m.id)} className="rounded-xl border border-slate-200 bg-white p-4 hover:border-blue-400 hover:shadow-sm">
+            <div key={m.id} className="rounded-xl border border-slate-200 bg-white overflow-hidden hover:border-blue-400 hover:shadow-sm">
+              <Link href={`/producao/medicao-final/${m.id}`} onClick={() => registrarRetorno(m.id)} className="block p-4">
               <div className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-2 text-sm font-bold text-slate-800"><Ruler size={16} /> {m.tipo_medicao === 'contramarco' ? 'Contramarco' : 'Tipologia / esquadria'}</span>
                 <span className="text-xs font-bold text-blue-700">Abrir / conferir →</span>
@@ -223,7 +268,15 @@ export default function VendaMedidaFinal({ clienteId, vendaId, obraId, orcamento
               <p className="mt-2 text-xs text-slate-600">{descricaoStatus(m.status_operacional)} · {new Date(m.created_at).toLocaleDateString('pt-BR')} · {m.totalPecas} peça(s)</p>
               {m.conferir > 0 && <p className="mt-2 text-xs font-semibold text-amber-700">{m.conferir} peça(s) com foto aguardando conferência numérica antes da fabricação</p>}
               {m.conferir === 0 && statusConcluidos.has(m.status_operacional || '') && <p className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 size={13} /> Concluída</p>}
-            </Link>
+              </Link>
+              {(m.tipo_medicao || 'tipologia') === 'tipologia' && <div className="border-t border-slate-100 px-4 py-2">
+                <button type="button" onClick={() => void abrirPreviaA4(m.id)} disabled={!!abrindoPrevia}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-blue-700 hover:text-blue-900 disabled:opacity-50">
+                  {abrindoPrevia === m.id ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+                  Abrir prévia A4 {usuarioMaster ? '/ editar e salvar' : '/ visualizar PDF'}
+                </button>
+              </div>}
+            </div>
           ))}
         </div>
       }

@@ -326,7 +326,7 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
     return gerarPdfContramarcos(medicao, itens, identificacao, salvar)
   }
   // O desenho antigo permanece exatamente igual até o Master salvar outro padrão A4.
-  const layout = layoutOverride || await carregarLayoutMedicaoA4()
+  const layout = layoutOverride || await carregarLayoutMedicaoA4({ medicaoId: medicao.id })
   if (JSON.stringify(layout) !== JSON.stringify(LAYOUT_MEDICAO_A4_PADRAO)) {
     return gerarPdfMedicaoFinalPersonalizado(medicao, itens, identificacao, layout, salvar)
   }
