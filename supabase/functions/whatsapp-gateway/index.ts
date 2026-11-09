@@ -121,6 +121,23 @@ async function customerByPhone(empresaId: string, telefone: string) {
     normalizePhone(c.whatsapp) === target || normalizePhone(c.telefone) === target
   ) || null;
 }
+async function customerByName(empresaId: string, nome: string) {
+  const normaliza = (value: unknown) => String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .trim()
+    .replace(/\s+/g, " ");
+  const target = normaliza(nome);
+  if (!target) return null;
+  const { data } = await db.from("clientes")
+    .select("id,nome")
+    .eq("empresa_id", empresaId)
+    .limit(1500);
+  const matches = (data || []).filter((c: any) => normaliza(c.nome) === target);
+  return matches.length === 1 ? matches[0] : null;
+}
+
 async function routingRule(empresaId: string, texto: string | null) {
   const { data } = await db
     .from("atendimento_regras_roteamento")
@@ -1035,6 +1052,16 @@ async function criarCardIntakeOrcamento(intake: any, structured: any, aiErro: st
     }
   }
 
+  // Vincula por nome somente quando há um único cadastro com nome exato.
+  // Em caso de nomes repetidos, mantém o cliente para validação humana.
+  if (!clienteId && clienteNome) {
+    const cliente = await customerByName(intake.empresa_id, clienteNome)
+    if (cliente?.id) {
+      clienteId = cliente.id
+      clienteNome = cliente.nome || clienteNome
+    }
+  }
+
   if (!clienteId && clienteNome && clienteWhatsapp) {
     const { data: novoCliente, error: clienteError } = await db.from("clientes").insert({
       empresa_id: intake.empresa_id,
@@ -1260,6 +1287,7 @@ async function estruturarIntakeComIA(
       "O conteúdo pode ter sido enviado em várias mensagens; trate o pacote inteiro como um único pedido.",
       "Identifique o CLIENTE pelo conteúdo do pedido (nome/telefone explicitamente citados). O remetente do grupo pode ser apenas o colaborador que encaminhou e NÃO deve ser assumido como cliente.",
       "Só preencha cliente_nome quando houver evidência de que o texto representa uma pessoa ou empresa cliente. Não transforme cidade, bairro, ambiente, cor, produto ou observação em nome de cliente.",
+      "Quando a mensagem, áudio ou texto visível na foto identificar explicitamente o cliente pelo nome (por exemplo, 'cliente Igor'), copie esse nome para cliente_nome e preserve a grafia; não use o nome de quem encaminhou a mensagem no grupo.",
       "Um município isolado, por exemplo José Bonifácio ou São José do Rio Preto, deve ser interpretado como cidade quando não houver marcador explícito de cliente. Se houver dúvida entre cidade e cliente, use cliente_nome=null e registre a dúvida em pendências.",
       "Identifique também claramente o que precisa ser orçado, separando ambientes, tipologias, medidas e quantidades quando estiverem explícitos.",
       "Extraia apenas informações explicitamente presentes. Nunca invente medida, preço, cidade, acabamento, quantidade, tipologia ou identidade do cliente.",
@@ -1865,82 +1893,45 @@ async function processGroupBudgetIntake(
 
   const windowMinutes = Math.max(1, Math.min(120, Number(automation.janela_agregacao_minutos || 1)))
   const cutoff = new Date(new Date(now).getTime() - windowMinutes * 60_000).toISOString()
-  const { data: existingIntake } = await db.from("atendimento_whatsapp_intakes")
-    .select("*")
-    .eq("empresa_id", config.empresa_id)
-    .eq("automacao_id", automation.id)
-    .eq("participante_jid", participantJid)
-    .eq("status", "aberto")
-    .is("fechado_em", null)
-    .gte("ultima_mensagem_em", cutoff)
-    .order("ultima_mensagem_em", { ascending: false })
-    .limit(1)
-    .maybeSingle()
 
-  if (existingIntake) {
-    const ids = Array.isArray(existingIntake.mensagens_ids) ? existingIntake.mensagens_ids : []
-    const anexos = Array.isArray(existingIntake.anexos) ? existingIntake.anexos : []
-    const content = rawLine ? appendRaw(existingIntake.conteudo_bruto, rawLine) : String(existingIntake.conteudo_bruto || "")
+  // A chamada SQL serializa mensagens do mesmo remetente e acrescenta texto,
+  // anexos e IDs atomicamente. Evita que webhooks simultâneos abram vários pacotes.
+  const { data: intakeRows, error: intakeError } = await db.rpc(
+    "atendimento_whatsapp_registrar_mensagem_orcamento",
+    {
+      p_empresa_id: config.empresa_id,
+      p_automacao_id: automation.id,
+      p_grupo_id: group.id,
+      p_conversa_id: conversation.id,
+      p_participante_jid: participantJid,
+      p_participante_telefone: participantPhone || null,
+      p_participante_nome: participantName,
+      p_mensagem_id: body.whatsappMessageId || messageRowId,
+      p_raw_line: rawLine,
+      p_anexo: attachment,
+      p_now: now,
+      p_cutoff: cutoff,
+      p_criar_se_ausente: !comandoPronto,
+    },
+  )
+  if (intakeError) throw intakeError
+  const intakeResult = Array.isArray(intakeRows) ? intakeRows[0] : null
+  const intakeId = intakeResult?.intake_id ? String(intakeResult.intake_id) : ""
+  const appended = intakeResult?.appended === true
 
-    const { error: intakeError } = await db.from("atendimento_whatsapp_intakes").update({
-      participante_telefone: participantPhone || existingIntake.participante_telefone || null,
-      participante_nome: participantName || existingIntake.participante_nome || null,
-      conteudo_bruto: content,
-      mensagens_ids: [...ids, body.whatsappMessageId || messageRowId],
-      anexos: attachment ? [...anexos, attachment] : anexos,
-      ai_status: "pendente",
-      ai_erro: null,
-      ultima_mensagem_em: now,
-      updated_at: now,
-    }).eq("id", existingIntake.id)
-    if (intakeError) throw intakeError
-
-    if (comandoPronto) {
-      if (gatewayToken) executarEmBackground(estruturarIntakeComIA(existingIntake.id, gatewayToken, "pronto", now))
-      return { intakeId: existingIntake.id, appended: true, fechamento: "pronto" }
-    }
-
-    if (gatewayToken) executarEmBackground(agendarFechamentoIntake(existingIntake.id, gatewayToken, now, windowMinutes))
-    return {
-      intakeId: existingIntake.id,
-      appended: true,
-      aguardandoMais: true,
-      comando: comandoAguarde ? "aguarde" : null,
-      fechaAposSegundosSemMensagem: windowMinutes * 60,
-    }
-  }
-
-  if (comandoPronto) {
+  if (!intakeId) {
     return { ignored: true, reason: "pronto_sem_pacote_aberto" }
   }
 
-  const { data: intake, error: intakeError } = await db.from("atendimento_whatsapp_intakes").insert({
-    empresa_id: config.empresa_id,
-    automacao_id: automation.id,
-    grupo_id: group.id,
-    conversa_id: conversation.id,
-    participante_jid: participantJid,
-    participante_telefone: participantPhone || null,
-    participante_nome: participantName,
-    status: "aberto",
-    orcamento_id: null,
-    tarefa_id: null,
-    conteudo_bruto: rawLine,
-    mensagens_ids: [body.whatsappMessageId || messageRowId],
-    anexos: attachment ? [attachment] : [],
-    ai_status: "pendente",
-    fechamento_pausado: false,
-    fechado_em: null,
-    gatilho_fechamento: null,
-    primeira_mensagem_em: now,
-    ultima_mensagem_em: now,
-  }).select("id").single()
-  if (intakeError) throw intakeError
+  if (comandoPronto) {
+    if (gatewayToken) executarEmBackground(estruturarIntakeComIA(intakeId, gatewayToken, "pronto", now))
+    return { intakeId, appended: true, fechamento: "pronto" }
+  }
 
-  if (gatewayToken) executarEmBackground(agendarFechamentoIntake(intake.id, gatewayToken, now, windowMinutes))
+  if (gatewayToken) executarEmBackground(agendarFechamentoIntake(intakeId, gatewayToken, now, windowMinutes))
   return {
-    intakeId: intake.id,
-    appended: false,
+    intakeId,
+    appended,
     aguardandoMais: true,
     comando: comandoAguarde ? "aguarde" : null,
     fechaAposSegundosSemMensagem: windowMinutes * 60,
