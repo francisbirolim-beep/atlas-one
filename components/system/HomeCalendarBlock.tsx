@@ -176,8 +176,8 @@ export default function HomeCalendarBlock() {
               Mostrar concluídos ({concluidosDoDia})
             </label>
             {carregando ? <p className="py-5 text-sm text-slate-400">Carregando...</p> : eventosDoDia.length === 0 ? <p className="py-5 text-sm text-slate-500">Nenhum compromisso neste dia.</p> : (
-              <div className="space-y-2">
-                {eventosDoDia.slice(0, 5).map(evento => (
+              <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
+                {eventosDoDia.map(evento => (
                   <div key={evento.id} className={`rounded-lg border border-slate-200 px-3 py-2.5 ${conclusoes[evento.id] ? 'bg-emerald-50/50' : 'bg-white'}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
