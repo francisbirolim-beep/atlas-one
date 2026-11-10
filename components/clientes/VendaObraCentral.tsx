@@ -54,6 +54,7 @@ type Venda = {
   confirmado_em?:string|null
   confirmado_por_nome?:string|null
   itens_snapshot?:any[]|null
+  config_snapshot?:{wvetro_historico?:{numero?:string;historico_id?:string;valor_historico?:number;tipo?:string}}|null
 }
 type Cliente = { id:string; nome:string; cidade?:string|null }
 type Obra = { id:string; numero?:number|null; nome:string; status?:string|null; previsao_entrega?:string|null }
@@ -366,7 +367,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   async function carregar(){
     setCarregando(true);setErro('')
-    const vr=await supabase.from('vendas_obras').select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,custo_previsto,status,confirmado_em,confirmado_por_nome,itens_snapshot').eq('id',vendaId).eq('cliente_id',clienteId).is('excluida_em',null).maybeSingle()
+    const vr=await supabase.from('vendas_obras').select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,custo_previsto,status,confirmado_em,confirmado_por_nome,itens_snapshot,config_snapshot').eq('id',vendaId).eq('cliente_id',clienteId).is('excluida_em',null).maybeSingle()
     if(vr.error||!vr.data){setErro('Venda não encontrada para este cliente.');setCarregando(false);return}
     const v=vr.data as Venda; setVenda(v)
     // Cada lote é uma solicitação de cotação por categoria, independente de compra aprovada.
@@ -1358,7 +1359,8 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             <Link href={`/clientes/${clienteId}`} className="mt-1 rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ArrowLeft size={20}/></Link>
             <div>
               <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold text-slate-900">{obra?.nome||`Venda #${venda.numero||'—'}`}</h1><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">{status(venda.status||'ativa')}</span></div>
-              <p className="mt-1 text-sm text-slate-500">{cliente.nome} · Orçamento #{numeroOrcamento(orcamento)}{obra?.numero?` · Obra #${obra.numero}`:''}</p>
+              <p className="mt-1 text-sm text-slate-500">{cliente.nome} · Orçamento Atlas #{numeroOrcamento(orcamento)}{obra?.numero?` · Obra #${obra.numero}`:''}</p>
+              {venda.config_snapshot?.wvetro_historico?.numero&&<p className="mt-1 inline-block rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-900">WVetro #{venda.config_snapshot.wvetro_historico.numero} vinculado à venda histórica · valor original preservado</p>}
               <p className="mt-1 text-xs text-slate-400">Venda confirmada em {dataBR(venda.confirmado_em)}{venda.confirmado_por_nome?` por ${venda.confirmado_por_nome}`:''}</p>
               <VendaMedidaStatus clienteId={clienteId} obraId={venda.obra_id||null} orcamentoId={venda.orcamento_id} onAbrir={()=>setAba('medida-final')}/>
             </div>
