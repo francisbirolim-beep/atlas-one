@@ -252,6 +252,7 @@ export async function POST(req: NextRequest) {
       .select('id,orcamento_id,cliente_id,obra_id,valor_venda,status')
       .eq('id', vendaId)
       .eq('empresa_id', usuario.empresa_id)
+      .is('excluida_em',null)
       .maybeSingle()
     if (erroVenda) throw erroVenda
     if (!venda) return NextResponse.json({ error: 'Venda não encontrada.' }, { status: 404 })
