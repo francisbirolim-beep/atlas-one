@@ -2,6 +2,7 @@
 
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import Link from 'next/link'
+import AlcaArrastarCard from '@/components/kanban/AlcaArrastarCard'
 import {
  ArrowLeft,ArrowRight,ArrowUpRight,BarChart3,Building2,CalendarDays,CheckCircle2,
  ChevronLeft,ChevronRight,ClipboardCheck,Clock3,Columns3,Factory,Filter,
@@ -230,17 +231,14 @@ export default function VisaoGeralProjetos(){
   finally{setSalvandoCard(false);setArrastando(null)}
  }
  async function moverCardVisual(vendaId:string,colunaId:string){
-  if(!podeMoverCards||demo||salvandoCard)return
+  if(demo||salvandoCard)return
   const atual=cards.find(c=>c.vendaId===vendaId)
   if(!atual||atual.colunaId===colunaId)return
   const destino=colunasOrdenadas.find(c=>c.id===colunaId)
   if(!destino){setErro('A coluna de destino não existe.');return}
   const nome=destino.nome
-  const motivo=window.prompt('Motivo para mover o card de '+atual.cliente+' para '+nome+' (mínimo 8 caracteres):',
-   'Ajuste manual do acompanhamento desta obra.')
-  if(!motivo)return
-  if(motivo.trim().length<8){setErro('Motivo obrigatório com pelo menos 8 caracteres.');return}
-  if(!window.confirm('Mover o card para '+nome+' nos dois Kanbans?\nCompras, produção, instalação e financeiro não serão alterados.'))return
+  // Movimento visual imediato: usuário, origem, destino e justificativa são auditados no banco.
+  const motivo='Reposicionamento manual do card para a coluna '+nome+'.'
   setSalvandoCard(true);setErro('')
   try{
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
@@ -442,7 +440,7 @@ export default function VisaoGeralProjetos(){
     <span className="inline-flex items-center gap-1"><ShieldCheck size={13}/> Etapas calculadas pelos setores; posições ajustadas manualmente não alteram os registros operacionais</span>
     <span>{carregando?'Consultando a empresa…':atualizado?'Atualizado: '+new Date(atualizado).toLocaleString('pt-BR'):'Aguardando dados'}</span>
    </div>
-   <div className="w-full overflow-x-auto rounded-xl pb-3" aria-label="Kanban Geral de Projetos" style={{scrollbarColor:'#385578 #0e2139'}}
+   <div data-kanban-scroll data-kanban-board className="w-full overflow-x-auto rounded-xl pb-3" aria-label="Kanban Geral de Projetos" style={{scrollbarColor:'#385578 #0e2139'}}
     onDragOver={e=>{
      const area=e.currentTarget.getBoundingClientRect()
      if(e.clientX<area.left+65)e.currentTarget.scrollLeft-=26
@@ -457,10 +455,10 @@ export default function VisaoGeralProjetos(){
       const Icon=paleta.icone
       const destinoFinalizado=col.criterios.includes('finalizado')
       const destinoVisual=col.id
-      return <section key={col.id}
-       onDragOver={e=>{if(podeMoverCards&&!demo&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
+      return <section data-kanban-coluna={col.id} key={col.id}
+       onDragOver={e=>{if(!demo&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
        onDrop={e=>{
-        if(!podeMoverCards||demo||salvandoCard)return
+        if(demo||salvandoCard)return
         const origem=e.dataTransfer.getData('text/plain')
         if(!origem.startsWith('atlas-principal:'))return
         const id=origem.slice('atlas-principal:'.length)
@@ -477,16 +475,13 @@ export default function VisaoGeralProjetos(){
        </div>
        <Link href="/clientes/identificar" title="Abrir o fluxo oficial de cliente e obra; a etapa será atualizada pelo Cliente 360" className="block border-t border-white/10 py-1.5 text-center text-[11px] font-semibold text-white hover:brightness-110" style={{background:paleta.botao}}>+ Adicionar</Link>
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
-        {podeMoverCards&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">{destinoFinalizado?'Arraste um projeto para cá para finalizar no painel':'Arraste um card para reposicioná-lo aqui'}</p>}
+        {!demo&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">{destinoFinalizado?'Arraste um projeto para cá para finalizar no painel':'Arraste um card para reposicioná-lo aqui'}</p>}
         {vis.map(c=><div key={c.vendaId} draggable={podeMoverCards&&!demo&&!salvandoCard}
          onDragStart={e=>{if(!podeMoverCards||demo)return;e.dataTransfer.setData('text/plain','atlas-principal:'+c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
          onDragEnd={()=>setArrastando(null)}
          className={podeMoverCards?'cursor-grab active:cursor-grabbing':''}>
-          {podeMoverCards&&!demo&&<div draggable
-           onDragStart={e=>{e.dataTransfer.setData('text/plain','atlas-principal:'+c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
-           className="mb-1 cursor-grab select-none rounded border border-blue-400/40 bg-blue-950/70 px-2 py-1.5 text-center text-[10px] font-bold text-white active:cursor-grabbing">
-           ⠿ Segure aqui e arraste
-          </div>}
+          {!demo&&<AlcaArrastarCard desabilitado={salvandoCard}
+            onSoltar={destino=>void moverCardVisual(c.vendaId,destino)} label="Segure aqui e arraste" />}
           <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
          </div>)}
         {pedidosCol.map(p=><CardPedido key={p.id} pedido={p} abrir={()=>abrir(p.id)}/>)}
