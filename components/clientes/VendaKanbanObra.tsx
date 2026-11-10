@@ -41,6 +41,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  const movimentacaoEmCurso=useRef(false)
  const permissoes=dados?.permissoesObra
  const ler=useCallback(async()=>{
+  if(movimentacaoEmCurso.current)return // polling não consulta durante POST/GET de confirmação
   const geracao=++leituraAtual.current
   try{
    const token=await tokenAtual()

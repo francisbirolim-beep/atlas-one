@@ -45,6 +45,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
  const leituraAtual=useRef(0)
  const movimentoEmCurso=useRef(false)
  const carregar=useCallback(async(silencioso=false)=>{
+  if(movimentoEmCurso.current)return // rejeitar consulta periódica durante salvamento
   const geracao=++leituraAtual.current
   if(!silencioso)setCarregando(true)
   try{
