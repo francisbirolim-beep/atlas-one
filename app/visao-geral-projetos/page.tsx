@@ -439,7 +439,7 @@ export default function VisaoGeralProjetos(){
       return <section key={col.id}
        onDragOver={e=>{if(podeMoverCards&&destinoVisual&&arrastando&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
        onDrop={e=>{if(!podeMoverCards||!destinoVisual||!arrastando||salvandoCard)return;e.preventDefault();const id=arrastando;setArrastando(null);void moverCardVisual(id,destinoVisual)}}
-       className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoVisual&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}> 
+       className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoVisual&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
        <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:paleta.cabecalho}}>
         <div className="flex items-center gap-1">
          <Icon size={15} className="shrink-0"/>
