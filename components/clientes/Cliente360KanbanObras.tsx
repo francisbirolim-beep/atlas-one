@@ -54,21 +54,21 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
   try{
    const token=await tokenAtual()
    if(!token)throw new Error('Sessão expirada. Faça login novamente.')
-   const resposta=await fetch('/api/visao-geral-projetos/mover?vendaId='+encodeURIComponent(vendaId),{
-    headers:{Authorization:'Bearer '+token},cache:'no-store'
+   const resposta=await fetch('/api/clientes/'+encodeURIComponent(clienteId)+'/kanban-obras',{
+    headers:{Authorization:'Bearer '+token},cache:'no-store',
    })
-   const atualizado=await resposta.json().catch(()=>({}))
-   if(!resposta.ok){
-    setAviso('✓ Obra gravada em '+destino.nome+'. A confirmação da leitura ficará pendente.')
-    return
-   }
-   if(atualizado.estado!=='manual'||atualizado.colunaId!==colunaId){
-    setAviso('')
-    setErro('A posição gravada no banco não corresponde à coluna '+destino.nome+'.')
-    return
-   }
-   posicoesGravadas.current.delete(vendaId)
-   setAviso('✓ Obra salva em '+destino.nome+' e sincronizada com o Kanban Geral.')
+   const json=await resposta.json().catch(()=>({}))
+   if(!resposta.ok)throw new Error(json.erro||'Não foi possível carregar o Kanban do Cliente.')
+   if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
+   const retorno=json as Resposta
+   retorno.cards=(retorno.cards||[]).map(c=>{
+    const vendaId=c.vendas.length===1?c.vendas[0].vendaId:null
+    const destino=vendaId?posicoesGravadas.current.get(vendaId):null
+    if(!destino)return c
+    if(c.colunaId===destino){posicoesGravadas.current.delete(vendaId!);return c}
+    return {...c,colunaId:destino,vendas:c.vendas.map(v=>({...v,colunaId:destino}))}
+   })
+   setDados(retorno);setErro('')
   }catch(e){
    if(!movimentoEmCurso.current&&geracao===leituraAtual.current)
     setErro(e instanceof Error?e.message:'Não foi possível carregar as obras.')
@@ -108,23 +108,21 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
    if(!res.ok||!json.ok)throw Error(json.erro||'Não foi possível mover a obra.')
    if(json.colunaId&&json.colunaId!==colunaId)throw Error('O banco respondeu outra coluna.')
    gravouNoBanco=true
-   const resposta=await fetch('/api/clientes/'+encodeURIComponent(clienteId)+'/kanban-obras',{
+   const resposta=await fetch('/api/visao-geral-projetos/mover?vendaId='+encodeURIComponent(vendaId),{
     headers:{Authorization:'Bearer '+token},cache:'no-store'
    })
    const atualizado=await resposta.json().catch(()=>({}))
    if(!resposta.ok){
-    setAviso('✓ Obra gravada em '+destino.nome+'. A leitura será atualizada automaticamente.')
+    setAviso('✓ Obra gravada em '+destino.nome+'. A confirmação da leitura ficará pendente.')
     return
    }
-   const confirmado=(atualizado.cards||[]).find((c:ObraCardCliente)=>
-    c.vendas.length===1&&c.vendas[0].vendaId===vendaId)
-   if(!confirmado||confirmado.colunaId!==colunaId){
-    setAviso('✓ Obra gravada em '+destino.nome+'. A sincronização da tela está pendente.')
+   if(atualizado.estado!=='manual'||atualizado.colunaId!==colunaId){
+    setAviso('')
+    setErro('A posição gravada no banco não corresponde à coluna '+destino.nome+'.')
     return
    }
    posicoesGravadas.current.delete(vendaId)
-   setDados(atualizado as Resposta)
-   setAviso('✓ Obra salva em '+destino.nome+'.')
+   setAviso('✓ Obra salva em '+destino.nome+' e sincronizada com o Kanban Geral.')
   }catch(e){
    if(gravouNoBanco){
     setAviso('✓ Obra gravada em '+destino.nome+'. Atualização do painel pendente.')
