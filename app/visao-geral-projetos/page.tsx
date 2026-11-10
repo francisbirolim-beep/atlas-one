@@ -162,7 +162,7 @@ export default function VisaoGeralProjetos(){
  const [ocultos,setOcultos]=useState<{vendaId:string;cliente:string;numeroOrcamento:string;motivoControle:string|null}[]>([])
  const [mostrarOcultos,setMostrarOcultos]=useState(false),[arrastando,setArrastando]=useState<string|null>(null),[arrastandoColuna,setArrastandoColuna]=useState<string|null>(null),[salvandoCard,setSalvandoCard]=useState(false)
  const [selecionado,setSelecionado]=useState<string|null>(null),[aba,setAba]=useState<Aba>('resumo')
- const [erro,setErro]=useState(''),[carregando,setCarregando]=useState(true),[atualizado,setAtualizado]=useState('')
+ const [erro,setErro]=useState(''),[aviso,setAviso]=useState(''),[carregando,setCarregando]=useState(true),[atualizado,setAtualizado]=useState('')
  const [modoTv,setModoTv]=useState(false),[compacto,setCompacto]=useState(false),[config,setConfig]=useState(false),[novoNome,setNovoNome]=useState('')
  const [filtros,setFiltros]=useState(false),[busca,setBusca]=useState(''),[condicao,setCondicao]=useState<Condicao>('todos')
  const [novoCriterio,setNovoCriterio]=useState<EtapaOperacional>('compras_liberacao'),[nomeEditando,setNomeEditando]=useState<Record<string,string>>({})
@@ -239,7 +239,7 @@ export default function VisaoGeralProjetos(){
   const nome=destino.nome
   // Movimento visual imediato: usuário, origem, destino e justificativa são auditados no banco.
   const motivo='Reposicionamento manual do card para a coluna '+nome+'.'
-  setSalvandoCard(true);setErro('')
+  setSalvandoCard(true);setErro('');setAviso('')
   try{
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
    const r=await fetch('/api/visao-geral-projetos/mover',{
@@ -249,6 +249,7 @@ export default function VisaoGeralProjetos(){
    const j=await r.json().catch(()=>({}))
    if(!r.ok||!j.ok)throw Error(j.erro||'A posição não foi salva.')
    await carregar()
+   setAviso('Card movido para '+nome+'.')
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao mover card.')}
   finally{setSalvandoCard(false);setArrastando(null)}
  }
@@ -410,6 +411,7 @@ export default function VisaoGeralProjetos(){
     <button onClick={()=>{setBusca('');setCondicao('todos')}} className="self-end rounded-md border border-[#395473] px-3 py-2 text-xs">Limpar filtros</button>
    </section>}
    {erro&&<p role="alert" className="mb-3 rounded-lg border border-rose-500/50 bg-rose-950/50 p-3 text-sm text-rose-100">{erro}</p>}
+   {aviso&&<p role="status" className="mb-3 rounded-lg border border-emerald-500/50 bg-emerald-950/50 p-3 text-sm font-semibold text-emerald-100">{aviso}</p>}
    <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">{montarKPIs.map(k=>{
     const Icone=k.icone
     return <div key={k.label} className="relative min-h-[80px] overflow-hidden rounded-lg border border-[#294461] bg-gradient-to-br from-[#152b46] to-[#0b1c32] px-3 py-3 shadow-[0_3px_18px_rgba(0,0,0,.13)]">
@@ -476,10 +478,10 @@ export default function VisaoGeralProjetos(){
        <Link href="/clientes/identificar" title="Abrir o fluxo oficial de cliente e obra; a etapa será atualizada pelo Cliente 360" className="block border-t border-white/10 py-1.5 text-center text-[11px] font-semibold text-white hover:brightness-110" style={{background:paleta.botao}}>+ Adicionar</Link>
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
         {!demo&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">{destinoFinalizado?'Arraste um projeto para cá para finalizar no painel':'Arraste um card para reposicioná-lo aqui'}</p>}
-        {vis.map(c=><div key={c.vendaId} draggable={podeMoverCards&&!demo&&!salvandoCard}
-         onDragStart={e=>{if(!podeMoverCards||demo)return;e.dataTransfer.setData('text/plain','atlas-principal:'+c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
+        {vis.map(c=><div key={c.vendaId} data-kanban-card draggable={!demo&&!salvandoCard}
+         onDragStart={e=>{if(demo||salvandoCard)return;e.dataTransfer.setData('text/plain','atlas-principal:'+c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
          onDragEnd={()=>setArrastando(null)}
-         className={podeMoverCards?'cursor-grab active:cursor-grabbing':''}>
+         className="cursor-grab active:cursor-grabbing">
           {!demo&&<AlcaArrastarCard desabilitado={salvandoCard}
             onSoltar={destino=>void moverCardVisual(c.vendaId,destino)} label="Segure aqui e arraste" />}
           <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>

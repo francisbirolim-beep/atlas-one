@@ -30,6 +30,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  const [carregando,setCarregando]=useState(true)
  const [salvando,setSalvando]=useState(false)
  const [erro,setErro]=useState('')
+ const [aviso,setAviso]=useState('')
  const [formAberto,setFormAberto]=useState(false)
  const [titulo,setTitulo]=useState('')
  const [descricao,setDescricao]=useState('')
@@ -86,7 +87,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
   const nome=colunas.find(c=>c.id===destino)?.nome||destino
   // Arrastar deve salvar diretamente; a auditoria registra usuário, data e destino.
   const motivo='Reposicionamento manual do card da obra para a coluna '+nome+'.'
-  setSalvando(true);setErro('')
+  setSalvando(true);setErro('');setAviso('')
   try{
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
    const res=await fetch('/api/visao-geral-projetos/mover',{
@@ -96,6 +97,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    const j=await res.json().catch(()=>({}))
    if(!res.ok||!j.ok)throw Error(j.erro||'Não foi possível mover o card principal.')
    await ler()
+   setAviso('Card reposicionado na coluna '+nome+'.')
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao mover o card principal.')}
   finally{setSalvando(false);setArrastandoPrincipal(false)}
  }
@@ -131,6 +133,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
     <h2 className="text-lg font-extrabold text-white">Kanban desta obra</h2>
     <p className="text-xs text-slate-300">Esta venda tem seu próprio quadro. O Kanban Geral mostra o mesmo andamento e os pedidos vinculados.</p>
     <p className="mt-1 text-[11px] text-sky-200">Card da venda = dados reais · Cartões azuis = acompanhamento manual · Compras = pedidos reais</p>
+    <p className="mt-1 text-xs font-semibold text-cyan-200">Arraste o card branco pelo mouse até outra coluna e solte. Ou escolha a coluna no seletor do card.</p>
    </div>
    <div className="flex flex-wrap items-center gap-2">
     {dados?.usuarioMaster&&<Link href="/configuracoes/usuarios" className="inline-flex items-center gap-1 rounded-lg border border-[#3c5876] px-3 py-2 text-xs font-bold text-white"><ShieldCheck size={14}/> Autorizar equipe</Link>}
@@ -140,6 +143,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    </div>
   </div>
   {erro&&<p role="alert" className="m-3 rounded-md bg-rose-950 p-3 text-xs text-rose-100">{erro}</p>}
+  {aviso&&<p role="status" className="m-3 rounded-md border border-emerald-600 bg-emerald-950 p-3 text-xs font-bold text-emerald-100">{aviso}</p>}
   {carregando&&!dados&&<p className="p-5 text-xs text-slate-200">Carregando dados reais desta venda...</p>}
   {dados&&!dados.kanbanObraConfigurado&&<p className="m-3 rounded-md border border-amber-600 bg-amber-950/40 p-3 text-xs text-amber-100">Os cards manuais ainda não estão habilitados no banco. O espelho das etapas reais continua disponível, sem alterações de dados.</p>}
   {formAberto&&permissoes?.criar&&<div className="m-3 grid gap-2 rounded-lg border border-blue-500 bg-[#102743] p-4 md:grid-cols-[1fr_1fr_180px_auto]">
@@ -181,10 +185,10 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
        <span>{col.nome}</span><span className="rounded-full bg-white/15 px-1.5">{Number(!!cardReal)+cardsManuais.length+cardsCompras.length}</span>
       </h3>
       <div className="space-y-2 p-1.5">
-       {cardReal&&<div draggable={!!permissoes?.mover&&!!dados?.podeMoverCards&&!salvando}
-        onDragStart={e=>{if(!permissoes?.mover||!dados?.podeMoverCards)return;e.dataTransfer.setData('text/plain','atlas-principal:'+vendaId);e.dataTransfer.effectAllowed='move';setArrastando(null);setArrastandoPrincipal(true)}}
+       {cardReal&&<div data-kanban-card draggable={!salvando}
+        onDragStart={e=>{if(salvando)return;e.dataTransfer.setData('text/plain','atlas-principal:'+vendaId);e.dataTransfer.effectAllowed='move';setArrastando(null);setArrastandoPrincipal(true)}}
         onDragEnd={()=>setArrastandoPrincipal(false)}
-        className={'rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow '+(permissoes?.mover&&dados?.podeMoverCards?'cursor-grab active:cursor-grabbing':'')}>
+        className="cursor-grab rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow active:cursor-grabbing">
         <AlcaArrastarCard desabilitado={salvando} onSoltar={destino=>void moverPrincipal(destino)} />
         <p className="text-[11px] font-extrabold">{cardReal.cliente}</p>
         <p className="text-[10px] text-slate-600">Orçamento {cardReal.numeroOrcamento}</p>
