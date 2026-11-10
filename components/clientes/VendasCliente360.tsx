@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Building2, ChevronRight, CircleDollarSign, FileText, Loader2 } from 'lucide-react'
+import { AlertTriangle, Building2, CheckCircle2, ChevronRight, CircleDollarSign, FileText, Loader2, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import {tokenAtual,usuarioAtual} from '@/lib/auth'
 
 type VendaObra = {
   id: string
@@ -66,8 +67,15 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
   const [contas,setContas]=useState<ContaVenda[]>([])
   const [carregando,setCarregando]=useState(true)
   const [erro,setErro]=useState('')
+  const [podeExcluir,setPodeExcluir]=useState(false)
+  const [vendaParaExcluir,setVendaParaExcluir]=useState<VendaObra|null>(null)
+  const [motivoExclusao,setMotivoExclusao]=useState('Venda lançada incorretamente; será sincronizada a venda correta.')
+  const [confirmacao,setConfirmacao]=useState('')
+  const [excluindo,setExcluindo]=useState(false)
+  const [sucesso,setSucesso]=useState('')
 
   useEffect(()=>{ void carregar() },[clienteId,verFinanceiro])
+  useEffect(()=>{let ativo=true;void usuarioAtual().then(u=>{if(ativo)setPodeExcluir(u?.role==='master')});return()=>{ativo=false}},[])
 
   async function carregar(){
     setCarregando(true); setErro('')
@@ -75,6 +83,8 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
       .from('vendas_obras')
       .select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,status,confirmado_em,created_at')
       .eq('cliente_id',clienteId)
+      .is('excluida_em',null)
+      .neq('status','cancelada')
       .order('confirmado_em',{ascending:false})
 
     if(vendasResp.error){ setErro(vendasResp.error.message); setCarregando(false); return }
@@ -106,6 +116,40 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
     setCarregando(false)
   }
 
+  function abrirExclusao(v:VendaObra){
+    setVendaParaExcluir(v)
+    setMotivoExclusao('Venda lançada incorretamente; será sincronizada a venda correta.')
+    setConfirmacao('')
+    setErro('')
+  }
+
+  async function excluirVenda(){
+    const v=vendaParaExcluir
+    if(!v||excluindo||!podeExcluir)return
+    if(confirmacao.trim().toUpperCase()!=='EXCLUIR '+v.numero){
+      setErro('Digite exatamente EXCLUIR '+v.numero+' para confirmar.')
+      return
+    }
+    if(motivoExclusao.trim().length<8){setErro('Informe um motivo para a exclusão.');return}
+    setExcluindo(true);setErro('')
+    try{
+      const token=await tokenAtual()
+      if(!token)throw Error('Sessão expirada. Faça login novamente.')
+      const resp=await fetch('/api/vendas/excluir-incorreta',{
+        method:'POST',cache:'no-store',
+        headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+        body:JSON.stringify({vendaId:v.id,clienteId,confirmacao:confirmacao.trim(),motivo:motivoExclusao.trim()})
+      })
+      const dados=await resp.json().catch(()=>({}))
+      if(!resp.ok||!dados.ok)throw Error(dados.error||'A exclusão da venda não foi confirmada.')
+      setVendaParaExcluir(null)
+      setConfirmacao('')
+      setSucesso('Venda #'+v.numero+' excluída da lista, com auditoria. '+(Number(dados.contasCanceladas)>0?dados.contasCanceladas+' pré-lançamento(s) financeiro(s) sem pagamento cancelado(s). ':'')+'Agora é possível sincronizar o orçamento correto do W.Vetro.')
+      await carregar()
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao excluir venda.')}
+    finally{setExcluindo(false)}
+  }
+
   const totalVendido=useMemo(()=>vendas.reduce((s,v)=>s+Number(v.valor_venda||orcamentos[v.orcamento_id]?.valor_estimado||0),0),[vendas,orcamentos])
   const totalRecebido=useMemo(()=>contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Number(c.valor_pago||0),0),[contas])
   const totalAberto=useMemo(()=>contas.filter(c=>c.status!=='cancelado').reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0),[contas])
@@ -113,7 +157,8 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
   if(carregando) return <div className="rounded-2xl border bg-white p-8 text-center text-sm text-slate-500"><Loader2 size={16} className="mx-auto mb-2 animate-spin"/>Carregando vendas...</div>
 
   return <div className="space-y-5">
-    {erro&&<div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
+    {erro&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
+    {sucesso&&<div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"><p className="flex gap-2"><CheckCircle2 size={18}/>{sucesso}</p><Link href="/integracoes/wvetro/sincronizar-numero" className="mt-2 inline-block font-bold underline">Sincronizar o número correto do W.Vetro</Link></div>}
 
     <div className="grid gap-3 sm:grid-cols-3">
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -144,7 +189,8 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
           const contasVenda=contas.filter(c=>c.venda_obra_id===v.id&&c.status!=='cancelado')
           const recebido=contasVenda.reduce((s,c)=>s+Number(c.valor_pago||0),0)
           const saldo=contasVenda.reduce((s,c)=>s+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
-          return <Link key={v.id} href={`/clientes/${clienteId}/vendas/${v.id}`} className="flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
+          return <div key={v.id} className="flex flex-col border-b border-slate-100 last:border-0 sm:flex-row sm:items-stretch">
+           <Link href={`/clientes/${clienteId}/vendas/${v.id}`} className="flex min-w-0 flex-1 flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 font-bold text-slate-900"><Building2 size={15} className="text-brand-navy"/>{obra?.nome||`Venda #${v.numero||'—'}`}</span>
@@ -163,7 +209,12 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
               </div>
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500"><ChevronRight size={18}/></span>
             </div>
-          </Link>
+           </Link>
+           {podeExcluir&&<button type="button" onClick={()=>abrirExclusao(v)}
+             aria-label={'Excluir venda incorreta número '+v.numero}
+             className="m-3 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-rose-500"
+             title="Exclusão lógica auditada, somente Master"><Trash2 size={15}/> Excluir venda</button>}
+          </div>
         })}
         {!vendas.length&&<div className="px-5 py-10 text-center">
           <CircleDollarSign size={28} className="mx-auto text-slate-300"/>
@@ -172,5 +223,41 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
         </div>}
       </div>
     </section>
+    {vendaParaExcluir&&podeExcluir&&<div role="presentation" className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/70 px-4 py-6">
+      <div role="dialog" aria-modal="true" aria-label="Excluir venda incorreta"
+       className="w-full max-w-lg space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+       <div className="flex items-start justify-between gap-3">
+        <div>
+         <h3 className="flex items-center gap-2 text-lg font-extrabold text-slate-900"><AlertTriangle size={20} className="text-amber-600"/> Excluir venda #{vendaParaExcluir.numero}</h3>
+         <p className="mt-1 text-xs text-slate-500">Orçamento #{numeroOrcamento(orcamentos[vendaParaExcluir.orcamento_id])} · {moeda(vendaParaExcluir.valor_venda)}</p>
+        </div>
+        <button aria-label="Fechar exclusão" disabled={excluindo} onClick={()=>{setVendaParaExcluir(null);setErro('')}} className="rounded-lg p-1 text-slate-600 hover:bg-slate-100"><X size={20}/></button>
+       </div>
+       <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+        A venda sairá dos Kanbans e relatórios ativos, mas <b>não será apagada definitivamente</b>.
+        O histórico e o orçamento serão preservados. Pré-lançamentos financeiros automáticos sem pagamento poderão ser cancelados.
+        Vendas com recebimentos, produção, cotação ou instalação vinculadas serão bloqueadas pelo servidor.
+       </p>
+       <label className="block text-sm font-semibold text-slate-800">Motivo da exclusão
+        <textarea value={motivoExclusao} maxLength={1000} onChange={e=>setMotivoExclusao(e.target.value)}
+         disabled={excluindo} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-2.5 text-sm font-normal" />
+       </label>
+       <label className="block text-sm font-semibold text-slate-800">Digite <b>EXCLUIR {vendaParaExcluir.numero}</b> para confirmar
+        <input value={confirmacao} onChange={e=>setConfirmacao(e.target.value)} autoComplete="off"
+         disabled={excluindo} placeholder={'EXCLUIR '+vendaParaExcluir.numero}
+         className="mt-1 block w-full rounded-lg border border-slate-300 p-2.5 text-sm font-normal" />
+       </label>
+       {erro&&<p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-sm text-rose-800">{erro}</p>}
+       <div className="flex justify-end gap-2">
+        <button type="button" onClick={()=>{setVendaParaExcluir(null);setErro('')}} disabled={excluindo}
+         className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700">Cancelar</button>
+        <button type="button" onClick={()=>void excluirVenda()}
+         disabled={excluindo||confirmacao.trim().toUpperCase()!=='EXCLUIR '+vendaParaExcluir.numero||motivoExclusao.trim().length<8}
+         className="inline-flex items-center gap-2 rounded-lg bg-rose-700 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
+         {excluindo?<Loader2 size={16} className="animate-spin"/>:<Trash2 size={16}/>} Excluir venda incorreta
+        </button>
+       </div>
+      </div>
+    </div>}
   </div>
 }
