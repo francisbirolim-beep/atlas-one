@@ -231,14 +231,14 @@ export default function VisaoGeralProjetos(){
  async function moverCardVisual(vendaId:string,etapa:string){
   if(!podeMoverCards||demo||salvandoCard)return
   const atual=cards.find(c=>c.vendaId===vendaId)
-  if(!atual||atual.etapaOperacional===etapa)return
+  if(!atual||colunasOrdenadas.find(col=>col.criterios.includes(atual.etapaOperacional as EtapaOperacional))?.criterios[0]===etapa)return
   const destino=colunasOrdenadas.find(c=>c.criterios.includes(etapa as EtapaOperacional))
   const nome=destino?.nome||etapa
   const motivo=window.prompt('Motivo para mover o card de '+atual.cliente+' para '+nome+' (mínimo 8 caracteres):',
    'Ajuste manual do acompanhamento desta obra.')
   if(!motivo)return
   if(motivo.trim().length<8){setErro('Motivo obrigatório com pelo menos 8 caracteres.');return}
-  if(!window.confirm('Mover o card para '+nome+' nos dois Kanbans?\\nCompras, produção, instalação e financeiro não serão alterados.'))return
+  if(!window.confirm('Mover o card para '+nome+' nos dois Kanbans?\nCompras, produção, instalação e financeiro não serão alterados.'))return
   setSalvandoCard(true);setErro('')
   try{
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
