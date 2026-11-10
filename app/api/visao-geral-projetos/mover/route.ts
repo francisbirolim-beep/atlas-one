@@ -2,11 +2,12 @@ import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
 import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
+import {ETAPAS_OPERACIONAIS} from '@/lib/visaoGeralProjetos'
 
 export const dynamic='force-dynamic'
 export const runtime='nodejs'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const etapas=new Set(['vendido','separacao_materiais','compras','aguardando_materiais','medicao_final','producao','instalacao','finalizado'])
+const etapas=new Set<string>(ETAPAS_OPERACIONAIS)
 const falha=(erro:string,status:number)=>NextResponse.json({erro},{status,headers:{'Cache-Control':'no-store'}})
 
 /** Move só o card principal na apresentação dos dois Kanbans; não altera os status operacionais. */
