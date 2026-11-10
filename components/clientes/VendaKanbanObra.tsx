@@ -59,6 +59,11 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    if(!res.ok)throw Error(payload.erro||'Não foi possível consultar o Kanban da obra.')
    // Descartar respostas antigas ou consultas iniciadas antes de uma movimentação.
    if(movimentacaoEmCurso.current||geracao!==leituraAtual.current)return
+   const banco=payload.posicoesPersistidas?.[vendaId]
+   if(typeof banco==='string'&&(payload.colunas||COLUNAS_GERAIS_PADRAO).some((c:{id:string})=>c.id===banco)){
+    payload.cards=(payload.cards||[]).map((c:ProjetoGeralCard)=>
+     c.vendaId===vendaId?{...c,colunaId:banco}:c)
+   }
    const gravada=posicaoGravada.current
    if(gravada){
     const card=payload.cards?.find((c:ProjetoGeralCard)=>c.vendaId===gravada.vendaId)
