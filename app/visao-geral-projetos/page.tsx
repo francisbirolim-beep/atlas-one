@@ -564,36 +564,89 @@ export default function VisaoGeralProjetos(){
      <div className="mt-1 flex flex-wrap items-baseline gap-2"><b className="text-[25px] font-bold leading-7 text-white">{k.numero}</b><span className="text-[10px] text-[#9bb7d8]">{k.detalhe}</span></div>
     </div>
    })}</div>
-   {config&&podeEditarColunas&&<section className="mb-4 space-y-3 rounded-xl border border-[#2b4665] bg-[#10233d] p-4">
-    <div><h2 className="font-extrabold text-white">Personalizar Kanban</h2><p className="text-xs text-slate-300">Somente Master. Colunas e sequência compartilhadas automaticamente com o Cliente 360 e cada Kanban de obra. Mudanças são visuais e não alteram produção, compras e instalação. {avisoConfiguracao}</p></div>
-    <div className="flex flex-wrap gap-2"><input value={novoNome} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da nova coluna" aria-label="Nome da nova coluna" className="rounded-md border border-[#375073] bg-[#0c2038] px-3 py-2 text-sm text-white"/><button onClick={criar} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold">+ Criar coluna</button></div>
-    <div className="flex flex-wrap gap-2 text-xs"><label className="self-center">Etapa operacional:</label><select value={novoCriterio} onChange={e=>setNovoCriterio(e.target.value as EtapaOperacional)} className="rounded-md border border-[#375073] bg-[#0c2038] px-2 py-1.5">{ETAPAS_OPERACIONAIS.map(x=><option key={x} value={x}>{x}</option>)}</select></div>
-    <p className="text-[11px] text-slate-300">Arraste as colunas para ordenar ou use as setas. A sequência será a mesma em todos os Kanbans do cliente.</p>
-    <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">{colunasOrdenadas.map(c=><div key={c.id} draggable
-     onDragStart={e=>{e.dataTransfer.setData('text/plain',c.id);e.dataTransfer.effectAllowed='move';setArrastandoColuna(c.id)}}
-     onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='move'}}
-     onDrop={e=>{e.preventDefault();soltarColuna(c.id);setArrastandoColuna(null)}}
-     onDragEnd={()=>setArrastandoColuna(null)}
-     className={'rounded-lg border p-2 '+(arrastandoColuna===c.id?'border-blue-400 bg-[#1b3a59]':'border-[#39516b]')}>
-     <p className="mb-1 flex items-center gap-1 text-[10px] text-slate-300"><GripVertical size={14}/> Etapa {c.ordem+1} · {c.criterios.length} vínculo(s) operacional(is)</p>
-     <input value={nomeEditando[c.id]??c.nome} onChange={e=>setNomeEditando(a=>({...a,[c.id]:e.target.value}))} className="mb-2 w-full rounded border border-[#34506b] bg-[#102a45] px-2 py-1.5 text-sm" aria-label={'Nome da coluna '+c.nome}/>
-     <textarea value={c.descricao||''} onChange={e=>alterarColuna(c.id,{descricao:e.target.value})} maxLength={240} rows={2} placeholder="Descrição da etapa" aria-label={'Descrição da coluna '+c.nome} className="mb-2 w-full rounded border border-[#34506b] bg-[#102a45] px-2 py-1.5 text-xs"/>
-     <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
-      <label className="flex items-center gap-1">Cor <input type="color" value={c.cor||'#2679fb'} aria-label={'Cor da coluna '+c.nome} onChange={e=>alterarColuna(c.id,{cor:e.target.value})} className="h-7 w-9 cursor-pointer rounded border border-[#34506b] bg-transparent"/></label>
-      <label className="flex items-center gap-1">Prazo <input type="number" min={0} max={3650} value={Math.round(((c.prazoHoras??((c.prazoDias??0)*24)))/(unidadePrazos[c.id]==='horas'?1:24))||''} placeholder="Sem prazo" aria-label={'Prazo da coluna '+c.nome}
-       onChange={e=>{const n=Number(e.target.value);alterarColuna(c.id,{prazoDias:null,prazoHoras:e.target.value&&n>0?n*(unidadePrazos[c.id]==='horas'?1:24):null})}} className="w-16 rounded border border-[#34506b] bg-[#102a45] px-1 py-1"/></label>
-      <select aria-label={'Unidade do prazo de '+c.nome} value={unidadePrazos[c.id]||'dias'} onChange={e=>{const unidade=e.target.value as 'horas'|'dias';setUnidadePrazos(p=>({...p,[c.id]:unidade}));alterarColuna(c.id,{prazoDias:null,prazoHoras:(c.prazoHoras??((c.prazoDias??0)*24))||null})}} className="rounded border border-[#34506b] bg-[#102a45] px-1 py-1"><option value="horas">Horas</option><option value="dias">Dias</option></select>
+   {editandoColuna&&podeEditarColunas&&<div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/70 p-3" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)fecharEditorColuna()}}>
+    <div role="dialog" aria-modal="true" aria-label={'Editar coluna '+editandoColuna.nome} className="flex w-full max-w-[560px] max-h-[90vh] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
+     <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+      <div><h2 className="text-lg font-extrabold">Editar coluna</h2><p className="text-xs text-slate-500">{editandoColuna.nome} · Somente Master</p></div>
+      <button type="button" onClick={fecharEditorColuna} aria-label="Fechar sem salvar" className="rounded p-2 hover:bg-slate-100"><X size={20}/></button>
+     </header>
+     <div className="flex gap-1 border-b border-slate-200 px-4 py-2 text-xs font-bold">
+      {([['coluna','Personalizar coluna'],['status','Status da coluna'],['prazo','Prazo da etapa']] as const).map(([id,nome])=>
+       <button key={id} type="button" onClick={()=>setAbaConfigColuna(id)}
+        className={'flex-1 rounded px-2 py-2 '+(abaConfigColuna===id?'bg-blue-600 text-white':'bg-slate-100 text-slate-700 hover:bg-slate-200')}>{nome}</button>)}
      </div>
-     <div className="mb-2 space-y-1 text-[10px]">
-      <p className="font-bold text-slate-200">Status desta etapa</p>
-      {(c.statusDisponiveis||[]).map(s=><div key={s.id} className="flex items-center justify-between gap-1 rounded border border-white/10 px-2 py-1"><span>{s.nome}</span><button type="button" onClick={()=>alterarStatus(c.id,s.id)} className="rounded bg-[#34506b] px-2 py-0.5">Editar</button></div>)}
-      <button type="button" onClick={()=>adicionarStatus(c.id)} className="rounded border border-[#48627f] px-2 py-1">+ Criar status</button>
+     <div className="space-y-4 overflow-y-auto p-4 text-sm">
+      {abaConfigColuna==='coluna'&&<>
+       <label className="block space-y-1 text-xs font-bold">Nome da coluna
+        <input value={nomeEditando[editandoColuna.id]??editandoColuna.nome} maxLength={70}
+         onChange={e=>{edicaoColunasPendente.current=true;setNomeEditando(a=>({...a,[editandoColuna.id]:e.target.value}))}}
+         className="w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="Nome da coluna"/>
+       </label>
+       <label className="block space-y-1 text-xs font-bold">Descrição
+        <textarea value={editandoColuna.descricao||''} maxLength={240} rows={3} onChange={e=>alterarColuna(editandoColuna.id,{descricao:e.target.value})}
+         className="w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="Descreva o objetivo desta etapa"/>
+       </label>
+       <label className="flex items-center gap-3 text-xs font-bold">Cor da coluna
+        <input type="color" value={editandoColuna.cor||'#2679fb'} onChange={e=>alterarColuna(editandoColuna.id,{cor:e.target.value})}
+         className="h-9 w-14 cursor-pointer rounded border border-slate-300" aria-label="Escolher cor da coluna"/>
+       </label>
+       <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-xs">
+        <span className="font-semibold">Ordem:</span>
+        <button type="button" onClick={()=>ordem(editandoColuna.id,-1)} className="rounded border px-3 py-1.5">← Mover para esquerda</button>
+        <button type="button" onClick={()=>ordem(editandoColuna.id,1)} className="rounded border px-3 py-1.5">Mover para direita →</button>
+       </div>
+       <div className="space-y-2 border-t border-slate-100 pt-3 text-xs">
+        <p className="font-semibold text-slate-600">Vínculo operacional (avançado)</p>
+        <p className="text-slate-500">Altere apenas quando precisar associar uma etapa real. O movimento visual não altera os registros dos setores.</p>
+        <div className="flex flex-wrap gap-2">
+         <select value={novoCriterio} onChange={e=>setNovoCriterio(e.target.value as EtapaOperacional)} className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-2">{ETAPAS_OPERACIONAIS.map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select>
+         <button type="button" onClick={()=>vincular(editandoColuna.id)} className="rounded border border-blue-400 px-3 py-2 font-semibold text-blue-800">Vincular</button>
+        </div>
+       </div>
+      </>}
+      {abaConfigColuna==='status'&&<>
+       <p className="text-xs text-slate-600">O Master define os status disponíveis; funcionários autorizados podem marcar vários no mesmo card.</p>
+       <div className="space-y-2">{(editandoColuna.statusDisponiveis||[]).map(s=>
+        <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2">
+         <span className="min-w-0 flex-1 text-xs font-bold">{s.nome}</span>
+         <label className="flex items-center gap-1 text-[11px] text-slate-600"><input type="checkbox" checked={s.conclusivo===true}
+          onChange={e=>alterarColuna(editandoColuna.id,{statusDisponiveis:editandoColuna.statusDisponiveis?.map(x=>x.id===s.id?{...x,conclusivo:e.target.checked}:x)})}/> Conclui etapa</label>
+         <button type="button" onClick={()=>alterarStatus(editandoColuna.id,s.id)} className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-blue-800">Editar</button>
+        </div>)}</div>
+       <button type="button" onClick={()=>adicionarStatus(editandoColuna.id)} className="rounded border border-blue-300 px-3 py-2 text-xs font-bold text-blue-800">+ Adicionar status</button>
+       <p className="text-[11px] text-slate-500">A opção “Conclui etapa” marca o card como concluído no prazo, sem mover a obra para outra coluna.</p>
+      </>}
+      {abaConfigColuna==='prazo'&&<>
+       <p className="text-xs text-slate-600">Defina o tempo máximo que o projeto pode permanecer nesta etapa, contado da entrada registrada do card.</p>
+       <div className="flex flex-wrap gap-3">
+        <label className="flex-1 space-y-1 text-xs font-bold">Prazo
+         <input type="number" min="0" step="0.5" value={(()=>{const h=editandoColuna.prazoHoras??((editandoColuna.prazoDias??0)*24);return h>0?(unidadePrazos[editandoColuna.id]|| (editandoColuna.prazoHoras!=null?'horas':'dias'))==='horas'?h:h/24:''})()}
+          onChange={e=>{const n=Number(e.target.value);const unidade=unidadePrazos[editandoColuna.id]|| (editandoColuna.prazoHoras!=null?'horas':'dias');alterarColuna(editandoColuna.id,{prazoDias:null,prazoHoras:e.target.value&&n>0?Math.round(n*(unidade==='horas'?1:24)):null})}}
+          className="w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="Sem prazo"/>
+        </label>
+        <label className="space-y-1 text-xs font-bold">Unidade
+         <select value={unidadePrazos[editandoColuna.id]||(editandoColuna.prazoHoras!=null?'horas':'dias')}
+          onChange={e=>setUnidadePrazos(p=>({...p,[editandoColuna.id]:e.target.value as 'horas'|'dias'}))}
+          className="w-full rounded border border-slate-300 px-3 py-2 text-sm"><option value="horas">Horas</option><option value="dias">Dias</option></select>
+        </label>
+       </div>
+       <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+        <p><b className="text-slate-600">Branco:</b> sem entrada confirmada ou sem prazo</p>
+        <p><b className="text-amber-600">Amarelo:</b> em andamento e dentro do prazo</p>
+        <p><b className="text-emerald-600">Verde:</b> etapa concluída dentro do prazo</p>
+        <p><b className="text-rose-600">Vermelho:</b> prazo excedido</p>
+       </div>
+       <p className="text-[11px] text-slate-500">Cards antigos sem data confiável de entrada não serão marcados como atrasados automaticamente.</p>
+      </>}
+      {!!validade.length&&<p className="rounded bg-rose-50 p-2 text-xs text-rose-800">{validade.join('; ')}</p>}
+      {!!avisoConfiguracao&&<p className="text-xs text-slate-500">{avisoConfiguracao}</p>}
      </div>
-     <div className="flex flex-wrap gap-1">{([['Salvar',()=>renomear(c.id)],['←',()=>ordem(c.id,-1)],['→',()=>ordem(c.id,1)],['Vincular',()=>vincular(c.id)],['Excluir',()=>excluir(c.id)]] as [string,()=>void][]).map(([l,acao])=><button key={l} onClick={acao} className="rounded border border-[#48627f] px-2 py-1 text-[10px] hover:bg-blue-950">{l}</button>)}</div>
-    </div>)}</div>
-    {!!validade.length&&<p className="text-xs text-rose-300">{validade.join('; ')}</p>}
-    {configuravel&&!demo&&<button disabled={!!validade.length} onClick={()=>void salvarConfig()} className="rounded-md bg-blue-600 px-4 py-2 text-xs font-bold disabled:opacity-40">Salvar configuração da empresa</button>}
-   </section>}
+     <footer className="flex items-center justify-end gap-2 border-t border-slate-200 bg-white p-3">
+      <button type="button" onClick={fecharEditorColuna} className="rounded border border-slate-300 px-4 py-2 text-xs font-bold">Cancelar</button>
+      <button type="button" onClick={()=>void salvarConfig()} disabled={!!validade.length} className="rounded bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Salvar alterações</button>
+     </footer>
+    </div>
+   </div>}
    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
     <span className="inline-flex items-center gap-1"><ShieldCheck size={13}/> Etapas calculadas pelos setores; posições ajustadas manualmente não alteram os registros operacionais</span>
     <span>{carregando?'Consultando a empresa…':atualizado?'Atualizado: '+new Date(atualizado).toLocaleString('pt-BR'):'Aguardando dados'}</span>
@@ -631,7 +684,8 @@ export default function VisaoGeralProjetos(){
         <div className="flex items-center gap-1">
          <Icon size={15} className="shrink-0"/>
          <h2 className="min-w-0 flex-1 text-[11px] font-extrabold leading-tight">{col.nome}</h2>
-         {podeEditarColunas&&<span draggable onDragStart={e=>{e.stopPropagation();e.dataTransfer.setData('text/plain','atlas-coluna:'+col.id);e.dataTransfer.effectAllowed='move';setArrastandoColuna(col.id)}} onDragEnd={()=>setArrastandoColuna(null)} title="Arrastar para reorganizar coluna" className="cursor-grab" role="button" aria-label={'Arrastar coluna '+col.nome}><GripVertical size={14}/></span>}
+         {podeEditarColunas&&<span draggable onDragStart={e=>{e.stopPropagation();e.dataTransfer.setData('text/plain','atlas-coluna:'+col.id);e.dataTransfer.effectAllowed='move';setArrastandoColuna(col.id)}} onDragEnd={()=>setArrastandoColuna(null)} title="Arrastar para reorganizar coluna" className="cursor-grab" role="button" aria-label={'Arrastar coluna '+col.nome}><GripVertical size={14}/></span>
+         {podeEditarColunas&&<button type="button" title={'Editar coluna '+col.nome} aria-label={'Editar coluna '+col.nome} onClick={()=>{setEditarColunaId(col.id);setAbaConfigColuna('coluna')}} className="rounded px-1 text-lg font-bold leading-4 text-white hover:bg-white/20">⋮</button>}}
          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold">{vis.length}{pedidosCol.length?' + '+pedidosCol.length:''}{manuaisCol.length?' + '+manuaisCol.length:''}</span>
         </div>
         {col.descricao&&<p title={col.descricao} className="mt-1 line-clamp-2 text-[10px] text-white/90">{col.descricao}</p>}
