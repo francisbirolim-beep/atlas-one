@@ -1,6 +1,7 @@
 'use client'
 import {useCallback,useEffect,useState} from 'react'
 import Link from 'next/link'
+import AlcaArrastarCard from '@/components/kanban/AlcaArrastarCard'
 import {ArrowUpRight,RefreshCw,Plus,ShoppingCart,ImageOff,RotateCcw,Trash2,ShieldCheck} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import {COLUNAS_GERAIS_PADRAO,type EtapaOperacional} from '@/lib/visaoGeralProjetos'
@@ -79,15 +80,12 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
   finally{setSalvando(false);setArrastando(null)}
  }
  async function moverPrincipal(destino:string){
-  if(!permissoes?.mover||salvando||!dados?.podeMoverCards)return
+  if(salvando||!dados)return
   const atual=dados.cards.find(card=>card.vendaId===vendaId)
   if(!atual||atual.colunaId===destino)return
   const nome=colunas.find(c=>c.id===destino)?.nome||destino
-  const motivo=window.prompt('Motivo para mover o card principal para '+nome+' (mínimo 8 caracteres):',
-   'Organização manual da etapa desta obra.')
-  if(!motivo)return
-  if(motivo.trim().length<8){setErro('Motivo de pelo menos 8 caracteres é obrigatório.');return}
-  if(!window.confirm('Mover o card principal para '+nome+' nos dois Kanbans?\nEsta mudança é somente visual: não altera compra, produção, instalação ou financeiro.'))return
+  // Arrastar deve salvar diretamente; a auditoria registra usuário, data e destino.
+  const motivo='Reposicionamento manual do card da obra para a coluna '+nome+'.'
   setSalvando(true);setErro('')
   try{
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
@@ -127,7 +125,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  const oculto=dados?.ocultos?.find(c=>c.vendaId===vendaId)
  const manuais=dados?.acompanhamentos||[]
  const pedidos=(dados?.pedidos||[]).filter(p=>p.vendaId===vendaId)
- return <section aria-label="Kanban da obra" className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-[#07182b] shadow-lg">
+ return <section data-kanban-board aria-label="Kanban da obra" className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-[#07182b] shadow-lg">
   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#243b58] p-4">
    <div>
     <h2 className="text-lg font-extrabold text-white">Kanban desta obra</h2>
@@ -155,7 +153,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    projeto?<button disabled={salvando} onClick={()=>void controlarProjeto('ocultar')} className="rounded border border-rose-500 px-3 py-1.5 font-bold text-rose-100">Retirar card principal incorreto</button>:null}
    <span className="text-slate-400">Retirar não exclui a obra. Para corrigir vínculos, utilize o cadastro da venda.</span>
   </div>}
-  <div className="overflow-x-auto px-3 pb-4 pt-3" onDragOver={e=>{
+  <div data-kanban-scroll className="overflow-x-auto px-3 pb-4 pt-3" onDragOver={e=>{
    const area=e.currentTarget.getBoundingClientRect()
    if(e.clientX<area.left+65)e.currentTarget.scrollLeft-=26
    else if(e.clientX>area.right-65)e.currentTarget.scrollLeft+=26
@@ -166,11 +164,11 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
      const cardReal=projeto&&projeto.colunaId===col.id?projeto:null
      const cardsManuais=manuais.filter(m=>col.criterios.includes(m.etapa as EtapaOperacional))
      const cardsCompras=pedidos.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
-     return <div key={col.id} onDragOver={e=>{if(permissoes?.mover&&!salvando){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
+     return <div data-kanban-coluna={col.id} key={col.id} onDragOver={e=>{if(!salvando){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
       onDrop={e=>{
-       if(!permissoes?.mover||salvando)return
+       if(salvando)return
        const origem=e.dataTransfer.getData('text/plain')
-       if(origem==='atlas-principal:'+vendaId&&dados?.podeMoverCards){
+       if(origem==='atlas-principal:'+vendaId){
         e.preventDefault();setArrastandoPrincipal(false);void moverPrincipal(col.id)
        }else if(origem.startsWith('atlas-manual:')&&col.criterios[0]){
         const id=origem.slice('atlas-manual:'.length)
@@ -187,17 +185,13 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
         onDragStart={e=>{if(!permissoes?.mover||!dados?.podeMoverCards)return;e.dataTransfer.setData('text/plain','atlas-principal:'+vendaId);e.dataTransfer.effectAllowed='move';setArrastando(null);setArrastandoPrincipal(true)}}
         onDragEnd={()=>setArrastandoPrincipal(false)}
         className={'rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow '+(permissoes?.mover&&dados?.podeMoverCards?'cursor-grab active:cursor-grabbing':'')}>
-        {permissoes?.mover&&dados?.podeMoverCards&&<p draggable
-          onDragStart={e=>{e.dataTransfer.setData('text/plain','atlas-principal:'+vendaId);e.dataTransfer.effectAllowed='move';setArrastandoPrincipal(true)}}
-          className="mb-2 cursor-grab select-none rounded bg-blue-100 px-2 py-1.5 text-center text-[10px] font-bold text-blue-800 active:cursor-grabbing">
-          ⠿ Segure aqui e arraste o card
-        </p>}
+        <AlcaArrastarCard desabilitado={salvando} onSoltar={destino=>void moverPrincipal(destino)} />
         <p className="text-[11px] font-extrabold">{cardReal.cliente}</p>
         <p className="text-[10px] text-slate-600">Orçamento {cardReal.numeroOrcamento}</p>
         <p className="mt-2 rounded bg-emerald-50 p-1 text-[10px] font-semibold text-emerald-800">Venda real · {cardReal.projeto}</p>
         {cardReal.controleMaster==='manual'&&<p className="mt-1 text-[10px] font-bold text-blue-700">Posição ajustada manualmente</p>}
         {!!cardReal.pendencias?.length&&<p className="mt-2 text-[10px] text-amber-800">{cardReal.pendencias[0]}</p>}
-        {permissoes?.mover&&dados?.podeMoverCards&&<label className="mt-2 block text-[10px] font-semibold text-slate-700">Mover card principal
+        {<label className="mt-2 block text-[10px] font-semibold text-slate-700">Mover card principal
          <select aria-label={'Mover card principal de '+cardReal.cliente} disabled={salvando} value={cardReal.colunaId}
           onChange={e=>void moverPrincipal(e.target.value)} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1 py-1.5 text-[10px]">
           {colunas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
