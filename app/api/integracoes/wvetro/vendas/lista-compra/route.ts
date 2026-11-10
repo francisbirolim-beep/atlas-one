@@ -26,7 +26,7 @@ export async function GET(req:NextRequest){
  if(!/^[0-9a-f-]{36}$/i.test(vendaId))return erro('Venda inválida.')
  try{
   const {data:venda,error:eVenda}=await supabaseAdmin.from('vendas_obras')
-   .select('id,orcamento_id').eq('id',vendaId).eq('empresa_id',usuario.empresa_id).maybeSingle()
+   .select('id,orcamento_id').eq('id',vendaId).eq('empresa_id',usuario.empresa_id).is('excluida_em',null).maybeSingle()
   if(eVenda)throw eVenda
   if(!venda)return erro('Venda não encontrada para esta empresa.',404)
   const {data:orcamento,error:eOrc}=await supabaseAdmin.from('orcamentos')
