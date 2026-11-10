@@ -144,7 +144,7 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
       if(!resp.ok||!dados.ok)throw Error(dados.error||'A exclusão da venda não foi confirmada.')
       setVendaParaExcluir(null)
       setConfirmacao('')
-      setSucesso('Venda #'+v.numero+' excluída da lista, com auditoria. '+(Number(dados.contasCanceladas)>0?dados.contasCanceladas+' pré-lançamento(s) financeiro(s) sem pagamento cancelado(s). ':'')+'Agora é possível sincronizar o orçamento correto do W.Vetro.')
+      setSucesso('Venda #'+v.numero+' excluída da lista, com auditoria. '+(Number(dados.contasCanceladas)>0?dados.contasCanceladas+' pré-lançamento(s) financeiro(s) sem pagamento cancelado(s). ':'')+'Confira e vincule o número correto do W.Vetro. Se for o mesmo orçamento Atlas, será necessária uma revisão do vínculo histórico.')
       await carregar()
     }catch(e){setErro(e instanceof Error?e.message:'Falha ao excluir venda.')}
     finally{setExcluindo(false)}
@@ -236,7 +236,7 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         A venda sairá dos Kanbans e relatórios ativos, mas <b>não será apagada definitivamente</b>.
         O histórico e o orçamento serão preservados. Pré-lançamentos financeiros automáticos sem pagamento poderão ser cancelados.
-        Vendas com recebimentos, produção, cotação ou instalação vinculadas serão bloqueadas pelo servidor.
+        Vendas com recebimentos, produção, cotação ou instalação vinculadas serão bloqueadas pelo servidor. A exclusão não libera automaticamente o mesmo orçamento para outra venda; esse vínculo exige revisão administrativa.
        </p>
        <label className="block text-sm font-semibold text-slate-800">Motivo da exclusão
         <textarea value={motivoExclusao} maxLength={1000} onChange={e=>setMotivoExclusao(e.target.value)}
