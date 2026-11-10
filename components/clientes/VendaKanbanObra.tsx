@@ -80,13 +80,13 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  async function moverPrincipal(destino:string){
   if(!permissoes?.mover||salvando||!dados?.podeMoverCards)return
   const atual=dados.cards.find(card=>card.vendaId===vendaId)
-  if(!atual||atual.etapaOperacional===destino)return
+  if(!atual||COLUNAS_GERAIS_PADRAO.find(col=>col.criterios.includes(atual.etapaOperacional as EtapaOperacional))?.criterios[0]===destino)return
   const nome=nomesEtapas[destino]||destino
   const motivo=window.prompt('Motivo para mover o card principal para '+nome+' (mínimo 8 caracteres):',
    'Organização manual da etapa desta obra.')
   if(!motivo)return
   if(motivo.trim().length<8){setErro('Motivo de pelo menos 8 caracteres é obrigatório.');return}
-  if(!window.confirm('Mover o card principal para '+nome+' nos dois Kanbans?\\nEsta mudança é somente visual: não altera compra, produção, instalação ou financeiro.'))return
+  if(!window.confirm('Mover o card principal para '+nome+' nos dois Kanbans?\nEsta mudança é somente visual: não altera compra, produção, instalação ou financeiro.'))return
   setSalvando(true);setErro('')
   try{
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
@@ -179,7 +179,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
         {cardReal.controleMaster==='manual'&&<p className="mt-1 text-[10px] font-bold text-blue-700">Posição ajustada manualmente</p>}
         {!!cardReal.pendencias?.length&&<p className="mt-2 text-[10px] text-amber-800">{cardReal.pendencias[0]}</p>}
         {permissoes?.mover&&dados?.podeMoverCards&&<label className="mt-2 block text-[10px] font-semibold text-slate-700">Mover card principal
-         <select aria-label={'Mover card principal de '+cardReal.cliente} disabled={salvando} value={cardReal.etapaOperacional}
+         <select aria-label={'Mover card principal de '+cardReal.cliente} disabled={salvando} value={col.criterios[0]}
           onChange={e=>void moverPrincipal(e.target.value)} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1 py-1.5 text-[10px]">
           {etapas.map(e=><option key={e} value={e}>{nomesEtapas[e]}</option>)}
          </select></label>}
