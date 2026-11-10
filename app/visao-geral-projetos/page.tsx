@@ -184,9 +184,13 @@ export default function VisaoGeralProjetos(){
    if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
    if(Array.isArray(j.colunas))setColunas(j.colunas)
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>{
-    const col=posicoesGravadas.current.get(c.vendaId)
-    if(col&&c.colunaId===col)posicoesGravadas.current.delete(c.vendaId)
-    return {...c,colunaId:col||c.colunaId,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]}
+    const colBanco=j.posicoesPersistidas?.[c.vendaId]
+    const colValida=typeof colBanco==='string'&&(j.colunas||COLUNAS_GERAIS_PADRAO)
+     .some((col:ColunaVisualProjeto)=>col.id===colBanco)?colBanco:null
+    const colLocal=posicoesGravadas.current.get(c.vendaId)
+    if(colLocal&&colValida===colLocal)posicoesGravadas.current.delete(c.vendaId)
+    const destino=colLocal||colValida||c.colunaId
+    return {...c,colunaId:destino,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]}
    }))
    setPedidos(j.pedidos||[]);setAcompanhamentos(j.acompanhamentos||[]);setUsuarioMaster(j.usuarioMaster===true);setPodeMoverCards(j.podeMoverCards===true)
    setOcultos(j.usuarioMaster===true?j.ocultos||[]:[])
