@@ -165,6 +165,22 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    setSalvando(false);setArrastandoPrincipal(false)
   }
  }
+ async function salvarStatusEtapa(colunaId:string,statusIds:string[]){
+  if(!dados?.podeMoverCards||salvando)return
+  setSalvando(true)
+  try{
+   const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+   const res=await fetch('/api/visao-geral-projetos/status',{
+    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({vendaId,colunaId,statusIds}),
+   })
+   const j=await res.json().catch(()=>({}))
+   if(!res.ok||!j.ok)throw Error(j.erro||'Não foi possível salvar os status.')
+   setAviso('Status da etapa atualizado no Kanban Geral e nesta obra.')
+   await ler()
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao atualizar status.')}
+  finally{setSalvando(false)}
+ }
  async function controlarProjeto(acao:'ocultar'|'restaurar'){
   if(!dados?.usuarioMaster||salvando)return
   const motivo=window.prompt(acao==='ocultar'?
@@ -251,7 +267,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
        }
       }}
       className="min-h-[260px] overflow-hidden rounded-lg border border-white/10" style={{background:base}}>
-      <h3 className="flex items-center justify-between px-2 py-3 text-[11px] font-bold text-white" style={{background:cor}}>
+      <h3 className="flex items-center justify-between px-2 py-3 text-[11px] font-bold text-white" style={{background:col.cor||cor}}>
        <span>{col.nome}</span><span className="rounded-full bg-white/15 px-1.5">{Number(!!cardReal)+cardsManuais.length+cardsCompras.length}</span>
       </h3>
       <div className="space-y-2 p-1.5">
@@ -283,6 +299,21 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
         <p className="text-[10px] text-slate-600">Orçamento {cardReal.numeroOrcamento}</p>
         <p className="mt-2 rounded bg-emerald-50 p-1 text-[10px] font-semibold text-emerald-800">Venda real · {cardReal.projeto}</p>
         {cardReal.controleMaster==='manual'&&<p className="mt-1 text-[10px] font-bold text-blue-700">Posição ajustada manualmente</p>}
+        {!!col.statusDisponiveis?.length&&<div className="mt-2 space-y-1 rounded border border-slate-100 bg-slate-50 p-2">
+         <p className="text-[10px] font-bold text-slate-700">Status de {col.nome}</p>
+         {(col.statusDisponiveis||[]).map(s=>{
+          const ativos=cardReal.statusEtapa||[]
+          return <label key={s.id} className="flex items-center gap-2 text-[10px] text-slate-700">
+           <input type="checkbox" checked={ativos.includes(s.id)} disabled={salvando||!dados?.podeMoverCards}
+            onChange={e=>void salvarStatusEtapa(col.id,e.target.checked?[...ativos,s.id]:ativos.filter(id=>id!==s.id))}/>
+           <span className={s.conclusivo?'font-bold text-emerald-700':''}>{s.nome}</span>
+          </label>
+         })}
+        </div>}
+        {cardReal.prazoEtapaEstado&&cardReal.prazoEtapaEstado!=='sem_prazo'&&
+         <p className={'mt-1 rounded px-2 py-1 text-[10px] font-bold '+(cardReal.prazoEtapaEstado==='vermelho'?'bg-rose-100 text-rose-800':cardReal.prazoEtapaEstado==='verde'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-900')}>
+          {cardReal.prazoEtapaEstado==='vermelho'?'Prazo vencido':cardReal.prazoEtapaEstado==='verde'?'Concluído no prazo':(cardReal.horasEtapaRestantes??0)+'h restantes'}
+         </p>}
         {!!cardReal.pendencias?.length&&<p className="mt-2 text-[10px] text-amber-800">{cardReal.pendencias[0]}</p>}
         {<label className="mt-2 block text-[10px] font-semibold text-slate-700">Mover card principal
          <select aria-label={'Mover card principal de '+cardReal.cliente} disabled={salvando} value={cardReal.colunaId}
