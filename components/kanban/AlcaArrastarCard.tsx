@@ -1,5 +1,5 @@
 'use client'
-import {useRef,useState,type PointerEvent} from 'react'
+import {useEffect,useRef,useState,type PointerEvent} from 'react'
 
 type Arraste={pointerId:number;x:number;y:number;movendo:boolean}
 type Props={onSoltar:(colunaId:string)=>void;desabilitado?:boolean;label?:string}
@@ -12,8 +12,11 @@ type Props={onSoltar:(colunaId:string)=>void;desabilitado?:boolean;label?:string
 export default function AlcaArrastarCard({onSoltar,desabilitado=false,label='Segure aqui e arraste o card'}:Props){
  const inicio=useRef<Arraste|null>(null)
  const alvo=useRef<HTMLElement|null>(null)
+ const fantasma=useRef<HTMLElement|null>(null)
+ useEffect(()=>()=>{fantasma.current?.remove();alvo.current?.classList.remove('ring-2','ring-cyan-400')},[])
  const [arrastando,setArrastando]=useState(false)
  function limpar(){
+  fantasma.current?.remove();fantasma.current=null
   alvo.current?.classList.remove('ring-2','ring-cyan-400')
   alvo.current=null
   inicio.current=null
@@ -32,7 +35,24 @@ export default function AlcaArrastarCard({onSoltar,desabilitado=false,label='Seg
   if(!a.movendo){
    if(Math.hypot(e.clientX-a.x,e.clientY-a.y)<7)return
    a.movendo=true;setArrastando(true)
+   // O card deve ACOMPANHAR o mouse, não apenas destacar o destino.
+   // O clone é só visual e jamais é enviado ao backend.
+   const fonte=e.currentTarget.closest<HTMLElement>('[data-kanban-card]')||e.currentTarget
+   const copia=fonte.cloneNode(true) as HTMLElement
+   copia.removeAttribute('id')
+   const largura=Math.max(145,Math.min(fonte.getBoundingClientRect().width,300))
+   Object.assign(copia.style,{
+    position:'fixed',left:'0',top:'0',width:largura+'px',minWidth:'0',
+    maxHeight:'75vh',overflow:'hidden',pointerEvents:'none',
+    zIndex:'2147483000',opacity:'0.94',transform:'translate(-9999px,-9999px)',
+    boxShadow:'0 16px 35px rgba(0,0,0,.35)',
+    border:'2px solid #0891b2',borderRadius:'10px',
+   })
+   copia.setAttribute('aria-hidden','true')
+   document.body.appendChild(copia)
+   fantasma.current=copia
   }
+  if(fantasma.current)fantasma.current.style.transform='translate('+(e.clientX+14)+'px,'+(e.clientY+14)+'px)'
   const board=e.currentTarget.closest('[data-kanban-board]')
   const scroll=board?.matches('[data-kanban-scroll]')?board as HTMLElement:board?.querySelector<HTMLElement>('[data-kanban-scroll]')
   if(scroll){
