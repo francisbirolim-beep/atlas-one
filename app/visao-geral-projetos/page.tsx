@@ -74,18 +74,35 @@ function FotoReal({url,alt,classe}:{url?:string|null;alt:string;classe?:string})
   }
  </div>
 }
-function CardProjeto({card,compacto,abrir,ativo}:{card:ProjetoGeralCard;compacto:boolean;abrir:()=>void;ativo:boolean}){
+function CardProjeto({card,coluna,compacto,abrir,ativo}:{card:ProjetoGeralCard;coluna:ColunaVisualProjeto;compacto:boolean;abrir:()=>void;ativo:boolean}){
  const materias=Object.fromEntries(card.materiais.map(m=>[m.tipo,percentual(m.comprados,m.total)])) as Record<string,number|null>
+ const status=(coluna.statusDisponiveis||[]).filter(s=>(card.statusEtapa||[]).includes(s.id))
+ const atraso=card.prazoEtapaEstado==='vermelho'
+ const concluido=card.prazoEtapaEstado==='verde'
+ const andamento=card.prazoEtapaEstado==='amarelo'
+ const corPrazo=atraso?'border-rose-500':concluido?'border-emerald-500':andamento?'border-amber-400':'border-[#d8e1f0]'
+ const prazoTexto=atraso?'Atrasado '+Math.abs(card.horasEtapaRestantes||0)+'h'
+   :concluido?'Concluído no prazo'
+   :andamento?Math.max(0,card.horasEtapaRestantes||0)+'h restantes':null
+ const mostrarProducao=['aguardando_producao','producao','aguardando_instalacao','instalacao','finalizado'].includes(card.etapaOperacional)
+ const mostrarInstalacao=['aguardando_instalacao','instalacao','finalizado'].includes(card.etapaOperacional)
+ const progressoProd=percentual(card.producao.concluidas,card.producao.total)
+ const progressoInst=percentual(card.instalacao.concluidas,card.instalacao.total)
  return <button type="button" onClick={abrir} aria-pressed={ativo}
-  className={'group w-full min-w-0 rounded-lg border bg-white text-left shadow-[0_2px_9px_rgba(0,0,0,.18)] transition hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-[0_5px_18px_rgba(0,0,0,.25)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 '+
-  (ativo?'border-[3px] border-blue-500':'border-[#d8e1f0]')+' '+(compacto?'p-2':'p-3')}>
-  <p className="line-clamp-2 min-h-[28px] text-[11px] font-extrabold leading-[14px] text-[#092044]" title={card.cliente}>Cliente: {card.cliente}</p>
+  className={'group w-full min-w-0 rounded-lg border-2 bg-white text-left shadow-[0_2px_9px_rgba(0,0,0,.18)] transition hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-[0_5px_18px_rgba(0,0,0,.25)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 '+
+  (ativo?'border-blue-500 ring-1 ring-blue-400':corPrazo)+' '+(compacto?'p-2':'p-2.5')}>
+  <p className="line-clamp-2 text-[11px] font-extrabold leading-[14px] text-[#092044]" title={card.cliente}>{card.cliente}</p>
   <p className="mt-0.5 truncate text-[10px] text-[#192c50]">Orçamento: <b>{card.numeroOrcamento||'Não vinculado'}</b></p>
-  <FotoReal url={card.fotoProjetoUrl} alt={'Foto vinculada ao orçamento de '+card.cliente} classe={(compacto?'h-[72px]':'h-[110px]')+' mt-2 w-full'}/>
-  <div className="mt-2 space-y-[5px]">
+  <p className="mt-1 line-clamp-2 text-[10px] text-slate-600">Obra: {card.projeto||'Não vinculada'}</p>
+  <div className="mt-2 space-y-[5px]" aria-label="Percentuais de materiais">
    {tipos.map(tipo=><Progresso key={tipo} nome={nomes[tipo]} valor={materias[tipo]??null} compacto/>)}
   </div>
-  {card.compras.total>0&&<p className="mt-2 line-clamp-2 border-t border-slate-100 pt-1 text-[10px] text-blue-700">
+  {mostrarProducao&&<div className="mt-2 border-t border-slate-100 pt-2"><Progresso nome="Produção" valor={progressoProd} compacto/><p className="mt-1 text-[10px] text-slate-500">{card.producao.total?card.producao.concluidas+' de '+card.producao.total+' ordens concluídas':'Sem ordens de produção conciliadas'}</p></div>}
+  {mostrarInstalacao&&<div className="mt-1"><Progresso nome="Instalação" valor={progressoInst} compacto/><p className="mt-1 text-[10px] text-slate-500">{card.instalacao.total?card.instalacao.concluidas+' de '+card.instalacao.total+' itens de instalação concluídos':'Sem itens de instalação conciliados'}</p></div>}
+  {!!status.length&&<div className="mt-2 flex flex-wrap gap-1" aria-label="Status desta etapa">{status.map(s=><span key={s.id} className={'rounded px-1.5 py-1 text-[10px] font-semibold '+(s.conclusivo?'bg-emerald-100 text-emerald-900':'bg-blue-100 text-blue-900')}>{s.nome}</span>)}</div>}
+  {(coluna.statusDisponiveis||[]).length>0&&<p className="mt-1 text-[10px] font-semibold text-blue-700">▾ Abrir para atualizar status</p>}
+  {prazoTexto&&<p className={'mt-2 rounded px-1.5 py-1 text-[10px] font-bold '+(atraso?'bg-rose-100 text-rose-800':concluido?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-900')}><Clock3 size={11} className="mr-1 inline"/>{prazoTexto}</p>}
+  {card.compras.total>0&&<p className="mt-2 border-t border-slate-100 pt-1 text-[10px] text-blue-700">
    <ShoppingCart size={11} className="mr-1 inline"/> {card.compras.comprados} de {card.compras.total} itens comprados
   </p>}
   {card.pendencias.length>0&&<p className="mt-1 line-clamp-2 rounded bg-amber-50 px-1.5 py-1 text-[10px] leading-3 text-amber-800">
@@ -93,7 +110,7 @@ function CardProjeto({card,compacto,abrir,ativo}:{card:ProjetoGeralCard;compacto
   </p>}
   <div className="mt-2 flex items-start gap-1.5 border-t border-slate-100 pt-2 text-[10px] leading-3 text-[#334d76]">
    <CalendarDays size={13} className="shrink-0 text-blue-600"/>
-   <span>Instalação prevista<br/><b>{card.dataInstalacao?dataBr(card.dataInstalacao):card.instalacaoMes||'A programar'}</b></span>
+   <span>Instalação prevista <b>{card.dataInstalacao?dataBr(card.dataInstalacao):card.instalacaoMes||'A programar'}</b></span>
   </div>
  </button>
 }
@@ -164,15 +181,20 @@ export default function VisaoGeralProjetos(){
  const [mostrarOcultos,setMostrarOcultos]=useState(false),[arrastando,setArrastando]=useState<string|null>(null),[arrastandoColuna,setArrastandoColuna]=useState<string|null>(null),[salvandoCard,setSalvandoCard]=useState(false)
  const [selecionado,setSelecionado]=useState<string|null>(null),[aba,setAba]=useState<Aba>('resumo')
  const [erro,setErro]=useState(''),[aviso,setAviso]=useState(''),[carregando,setCarregando]=useState(true),[atualizado,setAtualizado]=useState('')
- const [modoTv,setModoTv]=useState(false),[compacto,setCompacto]=useState(false),[config,setConfig]=useState(false),[novoNome,setNovoNome]=useState('')
+ const [modoTv,setModoTv]=useState(false),[compacto,setCompacto]=useState(false),[editarColunaId,setEditarColunaId]=useState<string|null>(null),[novoNome,setNovoNome]=useState('')
+ const [abaConfigColuna,setAbaConfigColuna]=useState<'coluna'|'status'|'prazo'>('coluna')
+ const [colunasSalvas,setColunasSalvas]=useState<ColunaVisualProjeto[]>(COLUNAS_GERAIS_PADRAO)
+ const [alterandoStatus,setAlterandoStatus]=useState(false)
  const [filtros,setFiltros]=useState(false),[busca,setBusca]=useState(''),[condicao,setCondicao]=useState<Condicao>('todos')
  const [novoCriterio,setNovoCriterio]=useState<EtapaOperacional>('compras_liberacao'),[nomeEditando,setNomeEditando]=useState<Record<string,string>>({})
+ const [unidadePrazos,setUnidadePrazos]=useState<Record<string,'horas'|'dias'>>({})
  const [fechou,setFechou]=useState(false)
  const selecionadoInicial=useRef(false)
  const leituraAtual=useRef(0)
  const movimentoEmCurso=useRef(false)
  const arrasteCard=useRef<{id:string;ponto:CoordenadaArraste|null;tratado:boolean}|null>(null)
  const posicoesGravadas=useRef(new Map<string,string>())
+ const edicaoColunasPendente=useRef(false)
  const carregar=useCallback(async()=>{
   if(demo===null)return
   if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setPodeMoverCards(false);setCarregando(false);setAtualizado(new Date().toISOString());return}
@@ -182,7 +204,7 @@ export default function VisaoGeralProjetos(){
    const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
    if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
-   if(Array.isArray(j.colunas))setColunas(j.colunas)
+   if(Array.isArray(j.colunas)&&!edicaoColunasPendente.current)setColunas(j.colunas)
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>{
     const colBanco=j.posicoesPersistidas?.[c.vendaId]
     const colValida=typeof colBanco==='string'&&(j.colunas||COLUNAS_GERAIS_PADRAO)
@@ -206,7 +228,12 @@ export default function VisaoGeralProjetos(){
    const token=await tokenAtual();if(!token)return
    const r=await fetch('/api/visao-geral-colunas',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}))
-   if(ativo&&r.ok){setColunas(j.colunas||COLUNAS_GERAIS_PADRAO);setConfiguravel(j.configuravel===true);setAvisoConfiguracao(j.aviso||'')}
+   if(ativo&&r.ok){
+    const configuradas=j.colunas||COLUNAS_GERAIS_PADRAO
+    setColunasSalvas(configuradas)
+    if(!edicaoColunasPendente.current)setColunas(configuradas)
+    setConfiguravel(j.configuravel===true);setAvisoConfiguracao(j.aviso||'')
+   }
   }catch{}})()
   return()=>{ativo=false}
  },[demo])
@@ -339,17 +366,54 @@ export default function VisaoGeralProjetos(){
   {label:'Previstos para instalação',numero:previstoInstalacao,detalhe:'Neste mês',cor:'#267efa',icone:CalendarDays},
  ]
  const validade=validarColunasGerais(colunas)
- function criar(){try{if(!podeEditarColunas)throw Error('Somente Master configura etapas.');if(!novoNome.trim())return
-  setColunas(a=>criarColunaGeral(a,'manual_'+Date.now(),novoNome));setNovoNome('');setErro('')
+ function criar(){try{
+  if(!podeEditarColunas)throw Error('Somente Master configura etapas.')
+  if(!novoNome.trim())return
+  const id='manual_'+Date.now()
+  edicaoColunasPendente.current=true
+  setColunas(a=>criarColunaGeral(a,id,novoNome))
+  setNovoNome('');setErro('');setEditarColunaId(id);setAbaConfigColuna('coluna')
  }catch(e){setErro(String(e))}}
- function renomear(id:string){try{setColunas(c=>renomearColunaGeral(c,id,nomeEditando[id]||''));setErro('')}catch(e){setErro(String(e))}}
+ function renomear(id:string){try{
+  edicaoColunasPendente.current=true
+  setColunas(c=>renomearColunaGeral(c,id,nomeEditando[id]||''))
+  setErro('')
+ }catch(e){setErro(String(e))}}
+ function alterarColuna(id:string,patch:Partial<ColunaVisualProjeto>){
+  edicaoColunasPendente.current=true
+  setColunas(antes=>antes.map(c=>c.id===id?{...c,...patch}:c))
+ }
+ function fecharEditorColuna(){
+  edicaoColunasPendente.current=false
+  setColunas(colunasSalvas)
+  setEditarColunaId(null)
+  setNomeEditando({})
+ }
+ function adicionarStatus(id:string){
+  const nome=window.prompt('Nome do novo status desta coluna:')
+  if(!nome?.trim())return
+  const novo={id:'s_'+Date.now().toString(36),nome:nome.trim(),conclusivo:false}
+  alterarColuna(id,{statusDisponiveis:[...(colunas.find(c=>c.id===id)?.statusDisponiveis||[]),novo]})
+ }
+ function alterarStatus(id:string,statusId:string){
+  const col=colunas.find(c=>c.id===id)
+  const atual=col?.statusDisponiveis?.find(s=>s.id===statusId)
+  if(!col||!atual)return
+  const nome=window.prompt('Nome do status:',atual.nome)
+  if(!nome?.trim())return
+  alterarColuna(id,{statusDisponiveis:col.statusDisponiveis?.map(s=>s.id===statusId?{...s,nome:nome.trim()}:s)})
+ }
+ function removerStatus(id:string,statusId:string){
+  // Evitar remover status já associados a cards sem migração explícita.
+  setErro('Exclusão de status será liberada com a auditoria e verificação de cards vinculados.')
+ }
  function vincular(id:string){try{setColunas(c=>associarCriterioColuna(c,novoCriterio,id));setErro('')}catch(e){setErro(String(e))}}
  function excluir(id:string){const dest=colunas.find(c=>c.id!==id);if(!dest)return
   const resposta=window.prompt('ID da coluna de destino dos vínculos (nenhum projeto será excluído):',dest.id);if(!resposta)return
-  try{setColunas(c=>excluirColunaGeral(c,id,resposta));setErro('')}catch(e){setErro(String(e))}
+  try{edicaoColunasPendente.current=true;setColunas(c=>excluirColunaGeral(c,id,resposta));setEditarColunaId(null);setErro('')}catch(e){setErro(String(e))}
  }
  function ordem(id:string,d:number){const ids=colunasOrdenadas.map(c=>c.id),i=ids.indexOf(id),j=i+d;if(j<0||j>=ids.length)return
-  ;[ids[i],ids[j]]=[ids[j],ids[i]];try{setColunas(c=>reordenarColunasGerais(c,ids))}catch(e){setErro(String(e))}
+  ;[ids[i],ids[j]]=[ids[j],ids[i]];try{edicaoColunasPendente.current=true;setColunas(c=>reordenarColunasGerais(c,ids))}catch(e){setErro(String(e))}
  }
  function soltarColuna(destinoId:string){
   if(!arrastandoColuna||arrastandoColuna===destinoId)return
@@ -357,16 +421,42 @@ export default function VisaoGeralProjetos(){
   const origem=ids.indexOf(arrastandoColuna),destino=ids.indexOf(destinoId)
   if(origem<0||destino<0)return
   ids.splice(origem,1);ids.splice(destino,0,arrastandoColuna)
-  try{setColunas(c=>reordenarColunasGerais(c,ids));setErro('')}catch(e){setErro(String(e))}
+  try{edicaoColunasPendente.current=true;setColunas(c=>reordenarColunasGerais(c,ids));setErro('')}catch(e){setErro(String(e))}
  }
  async function salvarConfig(){
-  if(demo){setAvisoConfiguracao('Prévia fictícia: configuração não foi gravada.');return}
+  const novas=colunas.map(x=>({...x,nome:nomeEditando[x.id]??x.nome}))
+  const errosConfig=validarColunasGerais(novas)
+  if(errosConfig.length){setErro(errosConfig.join('; '));return}
+  if(demo){
+   setColunas(novas);setColunasSalvas(novas);edicaoColunasPendente.current=false
+   setEditarColunaId(null);setAvisoConfiguracao('Simulação: configuração não gravada.');return
+  }
   if(!configuravel){setErro('Acesso reservado ao Master.');return}
   try{const token=await tokenAtual();if(!token)throw Error('Sessão expirada')
-   const r=await fetch('/api/visao-geral-colunas',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({colunas})})
+   const r=await fetch('/api/visao-geral-colunas',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({colunas:novas})})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Erro ao salvar')
-   setErro('');setAvisoConfiguracao('Configuração salva e auditada na empresa.')
-  }catch(e){setErro(String(e))}
+   const gravadas=Array.isArray(j.colunas)?j.colunas:novas
+   setColunas(gravadas);setColunasSalvas(gravadas);edicaoColunasPendente.current=false
+   setEditarColunaId(null);setNomeEditando({})
+   setErro('');setAviso('Configuração salva e auditada na empresa.')
+  }catch(e){setErro(e instanceof Error?e.message:'Erro ao salvar configuração.')}
+ }
+ async function atualizarStatusCard(vendaId:string,colunaId:string,ids:string[]){
+  if(demo||!podeMoverCards||alterandoStatus)return
+  setAlterandoStatus(true)
+  try{
+   const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+   const r=await fetch('/api/visao-geral-projetos/status',{
+    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({vendaId,colunaId,statusIds:ids}),
+   })
+   const j=await r.json().catch(()=>({}))
+   if(!r.ok||!j.ok)throw Error(j.erro||'Não foi possível registrar o status.')
+   setCards(anteriores=>anteriores.map(c=>c.vendaId===vendaId?{...c,statusEtapa:ids}:c))
+   setErro('');setAviso('Status da etapa registrado no histórico.')
+   await carregar()
+  }catch(e){setErro(e instanceof Error?e.message:'Erro ao atualizar o status.')}
+  finally{setAlterandoStatus(false)}
  }
  async function alternarTV(){
   if(!modoTv&&document.fullscreenEnabled)await document.documentElement.requestFullscreen().catch(()=>{})
@@ -374,6 +464,7 @@ export default function VisaoGeralProjetos(){
   setModoTv(v=>!v)
  }
  const etapaCard=cardAtual?colunasOrdenadas.find(c=>c.id===cardAtual.colunaId):null
+ const editandoColuna=colunasOrdenadas.find(c=>c.id===editarColunaId)||null
  const percentuais=cardAtual?cardAtual.materiais.map(m=>percentual(m.comprados,m.total)).filter((n):n is number=>n!==null):[]
  const progressoGeral=percentuais.length?Math.round(percentuais.reduce((s,n)=>s+n,0)/percentuais.length):null
 
@@ -432,7 +523,8 @@ export default function VisaoGeralProjetos(){
     <div className="flex flex-wrap items-center gap-2">
      {usuarioMaster&&!demo&&<button type="button" onClick={()=>setMostrarOcultos(v=>!v)} aria-expanded={mostrarOcultos} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Package size={15}/> Cards retirados ({ocultos.length})</button>}
      <button onClick={()=>setFiltros(v=>!v)} aria-expanded={filtros} className={'inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#243c59] '+(filtros?'bg-[#284968]':'bg-[#10253e]')}><Filter size={15}/> Filtros</button>
-     {podeEditarColunas&&<button onClick={()=>setConfig(v=>!v)} aria-expanded={config} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Settings2 size={15}/> Personalizar Kanban</button>}
+     {podeEditarColunas&&<button onClick={()=>{setEditarColunaId(colunasOrdenadas[0]?.id||null);setAbaConfigColuna('coluna')}} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Settings2 size={15}/> Personalizar Kanban</button>}
+     {podeEditarColunas&&edicaoColunasPendente.current&&<button onClick={()=>void salvarConfig()} className="rounded-md bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Salvar alterações</button>}
      <button onClick={()=>setCompacto(v=>!v)} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] text-white"><Columns3 size={15}/>{compacto?'Cards maiores':'Cards menores'}</button>
      <button onClick={()=>void alternarTV()} className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-2 text-[11px] font-semibold text-white hover:bg-blue-600"><Maximize2 size={15}/>{modoTv?'Sair do modo TV':'Modo TV'}</button>
      <Link href="/clientes/identificar" title="Criar ou identificar cliente para abrir uma obra no fluxo oficial" className="inline-flex items-center gap-1.5 rounded-md bg-[#0061d5] px-3 py-2 text-[11px] font-bold text-white hover:bg-blue-600"><Plus size={15}/> Novo Projeto</Link>
@@ -472,24 +564,90 @@ export default function VisaoGeralProjetos(){
      <div className="mt-1 flex flex-wrap items-baseline gap-2"><b className="text-[25px] font-bold leading-7 text-white">{k.numero}</b><span className="text-[10px] text-[#9bb7d8]">{k.detalhe}</span></div>
     </div>
    })}</div>
-   {config&&podeEditarColunas&&<section className="mb-4 space-y-3 rounded-xl border border-[#2b4665] bg-[#10233d] p-4">
-    <div><h2 className="font-extrabold text-white">Personalizar Kanban</h2><p className="text-xs text-slate-300">Somente Master. Colunas e sequência compartilhadas automaticamente com o Cliente 360 e cada Kanban de obra. Mudanças são visuais e não alteram produção, compras e instalação. {avisoConfiguracao}</p></div>
-    <div className="flex flex-wrap gap-2"><input value={novoNome} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da nova coluna" aria-label="Nome da nova coluna" className="rounded-md border border-[#375073] bg-[#0c2038] px-3 py-2 text-sm text-white"/><button onClick={criar} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold">+ Criar coluna</button></div>
-    <div className="flex flex-wrap gap-2 text-xs"><label className="self-center">Etapa operacional:</label><select value={novoCriterio} onChange={e=>setNovoCriterio(e.target.value as EtapaOperacional)} className="rounded-md border border-[#375073] bg-[#0c2038] px-2 py-1.5">{ETAPAS_OPERACIONAIS.map(x=><option key={x} value={x}>{x}</option>)}</select></div>
-    <p className="text-[11px] text-slate-300">Arraste as colunas para ordenar ou use as setas. A sequência será a mesma em todos os Kanbans do cliente.</p>
-    <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">{colunasOrdenadas.map(c=><div key={c.id} draggable
-     onDragStart={e=>{e.dataTransfer.setData('text/plain',c.id);e.dataTransfer.effectAllowed='move';setArrastandoColuna(c.id)}}
-     onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='move'}}
-     onDrop={e=>{e.preventDefault();soltarColuna(c.id);setArrastandoColuna(null)}}
-     onDragEnd={()=>setArrastandoColuna(null)}
-     className={'rounded-lg border p-2 '+(arrastandoColuna===c.id?'border-blue-400 bg-[#1b3a59]':'border-[#39516b]')}>
-     <p className="mb-1 flex items-center gap-1 text-[10px] text-slate-300"><GripVertical size={14}/> Etapa {c.ordem+1} · {c.criterios.length} vínculo(s) operacional(is)</p>
-     <input value={nomeEditando[c.id]??c.nome} onChange={e=>setNomeEditando(a=>({...a,[c.id]:e.target.value}))} className="mb-2 w-full rounded border border-[#34506b] bg-[#102a45] px-2 py-1.5 text-sm"/>
-     <div className="flex flex-wrap gap-1">{([['Salvar',()=>renomear(c.id)],['←',()=>ordem(c.id,-1)],['→',()=>ordem(c.id,1)],['Vincular',()=>vincular(c.id)],['Excluir',()=>excluir(c.id)]] as [string,()=>void][]).map(([l,acao])=><button key={l} onClick={acao} className="rounded border border-[#48627f] px-2 py-1 text-[10px] hover:bg-blue-950">{l}</button>)}</div>
-    </div>)}</div>
-    {!!validade.length&&<p className="text-xs text-rose-300">{validade.join('; ')}</p>}
-    {configuravel&&!demo&&<button disabled={!!validade.length} onClick={()=>void salvarConfig()} className="rounded-md bg-blue-600 px-4 py-2 text-xs font-bold disabled:opacity-40">Salvar configuração da empresa</button>}
-   </section>}
+   {editandoColuna&&podeEditarColunas&&<div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/70 p-3" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)fecharEditorColuna()}}>
+    <div role="dialog" aria-modal="true" aria-label={'Editar coluna '+editandoColuna.nome} className="flex w-full max-w-[560px] max-h-[90vh] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
+     <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+      <div><h2 className="text-lg font-extrabold">Editar coluna</h2><p className="text-xs text-slate-500">{editandoColuna.nome} · Somente Master</p></div>
+      <button type="button" onClick={fecharEditorColuna} aria-label="Fechar sem salvar" className="rounded p-2 hover:bg-slate-100"><X size={20}/></button>
+     </header>
+     <div className="flex gap-1 border-b border-slate-200 px-4 py-2 text-xs font-bold">
+      {([['coluna','Personalizar coluna'],['status','Status da coluna'],['prazo','Prazo da etapa']] as const).map(([id,nome])=>
+       <button key={id} type="button" onClick={()=>setAbaConfigColuna(id)}
+        className={'flex-1 rounded px-2 py-2 '+(abaConfigColuna===id?'bg-blue-600 text-white':'bg-slate-100 text-slate-700 hover:bg-slate-200')}>{nome}</button>)}
+     </div>
+     <div className="space-y-4 overflow-y-auto p-4 text-sm">
+      {abaConfigColuna==='coluna'&&<>
+       <label className="block space-y-1 text-xs font-bold">Nome da coluna
+        <input value={nomeEditando[editandoColuna.id]??editandoColuna.nome} maxLength={70}
+         onChange={e=>{edicaoColunasPendente.current=true;setNomeEditando(a=>({...a,[editandoColuna.id]:e.target.value}))}}
+         className="w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="Nome da coluna"/>
+       </label>
+       <label className="block space-y-1 text-xs font-bold">Descrição
+        <textarea value={editandoColuna.descricao||''} maxLength={240} rows={3} onChange={e=>alterarColuna(editandoColuna.id,{descricao:e.target.value})}
+         className="w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="Descreva o objetivo desta etapa"/>
+       </label>
+       <label className="flex items-center gap-3 text-xs font-bold">Cor da coluna
+        <input type="color" value={editandoColuna.cor||'#2679fb'} onChange={e=>alterarColuna(editandoColuna.id,{cor:e.target.value})}
+         className="h-9 w-14 cursor-pointer rounded border border-slate-300" aria-label="Escolher cor da coluna"/>
+       </label>
+       <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-xs">
+        <span className="font-semibold">Ordem:</span>
+        <button type="button" onClick={()=>ordem(editandoColuna.id,-1)} className="rounded border px-3 py-1.5">← Mover para esquerda</button>
+        <button type="button" onClick={()=>ordem(editandoColuna.id,1)} className="rounded border px-3 py-1.5">Mover para direita →</button>
+       </div>
+       <div className="space-y-2 border-t border-slate-100 pt-3 text-xs">
+        <p className="font-semibold text-slate-600">Vínculo operacional (avançado)</p>
+        <p className="text-slate-500">Altere apenas quando precisar associar uma etapa real. O movimento visual não altera os registros dos setores.</p>
+        <div className="flex flex-wrap gap-2">
+         <select value={novoCriterio} onChange={e=>setNovoCriterio(e.target.value as EtapaOperacional)} className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-2">{ETAPAS_OPERACIONAIS.map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select>
+         <button type="button" onClick={()=>vincular(editandoColuna.id)} className="rounded border border-blue-400 px-3 py-2 font-semibold text-blue-800">Vincular</button>
+        </div>
+       </div>
+      </>}
+      {abaConfigColuna==='status'&&<>
+       <p className="text-xs text-slate-600">O Master define os status disponíveis; funcionários autorizados podem marcar vários no mesmo card.</p>
+       <div className="space-y-2">{(editandoColuna.statusDisponiveis||[]).map(s=>
+        <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 p-2">
+         <span className="min-w-0 flex-1 text-xs font-bold">{s.nome}</span>
+         <label className="flex items-center gap-1 text-[11px] text-slate-600"><input type="checkbox" checked={s.conclusivo===true}
+          onChange={e=>alterarColuna(editandoColuna.id,{statusDisponiveis:editandoColuna.statusDisponiveis?.map(x=>x.id===s.id?{...x,conclusivo:e.target.checked}:x)})}/> Conclui etapa</label>
+         <button type="button" onClick={()=>alterarStatus(editandoColuna.id,s.id)} className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-blue-800">Editar</button>
+        </div>)}</div>
+       <button type="button" onClick={()=>adicionarStatus(editandoColuna.id)} className="rounded border border-blue-300 px-3 py-2 text-xs font-bold text-blue-800">+ Adicionar status</button>
+       <p className="text-[11px] text-slate-500">A opção “Conclui etapa” marca o card como concluído no prazo, sem mover a obra para outra coluna.</p>
+      </>}
+      {abaConfigColuna==='prazo'&&<>
+       <p className="text-xs text-slate-600">Defina o tempo máximo que o projeto pode permanecer nesta etapa, contado da entrada registrada do card.</p>
+       <div className="flex flex-wrap gap-3">
+        <label className="flex-1 space-y-1 text-xs font-bold">Prazo
+         <input type="number" min="0" step="0.5" value={(()=>{const h=editandoColuna.prazoHoras??((editandoColuna.prazoDias??0)*24);return h>0?(unidadePrazos[editandoColuna.id]|| (editandoColuna.prazoHoras!=null?'horas':'dias'))==='horas'?h:h/24:''})()}
+          onChange={e=>{const n=Number(e.target.value);const unidade=unidadePrazos[editandoColuna.id]|| (editandoColuna.prazoHoras!=null?'horas':'dias');alterarColuna(editandoColuna.id,{prazoDias:null,prazoHoras:e.target.value&&n>0?Math.round(n*(unidade==='horas'?1:24)):null})}}
+          className="w-full rounded border border-slate-300 px-3 py-2 text-sm" placeholder="Sem prazo"/>
+        </label>
+        <label className="space-y-1 text-xs font-bold">Unidade
+         <select value={unidadePrazos[editandoColuna.id]||(editandoColuna.prazoHoras!=null?'horas':'dias')}
+          onChange={e=>setUnidadePrazos(p=>({...p,[editandoColuna.id]:e.target.value as 'horas'|'dias'}))}
+          className="w-full rounded border border-slate-300 px-3 py-2 text-sm"><option value="horas">Horas</option><option value="dias">Dias</option></select>
+        </label>
+       </div>
+       <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+        <p><b className="text-slate-600">Branco:</b> sem entrada confirmada ou sem prazo</p>
+        <p><b className="text-slate-500">Branco:</b> aguardando início, dentro do prazo</p>
+        <p><b className="text-amber-600">Amarelo:</b> em andamento e dentro do prazo</p>
+        <p><b className="text-emerald-600">Verde:</b> etapa concluída dentro do prazo</p>
+        <p><b className="text-rose-600">Vermelho:</b> prazo excedido</p>
+       </div>
+       <p className="text-[11px] text-slate-500">Cards antigos sem data confiável de entrada não serão marcados como atrasados automaticamente.</p>
+      </>}
+      {!!validade.length&&<p className="rounded bg-rose-50 p-2 text-xs text-rose-800">{validade.join('; ')}</p>}
+      {!!avisoConfiguracao&&<p className="text-xs text-slate-500">{avisoConfiguracao}</p>}
+     </div>
+     <footer className="flex items-center justify-end gap-2 border-t border-slate-200 bg-white p-3">
+      <button type="button" onClick={fecharEditorColuna} className="rounded border border-slate-300 px-4 py-2 text-xs font-bold">Cancelar</button>
+      <button type="button" onClick={()=>void salvarConfig()} disabled={!!validade.length} className="rounded bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Salvar alterações</button>
+     </footer>
+    </div>
+   </div>}
    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
     <span className="inline-flex items-center gap-1"><ShieldCheck size={13}/> Etapas calculadas pelos setores; posições ajustadas manualmente não alteram os registros operacionais</span>
     <span>{carregando?'Consultando a empresa…':atualizado?'Atualizado: '+new Date(atualizado).toLocaleString('pt-BR'):'Aguardando dados'}</span>
@@ -500,7 +658,7 @@ export default function VisaoGeralProjetos(){
      if(e.clientX<area.left+65)e.currentTarget.scrollLeft-=26
      else if(e.clientX>area.right-65)e.currentTarget.scrollLeft+=26
     }}>
-    <div className="grid min-w-max items-stretch gap-2" style={{gridTemplateColumns:'repeat('+colunasOrdenadas.length+','+(compacto?'155px':'188px')+')'}}>
+    <div className="grid min-w-max items-stretch gap-2" style={{gridTemplateColumns:'repeat('+(colunasOrdenadas.length+(podeEditarColunas?1:0))+','+(compacto?'155px':'188px')+')'}}>
      {colunasOrdenadas.map((col,i)=>{
       const vis=agrupado.get(col.id)||[]
       const pedidosCol=pedidosVisiveis.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
@@ -514,6 +672,7 @@ export default function VisaoGeralProjetos(){
        onDrop={e=>{
         if(demo||salvandoCard)return
         const origem=e.dataTransfer.getData('text/plain')
+        if(origem.startsWith('atlas-coluna:')&&podeEditarColunas){soltarColuna(col.id);setArrastandoColuna(null);return}
         const id=origem.startsWith('atlas-principal:')?
          origem.slice('atlas-principal:'.length):(!origem?arrasteCard.current?.id:null)
         if(!id||!cards.some(c=>c.vendaId===id))return
@@ -522,12 +681,16 @@ export default function VisaoGeralProjetos(){
         setArrastando(null);void moverCardVisual(id,destinoVisual)
        }}
        className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoVisual&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
-       <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:paleta.cabecalho}}>
+       <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:col.cor||paleta.cabecalho}}>
         <div className="flex items-center gap-1">
          <Icon size={15} className="shrink-0"/>
          <h2 className="min-w-0 flex-1 text-[11px] font-extrabold leading-tight">{col.nome}</h2>
+         {podeEditarColunas&&<span draggable onDragStart={e=>{e.stopPropagation();e.dataTransfer.setData('text/plain','atlas-coluna:'+col.id);e.dataTransfer.effectAllowed='move';setArrastandoColuna(col.id)}} onDragEnd={()=>setArrastandoColuna(null)} title="Arrastar para reorganizar coluna" className="cursor-grab" role="button" aria-label={'Arrastar coluna '+col.nome}><GripVertical size={14}/></span>}
+         {podeEditarColunas&&<button type="button" title={'Editar coluna '+col.nome} aria-label={'Editar coluna '+col.nome} onClick={()=>{setEditarColunaId(col.id);setAbaConfigColuna('coluna')}} className="rounded px-1 text-lg font-bold leading-4 text-white hover:bg-white/20">⋮</button>}
          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold">{vis.length}{pedidosCol.length?' + '+pedidosCol.length:''}{manuaisCol.length?' + '+manuaisCol.length:''}</span>
         </div>
+        {col.descricao&&<p title={col.descricao} className="mt-1 line-clamp-2 text-[10px] text-white/90">{col.descricao}</p>}
+        {(col.prazoHoras||col.prazoDias)&&<p className="mt-1 flex items-center gap-1 text-[10px] text-white/90"><Clock3 size={11}/> Prazo: {col.prazoHoras?(col.prazoHoras+' h'):(col.prazoDias+' dias')}</p>}
        </div>
        <Link href="/clientes/identificar" title="Abrir o fluxo oficial de cliente e obra; a etapa será atualizada pelo Cliente 360" className="block border-t border-white/10 py-1.5 text-center text-[11px] font-semibold text-white hover:brightness-110" style={{background:paleta.botao}}>+ Adicionar</Link>
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
@@ -559,7 +722,7 @@ export default function VisaoGeralProjetos(){
           {!demo&&<AlcaArrastarCard desabilitado={salvandoCard}
             onSoltar={destino=>void moverCardVisual(c.vendaId,destino)}
             onSolturaInvalida={()=>{setAviso('');setErro('Solte dentro de uma coluna do Kanban para salvar. Nenhuma posição foi alterada.')}} label="Segure aqui e arraste" />}
-          <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
+          <CardProjeto card={c} coluna={col} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
          </div>)}
         {pedidosCol.map(p=><CardPedido key={p.id} pedido={p} abrir={()=>abrir(p.id)}/>)}
         {manuaisCol.map(c=><CardAcompanhamento key={c.id} card={c}/>)}
@@ -567,6 +730,13 @@ export default function VisaoGeralProjetos(){
        </div>
       </section>
      })}
+     {podeEditarColunas&&<section className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-blue-400/60 bg-[#102d4b] p-3 text-center">
+      <Plus size={27} className="text-blue-300"/>
+      <b className="text-xs text-white">Adicionar coluna</b>
+      <input value={novoNome} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da etapa" aria-label="Nome da nova coluna" className="w-full rounded border border-[#476382] bg-[#0b2037] px-2 py-2 text-xs text-white"/>
+      <button type="button" onClick={criar} className="rounded bg-blue-600 px-3 py-2 text-xs font-bold text-white">+ Adicionar</button>
+      <span className="text-[10px] text-slate-300">Salvar na personalização para compartilhar com as obras.</span>
+     </section>}
     </div>
    </div>
   </div>
@@ -614,6 +784,21 @@ export default function VisaoGeralProjetos(){
         <p className="text-[10px] text-slate-500">Barras calculadas a partir de quantidades conciliadas; sem dados, não estimamos percentuais.</p>
        </section>
       </>}
+      {aba==='resumo'&&!!etapaCard?.statusDisponiveis?.length&&<section className="rounded-lg border border-slate-200 bg-white p-3">
+       <h3 className="mb-2 text-xs font-extrabold text-[#1d335b]">Status de {etapaCard.nome}</h3>
+       <p className="mb-2 text-[11px] text-slate-500">É possível selecionar vários status ao mesmo tempo, sem movimentar o projeto.</p>
+       <div className="space-y-2">{(etapaCard.statusDisponiveis||[]).map(s=>{
+        const selecionados=cardAtual.statusEtapa||[]
+        const marcado=selecionados.includes(s.id)
+        return <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-2 text-[11px] font-semibold">
+         <input type="checkbox" checked={marcado} disabled={!podeMoverCards||alterandoStatus||demo===true}
+          onChange={e=>void atualizarStatusCard(cardAtual.vendaId,etapaCard.id,e.target.checked?[...selecionados,s.id]:selecionados.filter(id=>id!==s.id))}/>
+         <span className="flex-1">{s.nome}</span>
+         {s.conclusivo&&<span className="text-[10px] font-medium text-emerald-700">Conclui etapa</span>}
+        </label>
+       })}</div>
+       {!podeMoverCards&&<p className="mt-2 text-[10px] text-slate-500">Seu acesso é somente para visualização.</p>}
+      </section>}
       {aba==='resumo'&&<section className="rounded-lg border border-slate-200 bg-white p-3">
        <h3 className="flex items-center gap-2 text-[12px] font-extrabold text-[#1a3057]"><Info size={15}/> Informações principais</h3>
        <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">

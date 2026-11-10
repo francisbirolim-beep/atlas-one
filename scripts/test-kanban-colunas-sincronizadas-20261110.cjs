@@ -63,6 +63,9 @@ for(const x of ['posicionarCardVisual','agruparKanbanObras(cardsBase,agrupadas,c
 for(const x of ['const colunas=dados?.colunas||COLUNAS_GERAIS_PADRAO',
  'projeto.colunaId===col.id','moverPrincipal(col.id)'])
  assert.ok(venda.includes(x),'Venda não compartilha coluna: '+x)
-for(const x of ['onDragStart','soltarColuna(c.id)','p.colunaId===c.id','moverCardVisual(id,destinoVisual)'])
+for(const x of ['onDragStart','p.colunaId===c.id','moverCardVisual(id,destinoVisual)'])
  assert.ok(geralUI.includes(x),'Kanban Geral não compartilha coluna: '+x)
+assert.ok(geralUI.includes('soltarColuna(c.id)')||geralUI.includes('soltarColuna(col.id)'),
+ 'Kanban Geral não reordena colunas por arraste')
+assert.ok(geralUI.includes('setEditarColunaId(col.id)'), 'Edição contextual por coluna ausente')
 console.log('PASS: 9 colunas, validação, novas etapas, ordem por arraste, espelhamento, tenant, permissões e auditoria')

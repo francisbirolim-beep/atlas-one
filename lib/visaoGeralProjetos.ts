@@ -20,6 +20,11 @@ export type ColunaVisualProjeto = {
   // Critérios de apresentação, não estados gravados nas tabelas operacionais.
   criterios: EtapaOperacional[]
   prazoDias: number | null
+  // Metadados puramente visuais, opcionais para configurações antigas.
+  descricao?: string
+  cor?: string
+  prazoHoras?: number | null
+  statusDisponiveis?: { id: string; nome: string; conclusivo?: boolean }[]
 }
 
 export const COLUNAS_GERAIS_PADRAO: ColunaVisualProjeto[] = [
@@ -82,6 +87,31 @@ export function validarColunasGerais(colunas: ColunaVisualProjeto[]): string[] {
     if (c.prazoDias !== null && (!Number.isInteger(c.prazoDias) || c.prazoDias < 0 || c.prazoDias > 3650)) {
       erros.push('Prazo em dias inválido: ' + c.id)
     }
+    if (c.descricao !== undefined && (typeof c.descricao !== 'string' || c.descricao.length > 240)) {
+      erros.push('Descrição de coluna inválida: ' + c.id)
+    }
+    if (c.cor !== undefined && (typeof c.cor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(c.cor))) {
+      erros.push('Cor de coluna inválida: ' + c.id)
+    }
+    if (c.prazoHoras !== undefined && c.prazoHoras !== null &&
+        (!Number.isInteger(c.prazoHoras) || c.prazoHoras < 1 || c.prazoHoras > 87600)) {
+      erros.push('Prazo em horas inválido: ' + c.id)
+    }
+    if (c.statusDisponiveis !== undefined) {
+      if (!Array.isArray(c.statusDisponiveis) || c.statusDisponiveis.length > 24) {
+        erros.push('Lista de status inválida: ' + c.id)
+      } else {
+        const chaves = new Set<string>()
+        for (const status of c.statusDisponiveis) {
+          if (!status || typeof status.id !== 'string' || !/^[a-z0-9_-]{1,48}$/.test(status.id) ||
+              chaves.has(status.id) || typeof status.nome !== 'string' ||
+              !status.nome.trim() || status.nome.trim().length > 60 ||
+              (status.conclusivo !== undefined && typeof status.conclusivo !== 'boolean')) {
+            erros.push('Status inválido ou duplicado: ' + c.id)
+          } else chaves.add(status.id)
+        }
+      }
+    }
     for (const criterio of c.criterios) {
       if (!(ETAPAS_OPERACIONAIS as readonly string[]).includes(criterio)) erros.push('Critério desconhecido: ' + criterio)
       contagem.set(criterio, (contagem.get(criterio) || 0) + 1)
@@ -117,6 +147,48 @@ export function criarColunaGeral(colunas: ColunaVisualProjeto[], id: string, nom
     { id, nome: nome.trim(), ordem: colunas.length, criterios: [], prazoDias: null }]
   garantirConfig(novas)
   return novas
+}
+
+/** Atualiza apenas apresentação; jamais muda critérios ou status operacionais. */
+export function atualizarColunaVisual(
+  colunas: ColunaVisualProjeto[], id: string,
+  dados: Pick<ColunaVisualProjeto, 'nome' | 'descricao' | 'cor' | 'prazoDias' | 'prazoHoras' | 'statusDisponiveis'>
+): ColunaVisualProjeto[] {
+  if (!colunas.some(c => c.id === id)) throw new Error('Coluna não encontrada.')
+  const novas = colunas.map(c => c.id === id ? {
+    ...c, nome: dados.nome.trim(), descricao: dados.descricao?.trim() || '',
+    cor: dados.cor, prazoDias: dados.prazoDias,
+    prazoHoras: dados.prazoHoras,
+    statusDisponiveis: (dados.statusDisponiveis || []).map(s => ({ id: s.id, nome: s.nome.trim(), conclusivo: s.conclusivo === true })),
+  } : { ...c })
+  garantirConfig(novas)
+  return novas
+}
+
+/** SLA por entrada comprovada, em minutos reais; nunca inventa a entrada de cards legados. */
+export function situacaoPrazoEtapa(opcoes: {
+  entrouEm?: string | null
+  prazoHoras?: number | null
+  prazoDias?: number | null
+  agora: string
+  concluida?: boolean
+  emAndamento?: boolean
+  concluiuEm?: string | null
+}): { estado: 'sem_prazo' | 'branco' | 'amarelo' | 'verde' | 'vermelho'; vencimento: string | null; horasRestantes: number | null } {
+  const horas = opcoes.prazoHoras ?? (opcoes.prazoDias === null || opcoes.prazoDias === undefined ? null : opcoes.prazoDias * 24)
+  if (!opcoes.entrouEm || horas === null || !Number.isFinite(horas) || horas <= 0)
+    return { estado: 'sem_prazo', vencimento: null, horasRestantes: null }
+  const inicio = Date.parse(opcoes.entrouEm)
+  const agora = Date.parse(opcoes.agora)
+  if (!Number.isFinite(inicio) || !Number.isFinite(agora))
+    return { estado: 'sem_prazo', vencimento: null, horasRestantes: null }
+  const vencimentoMs = inicio + horas * 3600000
+  const encerramentoMs = opcoes.concluida && opcoes.concluiuEm ? Date.parse(opcoes.concluiuEm) : agora
+  if (!Number.isFinite(encerramentoMs))
+    return { estado: 'sem_prazo', vencimento: null, horasRestantes: null }
+  const horasRestantes = Math.ceil((vencimentoMs - encerramentoMs) / 3600000)
+  const estado = encerramentoMs > vencimentoMs ? 'vermelho' : opcoes.concluida ? 'verde' : opcoes.emAndamento ? 'amarelo' : 'branco'
+  return { estado, vencimento: new Date(vencimentoMs).toISOString(), horasRestantes }
 }
 
 export function associarCriterioColuna(
