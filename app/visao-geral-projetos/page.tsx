@@ -168,19 +168,23 @@ export default function VisaoGeralProjetos(){
  const [novoCriterio,setNovoCriterio]=useState<EtapaOperacional>('compras_liberacao'),[nomeEditando,setNomeEditando]=useState<Record<string,string>>({})
  const [fechou,setFechou]=useState(false)
  const selecionadoInicial=useRef(false)
+ const leituraAtual=useRef(0)
+ const movimentoEmCurso=useRef(false)
  const carregar=useCallback(async()=>{
   if(demo===null)return
   if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setPodeMoverCards(false);setCarregando(false);setAtualizado(new Date().toISOString());return}
+  const geracao=++leituraAtual.current
   try{const token=await tokenAtual();if(!token)throw Error('Faça login para consultar a visão geral.')
    const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
+   if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
    if(Array.isArray(j.colunas))setColunas(j.colunas)
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>({...c,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]})))
    setPedidos(j.pedidos||[]);setAcompanhamentos(j.acompanhamentos||[]);setUsuarioMaster(j.usuarioMaster===true);setPodeMoverCards(j.podeMoverCards===true)
    setOcultos(j.usuarioMaster===true?j.ocultos||[]:[])
    setAtualizado(j.atualizadoEm||new Date().toISOString());setErro('')
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar a empresa.')}
-  finally{setCarregando(false)}
+  }catch(e){if(!movimentoEmCurso.current&&geracao===leituraAtual.current)setErro(e instanceof Error?e.message:'Falha ao consultar a empresa.')}
+  finally{if(geracao===leituraAtual.current)setCarregando(false)}
  },[demo])
  useEffect(()=>{setDemo(new URLSearchParams(window.location.search).get('demo')==='1')},[])
  useEffect(()=>{
@@ -231,27 +235,47 @@ export default function VisaoGeralProjetos(){
   finally{setSalvandoCard(false);setArrastando(null)}
  }
  async function moverCardVisual(vendaId:string,colunaId:string){
-  if(demo||salvandoCard)return
+  if(demo||movimentoEmCurso.current)return
   const atual=cards.find(c=>c.vendaId===vendaId)
-  if(!atual||atual.colunaId===colunaId)return
+  if(!atual)return
   const destino=colunasOrdenadas.find(c=>c.id===colunaId)
   if(!destino){setErro('A coluna de destino não existe.');return}
   const nome=destino.nome
-  // Movimento visual imediato: usuário, origem, destino e justificativa são auditados no banco.
-  const motivo='Reposicionamento manual do card para a coluna '+nome+'.'
-  setSalvandoCard(true);setErro('');setAviso('')
+  if(atual.colunaId===colunaId){setAviso('Este card já está na coluna '+nome+'.');return}
+  movimentoEmCurso.current=true
+  ++leituraAtual.current
+  setSalvandoCard(true);setErro('');setAviso('Salvando card em '+nome+'...')
+  setCards(p=>p.map(c=>c.vendaId===vendaId?{...c,colunaId}:c))
   try{
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+   const motivo='Reposicionamento manual do card para a coluna '+nome+'.'
    const r=await fetch('/api/visao-geral-projetos/mover',{
     method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-    body:JSON.stringify({vendaId,colunaId,motivo:motivo.trim()})
+    body:JSON.stringify({vendaId,colunaId,motivo})
    })
    const j=await r.json().catch(()=>({}))
    if(!r.ok||!j.ok)throw Error(j.erro||'A posição não foi salva.')
-   await carregar()
-   setAviso('Card movido para '+nome+'.')
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao mover card.')}
-  finally{setSalvandoCard(false);setArrastando(null)}
+   if(j.colunaId&&j.colunaId!==colunaId)throw Error('O banco respondeu uma coluna diferente.')
+   const conferido=await fetch('/api/visao-geral-projetos?vendaId='+encodeURIComponent(vendaId),{
+    headers:{Authorization:'Bearer '+token},cache:'no-store'
+   })
+   const payload=await conferido.json().catch(()=>({}))
+   if(!conferido.ok)throw Error(payload.erro||'Não foi possível confirmar a posição no painel.')
+   const resultado=(payload.cards||[]).find((c:ProjetoGeralCard)=>c.vendaId===vendaId)
+   if(!resultado||resultado.colunaId!==colunaId)throw Error('O Kanban ainda não retornou a posição gravada.')
+   setCards(p=>p.map(c=>c.vendaId===vendaId?{
+    ...c,...resultado,materiais:resultado.materiais||[],pendencias:resultado.pendencias||[],
+    detalhesCompra:resultado.detalhesCompra||[]
+   }:c))
+   setAviso('✓ Card salvo na coluna '+nome+'.')
+  }catch(e){
+   setCards(p=>p.map(c=>c.vendaId===vendaId?atual:c))
+   setAviso('')
+   setErro(e instanceof Error?e.message:'Falha ao salvar o card.')
+  }finally{
+   movimentoEmCurso.current=false
+   setSalvandoCard(false);setArrastando(null)
+  }
  }
  const cardAtual=useMemo(()=>cards.find(c=>c.vendaId===selecionado)||null,[cards,selecionado])
  const pedidoAtual=useMemo(()=>pedidos.find(p=>p.id===selecionado)||null,[pedidos,selecionado])
@@ -410,8 +434,12 @@ export default function VisaoGeralProjetos(){
     </label>
     <button onClick={()=>{setBusca('');setCondicao('todos')}} className="self-end rounded-md border border-[#395473] px-3 py-2 text-xs">Limpar filtros</button>
    </section>}
-   {erro&&<p role="alert" className="mb-3 rounded-lg border border-rose-500/50 bg-rose-950/50 p-3 text-sm text-rose-100">{erro}</p>}
-   {aviso&&<p role="status" className="mb-3 rounded-lg border border-emerald-500/50 bg-emerald-950/50 p-3 text-sm font-semibold text-emerald-100">{aviso}</p>}
+   {erro&&<div role="alert" className="fixed bottom-20 right-5 z-[120] max-w-[420px] rounded-xl border-2 border-rose-400 bg-rose-950 px-4 py-3 text-sm font-bold text-white shadow-2xl">
+    {erro}<button type="button" onClick={()=>setErro('')} className="ml-3 underline">Fechar</button>
+   </div>}
+   {!erro&&aviso&&<div role="status" aria-live="polite" className="fixed bottom-20 right-5 z-[120] max-w-[420px] rounded-xl border-2 border-emerald-400 bg-emerald-950 px-4 py-3 text-sm font-bold text-white shadow-2xl">
+    {aviso}<button type="button" onClick={()=>setAviso('')} className="ml-3 underline">Fechar</button>
+   </div>}
    <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">{montarKPIs.map(k=>{
     const Icone=k.icone
     return <div key={k.label} className="relative min-h-[80px] overflow-hidden rounded-lg border border-[#294461] bg-gradient-to-br from-[#152b46] to-[#0b1c32] px-3 py-3 shadow-[0_3px_18px_rgba(0,0,0,.13)]">
