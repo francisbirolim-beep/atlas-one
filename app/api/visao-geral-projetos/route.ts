@@ -36,6 +36,7 @@ export async function GET(req:NextRequest){
   if(vendaSelecionada && !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(vendaSelecionada))
     return respErro('ID de venda inválido.',400)
   const permissaoObra=vendaSelecionada?await permissoesKanbanObra(u):null
+  const podeMoverCards=u.role==='master'||(permissaoObra?permissaoObra.mover:(await permissoesKanbanObra(u)).mover)
   if(!(await podeConsultarPainelGeral(u,'visao-geral-projetos'))&&!permissaoObra?.consultar)
     return respErro('Acesso não autorizado à Visão Geral ou à obra.',403)
   const empresa=u.empresa_id
@@ -210,14 +211,20 @@ export async function GET(req:NextRequest){
   }).filter(c=>c.vendaId)
   // Ajustes visuais do Master, sem alterar Cliente 360 ou status operacionais.
   const controlesR=await db.from('visao_geral_cards_controle')
-    .select('venda_id,estado,motivo,updated_at').eq('empresa_id',empresa).limit(1000)
+    .select('venda_id,estado,motivo,etapa_visual,updated_at').eq('empresa_id',empresa).limit(1000)
   if(controlesR.error)throw controlesR.error
   const controles=new Map((controlesR.data||[]).map(c=>[c.venda_id,c]))
   const normalizados=cards.map(c=>{
     const controle=controles.get(c.vendaId)
-    return controle?.estado==='finalizado'
-      ?{...c,etapaOrigem:c.etapaOperacional,etapaOperacional:'finalizado',colunaId:'finalizado',cor:'azul' as const,controleMaster:'finalizado',motivoControle:controle.motivo}
-      :{...c,controleMaster:controle?.estado||null,motivoControle:controle?.motivo||null}
+    if(controle?.estado==='finalizado')
+     return {...c,etapaOrigem:c.etapaOperacional,etapaOperacional:'finalizado',colunaId:'finalizado',
+      cor:'azul' as const,controleMaster:'finalizado',motivoControle:controle.motivo}
+    if(controle?.estado==='manual'){
+     const coluna=COLUNAS_GERAIS_PADRAO.find(x=>x.criterios.includes(controle.etapa_visual))
+     if(coluna)return {...c,etapaOrigem:c.etapaOperacional,etapaOperacional:controle.etapa_visual,
+      colunaId:coluna.id,controleMaster:'manual',motivoControle:controle.motivo}
+    }
+    return {...c,controleMaster:controle?.estado||null,motivoControle:controle?.motivo||null}
   })
   const ativos=normalizados.filter(c=>c.controleMaster!=='oculto')
   const ocultos=(u.role==='master'||permissaoObra?.restaurar)
@@ -269,7 +276,7 @@ export async function GET(req:NextRequest){
     })):[]
   return NextResponse.json({cards:ativos,ocultos,pedidos,acompanhamentos,retiradosManuais,
    permissoesObra:permissaoObra,kanbanObraConfigurado,
-   usuarioMaster:u.role==='master',atualizadoEm:new Date().toISOString(),
+   usuarioMaster:u.role==='master',podeMoverCards,atualizadoEm:new Date().toISOString(),
    observacao:'Os percentuais sem quantidades ou unidades conciliadas são exibidos como Não apurado. Agendamentos não foram inferidos a partir da entrega da obra.'},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('visao geral de projetos GET',e);return respErro('Não foi possível consultar a Visão Geral de Projetos.',500)}

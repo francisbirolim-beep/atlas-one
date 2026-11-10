@@ -157,6 +157,7 @@ export default function VisaoGeralProjetos(){
  const [cards,setCards]=useState<ProjetoGeralCard[]>([]),[pedidos,setPedidos]=useState<PedidoGeralCard[]>([])
  const [acompanhamentos,setAcompanhamentos]=useState<AcompanhamentoGeral[]>([])
  const [usuarioMaster,setUsuarioMaster]=useState(false)
+ const [podeMoverCards,setPodeMoverCards]=useState(false)
  const [ocultos,setOcultos]=useState<{vendaId:string;cliente:string;numeroOrcamento:string;motivoControle:string|null}[]>([])
  const [mostrarOcultos,setMostrarOcultos]=useState(false),[arrastando,setArrastando]=useState<string|null>(null),[salvandoCard,setSalvandoCard]=useState(false)
  const [selecionado,setSelecionado]=useState<string|null>(null),[aba,setAba]=useState<Aba>('resumo')
@@ -168,12 +169,12 @@ export default function VisaoGeralProjetos(){
  const selecionadoInicial=useRef(false)
  const carregar=useCallback(async()=>{
   if(demo===null)return
-  if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setCarregando(false);setAtualizado(new Date().toISOString());return}
+  if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setPodeMoverCards(false);setCarregando(false);setAtualizado(new Date().toISOString());return}
   try{const token=await tokenAtual();if(!token)throw Error('Faça login para consultar a visão geral.')
    const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>({...c,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]})))
-   setPedidos(j.pedidos||[]);setAcompanhamentos(j.acompanhamentos||[]);setUsuarioMaster(j.usuarioMaster===true)
+   setPedidos(j.pedidos||[]);setAcompanhamentos(j.acompanhamentos||[]);setUsuarioMaster(j.usuarioMaster===true);setPodeMoverCards(j.podeMoverCards===true)
    setOcultos(j.usuarioMaster===true?j.ocultos||[]:[])
    setAtualizado(j.atualizadoEm||new Date().toISOString());setErro('')
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar a empresa.')}
@@ -225,6 +226,30 @@ export default function VisaoGeralProjetos(){
    if(acao==='ocultar')setSelecionado(null)
    await carregar()
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao alterar o card.')}
+  finally{setSalvandoCard(false);setArrastando(null)}
+ }
+ async function moverCardVisual(vendaId:string,etapa:string){
+  if(!podeMoverCards||demo||salvandoCard)return
+  const atual=cards.find(c=>c.vendaId===vendaId)
+  if(!atual||colunasOrdenadas.find(col=>col.criterios.includes(atual.etapaOperacional as EtapaOperacional))?.criterios[0]===etapa)return
+  const destino=colunasOrdenadas.find(c=>c.criterios.includes(etapa as EtapaOperacional))
+  const nome=destino?.nome||etapa
+  const motivo=window.prompt('Motivo para mover o card de '+atual.cliente+' para '+nome+' (mínimo 8 caracteres):',
+   'Ajuste manual do acompanhamento desta obra.')
+  if(!motivo)return
+  if(motivo.trim().length<8){setErro('Motivo obrigatório com pelo menos 8 caracteres.');return}
+  if(!window.confirm('Mover o card para '+nome+' nos dois Kanbans?\nCompras, produção, instalação e financeiro não serão alterados.'))return
+  setSalvandoCard(true);setErro('')
+  try{
+   const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+   const r=await fetch('/api/visao-geral-projetos/mover',{
+    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({vendaId,etapa,motivo:motivo.trim()})
+   })
+   const j=await r.json().catch(()=>({}))
+   if(!r.ok||!j.ok)throw Error(j.erro||'A posição não foi salva.')
+   await carregar()
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao mover card.')}
   finally{setSalvandoCard(false);setArrastando(null)}
  }
  const cardAtual=useMemo(()=>cards.find(c=>c.vendaId===selecionado)||null,[cards,selecionado])
@@ -398,7 +423,7 @@ export default function VisaoGeralProjetos(){
     {configuravel&&!demo&&<button disabled={!!validade.length} onClick={()=>void salvarConfig()} className="rounded-md bg-blue-600 px-4 py-2 text-xs font-bold disabled:opacity-40">Salvar configuração da empresa</button>}
    </section>}
    <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
-    <span className="inline-flex items-center gap-1"><ShieldCheck size={13}/> Etapas atualizadas pelos registros reais do Cliente 360, Compras, Produção e Instalação</span>
+    <span className="inline-flex items-center gap-1"><ShieldCheck size={13}/> Etapas calculadas pelos setores; posições ajustadas manualmente não alteram os registros operacionais</span>
     <span>{carregando?'Consultando a empresa…':atualizado?'Atualizado: '+new Date(atualizado).toLocaleString('pt-BR'):'Aguardando dados'}</span>
    </div>
    <div className="w-full overflow-x-auto rounded-xl pb-3" aria-label="Kanban Geral de Projetos" style={{scrollbarColor:'#385578 #0e2139'}}>
@@ -410,10 +435,11 @@ export default function VisaoGeralProjetos(){
       const paleta=COLUNA_CORES[etapaIndice(col)]||COLUNA_CORES[i%COLUNA_CORES.length]
       const Icon=paleta.icone
       const destinoFinalizado=col.criterios.includes('finalizado')
+      const destinoVisual=col.criterios[0]
       return <section key={col.id}
-       onDragOver={e=>{if(usuarioMaster&&destinoFinalizado&&arrastando&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
-       onDrop={e=>{if(!usuarioMaster||!destinoFinalizado||!arrastando||salvandoCard)return;e.preventDefault();const id=arrastando;setArrastando(null);void operarMaster(id,'finalizar')}}
-       className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoFinalizado&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
+       onDragOver={e=>{if(podeMoverCards&&destinoVisual&&arrastando&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
+       onDrop={e=>{if(!podeMoverCards||!destinoVisual||!arrastando||salvandoCard)return;e.preventDefault();const id=arrastando;setArrastando(null);void moverCardVisual(id,destinoVisual)}}
+       className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoVisual&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
        <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:paleta.cabecalho}}>
         <div className="flex items-center gap-1">
          <Icon size={15} className="shrink-0"/>
@@ -423,11 +449,11 @@ export default function VisaoGeralProjetos(){
        </div>
        <Link href="/clientes/identificar" title="Abrir o fluxo oficial de cliente e obra; a etapa será atualizada pelo Cliente 360" className="block border-t border-white/10 py-1.5 text-center text-[11px] font-semibold text-white hover:brightness-110" style={{background:paleta.botao}}>+ Adicionar</Link>
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
-        {usuarioMaster&&destinoFinalizado&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">Arraste um projeto para cá para finalizar no painel</p>}
-        {vis.map(c=><div key={c.vendaId} draggable={usuarioMaster&&!demo&&c.etapaOperacional!=='finalizado'&&!salvandoCard}
-         onDragStart={e=>{if(!usuarioMaster||demo)return;e.dataTransfer.setData('text/plain',c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
+        {podeMoverCards&&destinoVisual&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">{destinoFinalizado?'Arraste um projeto para cá para finalizar no painel':'Arraste um card para reposicioná-lo aqui'}</p>}
+        {vis.map(c=><div key={c.vendaId} draggable={podeMoverCards&&!demo&&!salvandoCard}
+         onDragStart={e=>{if(!podeMoverCards||demo)return;e.dataTransfer.setData('text/plain',c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
          onDragEnd={()=>setArrastando(null)}
-         className={usuarioMaster&&c.etapaOperacional!=='finalizado'?'cursor-grab active:cursor-grabbing':''}>
+         className={podeMoverCards?'cursor-grab active:cursor-grabbing':''}>
           <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
          </div>)}
         {pedidosCol.map(p=><CardPedido key={p.id} pedido={p} abrir={()=>abrir(p.id)}/>)}
@@ -497,6 +523,11 @@ export default function VisaoGeralProjetos(){
        <p className="mt-2 text-[10px] text-slate-600">Itens instalados: {cardAtual.instalacao.concluidas} de {cardAtual.instalacao.total}</p>
        {cardAtual.valorInstalacao!==null&&cardAtual.valorInstalacao!==undefined&&<p className="text-[10px] font-medium text-slate-700">Valor planejado: {moeda(cardAtual.valorInstalacao)}</p>}
       </section>}
+      {cardAtual.controleMaster==='manual'&&<div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-[11px] text-blue-900">
+       <b>Posição visual definida manualmente</b>
+       <p>Andamento operacional calculado: {cardAtual.etapaOrigem||'Não identificado'}. O movimento não atualiza os status dos setores.</p>
+       {cardAtual.motivoControle&&<p className="mt-1">Motivo: {cardAtual.motivoControle}</p>}
+      </div>}
       {cardAtual.controleMaster==='finalizado'&&<div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-[11px] text-blue-900">
        <b>Finalizado visualmente pelo Master</b>
        <p>Esta organização não altera a situação real no Cliente 360. Etapa operacional anterior: {cardAtual.etapaOrigem||'Não identificada'}.</p>
@@ -518,6 +549,15 @@ export default function VisaoGeralProjetos(){
        <ItensCompra itens={cardAtual.detalhesCompra||[]}/>
       </section>}
       {aba==='producao'&&<section className="rounded-lg border border-slate-200 bg-white p-3"><h3 className="text-xs font-bold">Produção</h3><p className="my-2 text-[11px]">{cardAtual.producao.concluidas} de {cardAtual.producao.total} ordens concluídas</p><Progresso nome="Produção" valor={percentual(cardAtual.producao.concluidas,cardAtual.producao.total)}/></section>}
+      {podeMoverCards&&!demo&&<section className="space-y-2 rounded-lg border border-[#d5e1f2] bg-white p-3">
+       <label className="block text-xs font-bold text-[#15294f]">Mover o card principal para a etapa
+        <select aria-label="Mover card principal para etapa" value={etapaCard?.criterios[0]||'vendido'} disabled={salvandoCard}
+         onChange={e=>void moverCardVisual(cardAtual.vendaId,e.target.value)} className="mt-2 w-full rounded border border-slate-300 bg-white px-2 py-2 text-xs text-slate-900">
+         {colunasOrdenadas.filter(c=>c.criterios.length).map(c=><option key={c.id} value={c.criterios[0]}>{c.nome}</option>)}
+        </select>
+       </label>
+       <p className="text-[10px] text-slate-500">Arraste ou selecione uma coluna. Salva a posição nos dois Kanbans, sem mudar as operações.</p>
+      </section>}
       {usuarioMaster&&!demo&&<section className="space-y-2 rounded-lg border border-[#d5e1f2] bg-white p-3">
        <h3 className="text-xs font-extrabold text-[#15294f]">Organização do Master</h3>
        <p className="text-[10px] leading-4 text-slate-500">Somente o Master pode finalizar ou retirar cards. Nenhuma ação aqui apaga venda, obra, materiais ou documentos.</p>
