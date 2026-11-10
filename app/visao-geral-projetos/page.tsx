@@ -553,7 +553,7 @@ export default function VisaoGeralProjetos(){
            if(destino)void moverCardVisual(c.vendaId,destino)
            else {setAviso('');setErro('Solte o card sobre uma coluna do Kanban para gravar. Nenhuma mudança foi salva.')}
           }
-         }
+         }}
          className="cursor-grab active:cursor-grabbing">
           {!demo&&<AlcaArrastarCard desabilitado={salvandoCard}
             onSoltar={destino=>void moverCardVisual(c.vendaId,destino)} label="Segure aqui e arraste" />}
