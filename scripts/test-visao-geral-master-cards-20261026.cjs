@@ -19,7 +19,7 @@ assert.ok(!sql.includes('delete from public.vendas_obras')&&!sql.includes('updat
 assert.ok(ctl.includes("if(u.role!=='master')")&&ctl.includes('autenticarCompras(req)'))
 assert.ok(ctl.includes("db.rpc('alterar_card_visao_geral_master_v1'"))
 assert.ok(ctl.includes('p_empresa:u.empresa_id')&&ctl.includes('p_usuario:u.id'))
-assert.ok(get.includes(".eq('empresa_id',empresa)")&&get.includes("const ocultos=u.role==='master'"))
+assert.ok(get.includes(".eq('empresa_id',empresa)")&&get.includes("const ocultos=(u.role==='master'||permissaoObra?.restaurar)"))
 assert.ok(get.includes("const ativos=normalizados.filter(c=>c.controleMaster!=='oculto')"))
 for(const term of ['usuarioMaster&&!demo','Arraste um projeto para cá','onDragStart={e=>','onDragOver={e=>','onDrop={e=>',
  'Cards retirados','Restaurar card','Excluir card do painel','Mover para Finalizado','/api/visao-geral-projetos/controle']){
