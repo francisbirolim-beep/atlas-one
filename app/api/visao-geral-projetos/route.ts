@@ -45,7 +45,7 @@ export async function GET(req:NextRequest){
   if(layout.error&&!['PGRST205','42P01'].includes(String(layout.error.code||'')))throw layout.error
   const colunas=colunasKanbanEmpresa(layout.data?.colunas)
   let consultaVendas=db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,created_at,status')
-   .eq('empresa_id',empresa)
+   .eq('empresa_id',empresa).is('excluida_em',null)
   if(vendaSelecionada)consultaVendas=consultaVendas.eq('id',vendaSelecionada)
   const vendasR=await consultaVendas.order('created_at',{ascending:false}).limit(500)
   if(vendasR.error)throw vendasR.error
@@ -56,7 +56,7 @@ export async function GET(req:NextRequest){
   // Na visão filtrada de uma venda, outra venda pode usar a mesma obra.
   // Não atribuir pedidos compartilhados ao orçamento selecionado por engano.
   const todasVendasDaObra=obraIds.length?await db.from('vendas_obras')
-    .select('id,cliente_id,obra_id').eq('empresa_id',empresa).in('obra_id',obraIds).limit(5000):{data:[],error:null}
+    .select('id,cliente_id,obra_id').eq('empresa_id',empresa).is('excluida_em',null).in('obra_id',obraIds).limit(5000):{data:[],error:null}
   if(todasVendasDaObra.error)throw todasVendasDaObra.error
   const qtdVendasObra=(obraId:string)=>((todasVendasDaObra.data||[]) as {id:string;obra_id:string}[])
     .filter(v=>v.obra_id===obraId).length
