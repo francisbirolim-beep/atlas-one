@@ -1,15 +1,16 @@
 'use client'
 import {useEffect,useRef,useState,type PointerEvent} from 'react'
+import {colunaNoFimDoArraste} from '@/lib/kanbanArrastarDestino'
 
-type Arraste={pointerId:number;x:number;y:number;movendo:boolean}
-type Props={onSoltar:(colunaId:string)=>void;desabilitado?:boolean;label?:string}
+type Arraste={pointerId:number;x:number;y:number;ultimoX:number;ultimoY:number;movendo:boolean}
+type Props={onSoltar:(colunaId:string)=>void;onSolturaInvalida?:()=>void;desabilitado?:boolean;label?:string}
 
 /**
  * Alternativa a HTML5 drag/drop: utiliza Pointer Events e captura o ponteiro.
  * Funciona com mouse, touch e trackpad mesmo quando há cards e selects aninhados.
  * O destino é encontrado sob o cursor; somente a API decide se o usuário pode salvar.
  */
-export default function AlcaArrastarCard({onSoltar,desabilitado=false,label='Segure aqui e arraste o card'}:Props){
+export default function AlcaArrastarCard({onSoltar,onSolturaInvalida,desabilitado=false,label='Segure aqui e arraste o card'}:Props){
  const inicio=useRef<Arraste|null>(null)
  const alvo=useRef<HTMLElement|null>(null)
  const fantasma=useRef<HTMLElement|null>(null)
@@ -26,12 +27,13 @@ export default function AlcaArrastarCard({onSoltar,desabilitado=false,label='Seg
   if(desabilitado||e.button!==0)return
   e.preventDefault()
   e.stopPropagation()
-  inicio.current={pointerId:e.pointerId,x:e.clientX,y:e.clientY,movendo:false}
+  inicio.current={pointerId:e.pointerId,x:e.clientX,y:e.clientY,ultimoX:e.clientX,ultimoY:e.clientY,movendo:false}
   try{e.currentTarget.setPointerCapture(e.pointerId)}catch{limpar()}
  }
  function mover(e:PointerEvent<HTMLButtonElement>){
   const a=inicio.current
   if(!a||a.pointerId!==e.pointerId)return
+  if(e.clientX>0&&e.clientY>0){a.ultimoX=e.clientX;a.ultimoY=e.clientY}
   if(!a.movendo){
    if(Math.hypot(e.clientX-a.x,e.clientY-a.y)<7)return
    a.movendo=true;setArrastando(true)
@@ -72,12 +74,11 @@ export default function AlcaArrastarCard({onSoltar,desabilitado=false,label='Seg
  function terminar(e:PointerEvent<HTMLButtonElement>){
   const a=inicio.current
   if(!a||a.pointerId!==e.pointerId)return
-  const board=e.currentTarget.closest('[data-kanban-board]')
-  const coluna=document.elementFromPoint(e.clientX,e.clientY)?.closest<HTMLElement>('[data-kanban-coluna]')
-  const destino=a.movendo&&coluna&&board?.contains(coluna)?coluna.dataset.kanbanColuna:null
+  const destino=a.movendo?colunaNoFimDoArraste(e.currentTarget,{x:e.clientX,y:e.clientY},{x:a.ultimoX,y:a.ultimoY}):null
   limpar()
   if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId)
   if(destino)onSoltar(destino)
+  else if(a.movendo)onSolturaInvalida?.()
  }
  return <button type="button" draggable={false} disabled={desabilitado}
   aria-label={label} title="Clique, segure, leve até outra coluna e solte"
