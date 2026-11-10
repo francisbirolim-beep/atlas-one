@@ -783,6 +783,21 @@ export default function VisaoGeralProjetos(){
         <p className="text-[10px] text-slate-500">Barras calculadas a partir de quantidades conciliadas; sem dados, não estimamos percentuais.</p>
        </section>
       </>}
+      {aba==='resumo'&&!!etapaCard?.statusDisponiveis?.length&&<section className="rounded-lg border border-slate-200 bg-white p-3">
+       <h3 className="mb-2 text-xs font-extrabold text-[#1d335b]">Status de {etapaCard.nome}</h3>
+       <p className="mb-2 text-[11px] text-slate-500">É possível selecionar vários status ao mesmo tempo, sem movimentar o projeto.</p>
+       <div className="space-y-2">{(etapaCard.statusDisponiveis||[]).map(s=>{
+        const selecionados=cardAtual.statusEtapa||[]
+        const marcado=selecionados.includes(s.id)
+        return <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-2 text-[11px] font-semibold">
+         <input type="checkbox" checked={marcado} disabled={!podeMoverCards||alterandoStatus||demo===true}
+          onChange={e=>void atualizarStatusCard(cardAtual.vendaId,etapaCard.id,e.target.checked?[...selecionados,s.id]:selecionados.filter(id=>id!==s.id))}/>
+         <span className="flex-1">{s.nome}</span>
+         {s.conclusivo&&<span className="text-[10px] font-medium text-emerald-700">Conclui etapa</span>}
+        </label>
+       })}</div>
+       {!podeMoverCards&&<p className="mt-2 text-[10px] text-slate-500">Seu acesso é somente para visualização.</p>}
+      </section>}
       {aba==='resumo'&&<section className="rounded-lg border border-slate-200 bg-white p-3">
        <h3 className="flex items-center gap-2 text-[12px] font-extrabold text-[#1a3057]"><Info size={15}/> Informações principais</h3>
        <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
