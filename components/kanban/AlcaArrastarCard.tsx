@@ -34,7 +34,7 @@ export default function AlcaArrastarCard({onSoltar,desabilitado=false,label='Seg
    a.movendo=true;setArrastando(true)
   }
   const board=e.currentTarget.closest('[data-kanban-board]')
-  const scroll=board?.querySelector<HTMLElement>('[data-kanban-scroll]')
+  const scroll=board?.matches('[data-kanban-scroll]')?board as HTMLElement:board?.querySelector<HTMLElement>('[data-kanban-scroll]')
   if(scroll){
    const area=scroll.getBoundingClientRect()
    if(e.clientX<area.left+70)scroll.scrollLeft-=32
