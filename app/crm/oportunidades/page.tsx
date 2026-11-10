@@ -44,7 +44,7 @@ export default function OportunidadesComerciais(){
    let tq=supabase.from('crm_tarefas').select('id,cliente_id,cliente_nome,orcamento_id,titulo,descricao,data_vencimento,concluida,responsavel_id,responsavel_nome,created_at').eq('concluida',false).limit(1000)
    let pq=supabase.from('prospeccoes').select('id,nome_cliente,nome_obra,cliente_id,obra_id,cidade,interesses,status,temperatura,proxima_acao,proxima_acao_em,responsavel_id,responsavel_nome,created_at').order('created_at',{ascending:false}).limit(1000)
    if(!equipe){oq=oq.eq('criado_por_id',me.id);tq=tq.eq('responsavel_id',me.id);pq=pq.eq('responsavel_id',me.id)}
-   const [os,ts,ps,vendas]=await Promise.all([oq,tq,pq,supabase.from('vendas_obras').select('orcamento_id,status').limit(1000)])
+   const [os,ts,ps,vendas]=await Promise.all([oq,tq,pq,supabase.from('vendas_obras').select('orcamento_id,status').is('excluida_em',null).limit(1000)])
    if(os.error||ts.error||ps.error)throw new Error(os.error?.message||ts.error?.message||ps.error?.message)
    const vendidos=new Set((vendas.data||[]).filter(v=>['ativa','ativo','confirmada','confirmado'].includes(String(v.status||'').toLowerCase())).map(v=>v.orcamento_id))
    setVendasVerificadas(!vendas.error)
