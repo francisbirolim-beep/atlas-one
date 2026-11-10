@@ -14,8 +14,9 @@ alter table public.visao_geral_cards_controle
  add constraint visao_geral_cards_controle_etapa_visual_check
  check (
    (etapa_visual is null or etapa_visual in
-    ('vendido','separacao_materiais','compras','aguardando_materiais',
-     'medicao_final','producao','instalacao','finalizado'))
+    ('vendido','conferir_projeto','separacao_materiais','compras_liberacao',
+     'compras','aguardando_materiais','medicao_final','aguardando_producao',
+     'producao','aguardando_instalacao','instalacao','finalizado'))
    and (estado <> 'manual' or etapa_visual is not null)
  );
 
@@ -47,8 +48,9 @@ begin
  then raise exception 'Venda não encontrada ou cancelada nesta empresa'; end if;
 
  if p_etapa is null or p_etapa not in
-  ('vendido','separacao_materiais','compras','aguardando_materiais',
-   'medicao_final','producao','instalacao','finalizado')
+  ('vendido','conferir_projeto','separacao_materiais','compras_liberacao',
+   'compras','aguardando_materiais','medicao_final','aguardando_producao',
+   'producao','aguardando_instalacao','instalacao','finalizado')
  then raise exception 'Etapa visual inválida'; end if;
  if char_length(btrim(coalesce(p_motivo,''))) not between 8 and 1000
  then raise exception 'Motivo de movimentação inválido'; end if;
