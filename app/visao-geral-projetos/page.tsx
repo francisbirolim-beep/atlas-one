@@ -685,7 +685,7 @@ export default function VisaoGeralProjetos(){
          <Icon size={15} className="shrink-0"/>
          <h2 className="min-w-0 flex-1 text-[11px] font-extrabold leading-tight">{col.nome}</h2>
          {podeEditarColunas&&<span draggable onDragStart={e=>{e.stopPropagation();e.dataTransfer.setData('text/plain','atlas-coluna:'+col.id);e.dataTransfer.effectAllowed='move';setArrastandoColuna(col.id)}} onDragEnd={()=>setArrastandoColuna(null)} title="Arrastar para reorganizar coluna" className="cursor-grab" role="button" aria-label={'Arrastar coluna '+col.nome}><GripVertical size={14}/></span>
-         {podeEditarColunas&&<button type="button" title={'Editar coluna '+col.nome} aria-label={'Editar coluna '+col.nome} onClick={()=>{setEditarColunaId(col.id);setAbaConfigColuna('coluna')}} className="rounded px-1 text-lg font-bold leading-4 text-white hover:bg-white/20">⋮</button>}}
+         {podeEditarColunas&&<button type="button" title={'Editar coluna '+col.nome} aria-label={'Editar coluna '+col.nome} onClick={()=>{setEditarColunaId(col.id);setAbaConfigColuna('coluna')}} className="rounded px-1 text-lg font-bold leading-4 text-white hover:bg-white/20">⋮</button>}
          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold">{vis.length}{pedidosCol.length?' + '+pedidosCol.length:''}{manuaisCol.length?' + '+manuaisCol.length:''}</span>
         </div>
         {col.descricao&&<p title={col.descricao} className="mt-1 line-clamp-2 text-[10px] text-white/90">{col.descricao}</p>}
