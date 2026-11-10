@@ -1,12 +1,13 @@
 'use client'
 import {useCallback,useEffect,useMemo,useState} from 'react'
 import Link from 'next/link'
+import AlcaArrastarCard from '@/components/kanban/AlcaArrastarCard'
 import {ArrowUpRight,Building2,CalendarDays,CheckCircle2,Columns3,MapPin,RefreshCw,Search,SlidersHorizontal} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import type {ObraCardCliente} from '@/lib/cliente360KanbanObras'
 import {COLUNAS_GERAIS_PADRAO} from '@/lib/visaoGeralProjetos'
 
-type Resposta={cards:ObraCardCliente[];colunas?:typeof COLUNAS_GERAIS_PADRAO;vendasSemObra:number;atualizadoEm:string}
+type Resposta={cards:ObraCardCliente[];colunas?:typeof COLUNAS_GERAIS_PADRAO;podeMoverCards:boolean;vendasSemObra:number;atualizadoEm:string}
 type Filtro='todas'|'ativas'|'concluidas'
 const cores:Record<string,string>={
  orcamento:'bg-slate-100 text-slate-800 border-slate-200',
@@ -37,6 +38,8 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
  const [dados,setDados]=useState<Resposta|null>(null)
  const [carregando,setCarregando]=useState(true)
  const [erro,setErro]=useState('')
+ const [aviso,setAviso]=useState('')
+ const [movendo,setMovendo]=useState(false)
  const [busca,setBusca]=useState('')
  const [filtro,setFiltro]=useState<Filtro>('todas')
  const carregar=useCallback(async(silencioso=false)=>{
@@ -60,6 +63,26 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
   document.addEventListener('visibilitychange',voltar)
   return()=>{window.clearInterval(timer);document.removeEventListener('visibilitychange',voltar)}
  },[carregar])
+ async function moverVenda(vendaId:string,colunaId:string){
+  if(movendo||!dados?.podeMoverCards)return
+  const destino=(dados.colunas||COLUNAS_GERAIS_PADRAO).find(c=>c.id===colunaId)
+  const obra=dados.cards.find(c=>c.vendas.length===1&&c.vendas[0].vendaId===vendaId)
+  if(!destino||!obra||obra.colunaId===colunaId)return
+  setMovendo(true);setErro('');setAviso('')
+  try{
+   const token=await tokenAtual()
+   if(!token)throw Error('Sessão expirada. Entre novamente.')
+   const res=await fetch('/api/visao-geral-projetos/mover',{
+    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({vendaId,colunaId,motivo:'Reposicionamento manual no Kanban do Cliente para '+destino.nome+'.'}),
+   })
+   const json=await res.json().catch(()=>({}))
+   if(!res.ok||!json.ok)throw Error(json.erro||'Não foi possível mover a obra.')
+   await carregar(true)
+   setAviso('Obra movida para '+destino.nome+'. A posição foi salva.')
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao salvar posição da obra.')}
+  finally{setMovendo(false)}
+ }
  const cards=dados?.cards||[]
  const colunas=[{id:'orcamento',nome:'Pré-venda / Orçamento',ordem:-1},...(dados?.colunas||COLUNAS_GERAIS_PADRAO)].sort((a,b)=>a.ordem-b.ordem)
  const ativos=cards.filter(c=>c.colunaId!=='finalizado')
@@ -75,7 +98,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
   {titulo:'Em instalação',valor:cards.filter(c=>c.colunaId==='instalacao').length},
   {titulo:'Concluídas',valor:cards.filter(c=>c.colunaId==='finalizado').length},
  ]
- return <section className="space-y-4" aria-label="Kanban geral das obras deste cliente">
+ return <section data-kanban-board className="space-y-4" aria-label="Kanban geral das obras deste cliente">
   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
    {kpis.map(k=><div key={k.titulo} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
     <p className="text-[11px] font-semibold text-slate-500">{k.titulo}</p>
@@ -87,7 +110,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
     <div className="flex items-center gap-3">
      <div className="rounded-lg bg-blue-50 p-2 text-blue-700"><Columns3 size={19}/></div>
      <div><h2 className="font-bold text-slate-900">Kanban do Cliente (por Obra)</h2>
-      <p className="text-xs text-slate-500">Um card por obra. Colunas e posições visuais iguais ao Kanban Geral; operações continuam independentes.</p>
+      <p className="text-xs text-slate-500">Um card por obra. Arraste as obras com uma venda para a coluna correta; somente a posição visual muda.</p>
      </div>
     </div>
     <div className="flex flex-wrap items-center gap-2">
@@ -108,12 +131,23 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
     </div>
    </div>
    {erro&&<div role="alert" className="m-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{erro}</div>}
+   {aviso&&<div role="status" className="m-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{aviso}</div>}
    {carregando&&!dados&&<p className="p-5 text-sm text-slate-500">Consultando a evolução das obras...</p>}
-   {dados&&<div className="overflow-x-auto px-3 pb-3 pt-3" role="region" aria-label="Colunas do Kanban de obras" tabIndex={0}>
+   {dados&&<div data-kanban-scroll className="overflow-x-auto px-3 pb-3 pt-3" role="region" aria-label="Colunas do Kanban de obras" tabIndex={0}>
     <div className="flex w-max gap-2 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
      {colunas.map(col=>{
       const lista=visiveis.filter(c=>c.colunaId===col.id)
-      return <div key={col.id} className="w-[238px] shrink-0 rounded-xl border sm:w-auto sm:min-w-0 border-slate-100 bg-slate-50/75">
+      return <div key={col.id} data-kanban-coluna={col.id}
+       onDragOver={e=>{if(dados.podeMoverCards&&!movendo&&col.id!=='orcamento'){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
+       onDrop={e=>{
+        if(!dados.podeMoverCards||movendo||col.id==='orcamento')return
+        const origem=e.dataTransfer.getData('text/plain')
+        if(!origem.startsWith('atlas-principal:'))return
+        const vendaId=origem.slice('atlas-principal:'.length)
+        if(!dados.cards.some(c=>c.vendas.length===1&&c.vendas[0].vendaId===vendaId))return
+        e.preventDefault();void moverVenda(vendaId,col.id)
+       }}
+       className="w-[238px] shrink-0 rounded-xl border sm:w-auto sm:min-w-0 border-slate-100 bg-slate-50/75">
        <div className={'flex min-h-14 items-center justify-between gap-2 rounded-t-xl border-b px-3 py-3 '+(cores[col.id]||cores.orcamento)}>
         <h3 className="text-xs font-extrabold">{col.nome}</h3>
         <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-bold">{lista.length}</span>
@@ -122,10 +156,21 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
         {lista.map(card=>{
          const atual=card.vendas[0]
          const abrirVenda=podeVerVendas&&atual
-         return <article key={card.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+         return <article data-kanban-card key={card.id}
+          draggable={!!(dados.podeMoverCards&&card.vendas.length===1&&atual?.vendaId)&&!movendo}
+          onDragStart={e=>{
+           if(!dados.podeMoverCards||card.vendas.length!==1||!atual?.vendaId||movendo){e.preventDefault();return}
+           e.dataTransfer.setData('text/plain','atlas-principal:'+atual.vendaId)
+           e.dataTransfer.effectAllowed='move'
+          }}
+          className={'overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm '+(dados.podeMoverCards&&card.vendas.length===1?'cursor-grab active:cursor-grabbing':'')}>
           {card.fotoProjetoUrl?<img src={card.fotoProjetoUrl} alt={'Foto da obra '+card.nome}
            className="h-24 w-full object-cover" loading="lazy"/>:null}
           <div className="p-3">
+           {dados.podeMoverCards&&card.vendas.length===1&&atual?.vendaId&&<AlcaArrastarCard
+            desabilitado={movendo} onSoltar={destino=>void moverVenda(atual.vendaId,destino)}
+            label="Segure aqui e arraste a obra" />}
+           {dados.podeMoverCards&&card.vendas.length>1&&<p className="mb-2 rounded bg-amber-50 p-2 text-[10px] text-amber-800">Esta obra possui várias vendas. Abra a venda específica para reposicionar sem afetar as demais.</p>}
            <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-start gap-2">
              {!card.fotoProjetoUrl&&<Building2 size={17} className="mt-0.5 shrink-0 text-blue-600"/>}
@@ -142,6 +187,14 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
            <p className="mt-1 text-[10px] text-slate-500">{card.progressoDescricao}</p>
            <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-500"><CalendarDays size={12}/>Entrega: {dataBR(card.previsaoEntrega)}</p>
            {card.orcamentos!==null&&<p className="mt-1 text-[10px] text-slate-500">{card.orcamentos} orçamento(s) atual(is) vinculado(s)</p>}
+           {dados.podeMoverCards&&card.vendas.length===1&&atual?.vendaId&&<label className="mt-2 block text-[10px] font-semibold text-blue-900">
+            Mover obra para a coluna
+            <select aria-label={'Mover obra '+card.nome} disabled={movendo} value={card.colunaId}
+             onChange={e=>void moverVenda(atual.vendaId,e.target.value)}
+             className="mt-1 block w-full rounded border border-blue-200 bg-blue-50 px-2 py-1.5 text-xs text-blue-950">
+             {colunas.filter(c=>c.id!=='orcamento').map(c=><option value={c.id} key={c.id}>{c.nome}</option>)}
+            </select>
+           </label>}
            {abrirVenda?<Link href={'/clientes/'+encodeURIComponent(clienteId)+'/vendas/'+encodeURIComponent(atual.vendaId)}
             className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:underline">Abrir fluxo da obra <ArrowUpRight size={13}/></Link>
             :<button type="button" onClick={onAbrirObras} className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:underline">
@@ -166,7 +219,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
     {dados.vendasSemObra} venda(s) sem obra vinculada não foram posicionadas automaticamente. Vincule-as à obra correta para acompanhar neste Kanban.
    </p>}
    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500">
-    <span>Somente consulta · arraste os cards no Kanban da venda para sincronizar com o Geral.</span>
+    <span>{dados?.podeMoverCards?'Arraste o card ou selecione a coluna: a posição aparece nos três Kanbans.':'Posição somente consulta; usuário sem permissão de movimentação.'}</span>
     {dados?.atualizadoEm&&<span>Atualizado: {new Date(dados.atualizadoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>}
    </div>
   </div>
