@@ -24,7 +24,7 @@ export type ColunaVisualProjeto = {
   descricao?: string
   cor?: string
   prazoHoras?: number | null
-  statusDisponiveis?: { id: string; nome: string }[]
+  statusDisponiveis?: { id: string; nome: string; conclusivo?: boolean }[]
 }
 
 export const COLUNAS_GERAIS_PADRAO: ColunaVisualProjeto[] = [
@@ -105,7 +105,8 @@ export function validarColunasGerais(colunas: ColunaVisualProjeto[]): string[] {
         for (const status of c.statusDisponiveis) {
           if (!status || typeof status.id !== 'string' || !/^[a-z0-9_-]{1,48}$/.test(status.id) ||
               chaves.has(status.id) || typeof status.nome !== 'string' ||
-              !status.nome.trim() || status.nome.trim().length > 60) {
+              !status.nome.trim() || status.nome.trim().length > 60 ||
+              (status.conclusivo !== undefined && typeof status.conclusivo !== 'boolean')) {
             erros.push('Status inválido ou duplicado: ' + c.id)
           } else chaves.add(status.id)
         }
@@ -158,7 +159,7 @@ export function atualizarColunaVisual(
     ...c, nome: dados.nome.trim(), descricao: dados.descricao?.trim() || '',
     cor: dados.cor, prazoDias: dados.prazoDias,
     prazoHoras: dados.prazoHoras,
-    statusDisponiveis: (dados.statusDisponiveis || []).map(s => ({ id: s.id, nome: s.nome.trim() })),
+    statusDisponiveis: (dados.statusDisponiveis || []).map(s => ({ id: s.id, nome: s.nome.trim(), conclusivo: s.conclusivo === true })),
   } : { ...c })
   garantirConfig(novas)
   return novas
