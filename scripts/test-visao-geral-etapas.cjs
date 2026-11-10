@@ -15,7 +15,9 @@ const {
   reordenarColunasGerais: reordenar, avaliarAlertaProjeto: alerta,
 } = modulo.exports
 assert.deepEqual(validar(padrao), [])
-assert.equal(padrao.length, 8)
+assert.equal(padrao.length, 9)
+assert.equal(padrao[1].id,'validacao_projeto')
+assert.equal(coluna(padrao, 'conferir_projeto').id,'validacao_projeto')
 const base = {
   vendaConfirmada: true, projetoConferido: false, conferenciaIniciada: false,
   medicaoFinal: 'pendente', materiais: 'aguardando_liberacao',

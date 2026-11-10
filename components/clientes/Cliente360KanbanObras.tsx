@@ -3,13 +3,15 @@ import {useCallback,useEffect,useMemo,useState} from 'react'
 import Link from 'next/link'
 import {ArrowUpRight,Building2,CalendarDays,CheckCircle2,Columns3,MapPin,RefreshCw,Search,SlidersHorizontal} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
-import {COLUNAS_KANBAN_CLIENTE,type ObraCardCliente} from '@/lib/cliente360KanbanObras'
+import type {ObraCardCliente} from '@/lib/cliente360KanbanObras'
+import {COLUNAS_GERAIS_PADRAO} from '@/lib/visaoGeralProjetos'
 
-type Resposta={cards:ObraCardCliente[];vendasSemObra:number;atualizadoEm:string}
+type Resposta={cards:ObraCardCliente[];colunas?:typeof COLUNAS_GERAIS_PADRAO;vendasSemObra:number;atualizadoEm:string}
 type Filtro='todas'|'ativas'|'concluidas'
 const cores:Record<string,string>={
  orcamento:'bg-slate-100 text-slate-800 border-slate-200',
  vendido:'bg-blue-100 text-blue-800 border-blue-200',
+ validacao_projeto:'bg-sky-100 text-sky-800 border-sky-200',
  separacao:'bg-cyan-100 text-cyan-800 border-cyan-200',
  compras:'bg-amber-100 text-amber-800 border-amber-200',
  aguardando:'bg-orange-100 text-orange-800 border-orange-200',
@@ -59,6 +61,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
   return()=>{window.clearInterval(timer);document.removeEventListener('visibilitychange',voltar)}
  },[carregar])
  const cards=dados?.cards||[]
+ const colunas=[{id:'orcamento',nome:'Pré-venda / Orçamento',ordem:-1},...(dados?.colunas||COLUNAS_GERAIS_PADRAO)].sort((a,b)=>a.ordem-b.ordem)
  const ativos=cards.filter(c=>c.colunaId!=='finalizado')
  const visiveis=useMemo(()=>{
   const termo=busca.trim().toLocaleLowerCase('pt-BR')
@@ -84,7 +87,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
     <div className="flex items-center gap-3">
      <div className="rounded-lg bg-blue-50 p-2 text-blue-700"><Columns3 size={19}/></div>
      <div><h2 className="font-bold text-slate-900">Kanban do Cliente (por Obra)</h2>
-      <p className="text-xs text-slate-500">Um card por obra. Etapas sincronizadas com as vendas e operações reais.</p>
+      <p className="text-xs text-slate-500">Um card por obra. Colunas e posições visuais iguais ao Kanban Geral; operações continuam independentes.</p>
      </div>
     </div>
     <div className="flex flex-wrap items-center gap-2">
@@ -108,7 +111,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
    {carregando&&!dados&&<p className="p-5 text-sm text-slate-500">Consultando a evolução das obras...</p>}
    {dados&&<div className="overflow-x-auto px-3 pb-3 pt-3" role="region" aria-label="Colunas do Kanban de obras" tabIndex={0}>
     <div className="flex w-max gap-2 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-     {COLUNAS_KANBAN_CLIENTE.map(col=>{
+     {colunas.map(col=>{
       const lista=visiveis.filter(c=>c.colunaId===col.id)
       return <div key={col.id} className="w-[238px] shrink-0 rounded-xl border sm:w-auto sm:min-w-0 border-slate-100 bg-slate-50/75">
        <div className={'flex min-h-14 items-center justify-between gap-2 rounded-t-xl border-b px-3 py-3 '+(cores[col.id]||cores.orcamento)}>
@@ -163,7 +166,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
     {dados.vendasSemObra} venda(s) sem obra vinculada não foram posicionadas automaticamente. Vincule-as à obra correta para acompanhar neste Kanban.
    </p>}
    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500">
-    <span>Somente consulta · movimentações continuam no Kanban operacional da venda.</span>
+    <span>Somente consulta · arraste os cards no Kanban da venda para sincronizar com o Geral.</span>
     {dados?.atualizadoEm&&<span>Atualizado: {new Date(dados.atualizadoEm).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>}
    </div>
   </div>

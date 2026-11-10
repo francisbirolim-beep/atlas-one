@@ -12,9 +12,9 @@ for(const [nome,c] of [['Kanban da obra',obra],['Kanban Geral',geral]]){
  assert.ok(c.includes('onDragEnd='),nome+': falta limpeza de estado')
 }
 assert.match(obra,/const id=origem.slice\('atlas-manual:'\.length\)/)
-assert.match(obra,/COLUNAS_GERAIS_PADRAO\.map\(c=><option key=\{c\.id\} value=\{c\.criterios\[0\]\}/)
-assert.match(obra,/dados&&!dados.podeMoverCards/)
-assert.match(obra,/void moverPrincipal\(destino\)/)
+assert.match(obra,/colunas\.map\(c=><option key=\{c\.id\} value=\{c\.id\}/)
+assert.match(obra,/dados\?\.podeMoverCards/)
+assert.match(obra,/void moverPrincipal\(col\.id\)/)
 assert.match(geral,/void moverCardVisual\(id,destinoVisual\)/)
 assert.ok(!geral.includes('!arrastando||salvandoCard'),'Drop do Kanban Geral ainda depende do estado temporário')
 console.log('PASS: drag/drop lê origem do evento, alça disponível, rolagem e seletores corretos')

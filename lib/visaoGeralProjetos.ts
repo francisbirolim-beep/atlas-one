@@ -23,14 +23,15 @@ export type ColunaVisualProjeto = {
 }
 
 export const COLUNAS_GERAIS_PADRAO: ColunaVisualProjeto[] = [
-  { id:'vendido',nome:'Vendido',ordem:0,criterios:['vendido','conferir_projeto'],prazoDias:null },
-  { id:'separacao',nome:'Separação de Materiais',ordem:1,criterios:['separacao_materiais','compras_liberacao'],prazoDias:null },
-  { id:'compras',nome:'Compras',ordem:2,criterios:['compras'],prazoDias:null },
-  { id:'aguardando',nome:'Aguardando Material',ordem:3,criterios:['aguardando_materiais'],prazoDias:null },
-  { id:'medicao',nome:'Medição Final',ordem:4,criterios:['medicao_final'],prazoDias:null },
-  { id:'producao',nome:'Produção',ordem:5,criterios:['aguardando_producao','producao'],prazoDias:null },
-  { id:'instalacao',nome:'Instalação',ordem:6,criterios:['aguardando_instalacao','instalacao'],prazoDias:null },
-  { id:'finalizado',nome:'Finalizado',ordem:7,criterios:['finalizado'],prazoDias:null },
+  { id:'vendido',nome:'Vendido',ordem:0,criterios:['vendido'],prazoDias:null },
+  { id:'validacao_projeto',nome:'Validação de Projeto',ordem:1,criterios:['conferir_projeto'],prazoDias:null },
+  { id:'separacao',nome:'Separação de Materiais',ordem:2,criterios:['separacao_materiais','compras_liberacao'],prazoDias:null },
+  { id:'compras',nome:'Compras',ordem:3,criterios:['compras'],prazoDias:null },
+  { id:'aguardando',nome:'Aguardando Material',ordem:4,criterios:['aguardando_materiais'],prazoDias:null },
+  { id:'medicao',nome:'Medição Final',ordem:5,criterios:['medicao_final'],prazoDias:null },
+  { id:'producao',nome:'Produção',ordem:6,criterios:['aguardando_producao','producao'],prazoDias:null },
+  { id:'instalacao',nome:'Instalação',ordem:7,criterios:['aguardando_instalacao','instalacao'],prazoDias:null },
+  { id:'finalizado',nome:'Finalizado',ordem:8,criterios:['finalizado'],prazoDias:null },
 ]
 
 export type EvidenciasProjeto = {

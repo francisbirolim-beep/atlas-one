@@ -4,6 +4,7 @@ import {podeConsultarPainelGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {projetarCardGeral,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
 import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
+import {colunasKanbanEmpresa,posicionarCardVisual} from '@/lib/kanbanColunasSincronizadas'
 import type {MaterialResumo,PedidoGeralCard,DetalheMaterialCompra} from '@/lib/visaoGeralDemo'
 export const dynamic='force-dynamic'
 export const runtime='nodejs'
@@ -40,6 +41,9 @@ export async function GET(req:NextRequest){
   if(!(await podeConsultarPainelGeral(u,'visao-geral-projetos'))&&!permissaoObra?.consultar)
     return respErro('Acesso não autorizado à Visão Geral ou à obra.',403)
   const empresa=u.empresa_id
+  const layout=await db.from('visao_geral_configuracoes').select('colunas').eq('empresa_id',empresa).maybeSingle()
+  if(layout.error&&!['PGRST205','42P01'].includes(String(layout.error.code||'')))throw layout.error
+  const colunas=colunasKanbanEmpresa(layout.data?.colunas)
   let consultaVendas=db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,created_at,status')
    .eq('empresa_id',empresa)
   if(vendaSelecionada)consultaVendas=consultaVendas.eq('id',vendaSelecionada)
@@ -197,7 +201,8 @@ export async function GET(req:NextRequest){
    if(itens.some(i=>txt(i.pendencia)))pendencias.push('Existem pendências na instalação')
    const card=projetarCardGeral({vendaId:v.id,cliente:nomeCliente.get(v.cliente_id)||'Cliente sem cadastro',
     projeto:obra?.nome||'Obra não vinculada',sinais,previsaoEntrega:obra?.previsao_entrega,pendencias},
-    COLUNAS_GERAIS_PADRAO,hoje)
+    colunas,hoje)
+   if(!card)return null
    return {...card,clienteId:v.cliente_id,obraId:v.obra_id,numeroOrcamento:porOrc.get(v.orcamento_id)||'não identificado',
     materiais:itensAtuais.length?resumoItensAtuais(itensAtuais):categorias(necessidades),
     compras:itensAtuais.length?{total:itensAtuais.length,comprados:compradosAtuais.length,recebidos:recebidosAtuais.length}:{total:necessidades.length,comprados:comPedido,recebidos:recebidas},
@@ -208,23 +213,16 @@ export async function GET(req:NextRequest){
     instalacaoMes:agenda.get(v.id)?.data_prevista?.slice(0,7)||null,
     valorInstalacao:agenda.get(v.id)?Number(agenda.get(v.id)?.valor_programado):null,
     detalhesCompra:detalhesAtuais}
-  }).filter(c=>c.vendaId)
+  }).filter((c):c is NonNullable<typeof c>=>c!==null)
   // Ajustes visuais do Master, sem alterar Cliente 360 ou status operacionais.
   const controlesR=await db.from('visao_geral_cards_controle')
-    .select('venda_id,estado,motivo,etapa_visual,updated_at').eq('empresa_id',empresa).limit(1000)
+    .select('venda_id,estado,motivo,etapa_visual,coluna_visual_id,updated_at').eq('empresa_id',empresa).limit(1000)
   if(controlesR.error)throw controlesR.error
   const controles=new Map((controlesR.data||[]).map(c=>[c.venda_id,c]))
   const normalizados=cards.map(c=>{
     const controle=controles.get(c.vendaId)
-    if(controle?.estado==='finalizado')
-     return {...c,etapaOrigem:c.etapaOperacional,etapaOperacional:'finalizado',colunaId:'finalizado',
-      cor:'azul' as const,controleMaster:'finalizado',motivoControle:controle.motivo}
-    if(controle?.estado==='manual'){
-     const coluna=COLUNAS_GERAIS_PADRAO.find(x=>x.criterios.includes(controle.etapa_visual))
-     if(coluna)return {...c,etapaOrigem:c.etapaOperacional,etapaOperacional:controle.etapa_visual,
-      colunaId:coluna.id,controleMaster:'manual',motivoControle:controle.motivo}
-    }
-    return {...c,controleMaster:controle?.estado||null,motivoControle:controle?.motivo||null}
+    const posicionado=posicionarCardVisual(c,controle,colunas)
+    return controle?.estado==='finalizado'?{...posicionado,cor:'azul' as const}:posicionado
   })
   const ativos=normalizados.filter(c=>c.controleMaster!=='oculto')
   const ocultos=(u.role==='master'||permissaoObra?.restaurar)
@@ -274,7 +272,7 @@ export async function GET(req:NextRequest){
    ?manuais.filter(m=>m.retirado_em&&vendasPorId.has(m.venda_id)).map(m=>({
      id:m.id,vendaId:m.venda_id,titulo:m.titulo,etapa:m.etapa,retiradoEm:m.retirado_em
     })):[]
-  return NextResponse.json({cards:ativos,ocultos,pedidos,acompanhamentos,retiradosManuais,
+  return NextResponse.json({cards:ativos,colunas,ocultos,pedidos,acompanhamentos,retiradosManuais,
    permissoesObra:permissaoObra,kanbanObraConfigurado,
    usuarioMaster:u.role==='master',podeMoverCards,atualizadoEm:new Date().toISOString(),
    observacao:'Os percentuais sem quantidades ou unidades conciliadas são exibidos como Não apurado. Agendamentos não foram inferidos a partir da entrega da obra.'},

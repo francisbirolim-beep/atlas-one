@@ -1,4 +1,4 @@
-import { COLUNAS_GERAIS_PADRAO } from './visaoGeralProjetos'
+import { COLUNAS_GERAIS_PADRAO,type ColunaVisualProjeto } from './visaoGeralProjetos'
 
 /**
  * Espelho somente leitura. Um card por obra do Cliente 360, mesmo quando
@@ -39,8 +39,9 @@ export type ObraCardCliente = ObraBaseCliente & {
 export function agruparKanbanObras(
   obras: ObraBaseCliente[],
   vendasPorObra: Record<string, VendaCardCliente[]>,
+  colunas:ColunaVisualProjeto[] = COLUNAS_GERAIS_PADRAO,
 ): ObraCardCliente[] {
-  const ordem = new Map(COLUNAS_KANBAN_CLIENTE.map(c => [c.id, c.ordem]))
+  const ordem = new Map([{id:'orcamento',ordem:-1},...colunas].map(c => [c.id, c.ordem]))
   return obras.map(obra => {
     const vendas = (vendasPorObra[obra.id] || []).slice().sort((a, b) => {
       const aFinal = a.colunaId === 'finalizado'
