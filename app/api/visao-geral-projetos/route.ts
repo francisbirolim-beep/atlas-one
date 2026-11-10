@@ -215,10 +215,17 @@ export async function GET(req:NextRequest){
     detalhesCompra:detalhesAtuais}
   }).filter((c):c is NonNullable<typeof c>=>c!==null)
   // Ajustes visuais do Master, sem alterar Cliente 360 ou status operacionais.
-  const controlesR=await db.from('visao_geral_cards_controle')
-    .select('venda_id,estado,motivo,etapa_visual,coluna_visual_id,updated_at').eq('empresa_id',empresa).limit(1000)
+  const controlesR=vendaIds.length?await db.from('visao_geral_cards_controle')
+    .select('venda_id,estado,motivo,etapa_visual,coluna_visual_id,updated_at')
+    .eq('empresa_id',empresa).in('venda_id',vendaIds).limit(1000)
+    :{data:[],error:null}
   if(controlesR.error)throw controlesR.error
   const controles=new Map((controlesR.data||[]).map(c=>[c.venda_id,c]))
+  // Mapa explícito da fonte persistida para a obra e para o Kanban Geral.
+  // Não inferir a coluna a partir de compras/produção após movimentação manual.
+  const posicoesPersistidas=Object.fromEntries((controlesR.data||[])
+   .filter(c=>c.estado==='manual'&&colunas.some(col=>col.id===c.coluna_visual_id))
+   .map(c=>[c.venda_id,c.coluna_visual_id]))
   const normalizados=cards.map(c=>{
     const controle=controles.get(c.vendaId)
     const posicionado=posicionarCardVisual(c,controle,colunas)
@@ -272,7 +279,7 @@ export async function GET(req:NextRequest){
    ?manuais.filter(m=>m.retirado_em&&vendasPorId.has(m.venda_id)).map(m=>({
      id:m.id,vendaId:m.venda_id,titulo:m.titulo,etapa:m.etapa,retiradoEm:m.retirado_em
     })):[]
-  return NextResponse.json({cards:ativos,colunas,ocultos,pedidos,acompanhamentos,retiradosManuais,
+  return NextResponse.json({cards:ativos,colunas,posicoesPersistidas,ocultos,pedidos,acompanhamentos,retiradosManuais,
    permissoesObra:permissaoObra,kanbanObraConfigurado,
    usuarioMaster:u.role==='master',podeMoverCards,atualizadoEm:new Date().toISOString(),
    observacao:'Os percentuais sem quantidades ou unidades conciliadas são exibidos como Não apurado. Agendamentos não foram inferidos a partir da entrega da obra.'},
