@@ -189,6 +189,7 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('clientes.portal.financeiro','Consultar financeiro','Ver posição financeira do cliente.'),
     a('clientes.portal.documentos','Consultar documentos','Ver documentos disponíveis no portal.'),
     a('clientes.portal.editar','Editar cadastro','Alterar dados do cliente.'),
+    a('clientes.portal.excluir_venda','Excluir venda incorreta','Permitir exclusão lógica auditada de venda lançada por engano, com justificativa obrigatória. Não exclui vendas com pagamentos ou movimentação operacional.'),
   ]),
   m('kanban-obra','portal-cliente','Kanban individual por obra','Acompanhar cada venda e gerenciar cartões manuais auditados.','clientes',[
     a('clientes.kanban_obra.consultar','Consultar Kanban da obra','Visualizar o progresso de uma venda específica.'),
