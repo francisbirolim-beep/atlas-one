@@ -81,9 +81,9 @@ function CardProjeto({card,compacto,abrir,ativo}:{card:ProjetoGeralCard;compacto
   (ativo?'border-[3px] border-blue-500':'border-[#d8e1f0]')+' '+(compacto?'p-2':'p-3')}>
   <p className="line-clamp-2 min-h-[28px] text-[11px] font-extrabold leading-[14px] text-[#092044]" title={card.cliente}>Cliente: {card.cliente}</p>
   <p className="mt-0.5 truncate text-[10px] text-[#192c50]">Orçamento: <b>{card.numeroOrcamento||'Não vinculado'}</b></p>
-  <FotoReal url={card.fotoProjetoUrl} alt={'Foto vinculada ao orçamento de '+card.cliente} classe={(compacto?'h-[72px]':'h-[110px]')+' mt-2 w-full'}/>
-  <div className="mt-2 space-y-[5px]">
-   {tipos.map(tipo=><Progresso key={tipo} nome={nomes[tipo]} valor={materias[tipo]??null} compacto/>)}
+  <p className="mt-1 line-clamp-2 text-[10px] text-slate-600">Obra: {card.projeto||'Não vinculada'}</p>
+  <div className="mt-2 flex flex-wrap gap-1" aria-label="Resumo de materiais">
+   {tipos.map(tipo=><span key={tipo} className="rounded bg-slate-100 px-1.5 py-1 text-[10px] text-slate-700">{nomes[tipo]}: <b>{porcento(materias[tipo]??null)}</b></span>)}
   </div>
   {card.compras.total>0&&<p className="mt-2 line-clamp-2 border-t border-slate-100 pt-1 text-[10px] text-blue-700">
    <ShoppingCart size={11} className="mr-1 inline"/> {card.compras.comprados} de {card.compras.total} itens comprados
@@ -167,6 +167,7 @@ export default function VisaoGeralProjetos(){
  const [modoTv,setModoTv]=useState(false),[compacto,setCompacto]=useState(false),[config,setConfig]=useState(false),[novoNome,setNovoNome]=useState('')
  const [filtros,setFiltros]=useState(false),[busca,setBusca]=useState(''),[condicao,setCondicao]=useState<Condicao>('todos')
  const [novoCriterio,setNovoCriterio]=useState<EtapaOperacional>('compras_liberacao'),[nomeEditando,setNomeEditando]=useState<Record<string,string>>({})
+ const [unidadePrazos,setUnidadePrazos]=useState<Record<string,'horas'|'dias'>>({})
  const [fechou,setFechou]=useState(false)
  const selecionadoInicial=useRef(false)
  const leituraAtual=useRef(0)
@@ -343,6 +344,27 @@ export default function VisaoGeralProjetos(){
   setColunas(a=>criarColunaGeral(a,'manual_'+Date.now(),novoNome));setNovoNome('');setErro('')
  }catch(e){setErro(String(e))}}
  function renomear(id:string){try{setColunas(c=>renomearColunaGeral(c,id,nomeEditando[id]||''));setErro('')}catch(e){setErro(String(e))}}
+ function alterarColuna(id:string,patch:Partial<ColunaVisualProjeto>){
+  setColunas(antes=>antes.map(c=>c.id===id?{...c,...patch}:c))
+ }
+ function adicionarStatus(id:string){
+  const nome=window.prompt('Nome do novo status desta coluna:')
+  if(!nome?.trim())return
+  const novo={id:'s_'+Date.now().toString(36),nome:nome.trim()}
+  alterarColuna(id,{statusDisponiveis:[...(colunas.find(c=>c.id===id)?.statusDisponiveis||[]),novo]})
+ }
+ function alterarStatus(id:string,statusId:string){
+  const col=colunas.find(c=>c.id===id)
+  const atual=col?.statusDisponiveis?.find(s=>s.id===statusId)
+  if(!col||!atual)return
+  const nome=window.prompt('Nome do status:',atual.nome)
+  if(!nome?.trim())return
+  alterarColuna(id,{statusDisponiveis:col.statusDisponiveis?.map(s=>s.id===statusId?{...s,nome:nome.trim()}:s)})
+ }
+ function removerStatus(id:string,statusId:string){
+  // Evitar remover status já associados a cards sem migração explícita.
+  setErro('Exclusão de status será liberada com a auditoria e verificação de cards vinculados.')
+ }
  function vincular(id:string){try{setColunas(c=>associarCriterioColuna(c,novoCriterio,id));setErro('')}catch(e){setErro(String(e))}}
  function excluir(id:string){const dest=colunas.find(c=>c.id!==id);if(!dest)return
   const resposta=window.prompt('ID da coluna de destino dos vínculos (nenhum projeto será excluído):',dest.id);if(!resposta)return
@@ -484,7 +506,19 @@ export default function VisaoGeralProjetos(){
      onDragEnd={()=>setArrastandoColuna(null)}
      className={'rounded-lg border p-2 '+(arrastandoColuna===c.id?'border-blue-400 bg-[#1b3a59]':'border-[#39516b]')}>
      <p className="mb-1 flex items-center gap-1 text-[10px] text-slate-300"><GripVertical size={14}/> Etapa {c.ordem+1} · {c.criterios.length} vínculo(s) operacional(is)</p>
-     <input value={nomeEditando[c.id]??c.nome} onChange={e=>setNomeEditando(a=>({...a,[c.id]:e.target.value}))} className="mb-2 w-full rounded border border-[#34506b] bg-[#102a45] px-2 py-1.5 text-sm"/>
+     <input value={nomeEditando[c.id]??c.nome} onChange={e=>setNomeEditando(a=>({...a,[c.id]:e.target.value}))} className="mb-2 w-full rounded border border-[#34506b] bg-[#102a45] px-2 py-1.5 text-sm" aria-label={'Nome da coluna '+c.nome}/>
+     <textarea value={c.descricao||''} onChange={e=>alterarColuna(c.id,{descricao:e.target.value})} maxLength={240} rows={2} placeholder="Descrição da etapa" aria-label={'Descrição da coluna '+c.nome} className="mb-2 w-full rounded border border-[#34506b] bg-[#102a45] px-2 py-1.5 text-xs"/>
+     <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
+      <label className="flex items-center gap-1">Cor <input type="color" value={c.cor||'#2679fb'} aria-label={'Cor da coluna '+c.nome} onChange={e=>alterarColuna(c.id,{cor:e.target.value})} className="h-7 w-9 cursor-pointer rounded border border-[#34506b] bg-transparent"/></label>
+      <label className="flex items-center gap-1">Prazo <input type="number" min={0} max={3650} value={Math.round(((c.prazoHoras??((c.prazoDias??0)*24)))/(unidadePrazos[c.id]==='horas'?1:24))||''} placeholder="Sem prazo" aria-label={'Prazo da coluna '+c.nome}
+       onChange={e=>{const n=Number(e.target.value);alterarColuna(c.id,{prazoDias:null,prazoHoras:e.target.value&&n>0?n*(unidadePrazos[c.id]==='horas'?1:24):null})}} className="w-16 rounded border border-[#34506b] bg-[#102a45] px-1 py-1"/></label>
+      <select aria-label={'Unidade do prazo de '+c.nome} value={unidadePrazos[c.id]||'dias'} onChange={e=>{const unidade=e.target.value as 'horas'|'dias';setUnidadePrazos(p=>({...p,[c.id]:unidade}));alterarColuna(c.id,{prazoDias:null,prazoHoras:(c.prazoHoras??((c.prazoDias??0)*24))||null})}} className="rounded border border-[#34506b] bg-[#102a45] px-1 py-1"><option value="horas">Horas</option><option value="dias">Dias</option></select>
+     </div>
+     <div className="mb-2 space-y-1 text-[10px]">
+      <p className="font-bold text-slate-200">Status desta etapa</p>
+      {(c.statusDisponiveis||[]).map(s=><div key={s.id} className="flex items-center justify-between gap-1 rounded border border-white/10 px-2 py-1"><span>{s.nome}</span><button type="button" onClick={()=>alterarStatus(c.id,s.id)} className="rounded bg-[#34506b] px-2 py-0.5">Editar</button></div>)}
+      <button type="button" onClick={()=>adicionarStatus(c.id)} className="rounded border border-[#48627f] px-2 py-1">+ Criar status</button>
+     </div>
      <div className="flex flex-wrap gap-1">{([['Salvar',()=>renomear(c.id)],['←',()=>ordem(c.id,-1)],['→',()=>ordem(c.id,1)],['Vincular',()=>vincular(c.id)],['Excluir',()=>excluir(c.id)]] as [string,()=>void][]).map(([l,acao])=><button key={l} onClick={acao} className="rounded border border-[#48627f] px-2 py-1 text-[10px] hover:bg-blue-950">{l}</button>)}</div>
     </div>)}</div>
     {!!validade.length&&<p className="text-xs text-rose-300">{validade.join('; ')}</p>}
@@ -500,7 +534,7 @@ export default function VisaoGeralProjetos(){
      if(e.clientX<area.left+65)e.currentTarget.scrollLeft-=26
      else if(e.clientX>area.right-65)e.currentTarget.scrollLeft+=26
     }}>
-    <div className="grid min-w-max items-stretch gap-2" style={{gridTemplateColumns:'repeat('+colunasOrdenadas.length+','+(compacto?'155px':'188px')+')'}}>
+    <div className="grid min-w-max items-stretch gap-2" style={{gridTemplateColumns:'repeat('+(colunasOrdenadas.length+(podeEditarColunas?1:0))+','+(compacto?'155px':'188px')+')'}}>
      {colunasOrdenadas.map((col,i)=>{
       const vis=agrupado.get(col.id)||[]
       const pedidosCol=pedidosVisiveis.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
@@ -514,6 +548,7 @@ export default function VisaoGeralProjetos(){
        onDrop={e=>{
         if(demo||salvandoCard)return
         const origem=e.dataTransfer.getData('text/plain')
+        if(origem.startsWith('atlas-coluna:')&&podeEditarColunas){soltarColuna(col.id);setArrastandoColuna(null);return}
         const id=origem.startsWith('atlas-principal:')?
          origem.slice('atlas-principal:'.length):(!origem?arrasteCard.current?.id:null)
         if(!id||!cards.some(c=>c.vendaId===id))return
@@ -522,12 +557,15 @@ export default function VisaoGeralProjetos(){
         setArrastando(null);void moverCardVisual(id,destinoVisual)
        }}
        className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoVisual&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
-       <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:paleta.cabecalho}}>
+       <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:col.cor||paleta.cabecalho}}>
         <div className="flex items-center gap-1">
          <Icon size={15} className="shrink-0"/>
          <h2 className="min-w-0 flex-1 text-[11px] font-extrabold leading-tight">{col.nome}</h2>
+         {podeEditarColunas&&<span draggable onDragStart={e=>{e.stopPropagation();e.dataTransfer.setData('text/plain','atlas-coluna:'+col.id);e.dataTransfer.effectAllowed='move';setArrastandoColuna(col.id)}} onDragEnd={()=>setArrastandoColuna(null)} title="Arrastar para reorganizar coluna" className="cursor-grab" role="button" aria-label={'Arrastar coluna '+col.nome}><GripVertical size={14}/></span>}
          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold">{vis.length}{pedidosCol.length?' + '+pedidosCol.length:''}{manuaisCol.length?' + '+manuaisCol.length:''}</span>
         </div>
+        {col.descricao&&<p title={col.descricao} className="mt-1 line-clamp-2 text-[10px] text-white/90">{col.descricao}</p>}
+        {(col.prazoHoras||col.prazoDias)&&<p className="mt-1 flex items-center gap-1 text-[10px] text-white/90"><Clock3 size={11}/> Prazo: {col.prazoHoras?(col.prazoHoras+' h'):(col.prazoDias+' dias')}</p>}
        </div>
        <Link href="/clientes/identificar" title="Abrir o fluxo oficial de cliente e obra; a etapa será atualizada pelo Cliente 360" className="block border-t border-white/10 py-1.5 text-center text-[11px] font-semibold text-white hover:brightness-110" style={{background:paleta.botao}}>+ Adicionar</Link>
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
@@ -567,6 +605,13 @@ export default function VisaoGeralProjetos(){
        </div>
       </section>
      })}
+     {podeEditarColunas&&<section className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-blue-400/60 bg-[#102d4b] p-3 text-center">
+      <Plus size={27} className="text-blue-300"/>
+      <b className="text-xs text-white">Adicionar coluna</b>
+      <input value={novoNome} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da etapa" aria-label="Nome da nova coluna" className="w-full rounded border border-[#476382] bg-[#0b2037] px-2 py-2 text-xs text-white"/>
+      <button type="button" onClick={()=>{criar();setConfig(true)}} className="rounded bg-blue-600 px-3 py-2 text-xs font-bold text-white">+ Adicionar</button>
+      <span className="text-[10px] text-slate-300">Salvar na personalização para compartilhar com as obras.</span>
+     </section>}
     </div>
    </div>
   </div>
