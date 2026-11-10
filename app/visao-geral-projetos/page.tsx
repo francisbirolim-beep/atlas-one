@@ -173,6 +173,7 @@ export default function VisaoGeralProjetos(){
  const carregar=useCallback(async()=>{
   if(demo===null)return
   if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setPodeMoverCards(false);setCarregando(false);setAtualizado(new Date().toISOString());return}
+  if(movimentoEmCurso.current)return // ignorar polling enquanto valida o destino
   const geracao=++leituraAtual.current
   try{const token=await tokenAtual();if(!token)throw Error('Faça login para consultar a visão geral.')
    const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
