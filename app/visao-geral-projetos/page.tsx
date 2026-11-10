@@ -195,6 +195,8 @@ export default function VisaoGeralProjetos(){
  const arrasteCard=useRef<{id:string;ponto:CoordenadaArraste|null;tratado:boolean}|null>(null)
  const posicoesGravadas=useRef(new Map<string,string>())
  const edicaoColunasPendente=useRef(false)
+ const novaColunaRef=useRef<HTMLElement>(null)
+ const novoNomeRef=useRef<HTMLInputElement>(null)
  const carregar=useCallback(async()=>{
   if(demo===null)return
   if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setPodeMoverCards(false);setCarregando(false);setAtualizado(new Date().toISOString());return}
@@ -243,7 +245,11 @@ export default function VisaoGeralProjetos(){
   selecionadoInicial.current=true
   if(window.innerWidth>=1280)setSelecionado(cards[0].vendaId)
  },[cards,fechou])
- const podeEditarColunas=demo===true||configuravel
+ const podeEditarColunas=demo===true||configuravel||usuarioMaster
+ function revelarAdicionarColuna(){
+  novaColunaRef.current?.scrollIntoView({behavior:'smooth',block:'nearest',inline:'end'})
+  novoNomeRef.current?.focus({preventScroll:true})
+ }
  async function operarMaster(vendaId:string,acao:'finalizar'|'ocultar'|'restaurar'){
   if(!usuarioMaster||demo||salvandoCard){setErro('Apenas o Master pode organizar estes cards reais.');return}
   const titulo=acao==='finalizar'
@@ -431,7 +437,7 @@ export default function VisaoGeralProjetos(){
    setColunas(novas);setColunasSalvas(novas);edicaoColunasPendente.current=false
    setEditarColunaId(null);setAvisoConfiguracao('Simulação: configuração não gravada.');return
   }
-  if(!configuravel){setErro('Acesso reservado ao Master.');return}
+  if(!podeEditarColunas){setErro('Acesso reservado ao Master.');return}
   try{const token=await tokenAtual();if(!token)throw Error('Sessão expirada')
    const r=await fetch('/api/visao-geral-colunas',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({colunas:novas})})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Erro ao salvar')
@@ -523,6 +529,7 @@ export default function VisaoGeralProjetos(){
     <div className="flex flex-wrap items-center gap-2">
      {usuarioMaster&&!demo&&<button type="button" onClick={()=>setMostrarOcultos(v=>!v)} aria-expanded={mostrarOcultos} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Package size={15}/> Cards retirados ({ocultos.length})</button>}
      <button onClick={()=>setFiltros(v=>!v)} aria-expanded={filtros} className={'inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#243c59] '+(filtros?'bg-[#284968]':'bg-[#10253e]')}><Filter size={15}/> Filtros</button>
+     {podeEditarColunas&&<button type="button" onClick={revelarAdicionarColuna} className="inline-flex items-center gap-1.5 rounded-md border border-blue-400/60 bg-blue-700 px-3 py-2 text-[11px] font-bold text-white hover:bg-blue-600" aria-label="Ir ao final do Kanban para adicionar coluna"><Plus size={15}/> Adicionar coluna</button>}
      {podeEditarColunas&&<button onClick={()=>{setEditarColunaId(colunasOrdenadas[0]?.id||null);setAbaConfigColuna('coluna')}} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Settings2 size={15}/> Personalizar Kanban</button>}
      {podeEditarColunas&&edicaoColunasPendente.current&&<button onClick={()=>void salvarConfig()} className="rounded-md bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Salvar alterações</button>}
      <button onClick={()=>setCompacto(v=>!v)} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] text-white"><Columns3 size={15}/>{compacto?'Cards maiores':'Cards menores'}</button>
@@ -730,11 +737,11 @@ export default function VisaoGeralProjetos(){
        </div>
       </section>
      })}
-     {podeEditarColunas&&<section className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-blue-400/60 bg-[#102d4b] p-3 text-center">
+     {podeEditarColunas&&<section ref={novaColunaRef} data-kanban-adicionar-coluna className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-blue-400/60 bg-[#102d4b] p-3 text-center">
       <Plus size={27} className="text-blue-300"/>
       <b className="text-xs text-white">Adicionar coluna</b>
-      <input value={novoNome} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da etapa" aria-label="Nome da nova coluna" className="w-full rounded border border-[#476382] bg-[#0b2037] px-2 py-2 text-xs text-white"/>
-      <button type="button" onClick={criar} className="rounded bg-blue-600 px-3 py-2 text-xs font-bold text-white">+ Adicionar</button>
+      <input ref={novoNomeRef} value={novoNome} maxLength={70} onKeyDown={e=>{if(e.key==='Enter')criar()}} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da etapa" aria-label="Nome da nova coluna" className="w-full rounded border border-[#476382] bg-[#0b2037] px-2 py-2 text-xs text-white"/>
+      <button type="button" onClick={criar} disabled={!novoNome.trim()} className="rounded bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">+ Adicionar</button>
       <span className="text-[10px] text-slate-300">Salvar na personalização para compartilhar com as obras.</span>
      </section>}
     </div>
