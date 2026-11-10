@@ -14,7 +14,7 @@ export type ProjetoGeralCard = {
  medicao?:{registros:number};instalacaoMes?:string|null;dataInstalacao?:string|null;valorInstalacao?:number|null;detalhesCompra?:DetalheMaterialCompra[];
  fotoProjetoUrl?:string|null;dataVenda?:string|null;observacoes?:string|null;
  controleMaster?:string|null;motivoControle?:string|null;etapaOrigem?:string|null;
- statusEtapa?:string[];prazoEtapaEstado?:'sem_prazo'|'amarelo'|'verde'|'vermelho';
+ statusEtapa?:string[];prazoEtapaEstado?:'sem_prazo'|'branco'|'amarelo'|'verde'|'vermelho';
  prazoEtapaVencimento?:string|null;horasEtapaRestantes?:number|null;
 }
 export type PedidoGeralCard = {
