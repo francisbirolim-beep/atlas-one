@@ -44,6 +44,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
  const [filtro,setFiltro]=useState<Filtro>('todas')
  const leituraAtual=useRef(0)
  const movimentoEmCurso=useRef(false)
+ const posicoesGravadas=useRef(new Map<string,string>())
  const carregar=useCallback(async(silencioso=false)=>{
   if(movimentoEmCurso.current)return // rejeitar consulta periódica durante salvamento
   const geracao=++leituraAtual.current
@@ -57,7 +58,15 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
    const json=await resposta.json().catch(()=>({}))
    if(!resposta.ok)throw new Error(json.erro||'Não foi possível carregar o Kanban do Cliente.')
    if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
-   setDados(json as Resposta);setErro('')
+   const retorno=json as Resposta
+   retorno.cards=(retorno.cards||[]).map(c=>{
+    const vendaId=c.vendas.length===1?c.vendas[0].vendaId:null
+    const destino=vendaId?posicoesGravadas.current.get(vendaId):null
+    if(!destino)return c
+    if(c.colunaId===destino){posicoesGravadas.current.delete(vendaId!);return c}
+    return {...c,colunaId:destino,vendas:c.vendas.map(v=>({...v,colunaId:destino}))}
+   })
+   setDados(retorno);setErro('')
   }catch(e){
    if(!movimentoEmCurso.current&&geracao===leituraAtual.current)
     setErro(e instanceof Error?e.message:'Não foi possível carregar as obras.')
@@ -78,9 +87,11 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
   if(!destino||!obra)return
   if(obra.colunaId===colunaId){setAviso('Esta obra já está em '+destino.nome+'.');return}
   const anterior=dados
+  let gravouNoBanco=false
   movimentoEmCurso.current=true
   ++leituraAtual.current
   setMovendo(true);setErro('');setAviso('Salvando obra em '+destino.nome+'...')
+  posicoesGravadas.current.set(vendaId,colunaId)
   setDados(p=>p?{...p,cards:p.cards.map(c=>c.id===obra.id?{
    ...c,colunaId,vendas:c.vendas.map(v=>({...v,colunaId}))
   }:c)}:p)
@@ -94,20 +105,32 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
    const json=await res.json().catch(()=>({}))
    if(!res.ok||!json.ok)throw Error(json.erro||'Não foi possível mover a obra.')
    if(json.colunaId&&json.colunaId!==colunaId)throw Error('O banco respondeu outra coluna.')
+   gravouNoBanco=true
    const resposta=await fetch('/api/clientes/'+encodeURIComponent(clienteId)+'/kanban-obras',{
     headers:{Authorization:'Bearer '+token},cache:'no-store'
    })
    const atualizado=await resposta.json().catch(()=>({}))
-   if(!resposta.ok)throw Error(atualizado.erro||'Não foi possível confirmar o andamento da obra.')
+   if(!resposta.ok){
+    setAviso('✓ Obra gravada em '+destino.nome+'. A leitura será atualizada automaticamente.')
+    return
+   }
    const confirmado=(atualizado.cards||[]).find((c:ObraCardCliente)=>
     c.vendas.length===1&&c.vendas[0].vendaId===vendaId)
-   if(!confirmado||confirmado.colunaId!==colunaId)
-    throw Error('A nova coluna ainda não apareceu na leitura do Cliente 360.')
+   if(!confirmado||confirmado.colunaId!==colunaId){
+    setAviso('✓ Obra gravada em '+destino.nome+'. A sincronização da tela está pendente.')
+    return
+   }
+   posicoesGravadas.current.delete(vendaId)
    setDados(atualizado as Resposta)
    setAviso('✓ Obra salva em '+destino.nome+'.')
   }catch(e){
-   setDados(anterior);setAviso('')
-   setErro(e instanceof Error?e.message:'Falha ao confirmar a posição da obra.')
+   if(gravouNoBanco){
+    setAviso('✓ Obra gravada em '+destino.nome+'. Atualização do painel pendente.')
+   }else{
+    posicoesGravadas.current.delete(vendaId)
+    setDados(anterior);setAviso('')
+    setErro(e instanceof Error?e.message:'Falha ao salvar a posição da obra.')
+   }
   }finally{
    movimentoEmCurso.current=false;setMovendo(false)
   }

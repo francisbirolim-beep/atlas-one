@@ -170,6 +170,7 @@ export default function VisaoGeralProjetos(){
  const selecionadoInicial=useRef(false)
  const leituraAtual=useRef(0)
  const movimentoEmCurso=useRef(false)
+ const posicoesGravadas=useRef(new Map<string,string>())
  const carregar=useCallback(async()=>{
   if(demo===null)return
   if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setPodeMoverCards(false);setCarregando(false);setAtualizado(new Date().toISOString());return}
@@ -180,7 +181,11 @@ export default function VisaoGeralProjetos(){
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
    if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
    if(Array.isArray(j.colunas))setColunas(j.colunas)
-   setCards((j.cards||[]).map((c:ProjetoGeralCard)=>({...c,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]})))
+   setCards((j.cards||[]).map((c:ProjetoGeralCard)=>{
+    const col=posicoesGravadas.current.get(c.vendaId)
+    if(col&&c.colunaId===col)posicoesGravadas.current.delete(c.vendaId)
+    return {...c,colunaId:col||c.colunaId,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]}
+   }))
    setPedidos(j.pedidos||[]);setAcompanhamentos(j.acompanhamentos||[]);setUsuarioMaster(j.usuarioMaster===true);setPodeMoverCards(j.podeMoverCards===true)
    setOcultos(j.usuarioMaster===true?j.ocultos||[]:[])
    setAtualizado(j.atualizadoEm||new Date().toISOString());setErro('')
@@ -244,7 +249,9 @@ export default function VisaoGeralProjetos(){
   const nome=destino.nome
   if(atual.colunaId===colunaId){setAviso('Este card já está na coluna '+nome+'.');return}
   movimentoEmCurso.current=true
+  let gravouNoBanco=false
   ++leituraAtual.current
+  posicoesGravadas.current.set(vendaId,colunaId)
   setSalvandoCard(true);setErro('');setAviso('Salvando card em '+nome+'...')
   setCards(p=>p.map(c=>c.vendaId===vendaId?{...c,colunaId}:c))
   try{
@@ -257,22 +264,35 @@ export default function VisaoGeralProjetos(){
    const j=await r.json().catch(()=>({}))
    if(!r.ok||!j.ok)throw Error(j.erro||'A posição não foi salva.')
    if(j.colunaId&&j.colunaId!==colunaId)throw Error('O banco respondeu uma coluna diferente.')
+   gravouNoBanco=true
    const conferido=await fetch('/api/visao-geral-projetos?vendaId='+encodeURIComponent(vendaId),{
     headers:{Authorization:'Bearer '+token},cache:'no-store'
    })
    const payload=await conferido.json().catch(()=>({}))
-   if(!conferido.ok)throw Error(payload.erro||'Não foi possível confirmar a posição no painel.')
+   if(!conferido.ok){
+    setAviso('✓ Posição gravada em '+nome+'. Atualização do painel pendente.')
+    return
+   }
    const resultado=(payload.cards||[]).find((c:ProjetoGeralCard)=>c.vendaId===vendaId)
-   if(!resultado||resultado.colunaId!==colunaId)throw Error('O Kanban ainda não retornou a posição gravada.')
+   if(!resultado||resultado.colunaId!==colunaId){
+    setAviso('✓ Posição gravada em '+nome+'. A leitura será sincronizada automaticamente.')
+    return
+   }
+   posicoesGravadas.current.delete(vendaId)
    setCards(p=>p.map(c=>c.vendaId===vendaId?{
     ...c,...resultado,materiais:resultado.materiais||[],pendencias:resultado.pendencias||[],
     detalhesCompra:resultado.detalhesCompra||[]
    }:c))
    setAviso('✓ Card salvo na coluna '+nome+'.')
   }catch(e){
-   setCards(p=>p.map(c=>c.vendaId===vendaId?atual:c))
-   setAviso('')
-   setErro(e instanceof Error?e.message:'Falha ao salvar o card.')
+   if(gravouNoBanco){
+    setAviso('✓ Posição gravada em '+nome+'. A consulta será atualizada automaticamente.')
+   }else{
+    posicoesGravadas.current.delete(vendaId)
+    setCards(p=>p.map(c=>c.vendaId===vendaId?atual:c))
+    setAviso('')
+    setErro(e instanceof Error?e.message:'Falha ao salvar o card.')
+   }
   }finally{
    movimentoEmCurso.current=false
    setSalvandoCard(false);setArrastando(null)

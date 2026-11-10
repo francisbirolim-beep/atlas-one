@@ -39,6 +39,8 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  const [arrastandoPrincipal,setArrastandoPrincipal]=useState(false)
  const leituraAtual=useRef(0)
  const movimentacaoEmCurso=useRef(false)
+ // Não descartar a posição já gravada caso uma leitura de atualização retorne dados antigos.
+ const posicaoGravada=useRef<{vendaId:string;colunaId:string}|null>(null)
  const permissoes=dados?.permissoesObra
  const ler=useCallback(async()=>{
   if(movimentacaoEmCurso.current)return // polling não consulta durante POST/GET de confirmação
@@ -53,6 +55,13 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    if(!res.ok)throw Error(payload.erro||'Não foi possível consultar o Kanban da obra.')
    // Descartar respostas antigas ou consultas iniciadas antes de uma movimentação.
    if(movimentacaoEmCurso.current||geracao!==leituraAtual.current)return
+   const gravada=posicaoGravada.current
+   if(gravada){
+    const card=payload.cards?.find((c:ProjetoGeralCard)=>c.vendaId===gravada.vendaId)
+    if(card?.colunaId===gravada.colunaId)posicaoGravada.current=null
+    else payload.cards=(payload.cards||[]).map((c:ProjetoGeralCard)=>
+     c.vendaId===gravada.vendaId?{...c,colunaId:gravada.colunaId}:c)
+   }
    setDados(payload);setErro('')
   }catch(e){
    if(!movimentacaoEmCurso.current&&geracao===leituraAtual.current)
@@ -96,11 +105,13 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
   const nome=colunas.find(c=>c.id===destino)?.nome||destino
   if(atual.colunaId===destino){setAviso('Este card já está em '+nome+'.');setErro('');return}
   const anterior=dados
+  let gravouNoBanco=false
   movimentacaoEmCurso.current=true
   // Reposiciona imediatamente e impede que uma consulta antiga volte a coluna anterior.
   ++leituraAtual.current
   setSalvando(true);setErro('');setAviso('Salvando posição em '+nome+'...')
   setDados(p=>p?{...p,cards:p.cards.map(c=>c.vendaId===vendaId?{...c,colunaId:destino}:c)}:p)
+  posicaoGravada.current={vendaId,colunaId:destino}
   try{
    const token=await tokenAtual()
    if(!token)throw Error('Sessão expirada.')
@@ -113,22 +124,34 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    if(!res.ok||!j.ok)throw Error(j.erro||'Não foi possível gravar a posição (HTTP '+res.status+').')
    if(j.colunaId&&j.colunaId!==destino)
     throw Error('O banco respondeu uma coluna diferente da solicitada.')
+   gravouNoBanco=true
 
    // Não mostrar "salvo" antes de conferir a leitura real que será usada pelo painel.
    const consulta=await fetch('/api/visao-geral-projetos?vendaId='+encodeURIComponent(vendaId),{
     cache:'no-store',headers:{Authorization:'Bearer '+token}
    })
    const atualizado=await consulta.json().catch(()=>({}))
-   if(!consulta.ok)throw Error(atualizado.erro||'A posição foi gravada, mas a consulta falhou.')
+   if(!consulta.ok){
+    setAviso('✓ Posição gravada em '+nome+'. A confirmação da tela será sincronizada automaticamente.')
+    return
+   }
    const confirmado=atualizado.cards?.find((c:ProjetoGeralCard)=>c.vendaId===vendaId)
-   if(!confirmado||confirmado.colunaId!==destino)
-    throw Error('A nova posição ainda não foi confirmada na leitura do Kanban.')
+   if(!confirmado||confirmado.colunaId!==destino){
+    setAviso('✓ Posição gravada em '+nome+'. A atualização visual ainda está sincronizando.')
+    return
+   }
+   posicaoGravada.current=null
    setDados(atualizado)
    setAviso('✓ Card salvo em '+nome+'. A posição permanece após atualizar.')
   }catch(e){
-   setDados(anterior)
-   setAviso('')
-   setErro(e instanceof Error?e.message:'Não foi possível confirmar a posição do card.')
+   if(gravouNoBanco){
+    setAviso('✓ Posição gravada em '+nome+'. Atualização do painel pendente.')
+   }else{
+    posicaoGravada.current=null
+    setDados(anterior)
+    setAviso('')
+    setErro(e instanceof Error?e.message:'Não foi possível salvar a posição do card.')
+   }
   }finally{
    movimentacaoEmCurso.current=false
    setSalvando(false);setArrastandoPrincipal(false)
