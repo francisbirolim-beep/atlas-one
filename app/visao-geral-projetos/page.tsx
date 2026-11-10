@@ -74,18 +74,35 @@ function FotoReal({url,alt,classe}:{url?:string|null;alt:string;classe?:string})
   }
  </div>
 }
-function CardProjeto({card,compacto,abrir,ativo}:{card:ProjetoGeralCard;compacto:boolean;abrir:()=>void;ativo:boolean}){
+function CardProjeto({card,coluna,compacto,abrir,ativo}:{card:ProjetoGeralCard;coluna:ColunaVisualProjeto;compacto:boolean;abrir:()=>void;ativo:boolean}){
  const materias=Object.fromEntries(card.materiais.map(m=>[m.tipo,percentual(m.comprados,m.total)])) as Record<string,number|null>
+ const status=(coluna.statusDisponiveis||[]).filter(s=>(card.statusEtapa||[]).includes(s.id))
+ const atraso=card.prazoEtapaEstado==='vermelho'
+ const concluido=card.prazoEtapaEstado==='verde'
+ const andamento=card.prazoEtapaEstado==='amarelo'
+ const corPrazo=atraso?'border-rose-500':concluido?'border-emerald-500':andamento?'border-amber-400':'border-[#d8e1f0]'
+ const prazoTexto=atraso?'Atrasado '+Math.abs(card.horasEtapaRestantes||0)+'h'
+   :concluido?'Concluído no prazo'
+   :andamento?Math.max(0,card.horasEtapaRestantes||0)+'h restantes':null
+ const mostrarProducao=['aguardando_producao','producao','aguardando_instalacao','instalacao','finalizado'].includes(card.etapaOperacional)
+ const mostrarInstalacao=['aguardando_instalacao','instalacao','finalizado'].includes(card.etapaOperacional)
+ const progressoProd=percentual(card.producao.concluidas,card.producao.total)
+ const progressoInst=percentual(card.instalacao.concluidas,card.instalacao.total)
  return <button type="button" onClick={abrir} aria-pressed={ativo}
-  className={'group w-full min-w-0 rounded-lg border bg-white text-left shadow-[0_2px_9px_rgba(0,0,0,.18)] transition hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-[0_5px_18px_rgba(0,0,0,.25)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 '+
-  (ativo?'border-[3px] border-blue-500':'border-[#d8e1f0]')+' '+(compacto?'p-2':'p-3')}>
-  <p className="line-clamp-2 min-h-[28px] text-[11px] font-extrabold leading-[14px] text-[#092044]" title={card.cliente}>Cliente: {card.cliente}</p>
+  className={'group w-full min-w-0 rounded-lg border-2 bg-white text-left shadow-[0_2px_9px_rgba(0,0,0,.18)] transition hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-[0_5px_18px_rgba(0,0,0,.25)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 '+
+  (ativo?'border-blue-500 ring-1 ring-blue-400':corPrazo)+' '+(compacto?'p-2':'p-2.5')}>
+  <p className="line-clamp-2 text-[11px] font-extrabold leading-[14px] text-[#092044]" title={card.cliente}>{card.cliente}</p>
   <p className="mt-0.5 truncate text-[10px] text-[#192c50]">Orçamento: <b>{card.numeroOrcamento||'Não vinculado'}</b></p>
   <p className="mt-1 line-clamp-2 text-[10px] text-slate-600">Obra: {card.projeto||'Não vinculada'}</p>
-  <div className="mt-2 flex flex-wrap gap-1" aria-label="Resumo de materiais">
-   {tipos.map(tipo=><span key={tipo} className="rounded bg-slate-100 px-1.5 py-1 text-[10px] text-slate-700">{nomes[tipo]}: <b>{porcento(materias[tipo]??null)}</b></span>)}
+  <div className="mt-2 space-y-[5px]" aria-label="Percentuais de materiais">
+   {tipos.map(tipo=><Progresso key={tipo} nome={nomes[tipo]} valor={materias[tipo]??null} compacto/>)}
   </div>
-  {card.compras.total>0&&<p className="mt-2 line-clamp-2 border-t border-slate-100 pt-1 text-[10px] text-blue-700">
+  {mostrarProducao&&<div className="mt-2 border-t border-slate-100 pt-2"><Progresso nome="Produção" valor={progressoProd} compacto/><p className="mt-1 text-[10px] text-slate-500">{card.producao.total?card.producao.concluidas+' de '+card.producao.total+' ordens concluídas':'Sem ordens de produção conciliadas'}</p></div>}
+  {mostrarInstalacao&&<div className="mt-1"><Progresso nome="Instalação" valor={progressoInst} compacto/><p className="mt-1 text-[10px] text-slate-500">{card.instalacao.total?card.instalacao.concluidas+' de '+card.instalacao.total+' itens de instalação concluídos':'Sem itens de instalação conciliados'}</p></div>}
+  {!!status.length&&<div className="mt-2 flex flex-wrap gap-1" aria-label="Status desta etapa">{status.map(s=><span key={s.id} className={'rounded px-1.5 py-1 text-[10px] font-semibold '+(s.conclusivo?'bg-emerald-100 text-emerald-900':'bg-blue-100 text-blue-900')}>{s.nome}</span>)}</div>}
+  {(coluna.statusDisponiveis||[]).length>0&&<p className="mt-1 text-[10px] font-semibold text-blue-700">▾ Abrir para atualizar status</p>}
+  {prazoTexto&&<p className={'mt-2 rounded px-1.5 py-1 text-[10px] font-bold '+(atraso?'bg-rose-100 text-rose-800':concluido?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-900')}><Clock3 size={11} className="mr-1 inline"/>{prazoTexto}</p>}
+  {card.compras.total>0&&<p className="mt-2 border-t border-slate-100 pt-1 text-[10px] text-blue-700">
    <ShoppingCart size={11} className="mr-1 inline"/> {card.compras.comprados} de {card.compras.total} itens comprados
   </p>}
   {card.pendencias.length>0&&<p className="mt-1 line-clamp-2 rounded bg-amber-50 px-1.5 py-1 text-[10px] leading-3 text-amber-800">
@@ -93,7 +110,7 @@ function CardProjeto({card,compacto,abrir,ativo}:{card:ProjetoGeralCard;compacto
   </p>}
   <div className="mt-2 flex items-start gap-1.5 border-t border-slate-100 pt-2 text-[10px] leading-3 text-[#334d76]">
    <CalendarDays size={13} className="shrink-0 text-blue-600"/>
-   <span>Instalação prevista<br/><b>{card.dataInstalacao?dataBr(card.dataInstalacao):card.instalacaoMes||'A programar'}</b></span>
+   <span>Instalação prevista <b>{card.dataInstalacao?dataBr(card.dataInstalacao):card.instalacaoMes||'A programar'}</b></span>
   </div>
  </button>
 }
@@ -597,7 +614,7 @@ export default function VisaoGeralProjetos(){
           {!demo&&<AlcaArrastarCard desabilitado={salvandoCard}
             onSoltar={destino=>void moverCardVisual(c.vendaId,destino)}
             onSolturaInvalida={()=>{setAviso('');setErro('Solte dentro de uma coluna do Kanban para salvar. Nenhuma posição foi alterada.')}} label="Segure aqui e arraste" />}
-          <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
+          <CardProjeto card={c} coluna={col} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
          </div>)}
         {pedidosCol.map(p=><CardPedido key={p.id} pedido={p} abrir={()=>abrir(p.id)}/>)}
         {manuaisCol.map(c=><CardAcompanhamento key={c.id} card={c}/>)}
