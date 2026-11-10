@@ -23,9 +23,10 @@ assert.deepEqual(geral.validarColunasGerais(configuradas),[])
 assert.equal(configuradas.find(x=>x.id===c.id).prazoHoras,24)
 assert.equal(original.find(x=>x.id===c.id).prazoDias,null)
 const inicio='2026-11-10T08:00:00.000Z'
-const andamento=geral.situacaoPrazoEtapa({entrouEm:inicio,prazoHoras:24,agora:'2026-11-10T16:00:00.000Z'})
+const andamento=geral.situacaoPrazoEtapa({entrouEm:inicio,prazoHoras:24,emAndamento:true,agora:'2026-11-10T16:00:00.000Z'})
 assert.equal(andamento.estado,'amarelo')
 assert.equal(andamento.horasRestantes,16)
+assert.equal(geral.situacaoPrazoEtapa({entrouEm:inicio,prazoHoras:24,agora:'2026-11-10T16:00:00.000Z'}).estado,'branco')
 const vencido=geral.situacaoPrazoEtapa({entrouEm:inicio,prazoHoras:24,agora:'2026-11-11T09:00:00.000Z'})
 assert.equal(vencido.estado,'vermelho')
 const concluido=geral.situacaoPrazoEtapa({entrouEm:inicio,prazoHoras:24,
