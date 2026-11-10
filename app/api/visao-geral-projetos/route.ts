@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
 import {podeConsultarPainelGeral,podeMoverKanbanGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
-import {projetarCardGeral,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
+import {projetarCardGeral,situacaoPrazoEtapa,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
 import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
 import {colunasKanbanEmpresa,posicionarCardVisual} from '@/lib/kanbanColunasSincronizadas'
 import type {MaterialResumo,PedidoGeralCard,DetalheMaterialCompra} from '@/lib/visaoGeralDemo'
@@ -226,10 +226,31 @@ export async function GET(req:NextRequest){
   const posicoesPersistidas=Object.fromEntries((controlesR.data||[])
    .filter(c=>c.estado==='manual'&&colunas.some(col=>col.id===c.coluna_visual_id))
    .map(c=>[c.venda_id,c.coluna_visual_id]))
+  // Status visuais independentes: não modificam compras, produção ou instalação.
+  const statusR=vendaIds.length?await db.from('visao_geral_cards_status_etapa')
+   .select('venda_id,coluna_id,status_ids,updated_at').eq('empresa_id',empresa)
+   .in('venda_id',vendaIds).limit(3000):{data:[],error:null}
+  if(statusR.error&&!['42P01','PGRST205'].includes(String(statusR.error.code||'')))throw statusR.error
+  const statusPorCard=new Map((statusR.data||[]).map(s=>[s.venda_id+':'+s.coluna_id,s]))
   const normalizados=cards.map(c=>{
     const controle=controles.get(c.vendaId)
     const posicionado=posicionarCardVisual(c,controle,colunas)
-    return controle?.estado==='finalizado'?{...posicionado,cor:'azul' as const}:posicionado
+    const status=statusPorCard.get(c.vendaId+':'+posicionado.colunaId)
+    const statusEtapa=Array.isArray(status?.status_ids)?status.status_ids as string[]:[]
+    const colunaAtual=colunas.find(col=>col.id===posicionado.colunaId)
+    const concluiuStatus=(colunaAtual?.statusDisponiveis||[])
+      .some(s=>s.conclusivo===true&&statusEtapa.includes(s.id))
+    // Só iniciar SLA se há registro comprovado de entrada na coluna. Legado fica sem prazo.
+    const entradaConfirmada=controle?.estado==='manual'&&controle.coluna_visual_id===posicionado.colunaId
+      ?controle.updated_at:null
+    const prazo=situacaoPrazoEtapa({
+      entrouEm:entradaConfirmada,prazoHoras:colunaAtual?.prazoHoras,prazoDias:colunaAtual?.prazoDias,
+      agora:new Date().toISOString(),concluida:concluiuStatus,concluiuEm:concluiuStatus?status?.updated_at:null,
+    })
+    const cor=controle?.estado==='finalizado'?'azul' as const
+      :prazo.estado!=='sem_prazo'?prazo.estado:posicionado.cor
+    return {...posicionado,cor,statusEtapa,
+      prazoEtapaEstado:prazo.estado,prazoEtapaVencimento:prazo.vencimento,horasEtapaRestantes:prazo.horasRestantes}
   })
   const ativos=normalizados.filter(c=>c.controleMaster!=='oculto')
   const ocultos=(u.role==='master'||permissaoObra?.restaurar)
