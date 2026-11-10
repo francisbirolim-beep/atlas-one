@@ -3,6 +3,7 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import Link from 'next/link'
 import AlcaArrastarCard from '@/components/kanban/AlcaArrastarCard'
+import {colunaNoFimDoArraste,type CoordenadaArraste} from '@/lib/kanbanArrastarDestino'
 import {
  ArrowLeft,ArrowRight,ArrowUpRight,BarChart3,Building2,CalendarDays,CheckCircle2,
  ChevronLeft,ChevronRight,ClipboardCheck,Clock3,Columns3,Factory,Filter,
@@ -170,6 +171,7 @@ export default function VisaoGeralProjetos(){
  const selecionadoInicial=useRef(false)
  const leituraAtual=useRef(0)
  const movimentoEmCurso=useRef(false)
+ const arrasteCard=useRef<{id:string;ponto:CoordenadaArraste|null;tratado:boolean}|null>(null)
  const posicoesGravadas=useRef(new Map<string,string>())
  const carregar=useCallback(async()=>{
   if(demo===null)return
@@ -511,10 +513,12 @@ export default function VisaoGeralProjetos(){
        onDrop={e=>{
         if(demo||salvandoCard)return
         const origem=e.dataTransfer.getData('text/plain')
-        if(!origem.startsWith('atlas-principal:'))return
-        const id=origem.slice('atlas-principal:'.length)
-        if(!cards.some(c=>c.vendaId===id))return
-        e.preventDefault();setArrastando(null);void moverCardVisual(id,destinoVisual)
+        const id=origem.startsWith('atlas-principal:')?
+         origem.slice('atlas-principal:'.length):(!origem?arrasteCard.current?.id:null)
+        if(!id||!cards.some(c=>c.vendaId===id))return
+        e.preventDefault()
+        if(arrasteCard.current?.id===id)arrasteCard.current.tratado=true
+        setArrastando(null);void moverCardVisual(id,destinoVisual)
        }}
        className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoVisual&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
        <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:paleta.cabecalho}}>
@@ -528,8 +532,28 @@ export default function VisaoGeralProjetos(){
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
         {!demo&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">{destinoFinalizado?'Arraste um projeto para cá para finalizar no painel':'Arraste um card para reposicioná-lo aqui'}</p>}
         {vis.map(c=><div key={c.vendaId} data-kanban-card draggable={!demo&&!salvandoCard}
-         onDragStart={e=>{if(demo||salvandoCard)return;e.dataTransfer.setData('text/plain','atlas-principal:'+c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
-         onDragEnd={()=>setArrastando(null)}
+         onDragStart={e=>{
+          if(demo||salvandoCard){e.preventDefault();return}
+          e.dataTransfer.setData('text/plain','atlas-principal:'+c.vendaId)
+          e.dataTransfer.effectAllowed='move'
+          arrasteCard.current={id:c.vendaId,ponto:null,tratado:false}
+          setArrastando(c.vendaId)
+         }}
+         onDrag={e=>{
+          if(arrasteCard.current?.id===c.vendaId&&e.clientX>0&&e.clientY>0)
+           arrasteCard.current.ponto={x:e.clientX,y:e.clientY}
+         }}
+         onDragEnd={e=>{
+          const arraste=arrasteCard.current
+          const foiTratado=!!(arraste?.id===c.vendaId&&arraste.tratado)
+          const destino=foiTratado?null:colunaNoFimDoArraste(e.currentTarget,{x:e.clientX,y:e.clientY},arraste?.ponto||null)
+          arrasteCard.current=null
+          setArrastando(null)
+          if(!foiTratado&&!demo&&!salvandoCard){
+           if(destino)void moverCardVisual(c.vendaId,destino)
+           else {setAviso('');setErro('Solte o card sobre uma coluna do Kanban para gravar. Nenhuma mudança foi salva.')}
+          }
+         }
          className="cursor-grab active:cursor-grabbing">
           {!demo&&<AlcaArrastarCard desabilitado={salvandoCard}
             onSoltar={destino=>void moverCardVisual(c.vendaId,destino)} label="Segure aqui e arraste" />}
