@@ -237,7 +237,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
             if(destino&&destino!=='orcamento')void moverVenda(atual.vendaId,destino)
             else {setAviso('');setErro('Solte o card em uma coluna de andamento para salvar. Nenhuma posição foi alterada.')}
            }
-          }
+          }}
           className={'overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm '+(dados.podeMoverCards&&card.vendas.length===1?'cursor-grab active:cursor-grabbing':'')}>
           {card.fotoProjetoUrl?<img src={card.fotoProjetoUrl} alt={'Foto da obra '+card.nome}
            className="h-24 w-full object-cover" loading="lazy"/>:null}
