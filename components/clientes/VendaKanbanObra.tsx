@@ -81,7 +81,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
   if(!permissoes?.mover||salvando||!dados?.podeMoverCards)return
   const atual=dados.cards.find(card=>card.vendaId===vendaId)
   if(!atual||COLUNAS_GERAIS_PADRAO.find(col=>col.criterios.includes(atual.etapaOperacional as EtapaOperacional))?.criterios[0]===destino)return
-  const nome=nomesEtapas[destino]||destino
+  const nome=COLUNAS_GERAIS_PADRAO.find(c=>c.criterios[0]===destino)?.nome||nomesEtapas[destino]||destino
   const motivo=window.prompt('Motivo para mover o card principal para '+nome+' (mínimo 8 caracteres):',
    'Organização manual da etapa desta obra.')
   if(!motivo)return
@@ -142,6 +142,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
   {erro&&<p role="alert" className="m-3 rounded-md bg-rose-950 p-3 text-xs text-rose-100">{erro}</p>}
   {carregando&&!dados&&<p className="p-5 text-xs text-slate-200">Carregando dados reais desta venda...</p>}
   {dados&&!dados.kanbanObraConfigurado&&<p className="m-3 rounded-md border border-amber-600 bg-amber-950/40 p-3 text-xs text-amber-100">Os cards manuais ainda não estão habilitados no banco. O espelho das etapas reais continua disponível, sem alterações de dados.</p>}
+  {dados&&!dados.podeMoverCards&&<p className="m-3 rounded-md border border-amber-600 bg-amber-950/40 p-3 text-xs text-amber-100">Movimentação do card principal não liberada para esta sessão. Solicite ao Master a permissão Clientes → Kanban por obra → Movimentar e atualize a página.</p>}
   {formAberto&&permissoes?.criar&&<div className="m-3 grid gap-2 rounded-lg border border-blue-500 bg-[#102743] p-4 md:grid-cols-[1fr_1fr_180px_auto]">
    <label className="text-xs text-slate-200">Título do acompanhamento<input value={titulo} maxLength={120} onChange={e=>setTitulo(e.target.value)} className="mt-1 w-full rounded bg-white px-2 py-2 text-slate-900" placeholder="Ex.: Aguardando alumínio"/></label>
    <label className="text-xs text-slate-200">Observação<input value={descricao} maxLength={1000} onChange={e=>setDescricao(e.target.value)} className="mt-1 w-full rounded bg-white px-2 py-2 text-slate-900" placeholder="Descrição opcional"/></label>
@@ -202,7 +203,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
         {permissoes?.mover&&dados?.podeMoverCards&&<label className="mt-2 block text-[10px] font-semibold text-slate-700">Mover card principal
          <select aria-label={'Mover card principal de '+cardReal.cliente} disabled={salvando} value={col.criterios[0]}
           onChange={e=>void moverPrincipal(e.target.value)} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1 py-1.5 text-[10px]">
-          {etapas.map(e=><option key={e} value={e}>{nomesEtapas[e]}</option>)}
+          {COLUNAS_GERAIS_PADRAO.map(c=><option key={c.id} value={c.criterios[0]}>{c.nome}</option>)}
          </select></label>}
        </div>}
        {cardsCompras.map(p=>{const foto=p.detalhesCompra?.find(item=>podeFoto(item.fotoUrl))?.fotoUrl
