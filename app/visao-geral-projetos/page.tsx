@@ -632,6 +632,7 @@ export default function VisaoGeralProjetos(){
        </div>
        <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-3 text-xs">
         <p><b className="text-slate-600">Branco:</b> sem entrada confirmada ou sem prazo</p>
+        <p><b className="text-slate-500">Branco:</b> aguardando início, dentro do prazo</p>
         <p><b className="text-amber-600">Amarelo:</b> em andamento e dentro do prazo</p>
         <p><b className="text-emerald-600">Verde:</b> etapa concluída dentro do prazo</p>
         <p><b className="text-rose-600">Vermelho:</b> prazo excedido</p>
