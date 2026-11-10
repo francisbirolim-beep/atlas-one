@@ -23,7 +23,7 @@ export async function GET(req:NextRequest){
   if(!permissao.consultar && !(await podeConsultarPainelGeral(u,'visao-geral-projetos')))
    return falha('Acesso não autorizado ao Kanban.',403)
   const {data:venda,error:erroVenda}=await db.from('vendas_obras').select('id')
-   .eq('empresa_id',u.empresa_id).eq('id',vendaId).maybeSingle()
+   .eq('empresa_id',u.empresa_id).eq('id',vendaId).is('excluida_em',null).maybeSingle()
   if(erroVenda)throw erroVenda
   if(!venda)return falha('Venda não encontrada na empresa.',404)
   const {data,error}=await db.from('visao_geral_cards_controle')
