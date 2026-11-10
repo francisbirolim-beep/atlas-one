@@ -7,11 +7,12 @@ const telas=[
  ['Kanban do Cliente',ler('components/clientes/Cliente360KanbanObras.tsx')]
 ]
 for(const [nome,s] of telas){
- for(const trecho of ['leituraAtual=useRef(0)','movimentoEmCurso=useRef(false)','++leituraAtual.current',
+ for(const trecho of ['leituraAtual=useRef(0)','++leituraAtual.current',
   "cache:'no-store'","setAviso('Salvando", "setAviso('✓ ", 'role="status"',
   'fixed bottom-20 right-5','z-[120]','aria-live="polite"']){
   assert.ok(s.includes(trecho),nome+' falta '+trecho)
  }
+ assert.ok(s.includes('movimentoEmCurso=useRef(false)')||s.includes('movimentacaoEmCurso=useRef(false)'),nome+' falta bloqueio de leitura durante movimento')
  assert.ok(s.includes('setErro('),'Não mostra falha na gravação: '+nome)
  assert.ok(s.includes('colunaId!=='),'Não verifica retorno servidor: '+nome)
 }
