@@ -5,7 +5,7 @@ const central=fs.readFileSync('components/clientes/VendaObraCentral.tsx','utf8')
 for(const [nome,arquivo] of [['Cliente 360',venda],['Venda/Obra',central]]){
  assert.ok(arquivo.includes('wvetro_historico?.numero'),nome+' deve exibir a venda histórica vinculada')
  assert.ok(arquivo.includes('config_snapshot'),nome+' precisa carregar a fonte persistida da venda')
- assert.ok(arquivo.includes('Orçamento Atlas #'),nome+' deve preservar a identificação do orçamento Atlas original')
+ assert.ok(arquivo.includes('wvetro_historico?.numero?\'Atlas \':\'\''),nome+' deve distinguir orçamento Atlas apenas quando há vínculo histórico WVetro')
  assert.ok(arquivo.includes('.select(')&&arquivo.includes('config_snapshot\''),
  nome+' precisa selecionar config_snapshot do banco')
 }
