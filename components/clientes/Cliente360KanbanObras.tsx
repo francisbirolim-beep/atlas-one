@@ -243,7 +243,9 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
            className="h-24 w-full object-cover" loading="lazy"/>:null}
           <div className="p-3">
            {dados.podeMoverCards&&card.vendas.length===1&&atual?.vendaId&&<AlcaArrastarCard
-            desabilitado={movendo} onSoltar={destino=>void moverVenda(atual.vendaId,destino)}
+            desabilitado={movendo}
+            onSoltar={destino=>{if(destino==='orcamento'){setAviso('');setErro('Não é possível mover uma venda confirmada para Pré-venda.')}else void moverVenda(atual.vendaId,destino)}}
+            onSolturaInvalida={()=>{setAviso('');setErro('Solte dentro da coluna de destino para gravar a obra. Nenhuma posição foi alterada.')}}
             label="Segure aqui e arraste a obra" />}
            {dados.podeMoverCards&&card.vendas.length>1&&<p className="mb-2 rounded bg-amber-50 p-2 text-[10px] text-amber-800">Esta obra possui várias vendas. Abra a venda específica para reposicionar sem afetar as demais.</p>}
            <div className="flex items-start justify-between gap-2">
