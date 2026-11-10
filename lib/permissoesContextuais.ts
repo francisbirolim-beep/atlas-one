@@ -8,6 +8,7 @@ const ROTAS: Array<{ prefixo: string; titulo: string; modulos: string[] }> = [
   { prefixo: '/financeiro/caixa', titulo: 'Caixa', modulos: ['caixa'] },
   { prefixo: '/financeiro', titulo: 'Financeiro', modulos: ['financeiro-geral', 'contas-pagar', 'contas-receber'] },
   { prefixo: '/clientes', titulo: 'Clientes', modulos: ['portal-cliente'] },
+  { prefixo: '/visao-geral-projetos', titulo: 'Visão Geral de Projetos', modulos: ['kanban-geral'] },
   { prefixo: '/crm', titulo: 'CRM', modulos: ['crm'] },
   { prefixo: '/kanban/comercial', titulo: 'Kanban de orçamentos', modulos: ['pedido-orcamento', 'fazer-orcamento'] },
   { prefixo: '/orcamento-rapido', titulo: 'Pedido de orçamento', modulos: ['pedido-orcamento', 'fazer-orcamento'] },

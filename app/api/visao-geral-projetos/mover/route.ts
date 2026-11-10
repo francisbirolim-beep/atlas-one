@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
 import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
+import {podeMoverKanbanGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {ETAPAS_OPERACIONAIS} from '@/lib/visaoGeralProjetos'
 import {colunasKanbanEmpresa} from '@/lib/kanbanColunasSincronizadas'
@@ -17,7 +18,7 @@ export async function POST(req:NextRequest){
   const u=await autenticarCompras(req)
   if(!u)return falha('Sessão expirada.',401)
   const permissao=await permissoesKanbanObra(u)
-  if(!permissao.mover)return falha('O Master não autorizou a movimentação deste Kanban.',403)
+  if(!permissao.mover && !(await podeMoverKanbanGeral(u)))return falha('O Master não autorizou a movimentação deste Kanban.',403)
   const body=await req.json().catch(()=>null)
   if(!body||typeof body.vendaId!=='string'||!uuid.test(body.vendaId))
    return falha('Venda inválida.',400)

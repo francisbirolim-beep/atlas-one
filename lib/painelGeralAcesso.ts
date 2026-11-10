@@ -1,3 +1,28 @@
+export type NivelKanbanGeral = 'oculto' | 'consulta' | 'edicao'
+export const ACAO_CONSULTAR_KANBAN_GERAL = 'painel_visao_geral_projetos'
+export const ACAO_MOVER_KANBAN_GERAL = 'painel_visao_geral_projetos_mover'
+
+/** Permissões independentes de outros módulos e setores (menor privilégio). */
+export function nivelAcessoKanbanGeral(
+ role:string,
+ config:{acoes?:Record<string,unknown>} | null | undefined,
+):NivelKanbanGeral {
+ if(role==='master')return 'edicao'
+ if(!permissaoExplicitaPainelGeral(role,config,'visao-geral-projetos'))return 'oculto'
+ return config?.acoes?.[ACAO_MOVER_KANBAN_GERAL]==='edicao'?'edicao':'consulta'
+}
+export function alterarAcessoKanbanGeral<T extends Record<string,unknown>>(
+ acoes:T,nivel:NivelKanbanGeral,
+):T {
+ return {...acoes,
+  [ACAO_CONSULTAR_KANBAN_GERAL]:nivel==='oculto'?'oculto':'consulta',
+  [ACAO_MOVER_KANBAN_GERAL]:nivel==='edicao'?'edicao':'oculto',
+ }
+}
+export function permissaoMoverKanbanGeral(role:string,config:{acoes?:Record<string,unknown>}|null|undefined):boolean {
+ return nivelAcessoKanbanGeral(role,config)==='edicao'
+}
+
 export type PainelConsolidado = 'visao-geral-projetos' | 'relatorios-instalacoes'
 
 const CHAVES: Record<PainelConsolidado, string> = {

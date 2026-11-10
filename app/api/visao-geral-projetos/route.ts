@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
-import {podeConsultarPainelGeral} from '@/lib/painelGeralAcessoServer'
+import {podeConsultarPainelGeral,podeMoverKanbanGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {projetarCardGeral,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
 import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
@@ -37,7 +37,7 @@ export async function GET(req:NextRequest){
   if(vendaSelecionada && !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(vendaSelecionada))
     return respErro('ID de venda inválido.',400)
   const permissaoObra=vendaSelecionada?await permissoesKanbanObra(u):null
-  const podeMoverCards=u.role==='master'||(permissaoObra?permissaoObra.mover:(await permissoesKanbanObra(u)).mover)
+  const podeMoverCards=u.role==='master'||(await podeMoverKanbanGeral(u))||(permissaoObra?permissaoObra.mover:(await permissoesKanbanObra(u)).mover)
   if(!(await podeConsultarPainelGeral(u,'visao-geral-projetos'))&&!permissaoObra?.consultar)
     return respErro('Acesso não autorizado à Visão Geral ou à obra.',403)
   const empresa=u.empresa_id
