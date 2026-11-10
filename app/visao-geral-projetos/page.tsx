@@ -181,7 +181,10 @@ export default function VisaoGeralProjetos(){
  const [mostrarOcultos,setMostrarOcultos]=useState(false),[arrastando,setArrastando]=useState<string|null>(null),[arrastandoColuna,setArrastandoColuna]=useState<string|null>(null),[salvandoCard,setSalvandoCard]=useState(false)
  const [selecionado,setSelecionado]=useState<string|null>(null),[aba,setAba]=useState<Aba>('resumo')
  const [erro,setErro]=useState(''),[aviso,setAviso]=useState(''),[carregando,setCarregando]=useState(true),[atualizado,setAtualizado]=useState('')
- const [modoTv,setModoTv]=useState(false),[compacto,setCompacto]=useState(false),[config,setConfig]=useState(false),[novoNome,setNovoNome]=useState('')
+ const [modoTv,setModoTv]=useState(false),[compacto,setCompacto]=useState(false),[editarColunaId,setEditarColunaId]=useState<string|null>(null),[novoNome,setNovoNome]=useState('')
+ const [abaConfigColuna,setAbaConfigColuna]=useState<'coluna'|'status'|'prazo'>('coluna')
+ const [colunasSalvas,setColunasSalvas]=useState<ColunaVisualProjeto[]>(COLUNAS_GERAIS_PADRAO)
+ const [alterandoStatus,setAlterandoStatus]=useState(false)
  const [filtros,setFiltros]=useState(false),[busca,setBusca]=useState(''),[condicao,setCondicao]=useState<Condicao>('todos')
  const [novoCriterio,setNovoCriterio]=useState<EtapaOperacional>('compras_liberacao'),[nomeEditando,setNomeEditando]=useState<Record<string,string>>({})
  const [unidadePrazos,setUnidadePrazos]=useState<Record<string,'horas'|'dias'>>({})
@@ -191,6 +194,7 @@ export default function VisaoGeralProjetos(){
  const movimentoEmCurso=useRef(false)
  const arrasteCard=useRef<{id:string;ponto:CoordenadaArraste|null;tratado:boolean}|null>(null)
  const posicoesGravadas=useRef(new Map<string,string>())
+ const edicaoColunasPendente=useRef(false)
  const carregar=useCallback(async()=>{
   if(demo===null)return
   if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setPodeMoverCards(false);setCarregando(false);setAtualizado(new Date().toISOString());return}
@@ -200,7 +204,7 @@ export default function VisaoGeralProjetos(){
    const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
    if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
-   if(Array.isArray(j.colunas))setColunas(j.colunas)
+   if(Array.isArray(j.colunas)&&!edicaoColunasPendente.current)setColunas(j.colunas)
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>{
     const colBanco=j.posicoesPersistidas?.[c.vendaId]
     const colValida=typeof colBanco==='string'&&(j.colunas||COLUNAS_GERAIS_PADRAO)
@@ -224,7 +228,12 @@ export default function VisaoGeralProjetos(){
    const token=await tokenAtual();if(!token)return
    const r=await fetch('/api/visao-geral-colunas',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}))
-   if(ativo&&r.ok){setColunas(j.colunas||COLUNAS_GERAIS_PADRAO);setConfiguravel(j.configuravel===true);setAvisoConfiguracao(j.aviso||'')}
+   if(ativo&&r.ok){
+    const configuradas=j.colunas||COLUNAS_GERAIS_PADRAO
+    setColunasSalvas(configuradas)
+    if(!edicaoColunasPendente.current)setColunas(configuradas)
+    setConfiguravel(j.configuravel===true);setAvisoConfiguracao(j.aviso||'')
+   }
   }catch{}})()
   return()=>{ativo=false}
  },[demo])
@@ -357,17 +366,33 @@ export default function VisaoGeralProjetos(){
   {label:'Previstos para instalação',numero:previstoInstalacao,detalhe:'Neste mês',cor:'#267efa',icone:CalendarDays},
  ]
  const validade=validarColunasGerais(colunas)
- function criar(){try{if(!podeEditarColunas)throw Error('Somente Master configura etapas.');if(!novoNome.trim())return
-  setColunas(a=>criarColunaGeral(a,'manual_'+Date.now(),novoNome));setNovoNome('');setErro('')
+ function criar(){try{
+  if(!podeEditarColunas)throw Error('Somente Master configura etapas.')
+  if(!novoNome.trim())return
+  const id='manual_'+Date.now()
+  edicaoColunasPendente.current=true
+  setColunas(a=>criarColunaGeral(a,id,novoNome))
+  setNovoNome('');setErro('');setEditarColunaId(id);setAbaConfigColuna('coluna')
  }catch(e){setErro(String(e))}}
- function renomear(id:string){try{setColunas(c=>renomearColunaGeral(c,id,nomeEditando[id]||''));setErro('')}catch(e){setErro(String(e))}}
+ function renomear(id:string){try{
+  edicaoColunasPendente.current=true
+  setColunas(c=>renomearColunaGeral(c,id,nomeEditando[id]||''))
+  setErro('')
+ }catch(e){setErro(String(e))}}
  function alterarColuna(id:string,patch:Partial<ColunaVisualProjeto>){
+  edicaoColunasPendente.current=true
   setColunas(antes=>antes.map(c=>c.id===id?{...c,...patch}:c))
+ }
+ function fecharEditorColuna(){
+  edicaoColunasPendente.current=false
+  setColunas(colunasSalvas)
+  setEditarColunaId(null)
+  setNomeEditando({})
  }
  function adicionarStatus(id:string){
   const nome=window.prompt('Nome do novo status desta coluna:')
   if(!nome?.trim())return
-  const novo={id:'s_'+Date.now().toString(36),nome:nome.trim()}
+  const novo={id:'s_'+Date.now().toString(36),nome:nome.trim(),conclusivo:false}
   alterarColuna(id,{statusDisponiveis:[...(colunas.find(c=>c.id===id)?.statusDisponiveis||[]),novo]})
  }
  function alterarStatus(id:string,statusId:string){
@@ -385,10 +410,10 @@ export default function VisaoGeralProjetos(){
  function vincular(id:string){try{setColunas(c=>associarCriterioColuna(c,novoCriterio,id));setErro('')}catch(e){setErro(String(e))}}
  function excluir(id:string){const dest=colunas.find(c=>c.id!==id);if(!dest)return
   const resposta=window.prompt('ID da coluna de destino dos vínculos (nenhum projeto será excluído):',dest.id);if(!resposta)return
-  try{setColunas(c=>excluirColunaGeral(c,id,resposta));setErro('')}catch(e){setErro(String(e))}
+  try{edicaoColunasPendente.current=true;setColunas(c=>excluirColunaGeral(c,id,resposta));setEditarColunaId(null);setErro('')}catch(e){setErro(String(e))}
  }
  function ordem(id:string,d:number){const ids=colunasOrdenadas.map(c=>c.id),i=ids.indexOf(id),j=i+d;if(j<0||j>=ids.length)return
-  ;[ids[i],ids[j]]=[ids[j],ids[i]];try{setColunas(c=>reordenarColunasGerais(c,ids))}catch(e){setErro(String(e))}
+  ;[ids[i],ids[j]]=[ids[j],ids[i]];try{edicaoColunasPendente.current=true;setColunas(c=>reordenarColunasGerais(c,ids))}catch(e){setErro(String(e))}
  }
  function soltarColuna(destinoId:string){
   if(!arrastandoColuna||arrastandoColuna===destinoId)return
@@ -396,16 +421,42 @@ export default function VisaoGeralProjetos(){
   const origem=ids.indexOf(arrastandoColuna),destino=ids.indexOf(destinoId)
   if(origem<0||destino<0)return
   ids.splice(origem,1);ids.splice(destino,0,arrastandoColuna)
-  try{setColunas(c=>reordenarColunasGerais(c,ids));setErro('')}catch(e){setErro(String(e))}
+  try{edicaoColunasPendente.current=true;setColunas(c=>reordenarColunasGerais(c,ids));setErro('')}catch(e){setErro(String(e))}
  }
  async function salvarConfig(){
-  if(demo){setAvisoConfiguracao('Prévia fictícia: configuração não foi gravada.');return}
+  const novas=colunas.map(x=>({...x,nome:nomeEditando[x.id]??x.nome}))
+  const errosConfig=validarColunasGerais(novas)
+  if(errosConfig.length){setErro(errosConfig.join('; '));return}
+  if(demo){
+   setColunas(novas);setColunasSalvas(novas);edicaoColunasPendente.current=false
+   setEditarColunaId(null);setAvisoConfiguracao('Simulação: configuração não gravada.');return
+  }
   if(!configuravel){setErro('Acesso reservado ao Master.');return}
   try{const token=await tokenAtual();if(!token)throw Error('Sessão expirada')
-   const r=await fetch('/api/visao-geral-colunas',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({colunas})})
+   const r=await fetch('/api/visao-geral-colunas',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({colunas:novas})})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Erro ao salvar')
-   setErro('');setAvisoConfiguracao('Configuração salva e auditada na empresa.')
-  }catch(e){setErro(String(e))}
+   const gravadas=Array.isArray(j.colunas)?j.colunas:novas
+   setColunas(gravadas);setColunasSalvas(gravadas);edicaoColunasPendente.current=false
+   setEditarColunaId(null);setNomeEditando({})
+   setErro('');setAviso('Configuração salva e auditada na empresa.')
+  }catch(e){setErro(e instanceof Error?e.message:'Erro ao salvar configuração.')}
+ }
+ async function atualizarStatusCard(vendaId:string,colunaId:string,ids:string[]){
+  if(demo||!podeMoverCards||alterandoStatus)return
+  setAlterandoStatus(true)
+  try{
+   const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+   const r=await fetch('/api/visao-geral-projetos/status',{
+    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({vendaId,colunaId,statusIds:ids}),
+   })
+   const j=await r.json().catch(()=>({}))
+   if(!r.ok||!j.ok)throw Error(j.erro||'Não foi possível registrar o status.')
+   setCards(anteriores=>anteriores.map(c=>c.vendaId===vendaId?{...c,statusEtapa:ids}:c))
+   setErro('');setAviso('Status da etapa registrado no histórico.')
+   await carregar()
+  }catch(e){setErro(e instanceof Error?e.message:'Erro ao atualizar o status.')}
+  finally{setAlterandoStatus(false)}
  }
  async function alternarTV(){
   if(!modoTv&&document.fullscreenEnabled)await document.documentElement.requestFullscreen().catch(()=>{})
@@ -413,6 +464,7 @@ export default function VisaoGeralProjetos(){
   setModoTv(v=>!v)
  }
  const etapaCard=cardAtual?colunasOrdenadas.find(c=>c.id===cardAtual.colunaId):null
+ const editandoColuna=colunasOrdenadas.find(c=>c.id===editarColunaId)||null
  const percentuais=cardAtual?cardAtual.materiais.map(m=>percentual(m.comprados,m.total)).filter((n):n is number=>n!==null):[]
  const progressoGeral=percentuais.length?Math.round(percentuais.reduce((s,n)=>s+n,0)/percentuais.length):null
 
@@ -471,7 +523,8 @@ export default function VisaoGeralProjetos(){
     <div className="flex flex-wrap items-center gap-2">
      {usuarioMaster&&!demo&&<button type="button" onClick={()=>setMostrarOcultos(v=>!v)} aria-expanded={mostrarOcultos} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Package size={15}/> Cards retirados ({ocultos.length})</button>}
      <button onClick={()=>setFiltros(v=>!v)} aria-expanded={filtros} className={'inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-[#243c59] '+(filtros?'bg-[#284968]':'bg-[#10253e]')}><Filter size={15}/> Filtros</button>
-     {podeEditarColunas&&<button onClick={()=>setConfig(v=>!v)} aria-expanded={config} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Settings2 size={15}/> Personalizar Kanban</button>}
+     {podeEditarColunas&&<button onClick={()=>{setEditarColunaId(colunasOrdenadas[0]?.id||null);setAbaConfigColuna('coluna')}} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] font-semibold text-white hover:bg-[#243c59]"><Settings2 size={15}/> Personalizar Kanban</button>}
+     {podeEditarColunas&&edicaoColunasPendente.current&&<button onClick={()=>void salvarConfig()} className="rounded-md bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white">Salvar alterações</button>}
      <button onClick={()=>setCompacto(v=>!v)} className="inline-flex items-center gap-1.5 rounded-md border border-[#2a4769] bg-[#10253e] px-3 py-2 text-[11px] text-white"><Columns3 size={15}/>{compacto?'Cards maiores':'Cards menores'}</button>
      <button onClick={()=>void alternarTV()} className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-2 text-[11px] font-semibold text-white hover:bg-blue-600"><Maximize2 size={15}/>{modoTv?'Sair do modo TV':'Modo TV'}</button>
      <Link href="/clientes/identificar" title="Criar ou identificar cliente para abrir uma obra no fluxo oficial" className="inline-flex items-center gap-1.5 rounded-md bg-[#0061d5] px-3 py-2 text-[11px] font-bold text-white hover:bg-blue-600"><Plus size={15}/> Novo Projeto</Link>
@@ -626,7 +679,7 @@ export default function VisaoGeralProjetos(){
       <Plus size={27} className="text-blue-300"/>
       <b className="text-xs text-white">Adicionar coluna</b>
       <input value={novoNome} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da etapa" aria-label="Nome da nova coluna" className="w-full rounded border border-[#476382] bg-[#0b2037] px-2 py-2 text-xs text-white"/>
-      <button type="button" onClick={()=>{criar();setConfig(true)}} className="rounded bg-blue-600 px-3 py-2 text-xs font-bold text-white">+ Adicionar</button>
+      <button type="button" onClick={criar} className="rounded bg-blue-600 px-3 py-2 text-xs font-bold text-white">+ Adicionar</button>
       <span className="text-[10px] text-slate-300">Salvar na personalização para compartilhar com as obras.</span>
      </section>}
     </div>
