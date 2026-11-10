@@ -14,6 +14,7 @@ type Resposta={
  pedidos:PedidoGeralCard[];acompanhamentos:Manual[];retiradosManuais:Retirado[]
  permissoesObra:PermissoesKanbanObra|null;usuarioMaster:boolean
  kanbanObraConfigurado:boolean;podeMoverCards:boolean;atualizadoEm:string
+ colunas?:typeof COLUNAS_GERAIS_PADRAO
 }
 const cores=[
  ['#079c51','#062f26'],['#0759e8','#092345'],['#6417e9','#29154a'],['#fa5208','#45251b'],
@@ -80,8 +81,8 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  async function moverPrincipal(destino:string){
   if(!permissoes?.mover||salvando||!dados?.podeMoverCards)return
   const atual=dados.cards.find(card=>card.vendaId===vendaId)
-  if(!atual||COLUNAS_GERAIS_PADRAO.find(col=>col.criterios.includes(atual.etapaOperacional as EtapaOperacional))?.criterios[0]===destino)return
-  const nome=nomesEtapas[destino]||destino
+  if(!atual||atual.colunaId===destino)return
+  const nome=colunas.find(c=>c.id===destino)?.nome||destino
   const motivo=window.prompt('Motivo para mover o card principal para '+nome+' (mínimo 8 caracteres):',
    'Organização manual da etapa desta obra.')
   if(!motivo)return
@@ -92,7 +93,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
    const res=await fetch('/api/visao-geral-projetos/mover',{
     method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-    body:JSON.stringify({vendaId,etapa:destino,motivo:motivo.trim()})
+    body:JSON.stringify({vendaId,colunaId:destino,motivo:motivo.trim()})
    })
    const j=await res.json().catch(()=>({}))
    if(!res.ok||!j.ok)throw Error(j.erro||'Não foi possível mover o card principal.')
@@ -121,6 +122,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao organizar card.')}
   finally{setSalvando(false)}
  }
+ const colunas=dados?.colunas||COLUNAS_GERAIS_PADRAO
  const projeto=dados?.cards?.find(c=>c.vendaId===vendaId)
  const oculto=dados?.ocultos?.find(c=>c.vendaId===vendaId)
  const manuais=dados?.acompanhamentos||[]
@@ -154,16 +156,16 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    <span className="text-slate-400">Retirar não exclui a obra. Para corrigir vínculos, utilize o cadastro da venda.</span>
   </div>}
   <div className="overflow-x-auto px-3 pb-4 pt-3">
-   <div className="grid min-w-max gap-2" style={{gridTemplateColumns:'repeat(8,minmax(175px,1fr))'}}>
-    {COLUNAS_GERAIS_PADRAO.map((col,i)=>{
-     const [cor,base]=cores[i]
-     const cardReal=projeto&&col.criterios.includes(projeto.etapaOperacional as EtapaOperacional)?projeto:null
+   <div className="grid min-w-max gap-2" style={{gridTemplateColumns:'repeat('+colunas.length+',minmax(175px,1fr))'}}>
+    {colunas.map((col,i)=>{
+     const [cor,base]=cores[i%cores.length]
+     const cardReal=projeto&&projeto.colunaId===col.id?projeto:null
      const cardsManuais=manuais.filter(m=>col.criterios.includes(m.etapa as EtapaOperacional))
      const cardsCompras=pedidos.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
      return <div key={col.id} onDragOver={e=>{if((arrastando||arrastandoPrincipal)&&permissoes?.mover&&!salvando){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
-      onDrop={e=>{if(!permissoes?.mover||salvando)return;const destino=col.criterios[0];if(!destino)return
-       if(arrastandoPrincipal){e.preventDefault();setArrastandoPrincipal(false);void moverPrincipal(destino)}
-       else if(arrastando){e.preventDefault();const id=arrastando;setArrastando(null);void salvar('mover',id,destino)}}}
+      onDrop={e=>{if(!permissoes?.mover||salvando)return
+       if(arrastandoPrincipal){e.preventDefault();setArrastandoPrincipal(false);void moverPrincipal(col.id)}
+       else if(arrastando&&col.criterios[0]){e.preventDefault();const id=arrastando;setArrastando(null);void salvar('mover',id,col.criterios[0])}}}
       className="min-h-[260px] overflow-hidden rounded-lg border border-white/10" style={{background:base}}>
       <h3 className="flex items-center justify-between px-2 py-3 text-[11px] font-bold text-white" style={{background:cor}}>
        <span>{col.nome}</span><span className="rounded-full bg-white/15 px-1.5">{Number(!!cardReal)+cardsManuais.length+cardsCompras.length}</span>
@@ -179,9 +181,9 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
         {cardReal.controleMaster==='manual'&&<p className="mt-1 text-[10px] font-bold text-blue-700">Posição ajustada manualmente</p>}
         {!!cardReal.pendencias?.length&&<p className="mt-2 text-[10px] text-amber-800">{cardReal.pendencias[0]}</p>}
         {permissoes?.mover&&dados?.podeMoverCards&&<label className="mt-2 block text-[10px] font-semibold text-slate-700">Mover card principal
-         <select aria-label={'Mover card principal de '+cardReal.cliente} disabled={salvando} value={col.criterios[0]}
+         <select aria-label={'Mover card principal de '+cardReal.cliente} disabled={salvando} value={cardReal.colunaId}
           onChange={e=>void moverPrincipal(e.target.value)} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1 py-1.5 text-[10px]">
-          {etapas.map(e=><option key={e} value={e}>{nomesEtapas[e]}</option>)}
+          {colunas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
          </select></label>}
        </div>}
        {cardsCompras.map(p=>{const foto=p.detalhesCompra?.find(item=>podeFoto(item.fotoUrl))?.fotoUrl

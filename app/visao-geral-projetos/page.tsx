@@ -7,7 +7,7 @@ import {
  ChevronLeft,ChevronRight,ClipboardCheck,Clock3,Columns3,Factory,Filter,
  Layers3,Maximize2,Package,Plus,RefreshCw,Settings2,ShieldCheck,
  ShoppingCart,Truck,Warehouse,X,AlertTriangle,History,ImageOff,Info,
- Users,Wallet,Search,Bell,
+ Users,Wallet,Search,Bell,GripVertical,
 } from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import {
@@ -159,7 +159,7 @@ export default function VisaoGeralProjetos(){
  const [usuarioMaster,setUsuarioMaster]=useState(false)
  const [podeMoverCards,setPodeMoverCards]=useState(false)
  const [ocultos,setOcultos]=useState<{vendaId:string;cliente:string;numeroOrcamento:string;motivoControle:string|null}[]>([])
- const [mostrarOcultos,setMostrarOcultos]=useState(false),[arrastando,setArrastando]=useState<string|null>(null),[salvandoCard,setSalvandoCard]=useState(false)
+ const [mostrarOcultos,setMostrarOcultos]=useState(false),[arrastando,setArrastando]=useState<string|null>(null),[arrastandoColuna,setArrastandoColuna]=useState<string|null>(null),[salvandoCard,setSalvandoCard]=useState(false)
  const [selecionado,setSelecionado]=useState<string|null>(null),[aba,setAba]=useState<Aba>('resumo')
  const [erro,setErro]=useState(''),[carregando,setCarregando]=useState(true),[atualizado,setAtualizado]=useState('')
  const [modoTv,setModoTv]=useState(false),[compacto,setCompacto]=useState(false),[config,setConfig]=useState(false),[novoNome,setNovoNome]=useState('')
@@ -173,6 +173,7 @@ export default function VisaoGeralProjetos(){
   try{const token=await tokenAtual();if(!token)throw Error('Faça login para consultar a visão geral.')
    const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
+   if(Array.isArray(j.colunas))setColunas(j.colunas)
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>({...c,materiais:c.materiais||[],pendencias:c.pendencias||[],detalhesCompra:c.detalhesCompra||[]})))
    setPedidos(j.pedidos||[]);setAcompanhamentos(j.acompanhamentos||[]);setUsuarioMaster(j.usuarioMaster===true);setPodeMoverCards(j.podeMoverCards===true)
    setOcultos(j.usuarioMaster===true?j.ocultos||[]:[])
@@ -228,12 +229,13 @@ export default function VisaoGeralProjetos(){
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao alterar o card.')}
   finally{setSalvandoCard(false);setArrastando(null)}
  }
- async function moverCardVisual(vendaId:string,etapa:string){
+ async function moverCardVisual(vendaId:string,colunaId:string){
   if(!podeMoverCards||demo||salvandoCard)return
   const atual=cards.find(c=>c.vendaId===vendaId)
-  if(!atual||colunasOrdenadas.find(col=>col.criterios.includes(atual.etapaOperacional as EtapaOperacional))?.criterios[0]===etapa)return
-  const destino=colunasOrdenadas.find(c=>c.criterios.includes(etapa as EtapaOperacional))
-  const nome=destino?.nome||etapa
+  if(!atual||atual.colunaId===colunaId)return
+  const destino=colunasOrdenadas.find(c=>c.id===colunaId)
+  if(!destino){setErro('A coluna de destino não existe.');return}
+  const nome=destino.nome
   const motivo=window.prompt('Motivo para mover o card de '+atual.cliente+' para '+nome+' (mínimo 8 caracteres):',
    'Ajuste manual do acompanhamento desta obra.')
   if(!motivo)return
@@ -244,7 +246,7 @@ export default function VisaoGeralProjetos(){
    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
    const r=await fetch('/api/visao-geral-projetos/mover',{
     method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-    body:JSON.stringify({vendaId,etapa,motivo:motivo.trim()})
+    body:JSON.stringify({vendaId,colunaId,motivo:motivo.trim()})
    })
    const j=await r.json().catch(()=>({}))
    if(!r.ok||!j.ok)throw Error(j.erro||'A posição não foi salva.')
@@ -275,7 +277,7 @@ export default function VisaoGeralProjetos(){
   return !q||[c.cliente,c.numeroOrcamento||'',c.titulo,c.descricao].some(s=>s.toLocaleLowerCase('pt-BR').includes(q))
  }),[acompanhamentos,busca,condicao])
  const colunasOrdenadas=useMemo(()=>[...colunas].sort((a,b)=>a.ordem-b.ordem),[colunas])
- const agrupado=useMemo(()=>new Map(colunas.map(c=>[c.id,visiveis.filter(p=>c.criterios.includes(p.etapaOperacional as EtapaOperacional))])),[colunas,visiveis])
+ const agrupado=useMemo(()=>new Map(colunas.map(c=>[c.id,visiveis.filter(p=>p.colunaId===c.id)])),[colunas,visiveis])
  const ativos=cards.filter(c=>c.etapaOperacional!=='finalizado')
  const totalEmAndamento=ativos.filter(c=>c.etapaOperacional!=='vendido'&&c.etapaOperacional!=='conferir_projeto').length
  const atrasados=ativos.filter(c=>c.cor==='vermelho').length
@@ -302,6 +304,14 @@ export default function VisaoGeralProjetos(){
  function ordem(id:string,d:number){const ids=colunasOrdenadas.map(c=>c.id),i=ids.indexOf(id),j=i+d;if(j<0||j>=ids.length)return
   ;[ids[i],ids[j]]=[ids[j],ids[i]];try{setColunas(c=>reordenarColunasGerais(c,ids))}catch(e){setErro(String(e))}
  }
+ function soltarColuna(destinoId:string){
+  if(!arrastandoColuna||arrastandoColuna===destinoId)return
+  const ids=colunasOrdenadas.map(c=>c.id)
+  const origem=ids.indexOf(arrastandoColuna),destino=ids.indexOf(destinoId)
+  if(origem<0||destino<0)return
+  ids.splice(origem,1);ids.splice(destino,0,arrastandoColuna)
+  try{setColunas(c=>reordenarColunasGerais(c,ids));setErro('')}catch(e){setErro(String(e))}
+ }
  async function salvarConfig(){
   if(demo){setAvisoConfiguracao('Prévia fictícia: configuração não foi gravada.');return}
   if(!configuravel){setErro('Acesso reservado ao Master.');return}
@@ -316,7 +326,7 @@ export default function VisaoGeralProjetos(){
   if(modoTv&&document.fullscreenElement)await document.exitFullscreen().catch(()=>{})
   setModoTv(v=>!v)
  }
- const etapaCard=cardAtual?colunasOrdenadas.find(c=>c.criterios.includes(cardAtual.etapaOperacional as EtapaOperacional)):null
+ const etapaCard=cardAtual?colunasOrdenadas.find(c=>c.id===cardAtual.colunaId):null
  const percentuais=cardAtual?cardAtual.materiais.map(m=>percentual(m.comprados,m.total)).filter((n):n is number=>n!==null):[]
  const progressoGeral=percentuais.length?Math.round(percentuais.reduce((s,n)=>s+n,0)/percentuais.length):null
 
@@ -411,11 +421,17 @@ export default function VisaoGeralProjetos(){
     </div>
    })}</div>
    {config&&podeEditarColunas&&<section className="mb-4 space-y-3 rounded-xl border border-[#2b4665] bg-[#10233d] p-4">
-    <div><h2 className="font-extrabold text-white">Personalizar Kanban</h2><p className="text-xs text-slate-300">Somente Master. As colunas são visuais: movimentação real e finalização seguem o Cliente 360. {avisoConfiguracao}</p></div>
+    <div><h2 className="font-extrabold text-white">Personalizar Kanban</h2><p className="text-xs text-slate-300">Somente Master. Colunas e sequência compartilhadas automaticamente com o Cliente 360 e cada Kanban de obra. Mudanças são visuais e não alteram produção, compras e instalação. {avisoConfiguracao}</p></div>
     <div className="flex flex-wrap gap-2"><input value={novoNome} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da nova coluna" aria-label="Nome da nova coluna" className="rounded-md border border-[#375073] bg-[#0c2038] px-3 py-2 text-sm text-white"/><button onClick={criar} className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold">+ Criar coluna</button></div>
     <div className="flex flex-wrap gap-2 text-xs"><label className="self-center">Etapa operacional:</label><select value={novoCriterio} onChange={e=>setNovoCriterio(e.target.value as EtapaOperacional)} className="rounded-md border border-[#375073] bg-[#0c2038] px-2 py-1.5">{ETAPAS_OPERACIONAIS.map(x=><option key={x} value={x}>{x}</option>)}</select></div>
-    <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">{colunasOrdenadas.map(c=><div key={c.id} className="rounded-lg border border-[#39516b] p-2">
-     <p className="mb-1 text-[10px] text-slate-300">Etapa {c.ordem+1} · {c.criterios.length} vínculos</p>
+    <p className="text-[11px] text-slate-300">Arraste as colunas para ordenar ou use as setas. A sequência será a mesma em todos os Kanbans do cliente.</p>
+    <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">{colunasOrdenadas.map(c=><div key={c.id} draggable
+     onDragStart={e=>{e.dataTransfer.setData('text/plain',c.id);e.dataTransfer.effectAllowed='move';setArrastandoColuna(c.id)}}
+     onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='move'}}
+     onDrop={e=>{e.preventDefault();soltarColuna(c.id);setArrastandoColuna(null)}}
+     onDragEnd={()=>setArrastandoColuna(null)}
+     className={'rounded-lg border p-2 '+(arrastandoColuna===c.id?'border-blue-400 bg-[#1b3a59]':'border-[#39516b]')}>
+     <p className="mb-1 flex items-center gap-1 text-[10px] text-slate-300"><GripVertical size={14}/> Etapa {c.ordem+1} · {c.criterios.length} vínculo(s) operacional(is)</p>
      <input value={nomeEditando[c.id]??c.nome} onChange={e=>setNomeEditando(a=>({...a,[c.id]:e.target.value}))} className="mb-2 w-full rounded border border-[#34506b] bg-[#102a45] px-2 py-1.5 text-sm"/>
      <div className="flex flex-wrap gap-1">{([['Salvar',()=>renomear(c.id)],['←',()=>ordem(c.id,-1)],['→',()=>ordem(c.id,1)],['Vincular',()=>vincular(c.id)],['Excluir',()=>excluir(c.id)]] as [string,()=>void][]).map(([l,acao])=><button key={l} onClick={acao} className="rounded border border-[#48627f] px-2 py-1 text-[10px] hover:bg-blue-950">{l}</button>)}</div>
     </div>)}</div>
@@ -432,10 +448,10 @@ export default function VisaoGeralProjetos(){
       const vis=agrupado.get(col.id)||[]
       const pedidosCol=pedidosVisiveis.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
       const manuaisCol=acompanhamentoVisivel.filter(c=>col.criterios.includes(c.etapa as EtapaOperacional))
-      const paleta=COLUNA_CORES[etapaIndice(col)]||COLUNA_CORES[i%COLUNA_CORES.length]
+      const paleta=COLUNA_CORES[(col.id==='validacao_projeto'?1:etapaIndice(col)>=1?etapaIndice(col)-1:etapaIndice(col))]||COLUNA_CORES[i%COLUNA_CORES.length]
       const Icon=paleta.icone
       const destinoFinalizado=col.criterios.includes('finalizado')
-      const destinoVisual=col.criterios[0]
+      const destinoVisual=col.id
       return <section key={col.id}
        onDragOver={e=>{if(podeMoverCards&&destinoVisual&&arrastando&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
        onDrop={e=>{if(!podeMoverCards||!destinoVisual||!arrastando||salvandoCard)return;e.preventDefault();const id=arrastando;setArrastando(null);void moverCardVisual(id,destinoVisual)}}
@@ -449,7 +465,7 @@ export default function VisaoGeralProjetos(){
        </div>
        <Link href="/clientes/identificar" title="Abrir o fluxo oficial de cliente e obra; a etapa será atualizada pelo Cliente 360" className="block border-t border-white/10 py-1.5 text-center text-[11px] font-semibold text-white hover:brightness-110" style={{background:paleta.botao}}>+ Adicionar</Link>
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
-        {podeMoverCards&&destinoVisual&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">{destinoFinalizado?'Arraste um projeto para cá para finalizar no painel':'Arraste um card para reposicioná-lo aqui'}</p>}
+        {podeMoverCards&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">{destinoFinalizado?'Arraste um projeto para cá para finalizar no painel':'Arraste um card para reposicioná-lo aqui'}</p>}
         {vis.map(c=><div key={c.vendaId} draggable={podeMoverCards&&!demo&&!salvandoCard}
          onDragStart={e=>{if(!podeMoverCards||demo)return;e.dataTransfer.setData('text/plain',c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
          onDragEnd={()=>setArrastando(null)}
@@ -551,9 +567,9 @@ export default function VisaoGeralProjetos(){
       {aba==='producao'&&<section className="rounded-lg border border-slate-200 bg-white p-3"><h3 className="text-xs font-bold">Produção</h3><p className="my-2 text-[11px]">{cardAtual.producao.concluidas} de {cardAtual.producao.total} ordens concluídas</p><Progresso nome="Produção" valor={percentual(cardAtual.producao.concluidas,cardAtual.producao.total)}/></section>}
       {podeMoverCards&&!demo&&<section className="space-y-2 rounded-lg border border-[#d5e1f2] bg-white p-3">
        <label className="block text-xs font-bold text-[#15294f]">Mover o card principal para a etapa
-        <select aria-label="Mover card principal para etapa" value={etapaCard?.criterios[0]||'vendido'} disabled={salvandoCard}
+        <select aria-label="Mover card principal para etapa" value={cardAtual.colunaId} disabled={salvandoCard}
          onChange={e=>void moverCardVisual(cardAtual.vendaId,e.target.value)} className="mt-2 w-full rounded border border-slate-300 bg-white px-2 py-2 text-xs text-slate-900">
-         {colunasOrdenadas.filter(c=>c.criterios.length).map(c=><option key={c.id} value={c.criterios[0]}>{c.nome}</option>)}
+         {colunasOrdenadas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
         </select>
        </label>
        <p className="text-[10px] text-slate-500">Arraste ou selecione uma coluna. Salva a posição nos dois Kanbans, sem mudar as operações.</p>

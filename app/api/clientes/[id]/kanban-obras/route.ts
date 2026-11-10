@@ -5,6 +5,7 @@ import {podeCliente360} from '@/lib/cliente360Permissoes'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {projetarCardGeral,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
 import {agruparKanbanObras,type ObraBaseCliente,type VendaCardCliente} from '@/lib/cliente360KanbanObras'
+import {colunasKanbanEmpresa,posicionarCardVisual} from '@/lib/kanbanColunasSincronizadas'
 export const dynamic='force-dynamic'
 export const runtime='nodejs'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -36,6 +37,9 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}){
    verOrcamentos?db.from('orcamentos').select('id,obra_id,fotos_urls,revisao_atual').eq('empresa_id',empresa).eq('cliente_id',clienteId).limit(3000):Promise.resolve({data:[],error:null}),
   ])
   if(o.error||v.error||b.error)throw o.error||v.error||b.error
+  const layout=await db.from('visao_geral_configuracoes').select('colunas').eq('empresa_id',empresa).maybeSingle()
+  if(layout.error&&!['PGRST205','42P01'].includes(String(layout.error.code||'')))throw layout.error
+  const colunas=colunasKanbanEmpresa(layout.data?.colunas)
   const obras=o.data||[], vendas=(v.data||[]).filter(x=>!['cancelada','cancelado'].includes(txt(x.status)))
   const obrasIds=ids(obras.map(x=>x.id)), vendaIds=ids(vendas.map(x=>x.id)),orcIds=ids(vendas.map(x=>x.orcamento_id))
   const buscar=async(tabela:string,campos:string,coluna:string,lista:string[])=>{
@@ -47,15 +51,17 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}){
    }
    return dados
   }
-  const [nec,ops,inst,med,itensCompra]=await Promise.all([
+  const [nec,ops,inst,med,itensCompra,controles]=await Promise.all([
    buscar('compras_necessidades','id,obra_id,status,recebido_em','obra_id',obrasIds),
    buscar('ordens_producao','id,venda_obra_id,status,bloqueada','venda_obra_id',vendaIds),
    buscar('venda_instalacao_itens','id,venda_obra_id,status,quantidade,quantidade_instalada,pendencia,checklist','venda_obra_id',vendaIds),
    buscar('medicoes_finais','id,obra_id,orcamento_id,status_operacional','orcamento_id',orcIds),
    buscar('compras_solicitacao_itens','id,obra_id,destino,status,quantidade_necessaria','obra_id',obrasIds),
+   buscar('visao_geral_cards_controle','venda_id,estado,etapa_visual,coluna_visual_id,motivo','venda_id',vendaIds),
   ])
   const linhas=await buscar('compras_carrinho_itens','item_id,carrinho_id,quantidade_obra,recebido_obra','item_id',ids(itensCompra.map(x=>x.id)))
   const carrinhos=await buscar('compras_carrinhos','id,status','id',ids(linhas.map(x=>x.carrinho_id)))
+  const porControle=new Map(controles.map(x=>[x.venda_id,x]))
   const porCarrinho=new Map(carrinhos.map(x=>[x.id,x]))
   const porObra=new Map(obras.map(x=>[x.id,x]))
   const orcamentos=b.data||[]
@@ -97,9 +103,10 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}){
     instalacao:itens.length&&instaladas===itens.length?'concluida':itens.some(x=>txt(x.status)==='instalado')?'em_andamento':itens.length?'aguardando_agendamento':'nao_iniciada',
     encerramentoConfirmado:txt(venda.status)==='concluida',
    }
-   const p=projetarCardGeral({vendaId:venda.id,cliente:'',projeto:obra.nome,sinais,previsaoEntrega:obra.previsao_entrega},COLUNAS_GERAIS_PADRAO,new Date().toISOString().slice(0,10))
+   const p=projetarCardGeral({vendaId:venda.id,cliente:'',projeto:obra.nome,sinais,previsaoEntrega:obra.previsao_entrega},colunas,new Date().toISOString().slice(0,10))
    if(!p)continue
-   const coluna=p.colunaId
+   const posicionado=posicionarCardVisual(p,porControle.get(venda.id),colunas)
+   const coluna=posicionado.colunaId
    const progresso=['compras','aguardando'].includes(coluna)?percent(compradas,totalCompras):
     coluna==='producao'?percent(feitas,ordens.length):coluna==='instalacao'?percent(instaladas,itens.length):coluna==='finalizado'?100:null
    const descricao=['compras','aguardando'].includes(coluna)?'Materiais comprados: '+compradas+'/'+totalCompras:
@@ -107,7 +114,7 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}){
     coluna==='instalacao'?'Itens instalados: '+instaladas+'/'+itens.length:
     coluna==='finalizado'?'Obra encerrada no fluxo operacional':'Acompanhamento da etapa'
    const card:VendaCardCliente={vendaId:venda.id,numero:Number(venda.numero)||0,colunaId:coluna,
-    etapaOperacional:p.etapaOperacional,progresso,progressoDescricao:descricao}
+    etapaOperacional:posicionado.etapaOperacional,progresso,progressoDescricao:descricao}
    agrupadas[obra.id]=[...(agrupadas[obra.id]||[]),card]
   }
   const cardsBase:ObraBaseCliente[]=obras.map(obra=>{
@@ -119,10 +126,10 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}){
     fotoProjetoUrl:typeof foto==='string'?foto:null,orcamentos:verOrcamentos?lista.length:null}
   })
   const podeAbrirVendas=podeCliente360(acesso,'vendas')
-  const cards=agruparKanbanObras(cardsBase,agrupadas).map(card=>podeAbrirVendas?card:{
+  const cards=agruparKanbanObras(cardsBase,agrupadas,colunas).map(card=>podeAbrirVendas?card:{
    ...card,vendas:card.vendas.map(v=>({...v,vendaId:'',numero:0})),
   })
-  return NextResponse.json({cards,
+  return NextResponse.json({cards,colunas,
    vendasSemObra:vendas.filter(x=>!x.obra_id||!porObra.has(x.obra_id)).length,atualizadoEm:new Date().toISOString()},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('[cliente360 kanban por obra]',e);return erro('Falha ao consultar obras. Nenhum dado foi alterado.',503)}
