@@ -267,25 +267,22 @@ export default function VisaoGeralProjetos(){
    if(!r.ok||!j.ok)throw Error(j.erro||'A posição não foi salva.')
    if(j.colunaId&&j.colunaId!==colunaId)throw Error('O banco respondeu uma coluna diferente.')
    gravouNoBanco=true
-   const conferido=await fetch('/api/visao-geral-projetos?vendaId='+encodeURIComponent(vendaId),{
+   // Consultar a fonte persistida, não reconstruir o Kanban inteiro para verificar um POST.
+   const conferido=await fetch('/api/visao-geral-projetos/mover?vendaId='+encodeURIComponent(vendaId),{
     headers:{Authorization:'Bearer '+token},cache:'no-store'
    })
    const payload=await conferido.json().catch(()=>({}))
    if(!conferido.ok){
-    setAviso('✓ Posição gravada em '+nome+'. Atualização do painel pendente.')
+    setAviso('✓ Posição gravada em '+nome+'. A confirmação da leitura ficará pendente.')
     return
    }
-   const resultado=(payload.cards||[]).find((c:ProjetoGeralCard)=>c.vendaId===vendaId)
-   if(!resultado||resultado.colunaId!==colunaId){
-    setAviso('✓ Posição gravada em '+nome+'. A leitura será sincronizada automaticamente.')
+   if(payload.estado!=='manual'||payload.colunaId!==colunaId){
+    setAviso('')
+    setErro('A coluna registrada no banco não corresponde ao destino '+nome+'. Verifique o card.')
     return
    }
    posicoesGravadas.current.delete(vendaId)
-   setCards(p=>p.map(c=>c.vendaId===vendaId?{
-    ...c,...resultado,materiais:resultado.materiais||[],pendencias:resultado.pendencias||[],
-    detalhesCompra:resultado.detalhesCompra||[]
-   }:c))
-   setAviso('✓ Card salvo na coluna '+nome+'.')
+   setAviso('✓ Card salvo em '+nome+' e sincronizado com o Kanban da Obra.')
   }catch(e){
    if(gravouNoBanco){
     setAviso('✓ Posição gravada em '+nome+'. A consulta será atualizada automaticamente.')
