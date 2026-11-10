@@ -34,7 +34,7 @@ async function contexto(req:NextRequest){
 }
 async function verificaVenda(empresa:string,id:string){
  if(!validade(id))return false
- const {data,error}=await db.from('vendas_obras').select('id').eq('id',id).eq('empresa_id',empresa).maybeSingle()
+ const {data,error}=await db.from('vendas_obras').select('id').eq('id',id).eq('empresa_id',empresa).is('excluida_em',null).maybeSingle()
  if(error)throw error
  return !!data
 }
@@ -77,7 +77,7 @@ export async function GET(req:NextRequest){
   const [colunas,vr,acessos]=await Promise.all([
     semearColunas(ctx.u.empresa_id,setorColunas),
     db.from('vendas_obras').select('id,numero,cliente_id,obra_id,orcamento_id,valor_venda,created_at,status').eq('empresa_id',ctx.u.empresa_id)
-      .order('created_at',{ascending:false}).limit(1000),
+      .is('excluida_em',null).order('created_at',{ascending:false}).limit(1000),
     ctx.u.role==='master'?db.from('central_kanban_acessos').select('usuario_id,setor,nivel,responsavel').eq('empresa_id',ctx.u.empresa_id):
       Promise.resolve({data:[],error:null}),
   ])

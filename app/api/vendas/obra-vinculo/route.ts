@@ -14,7 +14,7 @@ export async function GET(req:NextRequest){
   if(!uuid.test(vendaId))return error('Venda inválida.')
   const {data:venda, error:erroVenda}=await supabaseAdmin.from('vendas_obras')
     .select('id,cliente_id,obra_id,orcamento_id').eq('empresa_id',usuario.empresa_id)
-    .eq('id',vendaId).maybeSingle()
+    .eq('id',vendaId).is('excluida_em',null).maybeSingle()
   if(erroVenda)return error('Não foi possível consultar a venda.',500)
   if(!venda)return error('Venda não localizada.',404)
   const {data:obras,error:erroObras}=await supabaseAdmin.from('obras')

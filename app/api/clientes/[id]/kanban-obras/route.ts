@@ -34,7 +34,7 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}){
   const verOrcamentos=podeCliente360(acesso,'orcamentos')
   const [o,v,b]=await Promise.all([
    db.from('obras').select('id,numero,nome,status,cidade,previsao_entrega').eq('empresa_id',empresa).eq('cliente_id',clienteId).order('created_at',{ascending:false}).limit(2000),
-   db.from('vendas_obras').select('id,numero,obra_id,orcamento_id,status').eq('empresa_id',empresa).eq('cliente_id',clienteId).order('created_at',{ascending:false}).limit(2000),
+   db.from('vendas_obras') .select('id,numero,obra_id,orcamento_id,status').eq('empresa_id',empresa).eq('cliente_id',clienteId).is('excluida_em',null).order('created_at',{ascending:false}).limit(2000),
    verOrcamentos?db.from('orcamentos').select('id,obra_id,fotos_urls,revisao_atual').eq('empresa_id',empresa).eq('cliente_id',clienteId).limit(3000):Promise.resolve({data:[],error:null}),
   ])
   if(o.error||v.error||b.error)throw o.error||v.error||b.error
