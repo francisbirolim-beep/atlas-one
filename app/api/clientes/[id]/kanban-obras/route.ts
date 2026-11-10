@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarTenant} from '@/lib/tenantServer'
+import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
 import {contextoCliente360Server} from '@/lib/cliente360AcessoServer'
 import {podeCliente360} from '@/lib/cliente360Permissoes'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
@@ -126,10 +127,11 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}){
     fotoProjetoUrl:typeof foto==='string'?foto:null,orcamentos:verOrcamentos?lista.length:null}
   })
   const podeAbrirVendas=podeCliente360(acesso,'vendas')
+  const podeMoverCards=podeAbrirVendas&&(await permissoesKanbanObra(u)).mover
   const cards=agruparKanbanObras(cardsBase,agrupadas,colunas).map(card=>podeAbrirVendas?card:{
    ...card,vendas:card.vendas.map(v=>({...v,vendaId:'',numero:0})),
   })
-  return NextResponse.json({cards,colunas,
+  return NextResponse.json({cards,colunas,podeMoverCards,
    vendasSemObra:vendas.filter(x=>!x.obra_id||!porObra.has(x.obra_id)).length,atualizadoEm:new Date().toISOString()},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('[cliente360 kanban por obra]',e);return erro('Falha ao consultar obras. Nenhum dado foi alterado.',503)}
