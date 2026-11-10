@@ -411,6 +411,7 @@ export default function VisaoGeralProjetos(){
     <button onClick={()=>{setBusca('');setCondicao('todos')}} className="self-end rounded-md border border-[#395473] px-3 py-2 text-xs">Limpar filtros</button>
    </section>}
    {erro&&<p role="alert" className="mb-3 rounded-lg border border-rose-500/50 bg-rose-950/50 p-3 text-sm text-rose-100">{erro}</p>}
+   {aviso&&<p role="status" className="mb-3 rounded-lg border border-emerald-500/50 bg-emerald-950/50 p-3 text-sm font-semibold text-emerald-100">{aviso}</p>}
    <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">{montarKPIs.map(k=>{
     const Icone=k.icone
     return <div key={k.label} className="relative min-h-[80px] overflow-hidden rounded-lg border border-[#294461] bg-gradient-to-br from-[#152b46] to-[#0b1c32] px-3 py-3 shadow-[0_3px_18px_rgba(0,0,0,.13)]">
