@@ -172,8 +172,9 @@ export function situacaoPrazoEtapa(opcoes: {
   prazoDias?: number | null
   agora: string
   concluida?: boolean
+  emAndamento?: boolean
   concluiuEm?: string | null
-}): { estado: 'sem_prazo' | 'amarelo' | 'verde' | 'vermelho'; vencimento: string | null; horasRestantes: number | null } {
+}): { estado: 'sem_prazo' | 'branco' | 'amarelo' | 'verde' | 'vermelho'; vencimento: string | null; horasRestantes: number | null } {
   const horas = opcoes.prazoHoras ?? (opcoes.prazoDias === null || opcoes.prazoDias === undefined ? null : opcoes.prazoDias * 24)
   if (!opcoes.entrouEm || horas === null || !Number.isFinite(horas) || horas <= 0)
     return { estado: 'sem_prazo', vencimento: null, horasRestantes: null }
@@ -186,7 +187,7 @@ export function situacaoPrazoEtapa(opcoes: {
   if (!Number.isFinite(encerramentoMs))
     return { estado: 'sem_prazo', vencimento: null, horasRestantes: null }
   const horasRestantes = Math.ceil((vencimentoMs - encerramentoMs) / 3600000)
-  const estado = encerramentoMs > vencimentoMs ? 'vermelho' : opcoes.concluida ? 'verde' : 'amarelo'
+  const estado = encerramentoMs > vencimentoMs ? 'vermelho' : opcoes.concluida ? 'verde' : opcoes.emAndamento ? 'amarelo' : 'branco'
   return { estado, vencimento: new Date(vencimentoMs).toISOString(), horasRestantes }
 }
 
