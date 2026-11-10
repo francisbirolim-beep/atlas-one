@@ -153,26 +153,47 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    projeto?<button disabled={salvando} onClick={()=>void controlarProjeto('ocultar')} className="rounded border border-rose-500 px-3 py-1.5 font-bold text-rose-100">Retirar card principal incorreto</button>:null}
    <span className="text-slate-400">Retirar não exclui a obra. Para corrigir vínculos, utilize o cadastro da venda.</span>
   </div>}
-  <div className="overflow-x-auto px-3 pb-4 pt-3">
+  <div className="overflow-x-auto px-3 pb-4 pt-3" onDragOver={e=>{
+   const area=e.currentTarget.getBoundingClientRect()
+   if(e.clientX<area.left+65)e.currentTarget.scrollLeft-=26
+   else if(e.clientX>area.right-65)e.currentTarget.scrollLeft+=26
+  }}>
    <div className="grid min-w-max gap-2" style={{gridTemplateColumns:'repeat(8,minmax(175px,1fr))'}}>
     {COLUNAS_GERAIS_PADRAO.map((col,i)=>{
      const [cor,base]=cores[i]
      const cardReal=projeto&&col.criterios.includes(projeto.etapaOperacional as EtapaOperacional)?projeto:null
      const cardsManuais=manuais.filter(m=>col.criterios.includes(m.etapa as EtapaOperacional))
      const cardsCompras=pedidos.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
-     return <div key={col.id} onDragOver={e=>{if((arrastando||arrastandoPrincipal)&&permissoes?.mover&&!salvando){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
-      onDrop={e=>{if(!permissoes?.mover||salvando)return;const destino=col.criterios[0];if(!destino)return
-       if(arrastandoPrincipal){e.preventDefault();setArrastandoPrincipal(false);void moverPrincipal(destino)}
-       else if(arrastando){e.preventDefault();const id=arrastando;setArrastando(null);void salvar('mover',id,destino)}}}
+     return <div key={col.id} onDragOver={e=>{
+       if(permissoes?.mover&&!salvando){e.preventDefault();e.dataTransfer.dropEffect='move'}
+      }}
+      onDrop={e=>{
+       if(!permissoes?.mover||salvando)return
+       const destino=col.criterios[0]
+       const origem=e.dataTransfer.getData('text/plain')
+       if(!destino||!origem)return
+       if(origem==='atlas-principal:'+vendaId&&dados?.podeMoverCards){
+        e.preventDefault();setArrastandoPrincipal(false);void moverPrincipal(destino)
+       } else if(origem.startsWith('atlas-manual:')){
+        const id=origem.slice('atlas-manual:'.length)
+        if(!manuais.some(m=>m.id===id))return
+        e.preventDefault();setArrastando(null);void salvar('mover',id,destino)
+       }
+      }}
       className="min-h-[260px] overflow-hidden rounded-lg border border-white/10" style={{background:base}}>
       <h3 className="flex items-center justify-between px-2 py-3 text-[11px] font-bold text-white" style={{background:cor}}>
        <span>{col.nome}</span><span className="rounded-full bg-white/15 px-1.5">{Number(!!cardReal)+cardsManuais.length+cardsCompras.length}</span>
       </h3>
       <div className="space-y-2 p-1.5">
        {cardReal&&<div draggable={!!permissoes?.mover&&!!dados?.podeMoverCards&&!salvando}
-        onDragStart={e=>{if(!permissoes?.mover||!dados?.podeMoverCards)return;e.dataTransfer.setData('text/plain',vendaId);e.dataTransfer.effectAllowed='move';setArrastando(null);setArrastandoPrincipal(true)}}
+        onDragStart={e=>{if(!permissoes?.mover||!dados?.podeMoverCards)return;e.dataTransfer.setData('text/plain','atlas-principal:'+vendaId);e.dataTransfer.effectAllowed='move';setArrastando(null);setArrastandoPrincipal(true)}}
         onDragEnd={()=>setArrastandoPrincipal(false)}
         className={'rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow '+(permissoes?.mover&&dados?.podeMoverCards?'cursor-grab active:cursor-grabbing':'')}>
+        {permissoes?.mover&&dados?.podeMoverCards&&<p draggable
+          onDragStart={e=>{e.dataTransfer.setData('text/plain','atlas-principal:'+vendaId);e.dataTransfer.effectAllowed='move';setArrastandoPrincipal(true)}}
+          className="mb-2 cursor-grab select-none rounded bg-blue-100 px-2 py-1.5 text-center text-[10px] font-bold text-blue-800 active:cursor-grabbing">
+          ⠿ Segure aqui e arraste o card
+        </p>}
         <p className="text-[11px] font-extrabold">{cardReal.cliente}</p>
         <p className="text-[10px] text-slate-600">Orçamento {cardReal.numeroOrcamento}</p>
         <p className="mt-2 rounded bg-emerald-50 p-1 text-[10px] font-semibold text-emerald-800">Venda real · {cardReal.projeto}</p>
@@ -192,7 +213,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
          <p className="mt-1 text-[10px] text-slate-500">{p.recebidos} de {p.itens} itens recebidos</p>
         </Link>})}
        {cardsManuais.map(m=><div key={m.id} draggable={permissoes?.mover&&!salvando}
-        onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);setArrastandoPrincipal(false);setArrastando(m.id)}} onDragEnd={()=>setArrastando(null)}
+        onDragStart={e=>{e.dataTransfer.setData('text/plain','atlas-manual:'+m.id);e.dataTransfer.effectAllowed='move';setArrastandoPrincipal(false);setArrastando(m.id)}} onDragEnd={()=>setArrastando(null)}
         className="rounded-lg border-l-4 border-l-sky-500 bg-white p-2.5 text-slate-900 shadow">
         <p className="text-[9px] font-bold uppercase text-sky-700">Acompanhamento manual</p>
         <p className="mt-1 text-[11px] font-extrabold">{m.titulo}</p>
