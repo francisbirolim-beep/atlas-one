@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarTenant} from '@/lib/tenantServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
+import {usuarioPodeAcaoServer} from '@/lib/acessoUsuarioServer'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -10,6 +11,19 @@ const resposta=(body:unknown,status=200)=>NextResponse.json(body,{
 })
 const erro=(mensagem:string,status=400)=>resposta({ok:false,error:mensagem},status)
 
+async function autorizado(u:{id:string;role:string;empresa_id:string}){
+ return usuarioPodeAcaoServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,
+  setorId:'portal-cliente',acaoId:'clientes.portal.excluir_venda',minimo:'edicao'})
+}
+
+/** Consulta de capacidade para mostrar a ação no Cliente 360. */
+export async function GET(req:NextRequest){
+ const usuario=await autenticarTenant(req)
+ if(!usuario)return erro('Sessão inválida.',401)
+ try{return resposta({ok:true,podeExcluir:await autorizado(usuario)})}
+ catch{return erro('Não foi possível conferir as permissões.',503)}
+}
+
 /**
  * Exclusão lógica auditada. Não apaga a venda do banco, o orçamento nem a obra.
  * A RPC é transacional: recusa movimentações operacionais/financeiras e cancela
@@ -18,7 +32,9 @@ const erro=(mensagem:string,status=400)=>resposta({ok:false,error:mensagem},stat
 export async function POST(req:NextRequest){
  const usuario=await autenticarTenant(req)
  if(!usuario)return erro('Sessão inválida. Entre novamente.',401)
- if(usuario.role!=='master')return erro('Somente o Master pode excluir vendas incorretas.',403)
+ try{
+  if(!(await autorizado(usuario)))return erro('Sem permissão para excluir vendas incorretas.',403)
+ }catch{return erro('Não foi possível conferir as permissões.',503)}
  // A prévia compartilha a base de dados: proibido mudar registros reais por essa URL.
  if(process.env.VERCEL_ENV==='preview')return erro('Exclusão indisponível no ambiente de prévia.',409)
  const b=await req.json().catch(()=>({})) as Record<string,unknown>
@@ -46,7 +62,7 @@ export async function POST(req:NextRequest){
   if(error){
    const msg=String(error.message||'')
    const regras=[
-    'Somente o Master pode excluir vendas',
+    'Usuário sem permissão de excluir vendas',
     'Venda concluída exige revisão administrativa',
     'Venda possui produção, cotação ou instalação vinculada',
     'Há recebimento ou movimentação financeira',
