@@ -126,12 +126,15 @@ export async function GET(req:NextRequest,{params}:{params:{id:string}}){
     cidade:obra.cidade||null,previsaoEntrega:obra.previsao_entrega||null,
     fotoProjetoUrl:typeof foto==='string'?foto:null,orcamentos:verOrcamentos?lista.length:null}
   })
+  const posicoesPersistidas=Object.fromEntries(controles
+   .filter(c=>c.estado==='manual'&&colunas.some(col=>col.id===c.coluna_visual_id))
+   .map(c=>[c.venda_id,c.coluna_visual_id]))
   const podeAbrirVendas=podeCliente360(acesso,'vendas')
   const podeMoverCards=podeAbrirVendas&&(await permissoesKanbanObra(u)).mover
   const cards=agruparKanbanObras(cardsBase,agrupadas,colunas).map(card=>podeAbrirVendas?card:{
    ...card,vendas:card.vendas.map(v=>({...v,vendaId:'',numero:0})),
   })
-  return NextResponse.json({cards,colunas,podeMoverCards,
+  return NextResponse.json({cards,colunas,podeMoverCards,posicoesPersistidas,
    vendasSemObra:vendas.filter(x=>!x.obra_id||!porObra.has(x.obra_id)).length,atualizadoEm:new Date().toISOString()},
    {headers:{'Cache-Control':'no-store'}})
  }catch(e){console.error('[cliente360 kanban por obra]',e);return erro('Falha ao consultar obras. Nenhum dado foi alterado.',503)}

@@ -59,6 +59,11 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    if(!res.ok)throw Error(payload.erro||'Não foi possível consultar o Kanban da obra.')
    // Descartar respostas antigas ou consultas iniciadas antes de uma movimentação.
    if(movimentacaoEmCurso.current||geracao!==leituraAtual.current)return
+   const banco=payload.posicoesPersistidas?.[vendaId]
+   if(typeof banco==='string'&&(payload.colunas||COLUNAS_GERAIS_PADRAO).some((c:{id:string})=>c.id===banco)){
+    payload.cards=(payload.cards||[]).map((c:ProjetoGeralCard)=>
+     c.vendaId===vendaId?{...c,colunaId:banco}:c)
+   }
    const gravada=posicaoGravada.current
    if(gravada){
     const card=payload.cards?.find((c:ProjetoGeralCard)=>c.vendaId===gravada.vendaId)
@@ -130,23 +135,22 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
     throw Error('O banco respondeu uma coluna diferente da solicitada.')
    gravouNoBanco=true
 
-   // Não mostrar "salvo" antes de conferir a leitura real que será usada pelo painel.
-   const consulta=await fetch('/api/visao-geral-projetos?vendaId='+encodeURIComponent(vendaId),{
+   // Verificação leve e direta do registro persistido (fonte dos três quadros).
+   const consulta=await fetch('/api/visao-geral-projetos/mover?vendaId='+encodeURIComponent(vendaId),{
     cache:'no-store',headers:{Authorization:'Bearer '+token}
    })
    const atualizado=await consulta.json().catch(()=>({}))
    if(!consulta.ok){
-    setAviso('✓ Posição gravada em '+nome+'. A confirmação da tela será sincronizada automaticamente.')
+    setAviso('✓ Posição gravada em '+nome+'. A confirmação da leitura ficará pendente.')
     return
    }
-   const confirmado=atualizado.cards?.find((c:ProjetoGeralCard)=>c.vendaId===vendaId)
-   if(!confirmado||confirmado.colunaId!==destino){
-    setAviso('✓ Posição gravada em '+nome+'. A atualização visual ainda está sincronizando.')
+   if(atualizado.estado!=='manual'||atualizado.colunaId!==destino){
+    setErro('A confirmação do banco não corresponde à coluna '+nome+'. Verifique a posição antes de mover novamente.')
+    setAviso('')
     return
    }
    posicaoGravada.current=null
-   setDados(atualizado)
-   setAviso('✓ Card salvo em '+nome+'. A posição permanece após atualizar.')
+   setAviso('✓ Card salvo em '+nome+' e sincronizado com o Kanban Geral.')
   }catch(e){
    if(gravouNoBanco){
     setAviso('✓ Posição gravada em '+nome+'. Atualização do painel pendente.')

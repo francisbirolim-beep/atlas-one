@@ -1,7 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
 import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
-import {podeMoverKanbanGeral} from '@/lib/painelGeralAcessoServer'
+import {podeMoverKanbanGeral,podeConsultarPainelGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
 import {ETAPAS_OPERACIONAIS} from '@/lib/visaoGeralProjetos'
 import {colunasKanbanEmpresa} from '@/lib/kanbanColunasSincronizadas'
@@ -12,7 +12,36 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const etapas=new Set<string>(ETAPAS_OPERACIONAIS)
 const falha=(erro:string,status:number)=>NextResponse.json({erro},{status,headers:{'Cache-Control':'no-store'}})
 
-/** Move só o card principal na apresentação dos dois Kanbans; não altera os status operacionais. */
+/** Lê o registro efetivamente persistido. É a mesma fonte dos Kanbans Geral, da Venda e do Cliente. */
+export async function GET(req:NextRequest){
+ try{
+  const u=await autenticarCompras(req)
+  if(!u)return falha('Sessão expirada.',401)
+  const vendaId=req.nextUrl.searchParams.get('vendaId')
+  if(!vendaId||!uuid.test(vendaId))return falha('Venda inválida.',400)
+  const permissao=await permissoesKanbanObra(u)
+  if(!permissao.consultar && !(await podeConsultarPainelGeral(u,'visao-geral-projetos')))
+   return falha('Acesso não autorizado ao Kanban.',403)
+  const {data:venda,error:erroVenda}=await db.from('vendas_obras').select('id')
+   .eq('empresa_id',u.empresa_id).eq('id',vendaId).maybeSingle()
+  if(erroVenda)throw erroVenda
+  if(!venda)return falha('Venda não encontrada na empresa.',404)
+  const {data,error}=await db.from('visao_geral_cards_controle')
+   .select('estado,coluna_visual_id,etapa_visual,updated_at')
+   .eq('empresa_id',u.empresa_id).eq('venda_id',vendaId).maybeSingle()
+  if(error)throw error
+  return NextResponse.json({
+   ok:true,vendaId,
+   colunaId:data?.estado==='manual'?data.coluna_visual_id:null,
+   estado:data?.estado||null,atualizadoEm:data?.updated_at||null,
+  },{headers:{'Cache-Control':'no-store, max-age=0'}})
+ }catch(e){
+  console.error('[Kanban principal] consulta da posição persistida',e)
+  return falha('Falha ao consultar posição persistida.',503)
+ }
+}
+
+/** Move só a apresentação do card nos Kanbans; não altera status operacionais. */
 export async function POST(req:NextRequest){
  try{
   const u=await autenticarCompras(req)
@@ -54,7 +83,19 @@ export async function POST(req:NextRequest){
     return falha(String(error.message),403)
    throw error
   }
-  return NextResponse.json(data,{headers:{'Cache-Control':'no-store'}})
+  // A resposta de sucesso só pode ser dada depois de confirmar a posição
+  // na mesma tabela consumida pelos três Kanbans. Não confundir drag visual com gravação.
+  if(!data || typeof data!=='object' || data.ok!==true)
+   return falha('O banco não confirmou a movimentação do card.',409)
+  const {data:gravado,error:erroLeitura}=await db.from('visao_geral_cards_controle')
+   .select('estado,coluna_visual_id,updated_at').eq('empresa_id',u.empresa_id)
+   .eq('venda_id',body.vendaId).maybeSingle()
+  if(erroLeitura)throw erroLeitura
+  if(gravado?.estado!=='manual'||gravado.coluna_visual_id!==colunaId)
+   return falha('A gravação não foi confirmada. Verifique a posição atual do card antes de tentar novamente.',409)
+  return NextResponse.json({...data,colunaId:gravado.coluna_visual_id,
+   persistido:true,atualizadoEm:gravado.updated_at},
+   {headers:{'Cache-Control':'no-store, max-age=0'}})
  }catch(e){
   console.error('[Kanban principal] movimentação visual',e)
   return falha('Não foi possível salvar a nova posição. Nenhum status operacional foi alterado.',500)
