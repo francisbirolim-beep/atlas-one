@@ -311,8 +311,8 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
          })}
         </div>}
         {cardReal.prazoEtapaEstado&&cardReal.prazoEtapaEstado!=='sem_prazo'&&
-         <p className={'mt-1 rounded px-2 py-1 text-[10px] font-bold '+(cardReal.prazoEtapaEstado==='vermelho'?'bg-rose-100 text-rose-800':cardReal.prazoEtapaEstado==='verde'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-900')}>
-          {cardReal.prazoEtapaEstado==='vermelho'?'Prazo vencido':cardReal.prazoEtapaEstado==='verde'?'Concluído no prazo':(cardReal.horasEtapaRestantes??0)+'h restantes'}
+         <p className={'mt-1 rounded px-2 py-1 text-[10px] font-bold '+(cardReal.prazoEtapaEstado==='vermelho'?'bg-rose-100 text-rose-800':cardReal.prazoEtapaEstado==='verde'?'bg-emerald-100 text-emerald-800':cardReal.prazoEtapaEstado==='branco'?'bg-slate-100 text-slate-700':'bg-amber-100 text-amber-900')}>
+          {cardReal.prazoEtapaEstado==='vermelho'?'Prazo vencido':cardReal.prazoEtapaEstado==='verde'?'Concluído no prazo':cardReal.prazoEtapaEstado==='branco'?'Aguardando início · '+(cardReal.horasEtapaRestantes??0)+'h disponíveis':(cardReal.horasEtapaRestantes??0)+'h restantes'}
          </p>}
         {!!cardReal.pendencias?.length&&<p className="mt-2 text-[10px] text-amber-800">{cardReal.pendencias[0]}</p>}
         {<label className="mt-2 block text-[10px] font-semibold text-slate-700">Mover card principal
