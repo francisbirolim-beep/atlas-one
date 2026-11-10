@@ -1,5 +1,5 @@
 'use client'
-import {useCallback,useEffect,useMemo,useState} from 'react'
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import Link from 'next/link'
 import AlcaArrastarCard from '@/components/kanban/AlcaArrastarCard'
 import {ArrowUpRight,Building2,CalendarDays,CheckCircle2,Columns3,MapPin,RefreshCw,Search,SlidersHorizontal} from 'lucide-react'
@@ -42,7 +42,10 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
  const [movendo,setMovendo]=useState(false)
  const [busca,setBusca]=useState('')
  const [filtro,setFiltro]=useState<Filtro>('todas')
+ const leituraAtual=useRef(0)
+ const movimentoEmCurso=useRef(false)
  const carregar=useCallback(async(silencioso=false)=>{
+  const geracao=++leituraAtual.current
   if(!silencioso)setCarregando(true)
   try{
    const token=await tokenAtual()
@@ -52,9 +55,13 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
    })
    const json=await resposta.json().catch(()=>({}))
    if(!resposta.ok)throw new Error(json.erro||'Não foi possível carregar o Kanban do Cliente.')
+   if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
    setDados(json as Resposta);setErro('')
-  }catch(e){setErro(e instanceof Error?e.message:'Não foi possível carregar as obras.')}
-  finally{setCarregando(false)}
+  }catch(e){
+   if(!movimentoEmCurso.current&&geracao===leituraAtual.current)
+    setErro(e instanceof Error?e.message:'Não foi possível carregar as obras.')
+  }
+  finally{if(geracao===leituraAtual.current)setCarregando(false)}
  },[clienteId])
  useEffect(()=>{
   void carregar()
@@ -64,11 +71,18 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
   return()=>{window.clearInterval(timer);document.removeEventListener('visibilitychange',voltar)}
  },[carregar])
  async function moverVenda(vendaId:string,colunaId:string){
-  if(movendo||!dados?.podeMoverCards)return
+  if(movimentoEmCurso.current||!dados?.podeMoverCards)return
   const destino=(dados.colunas||COLUNAS_GERAIS_PADRAO).find(c=>c.id===colunaId)
   const obra=dados.cards.find(c=>c.vendas.length===1&&c.vendas[0].vendaId===vendaId)
-  if(!destino||!obra||obra.colunaId===colunaId)return
-  setMovendo(true);setErro('');setAviso('')
+  if(!destino||!obra)return
+  if(obra.colunaId===colunaId){setAviso('Esta obra já está em '+destino.nome+'.');return}
+  const anterior=dados
+  movimentoEmCurso.current=true
+  ++leituraAtual.current
+  setMovendo(true);setErro('');setAviso('Salvando obra em '+destino.nome+'...')
+  setDados(p=>p?{...p,cards:p.cards.map(c=>c.id===obra.id?{
+   ...c,colunaId,vendas:c.vendas.map(v=>({...v,colunaId}))
+  }:c)}:p)
   try{
    const token=await tokenAtual()
    if(!token)throw Error('Sessão expirada. Entre novamente.')
@@ -78,10 +92,24 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
    })
    const json=await res.json().catch(()=>({}))
    if(!res.ok||!json.ok)throw Error(json.erro||'Não foi possível mover a obra.')
-   await carregar(true)
-   setAviso('Obra movida para '+destino.nome+'. A posição foi salva.')
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao salvar posição da obra.')}
-  finally{setMovendo(false)}
+   if(json.colunaId&&json.colunaId!==colunaId)throw Error('O banco respondeu outra coluna.')
+   const resposta=await fetch('/api/clientes/'+encodeURIComponent(clienteId)+'/kanban-obras',{
+    headers:{Authorization:'Bearer '+token},cache:'no-store'
+   })
+   const atualizado=await resposta.json().catch(()=>({}))
+   if(!resposta.ok)throw Error(atualizado.erro||'Não foi possível confirmar o andamento da obra.')
+   const confirmado=(atualizado.cards||[]).find((c:ObraCardCliente)=>
+    c.vendas.length===1&&c.vendas[0].vendaId===vendaId)
+   if(!confirmado||confirmado.colunaId!==colunaId)
+    throw Error('A nova coluna ainda não apareceu na leitura do Cliente 360.')
+   setDados(atualizado as Resposta)
+   setAviso('✓ Obra salva em '+destino.nome+'.')
+  }catch(e){
+   setDados(anterior);setAviso('')
+   setErro(e instanceof Error?e.message:'Falha ao confirmar a posição da obra.')
+  }finally{
+   movimentoEmCurso.current=false;setMovendo(false)
+  }
  }
  const cards=dados?.cards||[]
  const colunas=[{id:'orcamento',nome:'Pré-venda / Orçamento',ordem:-1},...(dados?.colunas||COLUNAS_GERAIS_PADRAO)].sort((a,b)=>a.ordem-b.ordem)
@@ -130,8 +158,12 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
      </button>
     </div>
    </div>
-   {erro&&<div role="alert" className="m-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{erro}</div>}
-   {aviso&&<div role="status" className="m-3 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">{aviso}</div>}
+   {erro&&<div role="alert" className="fixed bottom-20 right-5 z-[120] max-w-[420px] rounded-xl border-2 border-rose-400 bg-rose-950 px-4 py-3 text-sm font-bold text-white shadow-2xl">
+    {erro}<button type="button" onClick={()=>setErro('')} className="ml-3 underline">Fechar</button>
+   </div>}
+   {!erro&&aviso&&<div role="status" aria-live="polite" className="fixed bottom-20 right-5 z-[120] max-w-[420px] rounded-xl border-2 border-emerald-400 bg-emerald-950 px-4 py-3 text-sm font-bold text-white shadow-2xl">
+    {aviso}<button type="button" onClick={()=>setAviso('')} className="ml-3 underline">Fechar</button>
+   </div>}
    {carregando&&!dados&&<p className="p-5 text-sm text-slate-500">Consultando a evolução das obras...</p>}
    {dados&&<div data-kanban-scroll className="overflow-x-auto px-3 pb-3 pt-3" role="region" aria-label="Colunas do Kanban de obras" tabIndex={0}>
     <div className="flex w-max gap-2 sm:grid sm:w-full sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

@@ -1,5 +1,5 @@
 'use client'
-import {useCallback,useEffect,useState} from 'react'
+import {useCallback,useEffect,useRef,useState} from 'react'
 import Link from 'next/link'
 import AlcaArrastarCard from '@/components/kanban/AlcaArrastarCard'
 import {ArrowUpRight,RefreshCw,Plus,ShoppingCart,ImageOff,RotateCcw,Trash2,ShieldCheck} from 'lucide-react'
@@ -37,8 +37,11 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  const [etapa,setEtapa]=useState<EtapaOperacional>('vendido')
  const [arrastando,setArrastando]=useState<string|null>(null)
  const [arrastandoPrincipal,setArrastandoPrincipal]=useState(false)
+ const leituraAtual=useRef(0)
+ const movimentacaoEmCurso=useRef(false)
  const permissoes=dados?.permissoesObra
  const ler=useCallback(async()=>{
+  const geracao=++leituraAtual.current
   try{
    const token=await tokenAtual()
    if(!token)throw Error('Faça login novamente para consultar a obra.')
@@ -47,9 +50,14 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    })
    const payload=await res.json().catch(()=>({}))
    if(!res.ok)throw Error(payload.erro||'Não foi possível consultar o Kanban da obra.')
+   // Descartar respostas antigas ou consultas iniciadas antes de uma movimentação.
+   if(movimentacaoEmCurso.current||geracao!==leituraAtual.current)return
    setDados(payload);setErro('')
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar esta obra.')}
-  finally{setCarregando(false)}
+  }catch(e){
+   if(!movimentacaoEmCurso.current&&geracao===leituraAtual.current)
+    setErro(e instanceof Error?e.message:'Falha ao consultar esta obra.')
+  }
+  finally{if(geracao===leituraAtual.current)setCarregando(false)}
  },[vendaId])
  useEffect(()=>{
   void ler()
@@ -81,25 +89,49 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
   finally{setSalvando(false);setArrastando(null)}
  }
  async function moverPrincipal(destino:string){
-  if(salvando||!dados)return
+  if(movimentacaoEmCurso.current||!dados)return
   const atual=dados.cards.find(card=>card.vendaId===vendaId)
-  if(!atual||atual.colunaId===destino)return
+  if(!atual)return
   const nome=colunas.find(c=>c.id===destino)?.nome||destino
-  // Arrastar deve salvar diretamente; a auditoria registra usuário, data e destino.
-  const motivo='Reposicionamento manual do card da obra para a coluna '+nome+'.'
-  setSalvando(true);setErro('');setAviso('')
+  if(atual.colunaId===destino){setAviso('Este card já está em '+nome+'.');setErro('');return}
+  const anterior=dados
+  movimentacaoEmCurso.current=true
+  // Reposiciona imediatamente e impede que uma consulta antiga volte a coluna anterior.
+  ++leituraAtual.current
+  setSalvando(true);setErro('');setAviso('Salvando posição em '+nome+'...')
+  setDados(p=>p?{...p,cards:p.cards.map(c=>c.vendaId===vendaId?{...c,colunaId:destino}:c)}:p)
   try{
-   const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+   const token=await tokenAtual()
+   if(!token)throw Error('Sessão expirada.')
+   const motivo='Reposicionamento manual do card da obra para a coluna '+nome+'.'
    const res=await fetch('/api/visao-geral-projetos/mover',{
     method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
-    body:JSON.stringify({vendaId,colunaId:destino,motivo:motivo.trim()})
+    body:JSON.stringify({vendaId,colunaId:destino,motivo})
    })
    const j=await res.json().catch(()=>({}))
-   if(!res.ok||!j.ok)throw Error(j.erro||'Não foi possível mover o card principal.')
-   await ler()
-   setAviso('Card reposicionado na coluna '+nome+'.')
-  }catch(e){setErro(e instanceof Error?e.message:'Falha ao mover o card principal.')}
-  finally{setSalvando(false);setArrastandoPrincipal(false)}
+   if(!res.ok||!j.ok)throw Error(j.erro||'Não foi possível gravar a posição (HTTP '+res.status+').')
+   if(j.colunaId&&j.colunaId!==destino)
+    throw Error('O banco respondeu uma coluna diferente da solicitada.')
+
+   // Não mostrar "salvo" antes de conferir a leitura real que será usada pelo painel.
+   const consulta=await fetch('/api/visao-geral-projetos?vendaId='+encodeURIComponent(vendaId),{
+    cache:'no-store',headers:{Authorization:'Bearer '+token}
+   })
+   const atualizado=await consulta.json().catch(()=>({}))
+   if(!consulta.ok)throw Error(atualizado.erro||'A posição foi gravada, mas a consulta falhou.')
+   const confirmado=atualizado.cards?.find((c:ProjetoGeralCard)=>c.vendaId===vendaId)
+   if(!confirmado||confirmado.colunaId!==destino)
+    throw Error('A nova posição ainda não foi confirmada na leitura do Kanban.')
+   setDados(atualizado)
+   setAviso('✓ Card salvo em '+nome+'. A posição permanece após atualizar.')
+  }catch(e){
+   setDados(anterior)
+   setAviso('')
+   setErro(e instanceof Error?e.message:'Não foi possível confirmar a posição do card.')
+  }finally{
+   movimentacaoEmCurso.current=false
+   setSalvando(false);setArrastandoPrincipal(false)
+  }
  }
  async function controlarProjeto(acao:'ocultar'|'restaurar'){
   if(!dados?.usuarioMaster||salvando)return
@@ -142,8 +174,12 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
     <Link href="/visao-geral-projetos" className="inline-flex items-center gap-1 rounded-lg border border-[#3c5876] px-3 py-2 text-xs font-bold text-white">Kanban Geral <ArrowUpRight size={13}/></Link>
    </div>
   </div>
-  {erro&&<p role="alert" className="m-3 rounded-md bg-rose-950 p-3 text-xs text-rose-100">{erro}</p>}
-  {aviso&&<p role="status" className="m-3 rounded-md border border-emerald-600 bg-emerald-950 p-3 text-xs font-bold text-emerald-100">{aviso}</p>}
+  {erro&&<div role="alert" className="fixed bottom-20 right-5 z-[120] max-w-[420px] rounded-xl border-2 border-rose-400 bg-rose-950 px-4 py-3 text-sm font-bold text-white shadow-2xl">
+   {erro}<button type="button" onClick={()=>setErro('')} className="ml-3 underline">Fechar</button>
+  </div>}
+  {!erro&&aviso&&<div role="status" aria-live="polite" className="fixed bottom-20 right-5 z-[120] max-w-[420px] rounded-xl border-2 border-emerald-400 bg-emerald-950 px-4 py-3 text-sm font-bold text-white shadow-2xl">
+   {aviso}<button type="button" onClick={()=>setAviso('')} className="ml-3 underline">Fechar</button>
+  </div>}
   {carregando&&!dados&&<p className="p-5 text-xs text-slate-200">Carregando dados reais desta venda...</p>}
   {dados&&!dados.kanbanObraConfigurado&&<p className="m-3 rounded-md border border-amber-600 bg-amber-950/40 p-3 text-xs text-amber-100">Os cards manuais ainda não estão habilitados no banco. O espelho das etapas reais continua disponível, sem alterações de dados.</p>}
   {formAberto&&permissoes?.criar&&<div className="m-3 grid gap-2 rounded-lg border border-blue-500 bg-[#102743] p-4 md:grid-cols-[1fr_1fr_180px_auto]">
