@@ -36,6 +36,7 @@ import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
 import { listarPermissoesUsuario, listarSetores, salvarPermissoesUsuario } from '@/lib/setores'
 import { montarBlocosPermissao, type BlocoPermissaoId, type ItemPermissaoBloco, fallbackAcaoPermissao } from '@/lib/permissoesBlocos'
 import { acessoUsuarioPadrao, lerAcessoUsuarioConfig, salvarAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
+import {alterarAcessoKanbanGeral,nivelAcessoKanbanGeral} from '@/lib/painelGeralAcesso'
 import {
   CADASTROS_360,
   cadastrosConfigPadrao,
@@ -792,13 +793,19 @@ export default function UsuariosSenhasPage() {
 
                       <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
                         <p className="text-xs font-bold text-blue-900">Painéis consolidados — acesso individual</p>
-                        <p className="mt-1 text-[11px] text-blue-800">Ao escolher Somente consulta e salvar, o painel aparece na primeira tela, em Visão Geral, somente para este usuário. Autorizações independentes; colunas, metas e programação continuam exclusivas do Master.</p>
+                        <p className="mt-1 text-[11px] text-blue-800">Libere Somente consulta para visualizar o painel ou Visualizar e movimentar cards para permitir arrastar projetos com histórico. Nenhum outro setor é liberado; colunas, metas e programação continuam exclusivas do Master.</p>
                         {([['painel_visao_geral_projetos','Visão Geral de Projetos'],['painel_relatorio_instalacoes','Relatório de Instalações']] as const).map(([id,rotulo]) => (
                           <label key={id} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2.5 text-xs">
                             <span className="font-semibold">{rotulo}</span>
-                            <select aria-label={'Permissão de '+rotulo} value={acessoConfig.acoes?.[id]==='consulta'||acessoConfig.acoes?.[id]==='edicao'?'consulta':'oculto'} onChange={e=>setAcessoConfig(prev=>({...prev,acoes:{...prev.acoes,[id]:e.target.value as NivelPermissao}}))} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+                            <select aria-label={'Permissão de '+rotulo}
+                              value={id==='painel_visao_geral_projetos' ? nivelAcessoKanbanGeral('funcionario',acessoConfig) : acessoConfig.acoes?.[id]==='consulta'||acessoConfig.acoes?.[id]==='edicao'?'consulta':'oculto'}
+                              onChange={e=>setAcessoConfig(prev=>({...prev,acoes:id==='painel_visao_geral_projetos'
+                                ? alterarAcessoKanbanGeral(prev.acoes,e.target.value as NivelPermissao)
+                                : {...prev.acoes,[id]:e.target.value as NivelPermissao}}))}
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
                               <option value="oculto">Oculto</option>
                               <option value="consulta">Somente consulta</option>
+                              {id==='painel_visao_geral_projetos'&&<option value="edicao">Visualizar e movimentar cards</option>}
                             </select>
                           </label>
                         ))}

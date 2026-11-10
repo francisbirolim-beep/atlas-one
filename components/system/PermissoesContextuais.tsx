@@ -13,7 +13,18 @@ import { nivelEfetivoAcao } from '@/lib/producaoPermissoes'
 import { acaoAutorizadaNoModulo, acaoExigeEdicao, nivelModuloSobSetor, opcoesSetorMaster } from '@/lib/permissoesModeloMaster'
 import { nivelCliente360, type RecursoCliente360 } from '@/lib/cliente360Permissoes'
 import { resolverContextoPermissoes } from '@/lib/permissoesContextuais'
+import { alterarAcessoKanbanGeral, nivelAcessoKanbanGeral } from '@/lib/painelGeralAcesso'
 import type { NivelPermissao, Setor, Usuario } from '@/lib/tipos'
+
+// O Kanban Geral já usa autorizações explícitas independentes dos setores.
+const MODULO_KANBAN_GERAL:ItemPermissaoBloco = {
+ id:'kanban-geral',setorId:'portal-cliente',bloco:'clientes',
+ label:'Kanban Geral de Projetos',descricao:'Visualização e movimentação do quadro geral.',
+ acoes:[
+  {id:'painel_visao_geral_projetos',label:'Visualizar Kanban Geral',descricao:'Consultar todas as obras no painel geral.'},
+  {id:'painel_visao_geral_projetos_mover',label:'Movimentar cards',descricao:'Reposicionar cards com histórico sem alterar produção, compras ou instalação.'},
+ ],
+}
 
 type AcessoPorUsuario = {
   usuario: Usuario
@@ -37,6 +48,7 @@ function copiarEdicao(entrada: AcessoPorUsuario): Edicao {
 
 function nivelResumo(entrada: Edicao, modulo: ItemPermissaoBloco | undefined, recurso?: RecursoCliente360, acoesDaPagina?: ItemPermissaoBloco['acoes']): NivelPermissao {
   if (recurso) return nivelCliente360({ role: 'funcionario', setores: entrada.setores, acoes: entrada.config.acoes, modulos:entrada.config.modulos, cliente360: entrada.config.cliente360 }, recurso)
+  if (modulo?.id === 'kanban-geral') return nivelAcessoKanbanGeral('funcionario',entrada.config)
   if (!modulo) return 'oculto'
   const setor = entrada.setores[modulo.setorId] || 'oculto'
   if (setor === 'oculto') return 'oculto'
@@ -68,6 +80,7 @@ export default function PermissoesContextuais() {
   // completo continua disponível apenas em Configurações > Usuários.
   // No Kanban comercial o módulo correspondente é Fazer orçamento.
   const modulosDaTela = useMemo(() => {
+    if (contexto.moduloIds.includes('kanban-geral')) return [MODULO_KANBAN_GERAL]
     const ids = pathname === '/kanban/comercial' ? ['fazer-orcamento'] : contexto.moduloIds
     return ids.map(id => modulos.find(modulo => modulo.id === id))
       .filter((modulo): modulo is ItemPermissaoBloco => Boolean(modulo))
@@ -225,6 +238,16 @@ export default function PermissoesContextuais() {
     setMensagem('')
   }
 
+  function alterarKanbanGeral(nivel: NivelPermissao) {
+    setRascunho(atual => atual ? {
+      ...atual, config: {
+        ...atual.config,
+        acoes: alterarAcessoKanbanGeral(atual.config.acoes, nivel),
+      },
+    } : atual)
+    setMensagem('')
+  }
+
   function alterarAbaCliente(nivel: NivelPermissao) {
     const recurso = contexto.recursoCliente360
     if (!recurso) return
@@ -329,7 +352,7 @@ export default function PermissoesContextuais() {
                           return (
                             <button type="button" key={entrada.usuario.id} onClick={() => selecionar(entrada)} className={'w-full rounded-lg px-3 py-2.5 text-left transition ' + (selecionado ? 'bg-indigo-100 ring-1 ring-indigo-300' : 'hover:bg-slate-50')}>
                               <span className="block truncate text-sm font-semibold">{entrada.usuario.nome}</span>
-                              <span className="mt-0.5 block text-xs text-slate-500">{entrada.usuario.role === 'master' ? 'Master · acesso total' : NIVEIS.find(n => n.valor === nivel)?.label}</span>
+                              <span className="mt-0.5 block text-xs text-slate-500">{entrada.usuario.role === 'master' ? 'Master · acesso total' : moduloAtual?.id === 'kanban-geral' && nivel === 'edicao' ? 'Visualizar e movimentar cards' : NIVEIS.find(n => n.valor === nivel)?.label}</span>
                             </button>
                           )
                         })}
@@ -358,7 +381,27 @@ export default function PermissoesContextuais() {
                               <span className="mt-2 block font-normal">Acesso efetivo: {NIVEIS.find(n => n.valor === nivelResumo(rascunho, moduloAtual, contexto.recursoCliente360, acoesDaTela))?.label}. A regra do setor pode limitar a aba.</span>
                             </label>
                           )}
-                          {moduloAtual ? (
+                          {moduloAtual?.id === 'kanban-geral' ? (
+                            <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
+                              <div>
+                                <h4 className="text-sm font-bold text-indigo-950">Liberar acesso ao Kanban Geral</h4>
+                                <p className="mt-1 text-xs text-indigo-900">Esta autorização é individual e não libera outros setores ou módulos do Atlas.</p>
+                              </div>
+                              <label className="block text-xs font-semibold text-slate-800">
+                                Acesso do funcionário nesta tela
+                                <select aria-label="Nível de acesso ao Kanban Geral"
+                                  value={nivelAcessoKanbanGeral('funcionario',rascunho.config)}
+                                  onChange={evento => alterarKanbanGeral(evento.target.value as NivelPermissao)}
+                                  className="mt-2 block w-full rounded-lg border border-indigo-200 bg-white px-3 py-2.5 text-sm text-slate-900">
+                                  <option value="oculto">Sem acesso</option>
+                                  <option value="consulta">Somente visualizar</option>
+                                  <option value="edicao">Visualizar e movimentar cards</option>
+                                </select>
+                              </label>
+                              <p className="text-xs leading-5 text-slate-600">Movimentar cards atualiza a posição visual no Kanban Geral e no Kanban da obra, com motivo e histórico. Não altera materiais, produção, instalação ou financeiro.</p>
+                              <p className="text-xs font-semibold text-indigo-900">Criar, excluir e reorganizar colunas, finalizar ou retirar cards continuam exclusivos do Master.</p>
+                            </div>
+                          ) : moduloAtual ? (
                             <div className="rounded-xl border border-slate-200">
                               <div className="space-y-3 border-b bg-slate-50 px-3 py-3">
                                 <p className="text-sm font-semibold">{moduloAtual.label}</p>
