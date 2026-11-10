@@ -211,7 +211,7 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                 <span className="inline-flex items-center gap-1"><FileText size={12}/> Orçamento Atlas #{numeroOrcamento(o)}</span>
                 {v.config_snapshot?.wvetro_historico?.numero&&<span className="rounded-md bg-blue-50 px-2 py-0.5 font-semibold text-blue-800">WVetro #{v.config_snapshot.wvetro_historico.numero} · venda histórica vinculada</span>}
-                {obra?.numero&&<span>Obra #{obra.numero}</span>
+                {obra?.numero&&<span>Obra #{obra.numero}</span>}
                 <span>Venda em {dataBR(v.confirmado_em||v.created_at)}</span>
               </p>
             </div>
