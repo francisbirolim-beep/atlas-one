@@ -9,6 +9,7 @@ import {tokenAtual} from '@/lib/auth'
 type VendaObra = {
   id: string
   numero?: number | null
+  config_snapshot?: {wvetro_historico?: {numero?:string; historico_id?:string; valor_historico?:number; tipo?:string}} | null
   orcamento_id: string
   cliente_id: string
   obra_id?: string | null
@@ -92,7 +93,7 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
     setCarregando(true); setErro('')
     const vendasResp = await supabase
       .from('vendas_obras')
-      .select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,status,confirmado_em,created_at')
+      .select('id,numero,orcamento_id,cliente_id,obra_id,valor_venda,status,confirmado_em,created_at,config_snapshot')
       .eq('cliente_id',clienteId)
       .is('excluida_em',null)
       .neq('status','cancelada')
@@ -208,8 +209,9 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{status(v.status||obra?.status||'ativa')}</span>
               </div>
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                <span className="inline-flex items-center gap-1"><FileText size={12}/> Orçamento #{numeroOrcamento(o)}</span>
-                {obra?.numero&&<span>Obra #{obra.numero}</span>}
+                <span className="inline-flex items-center gap-1"><FileText size={12}/> Orçamento Atlas #{numeroOrcamento(o)}</span>
+                {v.config_snapshot?.wvetro_historico?.numero&&<span className="rounded-md bg-blue-50 px-2 py-0.5 font-semibold text-blue-800">WVetro #{v.config_snapshot.wvetro_historico.numero} · venda histórica vinculada</span>}
+                {obra?.numero&&<span>Obra #{obra.numero}</span>
                 <span>Venda em {dataBR(v.confirmado_em||v.created_at)}</span>
               </p>
             </div>
