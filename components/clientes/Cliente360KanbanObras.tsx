@@ -8,7 +8,7 @@ import {tokenAtual} from '@/lib/auth'
 import type {ObraCardCliente} from '@/lib/cliente360KanbanObras'
 import {COLUNAS_GERAIS_PADRAO} from '@/lib/visaoGeralProjetos'
 
-type Resposta={cards:ObraCardCliente[];colunas?:typeof COLUNAS_GERAIS_PADRAO;podeMoverCards:boolean;vendasSemObra:number;atualizadoEm:string}
+type Resposta={cards:ObraCardCliente[];colunas?:typeof COLUNAS_GERAIS_PADRAO;podeMoverCards:boolean;posicoesPersistidas?:Record<string,string>;vendasSemObra:number;atualizadoEm:string}
 type Filtro='todas'|'ativas'|'concluidas'
 const cores:Record<string,string>={
  orcamento:'bg-slate-100 text-slate-800 border-slate-200',
@@ -63,9 +63,13 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
    const retorno=json as Resposta
    retorno.cards=(retorno.cards||[]).map(c=>{
     const vendaId=c.vendas.length===1?c.vendas[0].vendaId:null
-    const destino=vendaId?posicoesGravadas.current.get(vendaId):null
-    if(!destino)return c
-    if(c.colunaId===destino){posicoesGravadas.current.delete(vendaId!);return c}
+    const gravada=vendaId?retorno.posicoesPersistidas?.[vendaId]:null
+    const valida=typeof gravada==='string'&&(retorno.colunas||COLUNAS_GERAIS_PADRAO)
+     .some(col=>col.id===gravada)?gravada:null
+    const local=vendaId?posicoesGravadas.current.get(vendaId):null
+    if(local&&local===valida)posicoesGravadas.current.delete(vendaId!)
+    const destino=local||valida
+    if(!destino||c.colunaId===destino)return c
     return {...c,colunaId:destino,vendas:c.vendas.map(v=>({...v,colunaId:destino}))}
    })
    setDados(retorno);setErro('')
