@@ -75,7 +75,7 @@ begin
   v_venda.valor_venda,btrim(p_motivo),p_usuario,coalesce(v_nome,'Master'),v_contas_canceladas);
 
  return jsonb_build_object('ok',true,'vendaId',p_venda,'contasCanceladas',v_contas_canceladas);
-end;$function$
+end;$function$;
 
 
 REVOKE ALL ON FUNCTION public.excluir_venda_incorreta_v1(uuid,uuid,uuid,text)
