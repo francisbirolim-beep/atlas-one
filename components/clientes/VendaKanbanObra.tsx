@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react'
 import Link from 'next/link'
 import AlcaArrastarCard from '@/components/kanban/AlcaArrastarCard'
+import {colunaNoFimDoArraste,type CoordenadaArraste} from '@/lib/kanbanArrastarDestino'
 import {ArrowUpRight,RefreshCw,Plus,ShoppingCart,ImageOff,RotateCcw,Trash2,ShieldCheck} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import {COLUNAS_GERAIS_PADRAO,type EtapaOperacional} from '@/lib/visaoGeralProjetos'
@@ -37,6 +38,9 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  const [etapa,setEtapa]=useState<EtapaOperacional>('vendido')
  const [arrastando,setArrastando]=useState<string|null>(null)
  const [arrastandoPrincipal,setArrastandoPrincipal]=useState(false)
+ const pontoArraste=useRef<CoordenadaArraste|null>(null)
+ const arrastandoPrincipalRef=useRef(false)
+ const dropPrincipalTratado=useRef(false)
  const leituraAtual=useRef(0)
  const movimentacaoEmCurso=useRef(false)
  // Não descartar a posição já gravada caso uma leitura de atualização retorne dados antigos.
@@ -232,8 +236,10 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
       onDrop={e=>{
        if(salvando)return
        const origem=e.dataTransfer.getData('text/plain')
-       if(origem==='atlas-principal:'+vendaId){
-        e.preventDefault();setArrastandoPrincipal(false);void moverPrincipal(col.id)
+       if(origem==='atlas-principal:'+vendaId||(!origem&&arrastandoPrincipalRef.current)){
+        e.preventDefault();dropPrincipalTratado.current=true
+        arrastandoPrincipalRef.current=false
+        setArrastandoPrincipal(false);void moverPrincipal(col.id)
        }else if(origem.startsWith('atlas-manual:')&&col.criterios[0]){
         const id=origem.slice('atlas-manual:'.length)
         if(!manuais.some(m=>m.id===id))return
@@ -246,8 +252,26 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
       </h3>
       <div className="space-y-2 p-1.5">
        {cardReal&&<div data-kanban-card draggable={!salvando}
-        onDragStart={e=>{if(salvando)return;e.dataTransfer.setData('text/plain','atlas-principal:'+vendaId);e.dataTransfer.effectAllowed='move';setArrastando(null);setArrastandoPrincipal(true)}}
-        onDragEnd={()=>setArrastandoPrincipal(false)}
+        onDragStart={e=>{
+         if(salvando){e.preventDefault();return}
+         e.dataTransfer.setData('text/plain','atlas-principal:'+vendaId)
+         e.dataTransfer.effectAllowed='move'
+         pontoArraste.current=null
+         dropPrincipalTratado.current=false
+         arrastandoPrincipalRef.current=true
+         setArrastando(null);setArrastandoPrincipal(true)
+        }}
+        onDrag={e=>{if(e.clientX>0&&e.clientY>0)pontoArraste.current={x:e.clientX,y:e.clientY}}}
+        onDragEnd={e=>{
+         const foiTratado=dropPrincipalTratado.current
+         const destino=foiTratado?null:colunaNoFimDoArraste(e.currentTarget,{x:e.clientX,y:e.clientY},pontoArraste.current)
+         arrastandoPrincipalRef.current=false;dropPrincipalTratado.current=false;pontoArraste.current=null
+         setArrastandoPrincipal(false)
+         if(!foiTratado){
+          if(destino)void moverPrincipal(destino)
+          else {setAviso('');setErro('O card não foi solto dentro de uma coluna válida. Solte sobre a coluna desejada ou use o seletor Mover card principal. Nenhuma mudança foi salva.')}
+         }
+        }
         className="cursor-grab rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow active:cursor-grabbing">
         <AlcaArrastarCard desabilitado={salvando} onSoltar={destino=>void moverPrincipal(destino)} />
         <p className="text-[11px] font-extrabold">{cardReal.cliente}</p>
