@@ -271,7 +271,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
           if(destino)void moverPrincipal(destino)
           else {setAviso('');setErro('O card não foi solto dentro de uma coluna válida. Solte sobre a coluna desejada ou use o seletor Mover card principal. Nenhuma mudança foi salva.')}
          }
-        }
+        }}
         className="cursor-grab rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow active:cursor-grabbing">
         <AlcaArrastarCard desabilitado={salvando} onSoltar={destino=>void moverPrincipal(destino)} />
         <p className="text-[11px] font-extrabold">{cardReal.cliente}</p>
