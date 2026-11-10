@@ -13,7 +13,7 @@ type Resposta={
  cards:ProjetoGeralCard[];ocultos:{vendaId:string;cliente:string;motivoControle:string|null}[]
  pedidos:PedidoGeralCard[];acompanhamentos:Manual[];retiradosManuais:Retirado[]
  permissoesObra:PermissoesKanbanObra|null;usuarioMaster:boolean
- kanbanObraConfigurado:boolean;atualizadoEm:string
+ kanbanObraConfigurado:boolean;podeMoverCards:boolean;atualizadoEm:string
 }
 const cores=[
  ['#079c51','#062f26'],['#0759e8','#092345'],['#6417e9','#29154a'],['#fa5208','#45251b'],
@@ -33,6 +33,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
  const [descricao,setDescricao]=useState('')
  const [etapa,setEtapa]=useState<EtapaOperacional>('vendido')
  const [arrastando,setArrastando]=useState<string|null>(null)
+ const [arrastandoPrincipal,setArrastandoPrincipal]=useState(false)
  const permissoes=dados?.permissoesObra
  const ler=useCallback(async()=>{
   try{
@@ -75,6 +76,29 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
    await ler()
   }catch(e){setErro(e instanceof Error?e.message:'Não foi possível salvar.')}
   finally{setSalvando(false);setArrastando(null)}
+ }
+ async function moverPrincipal(destino:string){
+  if(!permissoes?.mover||salvando||!dados?.podeMoverCards)return
+  const atual=dados.cards.find(card=>card.vendaId===vendaId)
+  if(!atual||atual.etapaOperacional===destino)return
+  const nome=nomesEtapas[destino]||destino
+  const motivo=window.prompt('Motivo para mover o card principal para '+nome+' (mínimo 8 caracteres):',
+   'Organização manual da etapa desta obra.')
+  if(!motivo)return
+  if(motivo.trim().length<8){setErro('Motivo de pelo menos 8 caracteres é obrigatório.');return}
+  if(!window.confirm('Mover o card principal para '+nome+' nos dois Kanbans?\\nEsta mudança é somente visual: não altera compra, produção, instalação ou financeiro.'))return
+  setSalvando(true);setErro('')
+  try{
+   const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+   const res=await fetch('/api/visao-geral-projetos/mover',{
+    method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({vendaId,etapa:destino,motivo:motivo.trim()})
+   })
+   const j=await res.json().catch(()=>({}))
+   if(!res.ok||!j.ok)throw Error(j.erro||'Não foi possível mover o card principal.')
+   await ler()
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao mover o card principal.')}
+  finally{setSalvando(false);setArrastandoPrincipal(false)}
  }
  async function controlarProjeto(acao:'ocultar'|'restaurar'){
   if(!dados?.usuarioMaster||salvando)return
@@ -136,18 +160,29 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
      const cardReal=projeto&&col.criterios.includes(projeto.etapaOperacional as EtapaOperacional)?projeto:null
      const cardsManuais=manuais.filter(m=>col.criterios.includes(m.etapa as EtapaOperacional))
      const cardsCompras=pedidos.filter(p=>col.criterios.includes(p.status==='aguardando'?'aguardando_materiais':'compras'))
-     return <div key={col.id} onDragOver={e=>{if(arrastando&&permissoes?.mover){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
-      onDrop={e=>{if(arrastando&&permissoes?.mover){e.preventDefault();const id=arrastando;setArrastando(null);void salvar('mover',id,col.criterios[0])}}}
+     return <div key={col.id} onDragOver={e=>{if((arrastando||arrastandoPrincipal)&&permissoes?.mover&&!salvando){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
+      onDrop={e=>{if(!permissoes?.mover||salvando)return;const destino=col.criterios[0];if(!destino)return
+       if(arrastandoPrincipal){e.preventDefault();setArrastandoPrincipal(false);void moverPrincipal(destino)}
+       else if(arrastando){e.preventDefault();const id=arrastando;setArrastando(null);void salvar('mover',id,destino)}}}
       className="min-h-[260px] overflow-hidden rounded-lg border border-white/10" style={{background:base}}>
       <h3 className="flex items-center justify-between px-2 py-3 text-[11px] font-bold text-white" style={{background:cor}}>
        <span>{col.nome}</span><span className="rounded-full bg-white/15 px-1.5">{Number(!!cardReal)+cardsManuais.length+cardsCompras.length}</span>
       </h3>
       <div className="space-y-2 p-1.5">
-       {cardReal&&<div className="rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow">
+       {cardReal&&<div draggable={!!permissoes?.mover&&!!dados?.podeMoverCards&&!salvando}
+        onDragStart={e=>{if(!permissoes?.mover||!dados?.podeMoverCards)return;e.dataTransfer.setData('text/plain',vendaId);e.dataTransfer.effectAllowed='move';setArrastando(null);setArrastandoPrincipal(true)}}
+        onDragEnd={()=>setArrastandoPrincipal(false)}
+        className={'rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow '+(permissoes?.mover&&dados?.podeMoverCards?'cursor-grab active:cursor-grabbing':'')}>
         <p className="text-[11px] font-extrabold">{cardReal.cliente}</p>
         <p className="text-[10px] text-slate-600">Orçamento {cardReal.numeroOrcamento}</p>
         <p className="mt-2 rounded bg-emerald-50 p-1 text-[10px] font-semibold text-emerald-800">Venda real · {cardReal.projeto}</p>
+        {cardReal.controleMaster==='manual'&&<p className="mt-1 text-[10px] font-bold text-blue-700">Posição ajustada manualmente</p>}
         {!!cardReal.pendencias?.length&&<p className="mt-2 text-[10px] text-amber-800">{cardReal.pendencias[0]}</p>}
+        {permissoes?.mover&&dados?.podeMoverCards&&<label className="mt-2 block text-[10px] font-semibold text-slate-700">Mover card principal
+         <select aria-label={'Mover card principal de '+cardReal.cliente} disabled={salvando} value={cardReal.etapaOperacional}
+          onChange={e=>void moverPrincipal(e.target.value)} className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-1 py-1.5 text-[10px]">
+          {etapas.map(e=><option key={e} value={e}>{nomesEtapas[e]}</option>)}
+         </select></label>}
        </div>}
        {cardsCompras.map(p=>{const foto=p.detalhesCompra?.find(item=>podeFoto(item.fotoUrl))?.fotoUrl
         return <Link key={p.id} href="/compras/solicitacoes" className="block rounded-lg border-l-4 border-l-violet-500 bg-white p-2 text-slate-900 shadow">
@@ -157,7 +192,7 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
          <p className="mt-1 text-[10px] text-slate-500">{p.recebidos} de {p.itens} itens recebidos</p>
         </Link>})}
        {cardsManuais.map(m=><div key={m.id} draggable={permissoes?.mover&&!salvando}
-        onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);setArrastando(m.id)}} onDragEnd={()=>setArrastando(null)}
+        onDragStart={e=>{e.dataTransfer.setData('text/plain',m.id);setArrastandoPrincipal(false);setArrastando(m.id)}} onDragEnd={()=>setArrastando(null)}
         className="rounded-lg border-l-4 border-l-sky-500 bg-white p-2.5 text-slate-900 shadow">
         <p className="text-[9px] font-bold uppercase text-sky-700">Acompanhamento manual</p>
         <p className="mt-1 text-[11px] font-extrabold">{m.titulo}</p>
