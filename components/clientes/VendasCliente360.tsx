@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, Building2, CheckCircle2, ChevronRight, CircleDollarSign, FileText, Loader2, Trash2, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import {tokenAtual,usuarioAtual} from '@/lib/auth'
+import {tokenAtual} from '@/lib/auth'
 
 type VendaObra = {
   id: string
@@ -69,13 +69,24 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
   const [erro,setErro]=useState('')
   const [podeExcluir,setPodeExcluir]=useState(false)
   const [vendaParaExcluir,setVendaParaExcluir]=useState<VendaObra|null>(null)
-  const [motivoExclusao,setMotivoExclusao]=useState('Venda lançada incorretamente; será sincronizada a venda correta.')
+  const [motivoExclusao,setMotivoExclusao]=useState('')
   const [confirmacao,setConfirmacao]=useState('')
   const [excluindo,setExcluindo]=useState(false)
   const [sucesso,setSucesso]=useState('')
 
   useEffect(()=>{ void carregar() },[clienteId,verFinanceiro])
-  useEffect(()=>{let ativo=true;void usuarioAtual().then(u=>{if(ativo)setPodeExcluir(u?.role==='master')});return()=>{ativo=false}},[])
+  useEffect(()=>{
+    let ativo=true
+    void (async()=>{
+      try{
+       const token=await tokenAtual();if(!token)return
+       const res=await fetch('/api/vendas/excluir-incorreta',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
+       const dados=await res.json().catch(()=>({}))
+       if(ativo)setPodeExcluir(res.ok&&dados.podeExcluir===true)
+      }catch{if(ativo)setPodeExcluir(false)}
+    })()
+    return()=>{ativo=false}
+  },[])
 
   async function carregar(){
     setCarregando(true); setErro('')
@@ -118,7 +129,7 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
 
   function abrirExclusao(v:VendaObra){
     setVendaParaExcluir(v)
-    setMotivoExclusao('Venda lançada incorretamente; será sincronizada a venda correta.')
+    setMotivoExclusao('')
     setConfirmacao('')
     setErro('')
   }
@@ -213,7 +224,7 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
            {podeExcluir&&<button type="button" onClick={()=>abrirExclusao(v)}
              aria-label={'Excluir venda incorreta número '+v.numero}
              className="m-3 inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-rose-500"
-             title="Exclusão lógica auditada, somente Master"><Trash2 size={15}/> Excluir venda</button>}
+             title="Exclusão lógica auditada por usuário autorizado, com motivo obrigatório"><Trash2 size={15}/> Excluir venda</button>}
           </div>
         })}
         {!vendas.length&&<div className="px-5 py-10 text-center">
@@ -234,12 +245,12 @@ export default function VendasCliente360({clienteId,verFinanceiro=true}:Props){
         <button aria-label="Fechar exclusão" disabled={excluindo} onClick={()=>{setVendaParaExcluir(null);setErro('')}} className="rounded-lg p-1 text-slate-600 hover:bg-slate-100"><X size={20}/></button>
        </div>
        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-        A venda sairá dos Kanbans e relatórios ativos, mas <b>não será apagada definitivamente</b>.
+        A venda sairá dos Kanbans e relatórios ativos, mas <b>não será apagada definitivamente</b>. Toda exclusão exige motivo escrito e registra o usuário responsável.
         O histórico e o orçamento serão preservados. Pré-lançamentos financeiros automáticos sem pagamento poderão ser cancelados.
         Vendas com recebimentos, produção, cotação ou instalação vinculadas serão bloqueadas pelo servidor. A exclusão não libera automaticamente o mesmo orçamento para outra venda; esse vínculo exige revisão administrativa.
        </p>
        <label className="block text-sm font-semibold text-slate-800">Motivo da exclusão
-        <textarea value={motivoExclusao} maxLength={1000} onChange={e=>setMotivoExclusao(e.target.value)}
+        <textarea required minLength={8} value={motivoExclusao} maxLength={1000} placeholder="Descreva por que esta venda está incorreta e qual será a correção." onChange={e=>setMotivoExclusao(e.target.value)}
          disabled={excluindo} rows={3} className="mt-1 w-full rounded-lg border border-slate-300 p-2.5 text-sm font-normal" />
        </label>
        <label className="block text-sm font-semibold text-slate-800">Digite <b>EXCLUIR {vendaParaExcluir.numero}</b> para confirmar
