@@ -426,7 +426,12 @@ export default function VisaoGeralProjetos(){
     <span className="inline-flex items-center gap-1"><ShieldCheck size={13}/> Etapas calculadas pelos setores; posições ajustadas manualmente não alteram os registros operacionais</span>
     <span>{carregando?'Consultando a empresa…':atualizado?'Atualizado: '+new Date(atualizado).toLocaleString('pt-BR'):'Aguardando dados'}</span>
    </div>
-   <div className="w-full overflow-x-auto rounded-xl pb-3" aria-label="Kanban Geral de Projetos" style={{scrollbarColor:'#385578 #0e2139'}}>
+   <div className="w-full overflow-x-auto rounded-xl pb-3" aria-label="Kanban Geral de Projetos" style={{scrollbarColor:'#385578 #0e2139'}}
+    onDragOver={e=>{
+     const area=e.currentTarget.getBoundingClientRect()
+     if(e.clientX<area.left+65)e.currentTarget.scrollLeft-=26
+     else if(e.clientX>area.right-65)e.currentTarget.scrollLeft+=26
+    }}>
     <div className="grid min-w-max items-stretch gap-2" style={{gridTemplateColumns:'repeat('+colunasOrdenadas.length+','+(compacto?'155px':'188px')+')'}}>
      {colunasOrdenadas.map((col,i)=>{
       const vis=agrupado.get(col.id)||[]
@@ -437,8 +442,15 @@ export default function VisaoGeralProjetos(){
       const destinoFinalizado=col.criterios.includes('finalizado')
       const destinoVisual=col.criterios[0]
       return <section key={col.id}
-       onDragOver={e=>{if(podeMoverCards&&destinoVisual&&arrastando&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
-       onDrop={e=>{if(!podeMoverCards||!destinoVisual||!arrastando||salvandoCard)return;e.preventDefault();const id=arrastando;setArrastando(null);void moverCardVisual(id,destinoVisual)}}
+       onDragOver={e=>{if(podeMoverCards&&!demo&&destinoVisual&&!salvandoCard){e.preventDefault();e.dataTransfer.dropEffect='move'}}}
+       onDrop={e=>{
+        if(!podeMoverCards||demo||!destinoVisual||salvandoCard)return
+        const origem=e.dataTransfer.getData('text/plain')
+        if(!origem.startsWith('atlas-principal:'))return
+        const id=origem.slice('atlas-principal:'.length)
+        if(!cards.some(c=>c.vendaId===id))return
+        e.preventDefault();setArrastando(null);void moverCardVisual(id,destinoVisual)
+       }}
        className={'flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[9px] border border-white/10 shadow-[0_4px_16px_rgba(0,0,0,.23)] '+(destinoVisual&&arrastando?'ring-2 ring-emerald-400':'')} style={{background:'linear-gradient(180deg,'+paleta.base+' 0%,#0b1c32 100%)'}}>
        <div className="min-h-[39px] px-2.5 py-2 text-white" style={{background:paleta.cabecalho}}>
         <div className="flex items-center gap-1">
@@ -451,9 +463,14 @@ export default function VisaoGeralProjetos(){
        <div className="flex flex-1 flex-col gap-2 p-[5px]">
         {podeMoverCards&&destinoVisual&&<p className="rounded border border-dashed border-white/30 px-1 py-2 text-center text-[10px] text-white/70">{destinoFinalizado?'Arraste um projeto para cá para finalizar no painel':'Arraste um card para reposicioná-lo aqui'}</p>}
         {vis.map(c=><div key={c.vendaId} draggable={podeMoverCards&&!demo&&!salvandoCard}
-         onDragStart={e=>{if(!podeMoverCards||demo)return;e.dataTransfer.setData('text/plain',c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
+         onDragStart={e=>{if(!podeMoverCards||demo)return;e.dataTransfer.setData('text/plain','atlas-principal:'+c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
          onDragEnd={()=>setArrastando(null)}
          className={podeMoverCards?'cursor-grab active:cursor-grabbing':''}>
+          {podeMoverCards&&!demo&&<div draggable
+            onDragStart={e=>{e.dataTransfer.setData('text/plain','atlas-principal:'+c.vendaId);e.dataTransfer.effectAllowed='move';setArrastando(c.vendaId)}}
+            className="mb-1 cursor-grab select-none rounded border border-blue-400/40 bg-blue-950/70 px-2 py-1.5 text-center text-[10px] font-bold text-white active:cursor-grabbing">
+            ⠿ Segure aqui e arraste
+           </div>}
           <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
          </div>)}
         {pedidosCol.map(p=><CardPedido key={p.id} pedido={p} abrir={()=>abrir(p.id)}/>)}
