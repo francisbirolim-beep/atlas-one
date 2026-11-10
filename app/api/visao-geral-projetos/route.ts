@@ -245,10 +245,11 @@ export async function GET(req:NextRequest){
       ?controle.updated_at:null
     const prazo=situacaoPrazoEtapa({
       entrouEm:entradaConfirmada,prazoHoras:colunaAtual?.prazoHoras,prazoDias:colunaAtual?.prazoDias,
-      agora:new Date().toISOString(),concluida:concluiuStatus,concluiuEm:concluiuStatus?status?.updated_at:null,
+      agora:new Date().toISOString(),concluida:concluiuStatus,emAndamento:statusEtapa.length>0,concluiuEm:concluiuStatus?status?.updated_at:null,
     })
     const cor=controle?.estado==='finalizado'?'azul' as const
-      :prazo.estado!=='sem_prazo'?prazo.estado:posicionado.cor
+      :prazo.estado==='verde'||prazo.estado==='amarelo'||prazo.estado==='vermelho'
+       ?prazo.estado:posicionado.cor
     return {...posicionado,cor,statusEtapa,
       prazoEtapaEstado:prazo.estado,prazoEtapaVencimento:prazo.vencimento,horasEtapaRestantes:prazo.horasRestantes}
   })
