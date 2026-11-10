@@ -10,7 +10,7 @@ assert.ok(cliente.includes('card.vendas.length===1'),'Só move venda inequivocam
 assert.ok(cliente.includes('card.vendas.length>1'),'Obras com múltiplas vendas precisam de orientação')
 assert.ok(cliente.includes("fetch('/api/visao-geral-projetos/mover'"),'Usar única API auditada')
 assert.ok(cliente.includes('data-kanban-coluna={col.id}')&&cliente.includes('data-kanban-scroll'))
-assert.ok(cliente.includes('onSoltar={destino=>void moverVenda(atual.vendaId,destino)}'))
+assert.ok(cliente.includes('void moverVenda(atual.vendaId,destino)'),'Alça deve chamar gravação para destino válido')
 assert.ok(cliente.includes("e.dataTransfer.setData('text/plain','atlas-principal:'"),'Também permitir arrastar pelo próprio card')
 for(const [nome,c] of [['obra',obra],['geral',geral]]){
  assert.ok(c.includes('data-kanban-card'),'Falta card inteiro arrastável: '+nome)
