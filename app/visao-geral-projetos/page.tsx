@@ -556,7 +556,8 @@ export default function VisaoGeralProjetos(){
          }}
          className="cursor-grab active:cursor-grabbing">
           {!demo&&<AlcaArrastarCard desabilitado={salvandoCard}
-            onSoltar={destino=>void moverCardVisual(c.vendaId,destino)} label="Segure aqui e arraste" />}
+            onSoltar={destino=>void moverCardVisual(c.vendaId,destino)}
+            onSolturaInvalida={()=>{setAviso('');setErro('Solte dentro de uma coluna do Kanban para salvar. Nenhuma posição foi alterada.')}} label="Segure aqui e arraste" />}
           <CardProjeto card={c} abrir={()=>abrir(c.vendaId)} compacto={compacto} ativo={selecionado===c.vendaId}/>
          </div>)}
         {pedidosCol.map(p=><CardPedido key={p.id} pedido={p} abrir={()=>abrir(p.id)}/>)}
