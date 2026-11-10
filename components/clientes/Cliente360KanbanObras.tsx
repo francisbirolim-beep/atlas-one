@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react'
 import Link from 'next/link'
 import AlcaArrastarCard from '@/components/kanban/AlcaArrastarCard'
+import {colunaNoFimDoArraste,type CoordenadaArraste} from '@/lib/kanbanArrastarDestino'
 import {ArrowUpRight,Building2,CalendarDays,CheckCircle2,Columns3,MapPin,RefreshCw,Search,SlidersHorizontal} from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
 import type {ObraCardCliente} from '@/lib/cliente360KanbanObras'
@@ -44,6 +45,7 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
  const [filtro,setFiltro]=useState<Filtro>('todas')
  const leituraAtual=useRef(0)
  const movimentoEmCurso=useRef(false)
+ const arrasteCard=useRef<{id:string;ponto:CoordenadaArraste|null;tratado:boolean}|null>(null)
  const posicoesGravadas=useRef(new Map<string,string>())
  const carregar=useCallback(async(silencioso=false)=>{
   if(movimentoEmCurso.current)return // rejeitar consulta periódica durante salvamento
@@ -198,10 +200,12 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
        onDrop={e=>{
         if(!dados.podeMoverCards||movendo||col.id==='orcamento')return
         const origem=e.dataTransfer.getData('text/plain')
-        if(!origem.startsWith('atlas-principal:'))return
-        const vendaId=origem.slice('atlas-principal:'.length)
-        if(!dados.cards.some(c=>c.vendas.length===1&&c.vendas[0].vendaId===vendaId))return
-        e.preventDefault();void moverVenda(vendaId,col.id)
+        const vendaId=origem.startsWith('atlas-principal:')?
+         origem.slice('atlas-principal:'.length):(!origem?arrasteCard.current?.id:null)
+        if(!vendaId||!dados.cards.some(c=>c.vendas.length===1&&c.vendas[0].vendaId===vendaId))return
+        e.preventDefault()
+        if(arrasteCard.current?.id===vendaId)arrasteCard.current.tratado=true
+        void moverVenda(vendaId,col.id)
        }}
        className="w-[238px] shrink-0 rounded-xl border sm:w-auto sm:min-w-0 border-slate-100 bg-slate-50/75">
        <div className={'flex min-h-14 items-center justify-between gap-2 rounded-t-xl border-b px-3 py-3 '+(cores[col.id]||cores.orcamento)}>
@@ -218,13 +222,30 @@ export default function Cliente360KanbanObras({clienteId,podeVerVendas,onAbrirOb
            if(!dados.podeMoverCards||card.vendas.length!==1||!atual?.vendaId||movendo){e.preventDefault();return}
            e.dataTransfer.setData('text/plain','atlas-principal:'+atual.vendaId)
            e.dataTransfer.effectAllowed='move'
+           arrasteCard.current={id:atual.vendaId,ponto:null,tratado:false}
+          }}
+          onDrag={e=>{
+           if(arrasteCard.current?.id===atual?.vendaId&&e.clientX>0&&e.clientY>0)
+            arrasteCard.current.ponto={x:e.clientX,y:e.clientY}
+          }}
+          onDragEnd={e=>{
+           const arraste=arrasteCard.current
+           const foiTratado=!!(arraste?.id===atual?.vendaId&&arraste.tratado)
+           const destino=foiTratado?null:colunaNoFimDoArraste(e.currentTarget,{x:e.clientX,y:e.clientY},arraste?.ponto||null)
+           arrasteCard.current=null
+           if(!foiTratado&&!movendo&&dados.podeMoverCards&&atual?.vendaId){
+            if(destino&&destino!=='orcamento')void moverVenda(atual.vendaId,destino)
+            else {setAviso('');setErro('Solte o card em uma coluna de andamento para salvar. Nenhuma posição foi alterada.')}
+           }
           }}
           className={'overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm '+(dados.podeMoverCards&&card.vendas.length===1?'cursor-grab active:cursor-grabbing':'')}>
           {card.fotoProjetoUrl?<img src={card.fotoProjetoUrl} alt={'Foto da obra '+card.nome}
            className="h-24 w-full object-cover" loading="lazy"/>:null}
           <div className="p-3">
            {dados.podeMoverCards&&card.vendas.length===1&&atual?.vendaId&&<AlcaArrastarCard
-            desabilitado={movendo} onSoltar={destino=>void moverVenda(atual.vendaId,destino)}
+            desabilitado={movendo}
+            onSoltar={destino=>{if(destino==='orcamento'){setAviso('');setErro('Não é possível mover uma venda confirmada para Pré-venda.')}else void moverVenda(atual.vendaId,destino)}}
+            onSolturaInvalida={()=>{setAviso('');setErro('Solte dentro da coluna de destino para gravar a obra. Nenhuma posição foi alterada.')}}
             label="Segure aqui e arraste a obra" />}
            {dados.podeMoverCards&&card.vendas.length>1&&<p className="mb-2 rounded bg-amber-50 p-2 text-[10px] text-amber-800">Esta obra possui várias vendas. Abra a venda específica para reposicionar sem afetar as demais.</p>}
            <div className="flex items-start justify-between gap-2">
