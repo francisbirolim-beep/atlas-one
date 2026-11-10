@@ -273,7 +273,8 @@ export default function VendaKanbanObra({clienteId,vendaId}:{clienteId:string;ve
          }
         }}
         className="cursor-grab rounded-lg border border-emerald-300 bg-white p-2.5 text-slate-900 shadow active:cursor-grabbing">
-        <AlcaArrastarCard desabilitado={salvando} onSoltar={destino=>void moverPrincipal(destino)} />
+        <AlcaArrastarCard desabilitado={salvando} onSoltar={destino=>void moverPrincipal(destino)}
+         onSolturaInvalida={()=>{setAviso('');setErro('Solte o card dentro da coluna de destino. Nenhuma posição foi alterada.')}} />
         <p className="text-[11px] font-extrabold">{cardReal.cliente}</p>
         <p className="text-[10px] text-slate-600">Orçamento {cardReal.numeroOrcamento}</p>
         <p className="mt-2 rounded bg-emerald-50 p-1 text-[10px] font-semibold text-emerald-800">Venda real · {cardReal.projeto}</p>
