@@ -1994,6 +1994,96 @@ export async function assinarDownloadMidiaAtendimento(
   return { url: data.signedUrl, nome }
 }
 
+/**
+ * Encaminha uma imagem já recebida/armazenada, sem downloads no dispositivo.
+ * O browser informa apenas os IDs; mídia, empresa e permissões são resolvidas
+ * novamente no servidor. O destino continua sujeito às regras de atendimento.
+ */
+export async function encaminharImagemWhatsApp(
+  conversaOrigemId: string,
+  mensagemId: string,
+  conversaDestinoId: string,
+  usuario: UsuarioTenant,
+) {
+  if (!conversaOrigemId || !mensagemId || !conversaDestinoId || conversaOrigemId === conversaDestinoId) {
+    throw new Error('Selecione uma conversa de destino diferente da origem.')
+  }
+
+  const origem = await conversaAcessivel(conversaOrigemId, usuario, true)
+  if (!origem) throw new Error('A conversa de origem não está disponível para você.')
+
+  const destino = await conversaAcessivel(conversaDestinoId, usuario, false)
+  if (!destino) throw new Error('A conversa de destino não está disponível para você.')
+  // Mesmas condições do envio normal, verificadas aqui antes de copiar a mídia.
+  if (destino.responsavel_id !== usuario.id || destino.status !== 'em_atendimento') {
+    throw new Error('Assuma o atendimento da conversa de destino antes de encaminhar.')
+  }
+
+  const origemIds = await idsHistoricoConversa(origem)
+  const { data: mensagem, error } = await supabaseAdmin
+    .from('atendimento_mensagens')
+    .select('id,tipo,media_url,mime_type,payload')
+    .eq('id', mensagemId)
+    .eq('empresa_id', usuario.empresa_id)
+    .in('conversa_id', origemIds.length ? origemIds : [origem.id])
+    .maybeSingle()
+  if (error) throw error
+  if (mensagem?.tipo !== 'imagem') throw new Error('Somente imagens podem ser encaminhadas nesta opção.')
+
+  const origemPath = String(mensagem.media_url || '')
+  const prefixoTenant = String(usuario.empresa_id)
+  if (!origemPath.startsWith(prefixoTenant + '/entrada/') && !origemPath.startsWith(prefixoTenant + '/saida/')) {
+    throw new Error('Esta imagem antiga não está disponível para encaminhamento seguro.')
+  }
+
+  const payload = mensagem.payload && typeof mensagem.payload === 'object'
+    ? mensagem.payload as Record<string, unknown> : {}
+  const mime = mimeBase(mensagem.mime_type || String(payload.mimeType || 'image/jpeg'))
+  if (!mime.startsWith('image/')) throw new Error('O arquivo original não é uma imagem válida.')
+
+  const nomeOriginal = String(payload.fileName || origemPath.split('/').pop() || 'imagem.jpg')
+  const nome = nomeArquivoSeguro(nomeOriginal)
+  let bytes = Number(payload.mediaSize || 0)
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    // Compatibilidade com imagens antigas que não registravam mediaSize.
+    const segmentos = origemPath.split('/')
+    const arquivo = segmentos.pop() || ''
+    const pasta = segmentos.join('/')
+    const { data: itens, error: erroLista } = await supabaseAdmin.storage
+      .from(WHATSAPP_MEDIA_BUCKET).list(pasta, { search: arquivo, limit: 100 })
+    if (erroLista) throw erroLista
+    const item = (itens || []).find(i => i.name === arquivo)
+    bytes = Number(item?.metadata?.size || 0)
+  }
+  validarArquivoMidia(mime, bytes)
+
+  const mes = new Date().toISOString().slice(0, 7)
+  const destinoPath = prefixoTenant + '/saida/' + mes + '/' + destino.id + '/' + crypto.randomUUID() + '-' + nome
+  const { error: erroCopia } = await supabaseAdmin.storage.from(WHATSAPP_MEDIA_BUCKET)
+    .copy(origemPath, destinoPath)
+  if (erroCopia) throw new Error('Não foi possível copiar a imagem para encaminhamento. ' + erroCopia.message)
+
+  // Envio e fila existentes: não alteramos o funcionamento do gateway.
+  const resultado = await enviarMidiaWhatsApp(destino.id, {
+    mediaPath: destinoPath,
+    mimeType: mime,
+    fileName: nome,
+    tamanho: bytes,
+    legenda: null,
+    ptt: false,
+  }, usuario)
+
+  await registrarEvento({
+    empresaId: usuario.empresa_id,
+    conversaId: destino.id,
+    tipo: 'imagem_encaminhada',
+    usuarioId: usuario.id,
+    usuarioNome: usuario.nome,
+    dados: { mensagem_origem_id: mensagem.id, conversa_origem_id: origem.id, mensagem_destino_id: resultado.mensagemId },
+  })
+  return resultado
+}
+
 export async function prepararUploadMidiaAtendimento(
   conversaId: string,
   arquivo: { nome?: string | null; mimeType?: string | null; tamanho?: number | null },
