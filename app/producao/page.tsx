@@ -15,6 +15,7 @@ import type { SetorKanbanColuna, SetorKanbanItem, Usuario } from '@/lib/tipos'
 import { aprovarMedicaoFinal } from '@/lib/medicaoFinalV2'
 import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
+import { gerarPdfPlanoCorteContramarcos } from '@/lib/contramarcoPlanoCortePdf'
 import { gerarPacoteMedicaoFinal } from '@/lib/materialPlanejamento'
 import { vincularCardAMedicao, temMarcadorMedicaoDoCard } from '@/lib/producaoMedicaoCard'
 import {
@@ -334,6 +335,24 @@ export default function Producao() {
     }
   }
 
+  function medicaoContramarcoDoCard(card: SetorKanbanItem | null): string | null {
+    return String(card?.descricao || '').match(/\[contramarco:([0-9a-f-]{36})\]/i)?.[1] || null
+  }
+
+  async function abrirPlanoCorteContramarco(card: SetorKanbanItem) {
+    if (!pode('producao.imprimir')) return
+    const medicaoId = medicaoContramarcoDoCard(card)
+    if (!medicaoId) return
+    setErro('')
+    const [medicao, itens] = await Promise.all([buscarMedicao(medicaoId), listarItensMedicao(medicaoId)])
+    if (!medicao || medicao.tipo_medicao !== 'contramarco') {
+      setErro('A medição de contramarco vinculada a este card não está acessível.')
+      return
+    }
+    try { await gerarPdfPlanoCorteContramarcos(medicao, itens) }
+    catch { setErro('Não foi possível gerar o plano de corte dos contramarcos.') }
+  }
+
   async function abrirRelatorioMedicao(medicaoId: string) {
     if (!pode('producao.imprimir')) return
     setErro('')
@@ -584,6 +603,14 @@ export default function Producao() {
               </div>
             </div>
             <div className="p-5 space-y-3">
+              {medicaoContramarcoDoCard(selecionado) && <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <p className="text-sm font-bold text-emerald-900">Produção de Contramarcos · Medida Final aprovada</p>
+                <p className="mt-1 text-xs text-emerald-800">Card separado da obra. Corte por tipologia e ambiente com perfil validado.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link href={`/producao/medicao-final/${medicaoContramarcoDoCard(selecionado)}`} className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800"><Ruler size={14}/> Medida de Contramarco</Link>
+                  {pode('producao.imprimir') && <button onClick={() => void abrirPlanoCorteContramarco(selecionado)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white"><FileText size={14}/> Gerar Plano de Corte A4</button>}
+                </div>
+              </section>}
               {pode('producao.geral.editar') && editandoCard && (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Editar card</p>
