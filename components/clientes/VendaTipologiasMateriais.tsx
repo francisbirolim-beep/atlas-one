@@ -48,6 +48,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
  const [historico,setHistorico]=useState<Registro[]>([])
  const [mostrarHistorico,setMostrarHistorico]=useState(false)
  const [master,setMaster]=useState(false)
+ const [permissoesTecnicas,setPermissoesTecnicas]=useState({substituir:false,aprovar:false,carregando:true,erro:''})
  const [carregando,setCarregando]=useState(false)
  const [salvando,setSalvando]=useState(false)
  const [erro,setErro]=useState('')
@@ -94,6 +95,23 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
  const visiveis=materiaisAtuais.filter(m=>categoriaDoGrupo(grupo,m.categoria))
  useEffect(()=>{void usuarioAtual().then(u=>setMaster(u?.role==='master'))},[])
  useEffect(()=>{
+  let ativo=true
+  void(async()=>{
+   try{
+    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+    const r=await fetch('/api/vendas/tipologias-materiais?modo=permissoes',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
+    const dados=await r.json().catch(()=>({}))
+    if(!r.ok)throw Error(dados.error||'Falha ao consultar permissões técnicas.')
+    if(ativo)setPermissoesTecnicas({substituir:!!dados.substituir,aprovar:!!dados.aprovar,carregando:false,erro:''})
+   }catch(e){
+    if(ativo)setPermissoesTecnicas({substituir:false,aprovar:false,carregando:false,erro:e instanceof Error?e.message:'Permissões técnicas indisponíveis.'})
+   }
+  })()
+  return()=>{ativo=false}
+ },[])
+ const podeSubstituir=master||permissoesTecnicas.substituir
+ const podeAprovar=master||permissoesTecnicas.aprovar
+ useEffect(()=>{
   if(!aberta||!pacoteId)return
   let vivo=true
   setHistorico([]);setErro('');setMostrarHistorico(false)
@@ -136,6 +154,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
    comprimento_barra_mm:material?.comprimento_barra_mm!=null?String(material.comprimento_barra_mm):'',justificativa:''})
  }
  function escolherProduto(p:Produto){
+  if(!master&&acao==='substituir'&&['perfil','contramarco'].includes(form.categoria)&&!['perfil','contramarco'].includes(p.categoria||'')){setErro('Escolha um perfil de alumínio ou contramarco no catálogo.');return}
   if(['perfil','contramarco'].includes(form.categoria)&&!p.foto_url){setErro('Perfil sem desenho técnico: cadastre a imagem antes de incluí-lo.');return}
   setForm(prev=>({...prev,produto_id:p.id,codigo:p.codigo||'',descricao:p.nome,unidade:p.unidade||prev.unidade,
     comprimento_barra_mm:p.tamanho_barra_mm?String(p.tamanho_barra_mm):prev.comprimento_barra_mm}))
@@ -199,7 +218,9 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
  function iniciarSubstituicao(){
   setErro('');setMensagem('');setAcao(null);setAbaTecnica('materiais');setGrupo('perfis')
   if(!aberta||!pacoteId){setErro('Selecione uma tipologia com pacote técnico para substituir um perfil.');return}
-  if(!master){setErro('A substituição de materiais está disponível para o usuário Master.');return}
+  if(permissoesTecnicas.carregando&&!master){setErro('Conferindo as autorizações técnicas. Tente novamente.');return}
+  if(permissoesTecnicas.erro&&!master){setErro(permissoesTecnicas.erro);return}
+  if(!podeSubstituir){setErro('Sua conta não possui autorização para substituir perfis. Solicite liberação no cadastro de permissões.');return}
   if(!perfisAtuais.length){setErro('Esta tipologia não possui perfis ativos para substituir. Confira a importação dos materiais.');return}
   if(perfisAtuais.length===1){abrirEdicao('substituir',perfisAtuais[0]);return}
   setSelecionandoPerfil(true)
@@ -207,7 +228,9 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
  function motivoBloqueioAprovacao():string|null{
   if(!aberta)return 'Selecione uma tipologia para confirmar a composição.'
   if(!pacoteId)return 'Esta tipologia ainda não possui pacote técnico vinculado.'
-  if(!master)return 'A aprovação da composição técnica é reservada ao usuário Master.'
+  if(permissoesTecnicas.carregando&&!master)return 'Conferindo as autorizações técnicas. Tente novamente.'
+  if(permissoesTecnicas.erro&&!master)return permissoesTecnicas.erro
+  if(!podeAprovar)return 'Sua conta não possui autorização para Confirmar / Aprovar tipologias.'
   if(carregandoSituacoes)return 'As conferências ainda estão sendo carregadas. Tente novamente.'
   if(erroSituacoes)return 'Não foi possível consultar as aprovações: '+erroSituacoes
   if(!materiaisAtuais.length)return 'Esta tipologia não tem materiais vinculados. Confira a importação antes de aprovar.'
@@ -225,7 +248,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
   void confirmarComposicao()
  }
  async function confirmarComposicao(){
-  if(!master||!pacoteId||!aberta||!materiaisAtuais.length||statusAtual==='validada'||salvando||carregandoSituacoes||erroSituacoes)return
+  if(!podeAprovar||!pacoteId||!aberta||!materiaisAtuais.length||statusAtual==='validada'||salvando||carregandoSituacoes||erroSituacoes)return
   if(!window.confirm('Confirmo que conferi esta tipologia e toda a composição técnica com o W.Vetro. Registrar aprovação humana? Isto não libera Compras nem Produção.'))return
   setSalvando(true);setErro('');setMensagem('')
   try{
@@ -353,7 +376,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
         {statusAtual==='validada'?<div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900"><p className="flex items-center gap-2 font-bold"><CheckCircle2 size={17}/> Composição conferida</p><p className="mt-2 leading-relaxed">Esta composição foi aprovada por um responsável autorizado. Uma alteração futura exigirá nova revisão.</p></div>
          :<div className="rounded-lg border border-amber-100 bg-white p-3 text-xs text-amber-900"><p className="flex items-center gap-2 font-bold"><Clock3 size={17}/> {statusAtual==='revisar'?'Revisão necessária':'Aguardando conferência'}</p><p className="mt-2 leading-relaxed">Confira o relatório original e todos os materiais. A IA não pode afirmar compatibilidade sem validação humana.</p></div>}
         <div className="rounded-lg bg-white/80 p-3 text-[11px] text-slate-700"><b>Ações de conferência</b><p className="mt-2 flex items-center gap-2"><CheckCircle2 size={13} className="text-blue-700"/> Lista importada vinculada à peça</p>
-         <p className="mt-2 flex items-center gap-2"><CheckCircle2 size={13} className="text-blue-700"/> Código, quantidades e medidas acessíveis</p><p className="mt-2 flex items-center gap-2"><ClipboardCheck size={13} className="text-blue-700"/> Aprovação exclusiva do Master</p></div>
+         <p className="mt-2 flex items-center gap-2"><CheckCircle2 size={13} className="text-blue-700"/> Código, quantidades e medidas acessíveis</p><p className="mt-2 flex items-center gap-2"><ClipboardCheck size={13} className="text-blue-700"/> Aprovação por Master ou usuário autorizado</p></div>
         <button type="button" onClick={()=>setAbaTecnica('ia')} className="text-xs font-bold text-blue-700 underline">Ver conferência assistida</button>
        </div>
       </div>}
@@ -372,7 +395,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
         <p className="mt-2 text-xs text-amber-700">Alterar materiais desta obra não modifica fórmulas de outras obras.</p></div>:<>
         <div className="flex items-center justify-between gap-2"><p className="text-xs text-slate-500">{visiveis.length} itens · {grupos.find(g=>g.id===grupo)?.nome}</p>
          {master&&pacoteId&&aberta&&<button type="button" onClick={()=>abrirEdicao('incluir')} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white"><Plus size={15}/> Incluir material</button>}</div>
-        <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[760px] text-xs"><thead className="bg-slate-100 text-left uppercase text-slate-600"><tr><th className="p-2">Imagem</th><th>Código / descrição</th><th>Cor</th><th>Quantidade</th><th>Corte</th><th>Origem</th><th className="text-right">Ações</th></tr></thead><tbody>{visiveis.map(m=><tr key={m.id} className="border-t"><td className="p-2">{fotoMaterial(m)?<img src={fotoMaterial(m)!} alt={m.descricao} className="h-12 w-16 object-contain"/>:<span className="flex items-center gap-1 text-[10px] text-amber-700"><ImageOff size={16}/> Pendente</span>}</td><td className="py-2"><b className="font-mono">{m.codigo||'—'}</b><p>{m.descricao}</p></td><td>{m.cor_ref||'—'}</td><td>{n(m.quantidade_ajustada)} {m.unidade}</td><td>{m.comprimento_corte_mm?n(m.comprimento_corte_mm)+' mm':'—'}</td><td>{m.incluido_manual?'Ajuste Atlas':'W.Vetro / técnico'}</td><td className="pr-2"><div className="flex justify-end gap-1">{master&&<><button type="button" title="Ajustar quantidade ou corte" onClick={()=>abrirEdicao('ajustar',m)} className="rounded-lg border p-2"><Pencil size={14}/></button><button type="button" title="Substituir material" onClick={()=>abrirEdicao('substituir',m)} className="rounded-lg border p-2"><Replace size={14}/></button><button type="button" title="Excluir material" onClick={()=>abrirEdicao('excluir',m)} className="rounded-lg border p-2 text-red-600"><Trash2 size={14}/></button></>}</div></td></tr>)}{!visiveis.length&&<tr><td colSpan={7} className="p-6 text-slate-500">Nenhum material nesta categoria.</td></tr>}</tbody></table></div>
+        <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[760px] text-xs"><thead className="bg-slate-100 text-left uppercase text-slate-600"><tr><th className="p-2">Imagem</th><th>Código / descrição</th><th>Cor</th><th>Quantidade</th><th>Corte</th><th>Origem</th><th className="text-right">Ações</th></tr></thead><tbody>{visiveis.map(m=><tr key={m.id} className="border-t"><td className="p-2">{fotoMaterial(m)?<img src={fotoMaterial(m)!} alt={m.descricao} className="h-12 w-16 object-contain"/>:<span className="flex items-center gap-1 text-[10px] text-amber-700"><ImageOff size={16}/> Pendente</span>}</td><td className="py-2"><b className="font-mono">{m.codigo||'—'}</b><p>{m.descricao}</p></td><td>{m.cor_ref||'—'}</td><td>{n(m.quantidade_ajustada)} {m.unidade}</td><td>{m.comprimento_corte_mm?n(m.comprimento_corte_mm)+' mm':'—'}</td><td>{m.incluido_manual?'Ajuste Atlas':'W.Vetro / técnico'}</td><td className="pr-2"><div className="flex justify-end gap-1">{master&&<button type="button" title="Ajustar quantidade ou corte" onClick={()=>abrirEdicao('ajustar',m)} className="rounded-lg border p-2"><Pencil size={14}/></button>}{(master||(podeSubstituir&&['perfil','contramarco'].includes(m.categoria)))&&<button type="button" title="Substituir material" onClick={()=>abrirEdicao('substituir',m)} className="rounded-lg border p-2"><Replace size={14}/></button>}{master&&<button type="button" title="Excluir material" onClick={()=>abrirEdicao('excluir',m)} className="rounded-lg border p-2 text-red-600"><Trash2 size={14}/></button>}</div></td></tr>)}{!visiveis.length&&<tr><td colSpan={7} className="p-6 text-slate-500">Nenhum material nesta categoria.</td></tr>}</tbody></table></div>
        </>}
       </div>}
       {(abaTecnica==='pdf'||abaTecnica==='ia')&&<div className="space-y-4">
