@@ -117,6 +117,7 @@ function dataInputLocal(d:Date){return `${d.getFullYear()}-${String(d.getMonth()
 function status(v?:string|null){return v?v.replace(/_/g,' ').replace(/^./,s=>s.toUpperCase()):'—'}
 function pct(parte:number,total:number){return total>0?Math.min(100,Math.max(0,(parte/total)*100)):0}
 function numeroOrcamento(o?:Orcamento|null){return o?.wvetro_fluxo?.numero||o?.numero||'—'}
+function numeroFonteWVetro(v?:Venda|null,o?:Orcamento|null){return String(v?.config_snapshot?.wvetro_historico?.numero||o?.wvetro_fluxo?.numero||'').trim()}
 function finalizada(v?:string|null){return ['concluido','concluida','concluído','concluída','finalizado','finalizada','produzido','pronto','recebido'].includes(String(v||'').toLowerCase())}
 function compraEfetivada(v?:string|null){return ['aprovado','pedido_emitido','aguardando_entrega','recebido'].includes(String(v||'').toLowerCase())}
 function categoriaMaterial(v?:string|null):'perfil'|'vidro'|'acessorios'|'outros'{
@@ -535,7 +536,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
       const resp=await fetch('/api/integracoes/wvetro/vendas/materializar',{
         method:'POST',
         headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({vendaId:venda.id}),
+        body:JSON.stringify({vendaId:venda.id,numeroWvetro:numeroFonteWVetro(venda,orcamento)||undefined}),
       })
       const json=await resp.json().catch(()=>({}))
       if(!resp.ok){
@@ -1359,7 +1360,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
             <Link href={`/clientes/${clienteId}`} className="mt-1 rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ArrowLeft size={20}/></Link>
             <div>
               <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold text-slate-900">{obra?.nome||`Venda #${venda.numero||'—'}`}</h1><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700">{status(venda.status||'ativa')}</span></div>
-              <p className="mt-1 text-sm text-slate-500">{cliente.nome} · Orçamento {venda.config_snapshot?.wvetro_historico?.numero?'Atlas ':''}#{numeroOrcamento(orcamento)}{obra?.numero?` · Obra #${obra.numero}`:''}</p>
+              <p className="mt-1 text-sm text-slate-500">{cliente.nome} · {numeroFonteWVetro(venda,orcamento)?`W.Vetro #${numeroFonteWVetro(venda,orcamento)} · Orçamento Atlas #${orcamento?.numero||'—'}`:`Orçamento #${numeroOrcamento(orcamento)}`}{obra?.numero?` · Obra #${obra.numero}`:''}</p>
               {venda.config_snapshot?.wvetro_historico?.numero&&<p className="mt-1 inline-block rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-900">WVetro #{venda.config_snapshot.wvetro_historico.numero} vinculado à venda histórica · valor original preservado</p>}
               <p className="mt-1 text-xs text-slate-400">Venda confirmada em {dataBR(venda.confirmado_em)}{venda.confirmado_por_nome?` por ${venda.confirmado_por_nome}`:''}</p>
               <VendaMedidaStatus clienteId={clienteId} obraId={venda.obra_id||null} orcamentoId={venda.orcamento_id} onAbrir={()=>setAba('medida-final')}/>
@@ -1505,7 +1506,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {painelEtapa==='venda'&&<div className="grid gap-3 p-4 md:grid-cols-2 lg:grid-cols-4">
           <Kpi titulo="Venda" valor={`#${venda.numero||'—'}`}/>
-          <Kpi titulo="Orçamento" valor={`#${numeroOrcamento(orcamento)}`}/>
+          <Kpi titulo={numeroFonteWVetro(venda,orcamento)?"W.Vetro":"Orçamento"} valor={`#${numeroFonteWVetro(venda,orcamento)||numeroOrcamento(orcamento)}`}/>
           <Kpi titulo="Valor" valor={moeda(valorVenda)}/>
           <Kpi titulo="Confirmação" valor={dataBR(venda.confirmado_em)} detalhe={venda.confirmado_por_nome?`Por ${venda.confirmado_por_nome}`:undefined}/>
         </div>}
@@ -1620,7 +1621,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         }}/>}
 
         {aba==='compras'&&<>
-          <VendaBarrasWVetro modo="kanban" vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>setAba('producao')}/>
+          <VendaBarrasWVetro modo="kanban" vendaId={venda.id} numeroWvetro={numeroFonteWVetro(venda,orcamento)} onAbrirCorte={()=>setAba('producao')}/>
           <Box titulo="Compras de acessórios, vidros e histórico de cotações anteriores">
             <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950"><b>Os perfis comerciais para compra estão na aba Materiais.</b> Os cards antigos com perfis cortados continuam preservados abaixo para consulta e acompanhamento, sem serem convertidos em barras comerciais.</p>
           {!venda.obra_id&&<div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Esta venda ainda não tem obra vinculada. Você pode validar materiais e gerar a lista de cotação, mas os pedidos e recebimentos só poderão ser vinculados à obra depois do cadastro/vínculo.</div>}
@@ -1809,7 +1810,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
           <summary className="cursor-pointer text-sm font-bold text-slate-700">Importação e histórico do PDF Barras Utilizadas · WVetro</summary>
           <div id="materiais-barras-wvetro" className="mt-3">
             <p className="mb-2 text-xs text-amber-800">Use este quadro para importar e comparar o PDF Barras Utilizadas com conferência e aprendizado supervisionado. Os ajustes da quantidade a comprar continuam no quadro Preparação de compras acima; não faça envio duplicado pelo fluxo anterior.</p>
-            <VendaBarrasWVetro modo="lista" somenteReferencia vendaId={venda.id} numeroWvetro={String(numeroOrcamento(orcamento))} onAbrirCorte={()=>venda.obra_id&&window.open('/obras/'+venda.obra_id+'/materiais/pdf?'+(pacoteTecnicoId?'pacote='+pacoteTecnicoId+'&':'')+'grupo=perfis','_blank','noopener,noreferrer')}/>
+            <VendaBarrasWVetro modo="lista" somenteReferencia vendaId={venda.id} numeroWvetro={numeroFonteWVetro(venda,orcamento)} onAbrirCorte={()=>venda.obra_id&&window.open('/obras/'+venda.obra_id+'/materiais/pdf?'+(pacoteTecnicoId?'pacote='+pacoteTecnicoId+'&':'')+'grupo=perfis','_blank','noopener,noreferrer')}/>
           </div>
         </details>}
 
@@ -2024,7 +2025,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
         {aba==='historico'&&<Box titulo="Histórico da venda">
           <div className="space-y-4">
-            <div className="flex gap-3"><span className="mt-1 h-3 w-3 rounded-full bg-emerald-500"/><div><b className="text-sm">Venda confirmada</b><p className="text-xs text-slate-500">{dataBR(venda.confirmado_em)} · Orçamento #{numeroOrcamento(orcamento)}</p></div></div>
+            <div className="flex gap-3"><span className="mt-1 h-3 w-3 rounded-full bg-emerald-500"/><div><b className="text-sm">Venda confirmada</b><p className="text-xs text-slate-500">{dataBR(venda.confirmado_em)} · {numeroFonteWVetro(venda,orcamento)?`W.Vetro #${numeroFonteWVetro(venda,orcamento)}`:`Orçamento #${numeroOrcamento(orcamento)}`}</p></div></div>
             {setorItens.map(i=>{const c=setorColunas[i.coluna_id];return c?<div key={i.id} className="flex gap-3"><span className="mt-1 h-3 w-3 rounded-full bg-brand-navy"/><div><b className="text-sm">{c.setor_id.replace(/-/g,' ')} · {c.nome}</b><p className="text-xs text-slate-500">{dataBR(i.atualizado_em)}</p></div></div>:null})}
             {compras.map(c=><div key={`cp-${c.id}`} className="flex gap-3"><span className="mt-1 h-3 w-3 rounded-full bg-amber-500"/><div><b className="text-sm">Compra/material · {c.descricao}</b><p className="text-xs text-slate-500">{dataBR(c.created_at)} · {status(c.status)}</p></div></div>)}
           </div>
