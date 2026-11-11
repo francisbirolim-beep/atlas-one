@@ -23,6 +23,7 @@ import {
 import { ativarPushNesteDispositivo, statusPushNesteDispositivo } from '@/lib/notificacoes'
 import { calcularIndicadoresWhatsApp } from '@/lib/whatsappIndicadores'
 import { FichaContatoWhatsApp } from '@/components/whatsapp/FichaContatoWhatsApp'
+import { GRUPOS_EMOJIS_REACAO } from '@/lib/chatEmojis'
 
 type Usuario = { id: string; nome: string; role?: string; cargo?: string | null }
 type Canal = {
@@ -144,12 +145,27 @@ type SugestaoIA = {
   created_at: string
 }
 
-// Reações de uso comum, disponíveis tanto no computador quanto no celular.
-const EMOJIS_REACAO = [
-  { titulo: 'Mais usados', itens: ['👍','❤️','😂','😮','😢','🙏','👏','✅','😍','🔥','🎉','👀'] },
-  { titulo: 'Expressões', itens: ['😀','😁','😊','🥰','😘','😎','🤔','😅','😆','😡','😔','😭'] },
-  { titulo: 'Gestos e símbolos', itens: ['👎','👌','💪','🤝','🙌','👋','🤗','💯','⭐','💚','💙','🚀'] },
-] as const
+// A mesma paleta de emojis fica disponível no WhatsApp e na Equipe interna.
+const EMOJIS_REACAO = GRUPOS_EMOJIS_REACAO
+
+type ReacaoInterna = {
+  mensagem_id: string
+  usuario_id: string
+  usuario_nome: string
+  emoji: string
+  created_at: string
+}
+
+async function obterReacoesInternas(conversaId: string): Promise<ReacaoInterna[]> {
+  const headers = await headersJson()
+  const resposta = await fetch(
+    '/api/comunicacao/chat/reacoes?conversaId=' + encodeURIComponent(conversaId),
+    { headers, cache: 'no-store' },
+  )
+  const json = await resposta.json()
+  if (!resposta.ok) throw new Error(json.error || 'Falha ao carregar reações da equipe.')
+  return (json.reacoes || []) as ReacaoInterna[]
+}
 
 function hora(valor?: string | null) {
   if (!valor) return ''
@@ -239,6 +255,9 @@ export default function WhatsAppAtendimentoPage() {
   const [conversasInternas, setConversasInternas] = useState<ChatConversa[]>([])
   const [conversaInternaAtiva, setConversaInternaAtiva] = useState<ChatConversa | null>(null)
   const [mensagensInternas, setMensagensInternas] = useState<ChatMensagem[]>([])
+  const [reacoesInternas, setReacoesInternas] = useState<ReacaoInterna[]>([])
+  const [reacaoInternaMensagemId, setReacaoInternaMensagemId] = useState<string | null>(null)
+  const [reagindoInternoId, setReagindoInternoId] = useState<string | null>(null)
   const [participantesConversaInterna, setParticipantesConversaInterna] = useState<Array<{id:string;nome:string}>>([])
   const [textoInterno, setTextoInterno] = useState('')
   const [enviandoInterno, setEnviandoInterno] = useState(false)
@@ -962,6 +981,28 @@ export default function WhatsAppAtendimentoPage() {
   }, [conversaInternaAtiva?.id])
 
   useEffect(() => {
+    const conversaId = conversaInternaAtiva?.id
+    setReacoesInternas([])
+    setReacaoInternaMensagemId(null)
+    if (!conversaId) return
+    let ativo = true
+    const atualizar = async () => {
+      try {
+        const lista = await obterReacoesInternas(conversaId)
+        if (ativo) setReacoesInternas(lista)
+      } catch {
+        // Em caso de oscilação de rede, mantém as mensagens e a interface estáveis.
+      }
+    }
+    void atualizar()
+    const intervalo = window.setInterval(() => void atualizar(), 12000)
+    return () => {
+      ativo = false
+      window.clearInterval(intervalo)
+    }
+  }, [conversaInternaAtiva?.id])
+
+  useEffect(() => {
     if (!diretorioAberto || !canalDiretorio) return
     const timer = setTimeout(() => { void carregarDiretorio() }, 250)
     return () => clearTimeout(timer)
@@ -1641,6 +1682,30 @@ export default function WhatsAppAtendimentoPage() {
     }
   }
 
+  async function reagirMensagemInterna(mensagemId: string, emoji: string) {
+    if (!conversaInternaAtiva || !mensagemId || !emoji || reagindoInternoId) return
+    const conversaId = conversaInternaAtiva.id
+    setReagindoInternoId(mensagemId)
+    setErro('')
+    try {
+      const headers = await headersJson()
+      const resposta = await fetch('/api/comunicacao/chat/reacoes', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ conversaId, mensagemId, emoji }),
+      })
+      const json = await resposta.json()
+      if (!resposta.ok) throw new Error(json.error || 'Não foi possível enviar a reação.')
+      setReacaoInternaMensagemId(null)
+      const lista = await obterReacoesInternas(conversaId)
+      setReacoesInternas(lista)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não foi possível reagir à mensagem interna.')
+    } finally {
+      setReagindoInternoId(null)
+    }
+  }
+
   async function reagirMensagem(mensagemId: string, emoji: string) {
     if (!ativa || !mensagemId || !emoji.trim() || reagindoMensagemId) return
     setErro('')
@@ -1669,6 +1734,21 @@ export default function WhatsAppAtendimentoPage() {
       setReagindoMensagemId(null)
     }
   }
+
+  const reacoesAgrupadasInternas = useMemo(() => {
+    const grupos = new Map<string, Map<string, { emoji: string; usuarios: string[]; minha: boolean }>>()
+    for (const reacao of reacoesInternas) {
+      const daMensagem = grupos.get(reacao.mensagem_id) || new Map()
+      const resumo = daMensagem.get(reacao.emoji) || { emoji: reacao.emoji, usuarios: [], minha: false }
+      resumo.usuarios.push(reacao.usuario_nome)
+      if (reacao.usuario_id === eu?.id) resumo.minha = true
+      daMensagem.set(reacao.emoji, resumo)
+      grupos.set(reacao.mensagem_id, daMensagem)
+    }
+    const resultado = new Map<string, Array<{ emoji: string; usuarios: string[]; minha: boolean }>>()
+    for (const [mensagemId, emojis] of grupos) resultado.set(mensagemId, [...emojis.values()])
+    return resultado
+  }, [reacoesInternas, eu?.id])
 
   const reacoesPorMensagem = useMemo(() => {
     const porWhatsapp = new Map<string,string>()
@@ -2284,7 +2364,7 @@ export default function WhatsAppAtendimentoPage() {
                       const minha=m.usuario_id===eu?.id
                       return (
                         <div key={m.id} className={`flex ${minha?'justify-end':'justify-start'}`}>
-                          <div className={`max-w-[78%] rounded-2xl px-4 py-3 shadow-sm ${minha?'bg-blue-600 text-white':'border bg-white text-slate-800'}`}>
+                          <div className={`min-w-0 max-w-[82%] rounded-2xl px-3 py-3 shadow-sm sm:px-4 ${minha?'bg-blue-600 text-white':'border bg-white text-slate-800'}`}>
                             {!minha && <b className="mb-1 block text-[11px] text-blue-700">{m.usuario_nome || 'Equipe'}</b>}
                             {m.texto && <p className="whitespace-pre-wrap break-words text-sm">{m.texto}</p>}
                             {m.anexo_url && (
@@ -2299,7 +2379,52 @@ export default function WhatsAppAtendimentoPage() {
                                         📎 {m.anexo_nome||'Abrir anexo'}
                                       </a>
                             )}
-                            <p className={`mt-1 text-right text-[10px] ${minha?'text-blue-100':'text-slate-400'}`}>{hora(m.created_at)}</p>
+                            {Boolean(reacoesAgrupadasInternas.get(m.id)?.length) && (
+                              <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label="Reações da mensagem">
+                                {reacoesAgrupadasInternas.get(m.id)!.map(item=>(
+                                  <button key={item.emoji} type="button"
+                                    disabled={Boolean(reagindoInternoId)}
+                                    onClick={()=>void reagirMensagemInterna(m.id,item.emoji)}
+                                    title={item.usuarios.join(', ') + (item.minha?' · clique para retirar sua reação':' · clique para reagir')}
+                                    className={`rounded-full border px-2 py-1 text-xs font-semibold disabled:opacity-50 ${minha?'border-blue-300 bg-blue-500/50 text-white':item.minha?'border-blue-300 bg-blue-100 text-blue-700':'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                    {item.emoji} {item.usuarios.length}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            <div className={`mt-2 flex items-center justify-between gap-2 ${minha?'text-blue-100':'text-slate-500'}`}>
+                              <button type="button"
+                                onClick={()=>setReacaoInternaMensagemId(id=>id===m.id?null:m.id)}
+                                disabled={Boolean(reagindoInternoId)}
+                                aria-label="Reagir à mensagem interna"
+                                aria-expanded={reacaoInternaMensagemId===m.id}
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold hover:bg-black/10 disabled:opacity-40`}>
+                                <SmilePlus size={15}/> Reagir
+                              </button>
+                              <span className="text-[10px]">{hora(m.created_at)}</span>
+                            </div>
+                            {reacaoInternaMensagemId === m.id && (
+                              <div className="mt-2 max-w-full space-y-2 rounded-xl border bg-white p-2 text-slate-800 shadow-sm"
+                                role="group" aria-label="Selecionar reação da mensagem interna">
+                                {EMOJIS_REACAO.map(grupo=>(
+                                  <div key={grupo.titulo}>
+                                    <p className="mb-1 text-[10px] font-semibold text-slate-500">{grupo.titulo}</p>
+                                    <div className="grid grid-cols-6 gap-1">
+                                      {grupo.itens.map(emoji=>(
+                                        <button key={emoji} type="button"
+                                          disabled={Boolean(reagindoInternoId)}
+                                          onClick={()=>void reagirMensagemInterna(m.id,emoji)}
+                                          aria-label={'Reagir com '+emoji}
+                                          className="grid h-8 w-8 max-w-full place-items-center rounded-lg text-lg hover:bg-blue-50 focus-visible:outline focus-visible:outline-blue-600 disabled:opacity-40">
+                                          {emoji}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                <p className="text-[10px] text-slate-500">Para retirar, clique novamente no mesmo emoji.</p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )
