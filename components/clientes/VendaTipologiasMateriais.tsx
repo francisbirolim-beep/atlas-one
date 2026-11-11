@@ -48,11 +48,14 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
  const [historico,setHistorico]=useState<Registro[]>([])
  const [mostrarHistorico,setMostrarHistorico]=useState(false)
  const [master,setMaster]=useState(false)
+ const [permissoesTecnicas,setPermissoesTecnicas]=useState({substituir:false,aprovar:false,carregando:true,erro:''})
  const [carregando,setCarregando]=useState(false)
  const [salvando,setSalvando]=useState(false)
  const [erro,setErro]=useState('')
  const [mensagem,setMensagem]=useState('')
  const [acao,setAcao]=useState<Acao|null>(null)
+ const [selecionandoPerfil,setSelecionandoPerfil]=useState(false)
+ const [produtoEscolhido,setProdutoEscolhido]=useState<Produto|null>(null)
  const [materialEditando,setMaterialEditando]=useState<Material|null>(null)
  const [form,setForm]=useState<Formulario>(padrao)
  const [busca,setBusca]=useState('')
@@ -92,6 +95,23 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
  const visiveis=materiaisAtuais.filter(m=>categoriaDoGrupo(grupo,m.categoria))
  useEffect(()=>{void usuarioAtual().then(u=>setMaster(u?.role==='master'))},[])
  useEffect(()=>{
+  let ativo=true
+  void(async()=>{
+   try{
+    const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+    const r=await fetch('/api/vendas/tipologias-materiais?modo=permissoes',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
+    const dados=await r.json().catch(()=>({}))
+    if(!r.ok)throw Error(dados.error||'Falha ao consultar permissões técnicas.')
+    if(ativo)setPermissoesTecnicas({substituir:!!dados.substituir,aprovar:!!dados.aprovar,carregando:false,erro:''})
+   }catch(e){
+    if(ativo)setPermissoesTecnicas({substituir:false,aprovar:false,carregando:false,erro:e instanceof Error?e.message:'Permissões técnicas indisponíveis.'})
+   }
+  })()
+  return()=>{ativo=false}
+ },[])
+ const podeSubstituir=master||permissoesTecnicas.substituir
+ const podeAprovar=master||permissoesTecnicas.aprovar
+ useEffect(()=>{
   if(!aberta||!pacoteId)return
   let vivo=true
   setHistorico([]);setErro('');setMostrarHistorico(false)
@@ -125,7 +145,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
   finally{setPesquisando(false)}
  }
  function abrirEdicao(tipo:Acao,material:Material|null=null){
-  setErro('');setBusca('');setResultados([])
+  setErro('');setBusca('');setResultados([]);setSelecionandoPerfil(false);setProdutoEscolhido(null)
   setMaterialEditando(material);setAcao(tipo)
   setForm({...padrao,produto_id:tipo==='substituir'?'':material?.produto_id||'',codigo:tipo==='substituir'?'':material?.codigo||'',descricao:tipo==='substituir'?'':material?.descricao||'',
    categoria:material?.categoria|| (grupo==='perfis'?'perfil':grupo==='acessorios'?'acessorio':grupo==='vidros'?'vidro':'outro'),
@@ -134,16 +154,20 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
    comprimento_barra_mm:material?.comprimento_barra_mm!=null?String(material.comprimento_barra_mm):'',justificativa:''})
  }
  function escolherProduto(p:Produto){
+  if(!master&&acao==='substituir'&&['perfil','contramarco'].includes(form.categoria)&&!['perfil','contramarco'].includes(p.categoria||'')){setErro('Escolha um perfil de alumínio ou contramarco no catálogo.');return}
   if(['perfil','contramarco'].includes(form.categoria)&&!p.foto_url){setErro('Perfil sem desenho técnico: cadastre a imagem antes de incluí-lo.');return}
   setForm(prev=>({...prev,produto_id:p.id,codigo:p.codigo||'',descricao:p.nome,unidade:p.unidade||prev.unidade,
     comprimento_barra_mm:p.tamanho_barra_mm?String(p.tamanho_barra_mm):prev.comprimento_barra_mm}))
-  setBusca(p.codigo||p.nome);setResultados([]);setErro('')
+  setBusca(p.codigo||p.nome);setResultados([]);setProdutoEscolhido(p);setErro('')
  }
  async function salvar(){
   if(!acao||!aberta||!pacoteId||salvando)return
   if(form.justificativa.trim().length<5){setErro('Informe uma justificativa de pelo menos cinco caracteres.');return}
   if(acao!=='excluir'&&(!form.descricao.trim()||Number(form.quantidade_ajustada)<=0)){
    setErro('Informe a descrição e uma quantidade positiva.');return
+  }
+  if((acao==='substituir'||acao==='incluir')&&['perfil','contramarco'].includes(form.categoria)&&!form.produto_id){
+   setErro('Selecione um perfil pelo catálogo, com desenho técnico cadastrado.');return
   }
   if((acao==='substituir'||acao==='incluir')&&form.codigo&&!form.produto_id){
    setErro('Escolha o produto pelo catálogo. Não é permitido vincular um código sem seu cadastro.');return
@@ -190,8 +214,41 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
  }
  const corAtual=materiaisAtuais.find(m=>m.cor_ref)?.cor_ref||''
  const linhaAtual=String(dadosAtuais?.linha||dadosAtuais?.linha_nome||dadosAtuais?.wvetro_item?.Linha||'')
+ const perfisAtuais=materiaisAtuais.filter(m=>['perfil','contramarco'].includes(m.categoria))
+ function iniciarSubstituicao(){
+  setErro('');setMensagem('');setAcao(null);setAbaTecnica('materiais');setGrupo('perfis')
+  if(!aberta||!pacoteId){setErro('Selecione uma tipologia com pacote técnico para substituir um perfil.');return}
+  if(permissoesTecnicas.carregando&&!master){setErro('Conferindo as autorizações técnicas. Tente novamente.');return}
+  if(permissoesTecnicas.erro&&!master){setErro(permissoesTecnicas.erro);return}
+  if(!podeSubstituir){setErro('Sua conta não possui autorização para substituir perfis. Solicite liberação no cadastro de permissões.');return}
+  if(!perfisAtuais.length){setErro('Esta tipologia não possui perfis ativos para substituir. Confira a importação dos materiais.');return}
+  if(perfisAtuais.length===1){abrirEdicao('substituir',perfisAtuais[0]);return}
+  setSelecionandoPerfil(true)
+ }
+ function motivoBloqueioAprovacao():string|null{
+  if(!aberta)return 'Selecione uma tipologia para confirmar a composição.'
+  if(!pacoteId)return 'Esta tipologia ainda não possui pacote técnico vinculado.'
+  if(permissoesTecnicas.carregando&&!master)return 'Conferindo as autorizações técnicas. Tente novamente.'
+  if(permissoesTecnicas.erro&&!master)return permissoesTecnicas.erro
+  if(!podeAprovar)return 'Sua conta não possui autorização para Confirmar / Aprovar tipologias.'
+  if(carregandoSituacoes)return 'As conferências ainda estão sendo carregadas. Tente novamente.'
+  if(erroSituacoes)return 'Não foi possível consultar as aprovações: '+erroSituacoes
+  if(!materiaisAtuais.length)return 'Esta tipologia não tem materiais vinculados. Confira a importação antes de aprovar.'
+  if(statusAtual==='validada'){
+   const registro=situacoes[aberta]
+   return 'Esta tipologia já foi aprovada'+(registro?.responsavel?' por '+registro.responsavel:'')+
+    (registro?.data?' em '+new Date(registro.data).toLocaleString('pt-BR'):'')+'.'
+  }
+  return null
+ }
+ function solicitarAprovacao(){
+  setErro('');setMensagem('')
+  const motivo=motivoBloqueioAprovacao()
+  if(motivo){if(statusAtual==='validada')setMensagem(motivo);else setErro(motivo);return}
+  void confirmarComposicao()
+ }
  async function confirmarComposicao(){
-  if(!master||!pacoteId||!aberta||!materiaisAtuais.length||statusAtual==='validada'||salvando||carregandoSituacoes||erroSituacoes)return
+  if(!podeAprovar||!pacoteId||!aberta||!materiaisAtuais.length||statusAtual==='validada'||salvando||carregandoSituacoes||erroSituacoes)return
   if(!window.confirm('Confirmo que conferi esta tipologia e toda a composição técnica com o W.Vetro. Registrar aprovação humana? Isto não libera Compras nem Produção.'))return
   setSalvando(true);setErro('');setMensagem('')
   try{
@@ -239,7 +296,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
       const ativo=aberta===it.ref
       const aprovado=situacoes[it.ref]?.situacao==='validada'
       const revisar=situacoes[it.ref]?.situacao==='revisar'
-      return <button key={it.ref||it.indice} type="button" onClick={()=>{setAberta(it.ref||null);setGrupo('perfis');setAbaTecnica('composicao');setAbrirDocumento(null);setAcao(null)}}
+      return <button key={it.ref||it.indice} type="button" onClick={()=>{setAberta(it.ref||null);setGrupo('perfis');setAbaTecnica('composicao');setAbrirDocumento(null);setAcao(null);setSelecionandoPerfil(false);setErro('');setMensagem('')}}
        className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${ativo?'border-blue-400 bg-blue-50 shadow-sm':'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'}`}>
        <span className="grid h-16 w-[74px] shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
         {fotoDaTipologia(it)?<img src={fotoDaTipologia(it)!} alt={'Imagem da '+(it.descricao||'tipologia')} className="h-full w-full object-contain"/>:<TipologiaEsquadriaIlustracao descricao={it.descricao||it.tipo_esquadria} compacta/>}
@@ -319,7 +376,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
         {statusAtual==='validada'?<div className="rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900"><p className="flex items-center gap-2 font-bold"><CheckCircle2 size={17}/> Composição conferida</p><p className="mt-2 leading-relaxed">Esta composição foi aprovada por um responsável autorizado. Uma alteração futura exigirá nova revisão.</p></div>
          :<div className="rounded-lg border border-amber-100 bg-white p-3 text-xs text-amber-900"><p className="flex items-center gap-2 font-bold"><Clock3 size={17}/> {statusAtual==='revisar'?'Revisão necessária':'Aguardando conferência'}</p><p className="mt-2 leading-relaxed">Confira o relatório original e todos os materiais. A IA não pode afirmar compatibilidade sem validação humana.</p></div>}
         <div className="rounded-lg bg-white/80 p-3 text-[11px] text-slate-700"><b>Ações de conferência</b><p className="mt-2 flex items-center gap-2"><CheckCircle2 size={13} className="text-blue-700"/> Lista importada vinculada à peça</p>
-         <p className="mt-2 flex items-center gap-2"><CheckCircle2 size={13} className="text-blue-700"/> Código, quantidades e medidas acessíveis</p><p className="mt-2 flex items-center gap-2"><ClipboardCheck size={13} className="text-blue-700"/> Aprovação exclusiva do Master</p></div>
+         <p className="mt-2 flex items-center gap-2"><CheckCircle2 size={13} className="text-blue-700"/> Código, quantidades e medidas acessíveis</p><p className="mt-2 flex items-center gap-2"><ClipboardCheck size={13} className="text-blue-700"/> Aprovação por Master ou usuário autorizado</p></div>
         <button type="button" onClick={()=>setAbaTecnica('ia')} className="text-xs font-bold text-blue-700 underline">Ver conferência assistida</button>
        </div>
       </div>}
@@ -338,7 +395,7 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
         <p className="mt-2 text-xs text-amber-700">Alterar materiais desta obra não modifica fórmulas de outras obras.</p></div>:<>
         <div className="flex items-center justify-between gap-2"><p className="text-xs text-slate-500">{visiveis.length} itens · {grupos.find(g=>g.id===grupo)?.nome}</p>
          {master&&pacoteId&&aberta&&<button type="button" onClick={()=>abrirEdicao('incluir')} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white"><Plus size={15}/> Incluir material</button>}</div>
-        <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[760px] text-xs"><thead className="bg-slate-100 text-left uppercase text-slate-600"><tr><th className="p-2">Imagem</th><th>Código / descrição</th><th>Cor</th><th>Quantidade</th><th>Corte</th><th>Origem</th><th className="text-right">Ações</th></tr></thead><tbody>{visiveis.map(m=><tr key={m.id} className="border-t"><td className="p-2">{fotoMaterial(m)?<img src={fotoMaterial(m)!} alt={m.descricao} className="h-12 w-16 object-contain"/>:<span className="flex items-center gap-1 text-[10px] text-amber-700"><ImageOff size={16}/> Pendente</span>}</td><td className="py-2"><b className="font-mono">{m.codigo||'—'}</b><p>{m.descricao}</p></td><td>{m.cor_ref||'—'}</td><td>{n(m.quantidade_ajustada)} {m.unidade}</td><td>{m.comprimento_corte_mm?n(m.comprimento_corte_mm)+' mm':'—'}</td><td>{m.incluido_manual?'Ajuste Atlas':'W.Vetro / técnico'}</td><td className="pr-2"><div className="flex justify-end gap-1">{master&&<><button type="button" title="Ajustar quantidade ou corte" onClick={()=>abrirEdicao('ajustar',m)} className="rounded-lg border p-2"><Pencil size={14}/></button><button type="button" title="Substituir material" onClick={()=>abrirEdicao('substituir',m)} className="rounded-lg border p-2"><Replace size={14}/></button><button type="button" title="Excluir material" onClick={()=>abrirEdicao('excluir',m)} className="rounded-lg border p-2 text-red-600"><Trash2 size={14}/></button></>}</div></td></tr>)}{!visiveis.length&&<tr><td colSpan={7} className="p-6 text-slate-500">Nenhum material nesta categoria.</td></tr>}</tbody></table></div>
+        <div className="overflow-x-auto rounded-xl border"><table className="w-full min-w-[760px] text-xs"><thead className="bg-slate-100 text-left uppercase text-slate-600"><tr><th className="p-2">Imagem</th><th>Código / descrição</th><th>Cor</th><th>Quantidade</th><th>Corte</th><th>Origem</th><th className="text-right">Ações</th></tr></thead><tbody>{visiveis.map(m=><tr key={m.id} className="border-t"><td className="p-2">{fotoMaterial(m)?<img src={fotoMaterial(m)!} alt={m.descricao} className="h-12 w-16 object-contain"/>:<span className="flex items-center gap-1 text-[10px] text-amber-700"><ImageOff size={16}/> Pendente</span>}</td><td className="py-2"><b className="font-mono">{m.codigo||'—'}</b><p>{m.descricao}</p></td><td>{m.cor_ref||'—'}</td><td>{n(m.quantidade_ajustada)} {m.unidade}</td><td>{m.comprimento_corte_mm?n(m.comprimento_corte_mm)+' mm':'—'}</td><td>{m.incluido_manual?'Ajuste Atlas':'W.Vetro / técnico'}</td><td className="pr-2"><div className="flex justify-end gap-1">{master&&<button type="button" title="Ajustar quantidade ou corte" onClick={()=>abrirEdicao('ajustar',m)} className="rounded-lg border p-2"><Pencil size={14}/></button>}{(master||(podeSubstituir&&['perfil','contramarco'].includes(m.categoria)))&&<button type="button" title="Substituir material" onClick={()=>abrirEdicao('substituir',m)} className="rounded-lg border p-2"><Replace size={14}/></button>}{master&&<button type="button" title="Excluir material" onClick={()=>abrirEdicao('excluir',m)} className="rounded-lg border p-2 text-red-600"><Trash2 size={14}/></button>}</div></td></tr>)}{!visiveis.length&&<tr><td colSpan={7} className="p-6 text-slate-500">Nenhum material nesta categoria.</td></tr>}</tbody></table></div>
        </>}
       </div>}
       {(abaTecnica==='pdf'||abaTecnica==='ia')&&<div className="space-y-4">
@@ -353,10 +410,11 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
       {linkFicha([aberta||''])&&<a href={linkFicha([aberta||''])!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"><Printer size={15}/> Imprimir Ficha</a>}
       {linkFicha(selecionadasImpressao)&&<a href={linkFicha(selecionadasImpressao)!} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"><FileText size={15}/> Imprimir Selecionadas</a>}
       <label className="flex items-center gap-1.5 text-[11px] text-slate-600"><input type="checkbox" aria-label="Selecionar tipologia para impressão" checked={!!aberta&&selecionadasImpressao.includes(aberta)} onChange={e=>setSelecionadasImpressao(v=>e.target.checked&&aberta?[...new Set([...v,aberta])]:v.filter(x=>x!==aberta))}/> Selecionar</label>
-      <button type="button" onClick={()=>{setAbaTecnica('materiais');setGrupo('perfis')}} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"><Pencil size={15}/> Substituir / Corrigir</button>
+      <button type="button" onClick={iniciarSubstituicao} disabled={salvando} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Pencil size={15}/> Substituir / Corrigir</button>
       <button type="button" onClick={()=>{setAbaTecnica('pdf');setAbrirDocumento(aberta)}} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50"><Upload size={15}/> Importar PDF Correto</button>
-      <button type="button" disabled={!master||!pacoteId||!materiaisAtuais.length||statusAtual==='validada'||salvando||carregandoSituacoes||!!erroSituacoes} onClick={()=>void confirmarComposicao()}
+      <button type="button" disabled={salvando} onClick={solicitarAprovacao} title={motivoBloqueioAprovacao()||'Registrar aprovação desta tipologia'}
        className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"><CheckCircle2 size={16}/> {salvando?'Validando...':statusAtual==='validada'?'Já aprovada':'Confirmar / Aprovar'}</button>
+      {(erro||mensagem)&&<p role={erro?'alert':'status'} className={'w-full rounded-lg p-3 text-xs '+(erro?'border border-red-200 bg-red-50 text-red-800':'border border-blue-200 bg-blue-50 text-blue-800')}>{erro||mensagem}</p>}
      </footer>
     </>:<div className="grid min-h-[420px] place-items-center p-8 text-center text-sm text-slate-500">{itensComRef.length?'Selecione uma tipologia à esquerda para começar.':'Nenhuma tipologia técnica está vinculada a esta venda.'}</div>}
    </div>
@@ -365,19 +423,38 @@ export default function VendaTipologiasMateriais({itens,materiais,pacoteId,venda
    <div className="w-full max-w-2xl rounded-2xl bg-white p-5" onClick={e=>e.stopPropagation()}><div className="mb-3 flex items-center justify-between"><b>{dadosAtuais.descricao||dadosAtuais.ambiente}</b><button type="button" aria-label="Fechar imagem" onClick={()=>setAmpliarDesenho(false)}><X size={18}/></button></div>
     <div className="grid min-h-[440px] place-items-center rounded-xl bg-slate-50">{fotoDaTipologia(dadosAtuais)?<img src={fotoDaTipologia(dadosAtuais)!} alt="Imagem ampliada da esquadria" className="max-h-[70vh] max-w-full object-contain"/>:<TipologiaEsquadriaIlustracao descricao={dadosAtuais.descricao||dadosAtuais.tipo_esquadria}/>}</div></div>
   </div>}
+  {selecionandoPerfil&&aberta&&<div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true" aria-label="Selecionar perfil para substituir">
+   <div className="flex max-h-[90dvh] w-full max-w-xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+    <div className="flex items-center justify-between border-b p-4"><h3 className="text-base font-bold">Escolha o perfil original</h3><button type="button" onClick={()=>setSelecionandoPerfil(false)} aria-label="Fechar seleção de perfil"><X size={18}/></button></div>
+    <p className="px-4 pt-3 text-xs text-slate-600">Selecione o perfil desta tipologia que será corrigido ou substituído. O próximo passo permite buscar o substituto no catálogo.</p>
+    <div className="space-y-2 overflow-y-auto p-4">{perfisAtuais.map(m=><button type="button" key={m.id} onClick={()=>abrirEdicao('substituir',m)} className="flex w-full items-center gap-3 rounded-lg border p-3 text-left hover:border-blue-400 hover:bg-blue-50">
+     <span className="grid h-16 w-20 shrink-0 place-items-center rounded border bg-white">{fotoMaterial(m)?<img src={fotoMaterial(m)!} alt={'Desenho do perfil '+(m.codigo||m.descricao)} className="h-14 w-16 max-w-full object-contain"/>:<span className="flex flex-col items-center gap-1 text-[10px] text-amber-700"><ImageOff size={18}/>Imagem pendente</span>}</span>
+     <span className="min-w-0 text-xs"><b className="block text-slate-900">{m.codigo||'Sem código'} · {m.descricao}</b><span className="mt-1 block text-slate-600">Quantidade: {n(m.quantidade_ajustada)} {m.unidade} · Corte: {m.comprimento_corte_mm?n(m.comprimento_corte_mm)+' mm':'—'}</span></span>
+     <ChevronRight size={16} className="ml-auto shrink-0 text-blue-700"/>
+    </button>)}</div>
+    <div className="flex justify-end border-t p-3"><button type="button" onClick={()=>setSelecionandoPerfil(false)} className="rounded-lg border px-4 py-2 text-xs font-bold">Cancelar</button></div>
+   </div>
+  </div>}
   {acao&&aberta&&<div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true">
    <div className="flex max-h-[94dvh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
     <div className="flex items-center justify-between border-b p-4"><h3 className="text-base font-bold">{nomeAcao[acao]} · {dadosAtuais?.ambiente||'Tipologia'}</h3><button aria-label="Fechar edição" disabled={salvando} onClick={()=>setAcao(null)}><X size={18}/></button></div>
     <div className="space-y-3 overflow-y-auto p-4 text-xs">
-     {materialEditando&&<p className="rounded-lg bg-slate-50 p-3">Material original: <b>{materialEditando.codigo||'—'}</b> · {materialEditando.descricao}</p>}
+     {materialEditando&&<div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3">
+      <span className="grid h-16 w-20 shrink-0 place-items-center rounded border bg-white">{fotoMaterial(materialEditando)?<img src={fotoMaterial(materialEditando)!} alt={'Desenho do material original '+(materialEditando.codigo||'')} className="max-h-14 max-w-full object-contain"/>:<span className="text-center text-[10px] text-amber-700"><ImageOff size={20} className="mx-auto"/>Imagem pendente</span>}</span>
+      <p>Material original: <b>{materialEditando.codigo||'—'}</b> · {materialEditando.descricao}</p>
+     </div>}
      {acao!=='excluir'&&<>
       {acao!=='ajustar'&&<div><label className="block font-bold">Buscar no catálogo (código ou descrição)</label><div className="mt-1 flex gap-2">
-       <input className="min-w-0 flex-1 rounded-lg border p-2" value={busca} onChange={e=>setBusca(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void pesquisar()}}} placeholder="Ex.: SU010, 30-023..."/>
+       <input className="min-w-0 flex-1 rounded-lg border p-2" value={busca} onChange={e=>{setBusca(e.target.value);setProdutoEscolhido(null);setForm(prev=>({...prev,produto_id:'',codigo:''}))}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void pesquisar()}}} placeholder="Ex.: SU010, 30-023..."/>
        <button type="button" disabled={pesquisando||busca.length<2} onClick={()=>void pesquisar()} className="flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-2 font-bold text-white">{pesquisando?<Loader2 size={14} className="animate-spin"/>:<Search size={14}/>} Buscar</button></div>
        {resultados.length>0&&<div className="mt-2 max-h-44 overflow-auto rounded-lg border">{resultados.map(p=><button type="button" key={p.id} onClick={()=>escolherProduto(p)} className="flex w-full items-center gap-2 border-b p-2 text-left hover:bg-blue-50">
         {p.foto_url?<img src={p.foto_url} alt={'Desenho '+p.codigo} className="h-10 w-10 object-contain"/>:<ImageOff size={20} className="text-amber-600"/>}
         <span><b>{p.codigo||'Sem código'}</b> · {p.nome}{p.codigo&&!p.foto_url?<span className="block text-amber-700">Imagem técnica pendente</span>:null}</span>
        </button>)}</div>}
+       {produtoEscolhido&&<div className="mt-3 flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+        {produtoEscolhido.foto_url?<img src={produtoEscolhido.foto_url} alt={'Desenho do substituto '+(produtoEscolhido.codigo||'')} className="h-16 w-20 object-contain"/>:<span className="text-amber-700"><ImageOff size={20}/></span>}
+        <span className="text-xs text-emerald-900"><b className="block">Produto substituto selecionado</b>{produtoEscolhido.codigo||'Sem código'} · {produtoEscolhido.nome}</span>
+       </div>}
       </div>}
       <div className="grid gap-3 sm:grid-cols-2">
        <label className="font-semibold">Categoria<select disabled={acao==='ajustar'} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})} className="mt-1 w-full rounded-lg border p-2"><option value="perfil">Perfil</option><option value="contramarco">Contramarco</option><option value="acessorio">Acessório</option><option value="vidro">Vidro</option><option value="outro">Serviço / Outro</option></select></label>

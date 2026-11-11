@@ -5,6 +5,7 @@ import pdfParse from 'pdf-parse'
 import {autenticarTenant} from '@/lib/tenantServer'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
 import {consultarOpenCode} from '@/lib/ai/opencode'
+import {usuarioTemDelegacaoExplicitaServer} from '@/lib/acessoUsuarioServer'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -169,7 +170,16 @@ export async function POST(req:NextRequest){
  if(!['tipologia','materiais'].includes(tipo)||!['analisar','validar_pdf','validar_atlas'].includes(acao))return bad('Operação inválida.')
  const c=await contexto(req,vendaId,pacoteId,tipo,itemRef)
  if(!c||!c.pacote)return bad('Venda ou pacote técnico inválido.',404)
- if(c.u.role!=='master')return bad('Aprovação de materiais reservada ao usuário Master.',403)
+ if(c.u.role!=='master'){
+  if(acao!=='validar_atlas'||tipo!=='tipologia')return bad('Análise e validação de PDF reservadas ao Master.',403)
+  try{
+   const autorizado=await usuarioTemDelegacaoExplicitaServer({
+    usuarioId:c.u.id,role:c.u.role,empresaId:c.u.empresa_id,
+    setorId:'portal-cliente',acaoId:'clientes.portal.tipologias_aprovar'
+   })
+   if(!autorizado)return bad('Aprovação técnica não autorizada para este usuário.',403)
+  }catch{return bad('Não foi possível verificar a autorização técnica.',503)}
+ }
  if(!c.materiais.length)return bad('Não há materiais técnicos para conferir neste pacote.',409)
  const file=form.get('arquivo')
  if(acao!=='validar_atlas'&&!(file instanceof File))return bad('Anexe o PDF correto.')
