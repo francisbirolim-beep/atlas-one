@@ -22,7 +22,7 @@ function diferenca(valores: unknown[]) {
   return validas.length ? Math.max(...validas) - Math.min(...validas) : 0
 }
 
-async function identificacaoPdf(medicao: MedicaoFinal): Promise<IdentificacaoPdf> {
+export async function identificacaoPdf(medicao: MedicaoFinal): Promise<IdentificacaoPdf> {
   try {
     const token = await tokenAtual()
     if (!token) return { cliente_nome: medicao.cliente_nome, numero_orcamento: null }

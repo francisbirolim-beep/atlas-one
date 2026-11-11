@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { idCardContramarco } from '@/lib/idCardMedicaoFinal'
+import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
+import { perfilAprovadoContramarco } from '@/lib/contramarcoRegrasCorte'
 
 export const runtime = 'nodejs'
 
-type Action = 'enviar' | 'aprovar' | 'remediar' | 'sincronizar_contramarco'
+type Action = 'enviar' | 'aprovar' | 'remediar' | 'sincronizar_contramarco' | 'definir_perfil'
 
 async function autenticar(req: NextRequest) {
   const authHeader = req.headers.get('authorization') || ''
@@ -86,7 +89,7 @@ async function sincronizarOrdensContramarco(
   const [{ data: venda }, { data: orcamento }, { data: itensMedicao }, { data: colunasProducao }] = await Promise.all([
     supabaseAdmin
       .from('vendas_obras')
-      .select('id,cliente_id,obra_id,versao')
+      .select('id,cliente_id,obra_id,versao,clientes(nome),obras(nome)')
       .eq('orcamento_id', medicao.orcamento_id)
       .eq('empresa_id', usuario.empresa_id)
       .order('created_at', { ascending: true })
@@ -100,15 +103,16 @@ async function sincronizarOrdensContramarco(
       .maybeSingle(),
     supabaseAdmin
       .from('medicao_itens')
-      .select('id,ordem,tipo_esquadria,tipo_outro_texto,descricao,ambiente,quantidade,contramarco,producao_largura_mm,producao_altura_mm,medido,status_medicao')
+      .select('id,ordem,tipo_esquadria,tipo_outro_texto,descricao,ambiente,quantidade,contramarco,producao_largura_mm,producao_altura_mm,medido,status_medicao,campos_extras')
       .eq('medicao_id', medicao.id)
       .eq('empresa_id', usuario.empresa_id)
       .order('ordem', { ascending: true }),
     supabaseAdmin
       .from('setor_kanban_colunas')
-      .select('id')
+      .select('id,ordem')
       .eq('empresa_id', usuario.empresa_id)
-      .eq('setor_id', 'producao'),
+      .eq('setor_id', 'producao')
+      .order('ordem', { ascending: true }),
   ])
 
   if (!venda?.id) {
@@ -170,6 +174,36 @@ async function sincronizarOrdensContramarco(
 
   let liberadas = 0
   let canceladas = 0
+  const possuiContramarco = mapeados.some(linha => linha.medicao?.contramarco === 'sim')
+  const idCardProprio = idCardContramarco(usuario.empresa_id, medicao.id)
+
+  if (possuiContramarco) {
+    const marcador = '[contramarco:' + medicao.id + ']'
+    const { data: cardJaExiste, error: erroBusca } = await supabaseAdmin
+      .from('setor_kanban_itens')
+      .select('id')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('id', idCardProprio)
+      .maybeSingle()
+    if (erroBusca) return { ok: false as const, code: 'ERRO_CARD', error: erroBusca.message }
+    if (!cardJaExiste) {
+      const { error: erroCard } = await supabaseAdmin.from('setor_kanban_itens').insert({
+        id: idCardProprio,
+        empresa_id: usuario.empresa_id,
+        titulo: 'Contramarcos — ' + String((venda as any).clientes?.nome || 'Cliente'),
+        descricao: 'Contramarcos aprovados para liberação de fabricação. Medida Final: 100%.\n' + marcador,
+        coluna_id: (colunasProducao || [])[0]?.id || null,
+        cliente_id: venda.cliente_id || null,
+        obra_id: venda.obra_id || null,
+        orcamento_id: medicao.orcamento_id,
+        criado_por_id: usuario.id,
+        criado_por_nome: usuario.nome,
+        atualizado_por_id: usuario.id,
+        atualizado_por_nome: usuario.nome,
+      })
+      if (erroCard && erroCard.code !== '23505') return { ok: false as const, code: 'ERRO_CARD', error: erroCard.message }
+    }
+  }
 
   for (const linha of mapeados) {
     const med = linha.medicao
@@ -231,11 +265,13 @@ async function sincronizarOrdensContramarco(
         largura_mm: largura,
         altura_mm: altura,
         aprovado_em: new Date().toISOString(),
+        perfil_codigo: perfilAprovadoContramarco(med),
+        perfil_produto_id: med?.campos_extras?.contramarco_perfil_produto_id || null,
       },
     }
     const payload = {
       empresa_id: usuario.empresa_id,
-      setor_card_id: cardProducao.id,
+      setor_card_id: possuiContramarco ? idCardProprio : cardProducao.id,
       cliente_id: venda.cliente_id || null,
       obra_id: venda.obra_id || null,
       venda_obra_id: venda.id,
@@ -248,9 +284,10 @@ async function sincronizarOrdensContramarco(
       quantidade: Math.max(1, numero(med?.quantidade) || numero(linha.base?.quantidade) || 1),
       largura_mm: largura,
       altura_mm: altura,
-      status: 'liberada',
-      bloqueada: false,
-      bloqueio_motivo: null,
+      status: ['CM200', 'CM060'].includes(perfilAprovadoContramarco(med)) ? 'liberada' : 'aguardando',
+      bloqueada: !['CM200', 'CM060'].includes(perfilAprovadoContramarco(med)),
+      bloqueio_motivo: ['CM200', 'CM060'].includes(perfilAprovadoContramarco(med))
+        ? null : 'Receita técnica específica do perfil ainda não validada para corte.',
       origem: 'medicao_contramarco',
       criado_por_id: usuario.id,
       criado_por_nome: usuario.nome,
@@ -273,7 +310,7 @@ async function sincronizarOrdensContramarco(
     liberadas += 1
   }
 
-  return { ok: true as const, liberadas, canceladas, cardProducaoId: cardProducao.id }
+  return { ok: true as const, liberadas, canceladas, cardProducaoId: possuiContramarco ? idCardProprio : cardProducao.id }
 }
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -386,6 +423,53 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       .maybeSingle()
 
     if (!item) return NextResponse.json({ error: 'Posicao nao encontrada nesta Medicao Final.' }, { status: 404 })
+
+    if (action === 'definir_perfil') {
+      if (medicao.tipo_medicao !== 'contramarco') {
+        return NextResponse.json({ error: 'Esta medição não é de contramarco.' }, { status: 400 })
+      }
+      const autorizado = await usuarioPodeAcaoServer({
+        usuarioId: usuario.id, role: usuario.role, empresaId: usuario.empresa_id,
+        setorId: 'medida-final-msdwtt9y', acaoId: 'producao.medida_final.aprovar', minimo: 'edicao',
+      })
+      if (!autorizado) return NextResponse.json({ error: 'Sem permissão para validar o perfil.' }, { status: 403 })
+      if (!item.medido || item.status_medicao !== 'aguardando_conferencia' || medicao.status_operacional === 'contramarco_aprovado') {
+        return NextResponse.json({ error: 'Somente posições medidas e aguardando conferência permitem alterar o perfil.' }, { status: 409 })
+      }
+      const codigo = String(body?.perfilCodigo || '').trim().toUpperCase().replace(/\s+/g, '')
+      const produtoId = String(body?.perfilProdutoId || '').trim()
+      if (!/^[A-Z0-9][A-Z0-9._-]{1,39}$/.test(codigo)) {
+        return NextResponse.json({ error: 'Código de contramarco inválido.' }, { status: 400 })
+      }
+      if (!produtoId && !['CM200','CM060'].includes(codigo)) {
+        return NextResponse.json({ error: 'Cadastre o novo contramarco com código e desenho técnico antes de selecioná-lo.' }, { status: 409 })
+      }
+      if (produtoId) {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(produtoId)) {
+          return NextResponse.json({ error: 'Identificador de perfil inválido.' }, { status: 400 })
+        }
+        const { data: perfil } = await supabaseAdmin.from('produtos')
+          .select('id,codigo,nome,foto_url,ativo,categoria')
+          .eq('id', produtoId).eq('empresa_id', usuario.empresa_id).eq('categoria', 'perfil').eq('ativo', true).maybeSingle()
+        const cod = String(perfil?.codigo || '').trim().toUpperCase().replace(/\s+/g, '')
+        const codigoEncontrado = cod || String(perfil?.nome || '').match(/CM\s*\d{2,4}/i)?.[0]?.replace(/\s/g, '').toUpperCase()
+        if (!perfil || !perfil.foto_url || codigoEncontrado !== codigo) {
+          return NextResponse.json({ error: 'Perfil não encontrado no cadastro da empresa, sem código correspondente ou sem imagem técnica.' }, { status: 409 })
+        }
+      }
+      const extras = item.campos_extras && typeof item.campos_extras === 'object' && !Array.isArray(item.campos_extras)
+        ? item.campos_extras : {}
+      const { data: salvo, error } = await supabaseAdmin.from('medicao_itens').update({
+        campos_extras: {
+          ...extras,
+          contramarco_perfil_codigo: codigo,
+          contramarco_perfil_produto_id: produtoId || '',
+        }, updated_at: new Date().toISOString(),
+      }).eq('empresa_id', usuario.empresa_id).eq('medicao_id', id).eq('id', item.id).eq('status_medicao', 'aguardando_conferencia').select('id').maybeSingle()
+      if (error) throw error
+      if (!salvo) return NextResponse.json({ error: 'A posição mudou de status durante a validação. Atualize e confira novamente.' }, { status: 409 })
+      return NextResponse.json({ ok: true, action, perfilCodigo: codigo, perfilProdutoId: produtoId })
+    }
 
     if (action === 'aprovar') {
       if (!item.medido) return NextResponse.json({ error: 'A posicao ainda nao possui medida concluida.' }, { status: 409 })

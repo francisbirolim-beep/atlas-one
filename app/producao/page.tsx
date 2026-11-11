@@ -169,12 +169,16 @@ export default function Producao() {
   }, [ordens])
 
   function medicaoDoCard(card: SetorKanbanItem | null) {
+    // Card de contramarco tem fluxo independente e não deve herdar a
+    // aprovação/pendências da Medição Final das esquadrias desta obra.
+    if (String(card?.descricao || '').includes('[contramarco:')) return null
     return vincularCardAMedicao(card, medicoes)
   }
 
   function cardsDaColuna(id: string) {
     return cards.filter(c => {
       if(c.coluna_id!==id)return false
+      if(String(c.descricao || '').includes('[contramarco:')) return true
       // Serviços avulsos, sem orçamento, preservam seu fluxo independente.
       if(!c.orcamento_id)return true
       // Uma obra só entra na fila medida por um card de Medição Final identificado.
@@ -183,7 +187,7 @@ export default function Producao() {
   }
 
   function descricaoVisivel(card: SetorKanbanItem) {
-    return String(card.descricao || '').replace(/\s*\[medicao:[^\]]+\]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
+    return String(card.descricao || '').replace(/\s*\[(?:medicao|contramarco):[^\]]+\]\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()
   }
 
   async function carregarPecasAprovadas(medicaoId: string) {
@@ -506,6 +510,7 @@ export default function Producao() {
                       <button key={card.id} draggable={pode('producao.geral.mover')} onDragStart={e => { if (pode('producao.geral.mover')) e.dataTransfer.setData('text/plain', card.id) }} onClick={() => abrirCard(card)} className="w-full rounded-lg border border-white/80 bg-white px-2.5 py-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                         <div className="flex items-start gap-1.5"><Package size={13} className="mt-0.5 shrink-0 text-brand-navy"/><div className="min-w-0 flex-1"><p className="truncate text-[12px] font-semibold leading-4 text-slate-800">{card.titulo}</p><p className="mt-0.5 truncate text-[10px] leading-4 text-slate-400">{medicao?.orcamento_numero ? `Orçamento #${medicao.orcamento_numero} · ` : ''}{ops.length} ordem(ns)</p></div></div>
                         {descricao && <p className="mt-1 line-clamp-1 text-[10px] leading-4 text-slate-500">{descricao}</p>}
+                        {String(card.descricao || '').includes('[contramarco:') && <div className="mt-1.5 rounded-lg bg-emerald-50 p-1.5 text-[10px] font-bold text-emerald-800">Contramarcos · Medida Final 100% · {ops.length} ordem(ns) de corte</div>}
                         {medicao && <div className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${medicao.status_operacional === 'aprovado' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}><Ruler size={11}/>{medicao.status_operacional === 'aprovado' ? 'Medição final liberada' : 'Medição final enviada'}</div>}
                         {bloqueadas > 0 && <div className="ml-1 mt-1.5 inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-700"><LockKeyhole size={11}/>{bloqueadas} bloqueada(s)</div>}
                         {prontas > 0 && <p className="mt-1.5 text-[9px] text-slate-400">{prontas} ordem(ns) concluída(s)</p>}
