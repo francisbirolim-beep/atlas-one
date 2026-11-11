@@ -1,11 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from 'react'
 import {
   Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   BellRing, ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
-  Download, Forward, Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
+  Download, Forward, ClipboardPaste, Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
   UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus, Camera, Square,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -24,6 +24,13 @@ import { ativarPushNesteDispositivo, statusPushNesteDispositivo } from '@/lib/no
 import { calcularIndicadoresWhatsApp } from '@/lib/whatsappIndicadores'
 import { FichaContatoWhatsApp } from '@/components/whatsapp/FichaContatoWhatsApp'
 import { GRUPOS_EMOJIS_REACAO } from '@/lib/chatEmojis'
+
+type PrintCopiado = {
+  arquivo: File
+  urlPreview: string
+  conversaId: string
+  destino: 'whatsapp' | 'interna'
+}
 
 type Usuario = { id: string; nome: string; role?: string; cargo?: string | null }
 type Canal = {
@@ -289,6 +296,8 @@ export default function WhatsAppAtendimentoPage() {
   const [novaRapidaTitulo, setNovaRapidaTitulo] = useState('')
   const [novaRapidaTexto, setNovaRapidaTexto] = useState('')
   const [enviandoMidia, setEnviandoMidia] = useState(false)
+  const [printCopiado, setPrintCopiado] = useState<PrintCopiado | null>(null)
+  const [enviandoPrintCopiado, setEnviandoPrintCopiado] = useState(false)
   const [gravando, setGravando] = useState(false)
   const [segundosGravacao, setSegundosGravacao] = useState(0)
   const fimRef = useRef<HTMLDivElement | null>(null)
@@ -308,6 +317,12 @@ export default function WhatsAppAtendimentoPage() {
   const cameraInternaInputRef = useRef<HTMLInputElement | null>(null)
   const gravadorInternoRef = useRef<MediaRecorder | null>(null)
   const partesAudioInternoRef = useRef<Blob[]>([])
+
+  // Libera a memória do print quando a prévia fecha ou é substituída.
+  useEffect(() => {
+    if (!printCopiado) return
+    return () => URL.revokeObjectURL(printCopiado.urlPreview)
+  }, [printCopiado])
 
   useEffect(() => {
     try {
@@ -599,6 +614,102 @@ export default function WhatsAppAtendimentoPage() {
     }
   }
 
+  /**
+   * Ctrl+V / Command+V no campo da conversa.
+   * Só interrompe a colagem normal quando existe uma imagem no clipboard:
+   * textos copiados continuam sendo colados no editor como antes.
+   */
+  function tratarColagemNaConversa(evento: ReactClipboardEvent<HTMLTextAreaElement>, destino: 'whatsapp' | 'interna') {
+    const imagem = Array.from(evento.clipboardData.items).find(item =>
+      item.kind === 'file' && item.type.startsWith('image/'))
+      ?.getAsFile() || Array.from(evento.clipboardData.files).find(file => file.type.startsWith('image/'))
+    if (!imagem) return
+    evento.preventDefault()
+    prepararPreviewPrint(imagem, destino)
+  }
+
+  function prepararPreviewPrint(blob: Blob, destino: 'whatsapp' | 'interna') {
+    const conversaId = destino === 'interna' ? conversaInternaAtiva?.id : ativa?.id
+    if (!conversaId) {
+      setErro('Abra a conversa de destino antes de colar o print.')
+      return
+    }
+    if (destino === 'whatsapp' && (!podeResponder || !canalPronto || gravando || enviandoMidia)) {
+      setErro('Assuma o atendimento e confirme a conexão do WhatsApp antes de colar o print.')
+      return
+    }
+    if (destino === 'interna' && (gravandoInterno || enviandoArquivoInterno)) {
+      setErro('Finalize o envio ou a gravação atual antes de colar o print.')
+      return
+    }
+    const formatos: Record<string, string> = {
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+      'image/heic': 'heic',
+    }
+    const extensao = formatos[blob.type.toLowerCase()]
+    if (!extensao) {
+      setErro('Formato de imagem não suportado. Copie o print como PNG ou JPG.')
+      return
+    }
+    if (!blob.size || blob.size > 50 * 1024 * 1024) {
+      setErro('O print está vazio ou ultrapassa o limite de 50 MB.')
+      return
+    }
+    const arquivo = new File([blob], `print-${new Date().toISOString().replace(/[:.]/g, '-')}.${extensao}`, { type: blob.type })
+    setErro('')
+    setPrintCopiado({
+      arquivo,
+      conversaId,
+      destino,
+      urlPreview: URL.createObjectURL(arquivo),
+    })
+  }
+
+  // O botão é opcional: navegadores que bloqueiam leitura do clipboard
+  // continuam permitindo a colagem convencional por Ctrl+V / Command+V.
+  async function colarPrintPeloBotao(destino: 'whatsapp' | 'interna') {
+    try {
+      if (!navigator.clipboard?.read) {
+        setErro('Neste navegador, clique no campo da mensagem e use Ctrl+V (ou ⌘+V no Mac).')
+        return
+      }
+      const itens = await navigator.clipboard.read()
+      for (const item of itens) {
+        const formato = item.types.find(tipo => ['image/png', 'image/jpeg', 'image/webp', 'image/heic'].includes(tipo))
+        if (formato) {
+          prepararPreviewPrint(await item.getType(formato), destino)
+          return
+        }
+      }
+      setErro('Nenhuma imagem encontrada na área de transferência. Copie o print primeiro.')
+    } catch {
+      setErro('O navegador bloqueou a leitura. Clique no campo da mensagem e use Ctrl+V (ou ⌘+V no Mac).')
+    }
+  }
+
+  async function confirmarEnvioPrintCopiado() {
+    if (!printCopiado || enviandoPrintCopiado) return
+    const { destino, conversaId, arquivo } = printCopiado
+    if ((destino === 'whatsapp' && (ativa?.id !== conversaId || !podeResponder || !canalPronto)) ||
+        (destino === 'interna' && conversaInternaAtiva?.id !== conversaId)) {
+      setErro('A conversa foi alterada. Cole o print novamente no destino correto.')
+      setPrintCopiado(null)
+      return
+    }
+    setEnviandoPrintCopiado(true)
+    try {
+      // Reaproveita exatamente os envios existentes e suas validações/permissões.
+      const enviado = destino === 'whatsapp'
+        ? await enviarArquivo(arquivo)
+        : await enviarArquivoInterno(arquivo)
+      if (enviado) setPrintCopiado(null)
+    } finally {
+      setEnviandoPrintCopiado(false)
+    }
+  }
+
   async function enviarInterno() {
     if (!conversaInternaAtiva || !textoInterno.trim() || enviandoInterno) return
     const corpo = textoInterno.trim()
@@ -619,14 +730,14 @@ export default function WhatsAppAtendimentoPage() {
     }
   }
 
-  async function enviarArquivoInterno(file: File) {
-    if (!conversaInternaAtiva || enviandoArquivoInterno) return
+  async function enviarArquivoInterno(file: File): Promise<boolean> {
+    if (!conversaInternaAtiva || enviandoArquivoInterno) return false
     setErro('')
     setEnviandoArquivoInterno(true)
     try {
       if (file.size > 50 * 1024 * 1024) {
         setErro('Arquivo maior que 50 MB.')
-        return
+        return false
       }
       const ext = (file.name.split('.').pop() || 'bin').replace(/[^a-zA-Z0-9]/g, '')
       const caminho = `${eu?.id || 'usuario'}/${conversaInternaAtiva.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`
@@ -635,7 +746,7 @@ export default function WhatsAppAtendimentoPage() {
         .upload(caminho, file, { contentType: file.type || undefined })
       if (uploadError) {
         setErro('Não foi possível enviar o arquivo.')
-        return
+        return false
       }
 
       const { data: url } = supabase.storage.from('chat-anexos').getPublicUrl(caminho)
@@ -645,14 +756,19 @@ export default function WhatsAppAtendimentoPage() {
       })
       if (!ok) {
         setErro('Arquivo enviado, mas não foi possível registrar a mensagem.')
-        return
+        return false
       }
 
-      const historico = await listarMensagensInternas(conversaInternaAtiva.id)
-      setMensagensInternas(historico)
-      await atualizarConversasInternas()
+      // O RPC já confirmou o envio. Falha no refresh não deve causar envio duplicado.
+      try {
+        const historico = await listarMensagensInternas(conversaInternaAtiva.id)
+        setMensagensInternas(historico)
+        await atualizarConversasInternas()
+      } catch {}
+      return true
     } catch {
       setErro('Não foi possível enviar o arquivo.')
+      return false
     } finally {
       setEnviandoArquivoInterno(false)
       if (arquivoInternoInputRef.current) arquivoInternoInputRef.current.value = ''
@@ -1596,8 +1712,8 @@ export default function WhatsAppAtendimentoPage() {
     }
   }
 
-  async function enviarArquivo(file: File, opcoes: { ptt?: boolean } = {}) {
-    if (!ativa || enviandoMidia) return
+  async function enviarArquivo(file: File, opcoes: { ptt?: boolean } = {}): Promise<boolean> {
+    if (!ativa || enviandoMidia) return false
     setErro('')
     setEnviandoMidia(true)
     try {
@@ -1644,10 +1760,14 @@ export default function WhatsAppAtendimentoPage() {
       const envio = await registrar.json()
       if (!registrar.ok) throw new Error(envio.error || 'Não foi possível enfileirar a mídia.')
 
-      await carregarMensagens(ativa.id)
+      // Após o gateway confirmar o registro, o print já foi enviado.
+      // Um refresh instável não pode induzir o usuário a reenviar a mesma imagem.
+      try { await carregarMensagens(ativa.id) } catch {}
       agendarRefreshConversas()
+      return true
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível enviar o arquivo.')
+      return false
     } finally {
       setEnviandoMidia(false)
       if (arquivoInputRef.current) arquivoInputRef.current.value = ''
@@ -2527,9 +2647,17 @@ export default function WhatsAppAtendimentoPage() {
                       className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border text-slate-600 hover:bg-slate-50 disabled:opacity-40">
                       <Camera size={18}/>
                     </button>
+                    <button type="button" disabled={enviandoArquivoInterno||gravandoInterno}
+                      onClick={()=>void colarPrintPeloBotao('interna')}
+                      aria-label="Colar print copiado na conversa interna"
+                      title="Cole um print da área de transferência (ou use Ctrl+V no campo)"
+                      className="inline-flex h-11 shrink-0 items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-40">
+                      <ClipboardPaste size={18}/><span className="hidden sm:inline">Colar print</span>
+                    </button>
                     <textarea
                       value={textoInterno}
                       onChange={e=>setTextoInterno(e.target.value)}
+                      onPaste={e=>tratarColagemNaConversa(e,'interna')}
                       onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviarInterno()}}}
                       rows={2}
                       placeholder="Mensagem interna para a equipe..."
@@ -2556,7 +2684,7 @@ export default function WhatsAppAtendimentoPage() {
                     </p>
                   )}
                   <p className="mt-2 text-center text-[10px] font-medium text-blue-500">
-                    Conversa interna — visível apenas aos participantes e ao Master.
+                    Cole um print com Ctrl+V (⌘+V no Mac), confira a prévia e envie. Conversa interna — visível apenas aos participantes e ao Master.
                   </p>
                 </div>
               </>
@@ -3059,6 +3187,12 @@ export default function WhatsAppAtendimentoPage() {
                         className="rounded-lg p-2 hover:bg-slate-100 disabled:opacity-40" title="Enviar foto, vídeo, áudio ou documento">
                         <Paperclip size={18}/>
                       </button>
+                      <button type="button" disabled={enviandoMidia||gravando||!canalPronto}
+                        onClick={()=>void colarPrintPeloBotao('whatsapp')}
+                        title="Copie o print e cole nesta conversa sem baixar"
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40">
+                        <ClipboardPaste size={18}/> Colar print
+                      </button>
                       <button type="button" onClick={()=>setEmojiComposerAberto(v=>!v)}
                         aria-label="Inserir emoji na mensagem"
                         aria-expanded={emojiComposerAberto}
@@ -3076,7 +3210,7 @@ export default function WhatsAppAtendimentoPage() {
                         title="Mensagens rápidas">
                         <Zap size={17}/> Rápidas
                       </button>
-                      <span className="ml-auto text-[10px] text-slate-400">Enter envia · Shift+Enter quebra linha</span>
+                      <span className="ml-auto text-[10px] text-slate-400">Ctrl+V cola print · Enter envia texto</span>
                     </div>
 
                     {emojiComposerAberto && (
@@ -3155,6 +3289,7 @@ export default function WhatsAppAtendimentoPage() {
                     )}
                     <div className="flex items-end gap-2">
                       <textarea value={texto} onChange={e=>setTexto(e.target.value)}
+                        onPaste={e=>tratarColagemNaConversa(e,'whatsapp')}
                         onKeyDown={e=>{
                           if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void enviar()}
                         }}
@@ -3452,6 +3587,51 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
       </div>
+
+        {printCopiado && (
+          <div className="fixed inset-0 z-[218] flex items-center justify-center bg-slate-950/75 p-3 sm:p-5"
+            role="dialog" aria-modal="true" aria-label="Prévia do print copiado"
+            onKeyDown={e=>{if(e.key==='Escape'&&!enviandoPrintCopiado)setPrintCopiado(null)}}>
+            <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Print pronto para enviar</h2>
+                  <p className="text-xs text-slate-500">A imagem foi copiada; não precisa salvar em Downloads.</p>
+                </div>
+                <button type="button" disabled={enviandoPrintCopiado}
+                  onClick={()=>setPrintCopiado(null)}
+                  className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+                  aria-label="Cancelar envio do print"><X size={18}/></button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                <div className="flex justify-center rounded-xl bg-slate-100 p-2">
+                  <img src={printCopiado.urlPreview} alt="Prévia do print colado"
+                    className="max-h-[55dvh] max-w-full rounded-lg object-contain"/>
+                </div>
+                <p className="text-sm text-slate-700">
+                  Destino: <strong>{printCopiado.destino==='interna'
+                    ? (conversaInternaAtiva?.nome || 'Conversa da equipe')
+                    : (ativa?.grupo_nome || ativa?.contato_nome || ativa?.telefone || 'Conversa do WhatsApp')}</strong>
+                </p>
+                <p className="text-xs text-slate-500">
+                  Confira a imagem e confirme o envio. Se cancelar, nenhuma mensagem será enviada.
+                </p>
+                {erro && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+              </div>
+              <div className="flex justify-end gap-2 border-t bg-slate-50 p-3">
+                <button type="button" disabled={enviandoPrintCopiado} onClick={()=>setPrintCopiado(null)}
+                  className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white disabled:opacity-40">
+                  Cancelar
+                </button>
+                <button type="button" disabled={enviandoPrintCopiado}
+                  onClick={()=>void confirmarEnvioPrintCopiado()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-40">
+                  <Send size={17}/>{enviandoPrintCopiado?'Enviando...':'Enviar print'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {imagemInternaEncaminhar && (
           <div className="fixed inset-0 z-[207] flex items-center justify-center bg-slate-950/75 p-3 sm:p-5"
