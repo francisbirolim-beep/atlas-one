@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   BellRing, ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
-  Download, Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
+  Download, Forward, Send, Settings, ShieldCheck, Smartphone, StickyNote, Tag, UserPlus, Users,
   UserRoundCheck, Plus, Zap, ChevronLeft, ChevronRight, Sparkles, X, History, Reply, SmilePlus, Camera, Square,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -144,6 +144,13 @@ type SugestaoIA = {
   created_at: string
 }
 
+// Reações de uso comum, disponíveis tanto no computador quanto no celular.
+const EMOJIS_REACAO = [
+  { titulo: 'Mais usados', itens: ['👍','❤️','😂','😮','😢','🙏','👏','✅','😍','🔥','🎉','👀'] },
+  { titulo: 'Expressões', itens: ['😀','😁','😊','🥰','😘','😎','🤔','😅','😆','😡','😔','😭'] },
+  { titulo: 'Gestos e símbolos', itens: ['👎','👌','💪','🤝','🙌','👋','🤗','💯','⭐','💚','💙','🚀'] },
+] as const
+
 function hora(valor?: string | null) {
   if (!valor) return ''
   return new Date(valor).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -179,6 +186,7 @@ export default function WhatsAppAtendimentoPage() {
   const [mensagemRespondendo, setMensagemRespondendo] = useState<Mensagem | null>(null)
   const [emojiMensagemId, setEmojiMensagemId] = useState<string | null>(null)
   const [emojiCustom, setEmojiCustom] = useState('')
+  const [reagindoMensagemId, setReagindoMensagemId] = useState<string | null>(null)
   const [emojiComposerAberto, setEmojiComposerAberto] = useState(false)
   const [sugestaoIA, setSugestaoIA] = useState<SugestaoIA | null>(null)
   const [modoIA, setModoIA] = useState<'observando' | 'sugerindo' | 'automatico'>('observando')
@@ -193,6 +201,12 @@ export default function WhatsAppAtendimentoPage() {
   const [mensagensSupervisao, setMensagensSupervisao] = useState<ChatMensagem[]>([])
   const [carregandoSupervisao, setCarregandoSupervisao] = useState(false)
   const [midiaAmpliada, setMidiaAmpliada] = useState<Mensagem | null>(null)
+  const [imagemEncaminhar, setImagemEncaminhar] = useState<{mensagem: Mensagem; origemId: string} | null>(null)
+  const [buscaEncaminhamento, setBuscaEncaminhamento] = useState('')
+  const [destinoEncaminhamentoId, setDestinoEncaminhamentoId] = useState('')
+  const [encaminhandoImagem, setEncaminhandoImagem] = useState(false)
+  const [erroEncaminhamento, setErroEncaminhamento] = useState('')
+  const [avisoEncaminhamento, setAvisoEncaminhamento] = useState('')
   const [filtro, setFiltro] = useState<'todas' | 'internas' | 'aguardando' | 'com_atendente' | 'nao_lidas' | 'minhas' | 'acompanhando' | 'transferidas' | 'finalizadas' | 'grupos'>('todas')
   const [canalFiltro, setCanalFiltro] = useState('todos')
   const [erro, setErro] = useState('')
@@ -1407,6 +1421,47 @@ export default function WhatsAppAtendimentoPage() {
     return ext ? (mapa[ext] || 'application/octet-stream') : 'application/octet-stream'
   }
 
+  function abrirEncaminhamento(m: Mensagem) {
+    if (!ativa || m.tipo !== 'imagem' || !m.media_url) return
+    setImagemEncaminhar({ mensagem: m, origemId: ativa.id })
+    setBuscaEncaminhamento('')
+    setDestinoEncaminhamentoId('')
+    setErroEncaminhamento('')
+    setAvisoEncaminhamento('')
+    setMidiaAmpliada(null)
+  }
+
+  async function confirmarEncaminhamento() {
+    if (!imagemEncaminhar || !destinoEncaminhamentoId || encaminhandoImagem) return
+    setErroEncaminhamento('')
+    setEncaminhandoImagem(true)
+    try {
+      const headers = await headersJson()
+      const resposta = await fetch('/api/integracoes/whatsapp/midia', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          acao: 'encaminhar_imagem',
+          conversaId: destinoEncaminhamentoId,
+          conversaOrigemId: imagemEncaminhar.origemId,
+          mensagemId: imagemEncaminhar.mensagem.id,
+        }),
+      })
+      const json = await resposta.json()
+      if (!resposta.ok) throw new Error(json.error || 'Não foi possível encaminhar a imagem.')
+      const destino = conversas.find(c=>c.id===destinoEncaminhamentoId)
+      setAvisoEncaminhamento('Imagem colocada na fila de envio para ' +
+        (destino?.grupo_nome || destino?.contato_nome || destino?.telefone || 'a conversa selecionada') + '.')
+      setImagemEncaminhar(null)
+      setDestinoEncaminhamentoId('')
+      agendarRefreshConversas()
+    } catch (e) {
+      setErroEncaminhamento(e instanceof Error ? e.message : 'Não foi possível encaminhar a imagem.')
+    } finally {
+      setEncaminhandoImagem(false)
+    }
+  }
+
   async function baixarAnexo(m: Mensagem) {
     if (!ativa || !m.media_url) return
     setErro('')
@@ -1587,8 +1642,9 @@ export default function WhatsAppAtendimentoPage() {
   }
 
   async function reagirMensagem(mensagemId: string, emoji: string) {
-    if (!ativa || !mensagemId || !emoji.trim()) return
+    if (!ativa || !mensagemId || !emoji.trim() || reagindoMensagemId) return
     setErro('')
+    setReagindoMensagemId(mensagemId)
     try {
       const headers = await headersJson()
       const resp = await fetch('/api/integracoes/whatsapp/mensagens', {
@@ -1609,6 +1665,8 @@ export default function WhatsAppAtendimentoPage() {
       await carregarApoio(ativa.id)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Nao foi possivel reagir.')
+    } finally {
+      setReagindoMensagemId(null)
     }
   }
 
@@ -1767,6 +1825,16 @@ export default function WhatsAppAtendimentoPage() {
     (eu?.role === 'master' || ativa.grupo_pode_delegar === true)
   )
 
+  const termoEncaminhamento = buscaEncaminhamento.toLocaleLowerCase('pt-BR').trim()
+  const numeroEncaminhamento = buscaEncaminhamento.replace(/\D/g, '')
+  const destinosEncaminhamento = conversas
+    .filter(c => c.id !== imagemEncaminhar?.origemId && c.status === 'em_atendimento' && c.responsavel_id === eu?.id)
+    .filter(c => c.whatsapp_chat_tipo !== 'grupo' || c.grupo_pode_atender === true || eu?.role === 'master')
+    .filter(c => !termoEncaminhamento ||
+      (c.grupo_nome || c.contato_nome || c.telefone || '').toLocaleLowerCase('pt-BR').includes(termoEncaminhamento) ||
+      (numeroEncaminhamento.length >= 2 && c.telefone.replace(/\D/g, '').includes(numeroEncaminhamento)))
+    .sort((a,b) => (b.ultima_mensagem_em || '').localeCompare(a.ultima_mensagem_em || ''))
+
   const cadastroNome = ativa?.contato_nome || ''
   const cadastroWhatsApp = ativa?.telefone || ''
   const cadastroConversaId = ativa?.id || ''
@@ -1868,6 +1936,10 @@ export default function WhatsAppAtendimentoPage() {
         </header>
 
         {erro && <div className="border-b bg-red-50 px-4 py-2 text-sm text-red-700">{erro}</div>}
+        {avisoEncaminhamento && <div role="status" className="flex items-center justify-between gap-2 border-b bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+          <span>{avisoEncaminhamento}</span>
+          <button type="button" onClick={()=>setAvisoEncaminhamento('')} aria-label="Fechar aviso"><X size={16}/></button>
+        </div>}
         {!carregando && canais.length === 0 && (
           <div className="border-b bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">
             Nenhum WhatsApp está conectado. Conecte um número para carregar as conversas.
@@ -2519,19 +2591,35 @@ export default function WhatsAppAtendimentoPage() {
                           )}
                         </div>
                         {emojiMensagemId===m.id && podeResponder && (
-                          <div className="mb-2 flex flex-wrap items-center gap-1 rounded-xl border bg-white p-2 shadow-sm">
-                            {['👍','✅','❤️','😂','👏','🙏','🔥','👀'].map(emoji=>(
-                              <button key={emoji} type="button" onClick={()=>void reagirMensagem(m.id,emoji)}
-                                className="grid h-8 w-8 place-items-center rounded-lg text-lg hover:bg-slate-100">
-                                {emoji}
-                              </button>
+                          <div className="mb-2 max-w-full space-y-2 rounded-xl border bg-white p-2 shadow-sm"
+                            role="group" aria-label="Escolher emoji para reagir">
+                            <p className="text-[11px] font-semibold text-slate-600">Escolha uma reação</p>
+                            {EMOJIS_REACAO.map(grupo=>(
+                              <div key={grupo.titulo}>
+                                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{grupo.titulo}</p>
+                                <div className="grid grid-cols-6 gap-1">
+                                  {grupo.itens.map(emoji=>(
+                                    <button key={emoji} type="button" disabled={Boolean(reagindoMensagemId)}
+                                      onClick={()=>void reagirMensagem(m.id,emoji)} aria-label={'Reagir com '+emoji}
+                                      className="grid h-9 w-9 max-w-full place-items-center rounded-lg text-xl hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:opacity-40">
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                             ))}
-                            <div className="flex items-center gap-1 border-l pl-2">
-                              <input value={emojiCustom} onChange={e=>setEmojiCustom(e.target.value)}
-                                onKeyDown={e=>{if(e.key==='Enter'&&emojiCustom.trim()){e.preventDefault();void reagirMensagem(m.id,emojiCustom)}}}
-                                placeholder="emoji" className="w-16 rounded-md border px-2 py-1 text-xs"/>
-                              <button type="button" disabled={!emojiCustom.trim()} onClick={()=>void reagirMensagem(m.id,emojiCustom)}
-                                className="rounded-md bg-slate-800 px-2 py-1 text-[10px] font-bold text-white disabled:opacity-30">OK</button>
+                            <div className="flex items-center gap-2 border-t pt-2">
+                              <label className="min-w-0 flex-1 text-[11px] text-slate-500">
+                                Outro emoji
+                                <input value={emojiCustom} onChange={e=>setEmojiCustom(e.target.value.slice(0,16))}
+                                  onKeyDown={e=>{if(e.key==='Enter'&&emojiCustom.trim()){e.preventDefault();void reagirMensagem(m.id,emojiCustom)}}}
+                                  placeholder="Cole um emoji" className="mt-1 w-full rounded-md border px-2 py-1.5 text-xs"/>
+                              </label>
+                              <button type="button" disabled={!emojiCustom.trim()||Boolean(reagindoMensagemId)}
+                                onClick={()=>void reagirMensagem(m.id,emojiCustom)}
+                                className="self-end rounded-md bg-slate-800 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-30">
+                                {reagindoMensagemId===m.id?'Enviando...':'Reagir'}
+                              </button>
                             </div>
                           </div>
                         )}
@@ -2575,6 +2663,13 @@ export default function WhatsAppAtendimentoPage() {
                             className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-white"
                             title="Baixar imagem no dispositivo">
                             <Download size={14}/> Baixar imagem
+                          </button>
+                        )}
+                        {m.tipo === 'imagem' && midia && (
+                          <button type="button" onClick={()=>abrirEncaminhamento(m)}
+                            className="mt-2 ml-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white/80 px-2.5 py-1.5 text-xs font-semibold text-blue-800 hover:bg-white"
+                            title="Encaminhar diretamente para outra conversa, sem baixar">
+                            <Forward size={14}/> Encaminhar
                           </button>
                         )}
                         {m.tipo === 'imagem' && !midia && texto && (
@@ -3156,6 +3251,65 @@ export default function WhatsAppAtendimentoPage() {
         )}
       </div>
 
+        {imagemEncaminhar && (
+          <div className="fixed inset-0 z-[205] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
+            role="dialog" aria-modal="true" aria-label="Encaminhar imagem"
+            onKeyDown={e=>{if(e.key==='Escape'&&!encaminhandoImagem)setImagemEncaminhar(null)}}>
+            <div className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">Encaminhar imagem</h2>
+                  <p className="text-xs text-slate-500">Direto para outra conversa, sem salvar em Downloads.</p>
+                </div>
+                <button type="button" disabled={encaminhandoImagem} onClick={()=>setImagemEncaminhar(null)}
+                  aria-label="Fechar encaminhamento" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40"><X size={18}/></button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                <div className="flex justify-center rounded-xl bg-slate-100 p-2">
+                  <img src={imagemEncaminhar.mensagem.media_url || undefined} alt="Imagem a encaminhar"
+                    className="max-h-36 max-w-full rounded-lg object-contain"/>
+                </div>
+                <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-3">
+                  <Search size={17} className="text-slate-500"/>
+                  <input autoFocus value={buscaEncaminhamento} onChange={e=>setBuscaEncaminhamento(e.target.value)}
+                    placeholder="Buscar contato, número ou grupo..."
+                    className="w-full bg-transparent py-3 text-sm text-slate-800 outline-none"/>
+                </label>
+                <p className="text-xs text-slate-500">Destinos disponíveis: conversas que estão em atendimento com você.</p>
+                <div className="max-h-56 overflow-y-auto rounded-xl border">
+                  {destinosEncaminhamento.length ? destinosEncaminhamento.map(c=>(
+                    <button key={c.id} type="button" onClick={()=>setDestinoEncaminhamentoId(c.id)}
+                      className={`flex w-full items-center gap-3 border-b px-3 py-3 text-left text-sm last:border-b-0 hover:bg-slate-50 ${destinoEncaminhamentoId===c.id?'bg-blue-50':''}`}>
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                        {c.whatsapp_chat_tipo==='grupo'?<Users size={18}/>:<MessageCircle size={18}/>}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold text-slate-900">{c.grupo_nome || c.contato_nome || telefoneFormatado(c.telefone)}</span>
+                        <span className="block truncate text-xs text-slate-500">{c.whatsapp_chat_tipo==='grupo'?'Grupo':'Contato'} · {telefoneFormatado(c.telefone)}</span>
+                      </span>
+                      <span aria-hidden="true" className={`h-4 w-4 shrink-0 rounded-full border-2 ${destinoEncaminhamentoId===c.id?'border-blue-600 bg-blue-600':'border-slate-300'}`}/>
+                    </button>
+                  )) : (
+                    <p className="p-5 text-center text-sm text-slate-500">
+                      Nenhuma conversa disponível. Abra e assuma o atendimento do destinatário antes de encaminhar.
+                    </p>
+                  )}
+                </div>
+                {erroEncaminhamento && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{erroEncaminhamento}</p>}
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t bg-slate-50 p-3">
+                <button type="button" disabled={encaminhandoImagem} onClick={()=>setImagemEncaminhar(null)}
+                  className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Cancelar</button>
+                <button type="button" disabled={!destinoEncaminhamentoId||encaminhandoImagem}
+                  onClick={()=>void confirmarEncaminhamento()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-40">
+                  <Forward size={16}/>{encaminhandoImagem?'Encaminhando...':'Encaminhar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {midiaAmpliada && (
           <div className="fixed inset-0 z-[180] flex flex-col bg-[#101820]/95 text-white"
             role="dialog" aria-modal="true" aria-label="Visualização de anexo"
@@ -3166,6 +3320,12 @@ export default function WhatsAppAtendimentoPage() {
                 <b className="block truncate text-sm">{midiaAmpliada.arquivo_nome||'Anexo do WhatsApp'}</b>
                 <p className="text-xs text-slate-400">{ativa?.contato_nome||ativa?.grupo_nome||'Conversa'} · {new Date(midiaAmpliada.created_at).toLocaleString('pt-BR')}</p>
               </div>
+              {midiaAmpliada.tipo === 'imagem' && (
+                <button type="button" onClick={()=>abrirEncaminhamento(midiaAmpliada)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold hover:bg-emerald-700">
+                  <Forward size={17}/> <span className="hidden sm:inline">Encaminhar</span>
+                </button>
+              )}
               <button type="button" onClick={()=>void baixarAnexo(midiaAmpliada)} title="Baixar arquivo"
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold hover:bg-blue-700">
                 <Download size={17}/><span className="hidden sm:inline">Baixar</span>
