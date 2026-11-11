@@ -737,7 +737,7 @@ export default function VisaoGeralProjetos(){
        </div>
       </section>
      })}
-     {podeEditarColunas&&<section ref={novaColunaRef} data-kanban-adicionar-coluna className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-blue-400/60 bg-[#102d4b] p-3 text-center">
+     {podeEditarColunas&&<section ref={novaColunaRef} data-kanban-adicionar-coluna className="flex h-[260px] self-start flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-blue-400/60 bg-[#102d4b] p-3 text-center">
       <Plus size={27} className="text-blue-300"/>
       <b className="text-xs text-white">Adicionar coluna</b>
       <input ref={novoNomeRef} value={novoNome} maxLength={70} onKeyDown={e=>{if(e.key==='Enter')criar()}} onChange={e=>setNovoNome(e.target.value)} placeholder="Nome da etapa" aria-label="Nome da nova coluna" className="w-full rounded border border-[#476382] bg-[#0b2037] px-2 py-2 text-xs text-white"/>
