@@ -11,3 +11,13 @@ export function idCardMedicaoFinal(empresaId: string, medicaoId: string): string
   const h = bytes.toString('hex')
   return [h.slice(0, 8), h.slice(8, 12), h.slice(12, 16), h.slice(16, 20), h.slice(20, 32)].join('-')
 }
+
+// Card técnico separado do card geral da obra, escopado à medição aprovada.
+// ID estável evita duplicação por cliques repetidos ou reenvio no celular.
+export function idCardContramarco(empresaId: string, medicaoId: string): string {
+  const bytes = createHash('sha256').update('atlas:producao:contramarco:' + empresaId + ':' + medicaoId).digest()
+  bytes[6] = (bytes[6] & 0x0f) | 0x80
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const h = bytes.toString('hex')
+  return [h.slice(0, 8), h.slice(8, 12), h.slice(12, 16), h.slice(16, 20), h.slice(20, 32)].join('-')
+}

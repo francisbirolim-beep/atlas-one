@@ -21,6 +21,7 @@ import { uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem, salvarFotoCampoExtraMedicao } from '@/lib/medicaoFoto'
 import { listarTipologias } from '@/lib/tipologias'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
+import { gerarPdfPlanoCorteContramarcos } from '@/lib/contramarcoPlanoCortePdf'
 import { obterRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import ContramarcoFlow from '@/components/medicao-final/ContramarcoFlow'
 const EditorLayoutA4 = dynamic(() => import('@/components/medicao-final/EditorLayoutA4'), { ssr: false })
@@ -604,6 +605,13 @@ export default function DetalheMedicaoFinal() {
             <button type="button" onClick={() => setEditorLayoutAberto(true)}
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-brand-navy hover:bg-slate-50">
               <Pencil size={16} /> Editar layout A4
+            </button>
+          )}
+          {ehContramarco && itens.some(item => item.medido && item.contramarco === 'sim') && (
+            <button type="button"
+              onClick={() => void gerarPdfPlanoCorteContramarcos(medicao, itens)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900">
+              <FileText size={16}/> Plano de Corte A4
             </button>
           )}
           {itens.length > 0 && (

@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Check, FileSpreadsheet, Loader2, LockKeyhole, Save, Search, SlidersHorizontal, Star } from 'lucide-react'
+import { ArrowLeft, Check, FileSpreadsheet, ImageOff, Loader2, LockKeyhole, Save, Search, SlidersHorizontal, Star } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
+import { carregarOrdemProducao, type OrdemProducao } from '@/lib/ordensProducao'
+import { descricaoPerfilContramarco, sugerirPerfilContramarco, type CodigoPerfilContramarco } from '@/lib/contramarcoRegrasCorte'
 import type { NivelPermissao, Produto, Usuario } from '@/lib/tipos'
 import {
   listarComponentesReceita,
@@ -70,6 +72,10 @@ export default function PlanoCortePage() {
   const [componentesPlano, setComponentesPlano] = useState<ComponentePlanoCorte[]>([])
   const [salvando, setSalvando] = useState(false)
   const [mensagem, setMensagem] = useState('')
+  const [ordemSolicitada, setOrdemSolicitada] = useState(false)
+  const [carregandoOrdem, setCarregandoOrdem] = useState(false)
+  const [ordemVinculada, setOrdemVinculada] = useState<OrdemProducao | null>(null)
+  const [erroOrdem, setErroOrdem] = useState('')
 
   const [variaveisTipologia, setVariaveisTipologia] = useState<TipologiaVariavelComVariavel[]>([])
   const [opcoesTodas, setOpcoesTodas] = useState<EngenhariaVariavelOpcao[]>([])
@@ -109,6 +115,41 @@ export default function PlanoCortePage() {
     void carregar()
   }, [])
 
+  // A OP e a Medição Final são a fonte das medidas aprovadas.
+  // Não reaplicamos as folgas: largura_mm/altura_mm da OP já são medidas de fabricação.
+  useEffect(() => {
+    const ordemId = new URLSearchParams(window.location.search).get('ordem')
+    if (!ordemId) return
+    setOrdemSolicitada(true)
+    setCarregandoOrdem(true)
+    let ativo = true
+    void carregarOrdemProducao(ordemId).then(ordem => {
+      if (!ativo) return
+      if (!ordem || ordem.tipo_producao !== 'contramarco') {
+        setErroOrdem('A ordem de contramarco informada não foi encontrada ou não está acessível.')
+      } else if (ordem.bloqueada || ['aguardando', 'cancelada', 'concluida'].includes(ordem.status)) {
+        setErroOrdem('Esta ordem não está liberada para novo plano de corte. Confira o status da Medida Final e da Produção.')
+      } else if (!(Number(ordem.largura_mm) > 0) || !(Number(ordem.altura_mm) > 0)) {
+        setErroOrdem('A ordem não tem largura e altura de fabricação válidas. Confira a medição aprovada.')
+      } else {
+        setOrdemVinculada(ordem)
+        const codigoAprovado = String(ordem.item_snapshot?.medicao_contramarco?.perfil_codigo || '').trim().replace(/\s+/g, '').toUpperCase()
+        setVariaveis(atual => ({ ...atual, contramarco: (codigoAprovado || sugerirPerfilContramarco(ordem.item_snapshot || {})).toLowerCase() }))
+        setQuantidade(String(ordem.quantidade || 1))
+        setLargura(String(ordem.largura_mm))
+        setAltura(String(ordem.altura_mm))
+        setFolgaLargura('0')
+        setFolgaAltura('0')
+      }
+      setCarregandoOrdem(false)
+    }).catch(() => {
+      if (!ativo) return
+      setErroOrdem('Não foi possível carregar a ordem de produção.')
+      setCarregandoOrdem(false)
+    })
+    return () => { ativo = false }
+  }, [])
+
   const podeEditar = nivel === 'edicao'
   const produtosFiltrados = useMemo(() => {
     const termo = nomeNormalizado(busca)
@@ -117,6 +158,18 @@ export default function PlanoCortePage() {
   }, [produtos, busca])
   const produto = produtos.find(p => p.id === produtoId) || null
   const tipologia = tipologias.find(t => t.id === tipologiaId) || null
+  const planosVisiveis = ordemVinculada ? planos.filter(plano => plano.ordem_producao_id === ordemVinculada.id) : planos
+  const larguraVinculada = ordemVinculada ? Number(ordemVinculada.largura_mm) : null
+  const alturaVinculada = ordemVinculada ? Number(ordemVinculada.altura_mm) : null
+  const quantidadeVinculada = ordemVinculada ? Math.max(1, Number(ordemVinculada.quantidade) || 1) : null
+  const codigoAprovado = String(ordemVinculada?.item_snapshot?.medicao_contramarco?.perfil_codigo || '').trim().replace(/\s+/g, '').toUpperCase()
+  const perfilContramarco: string = String(variaveis.contramarco || codigoAprovado ||
+    (ordemVinculada ? sugerirPerfilContramarco(ordemVinculada.item_snapshot || {}) : 'CM060')).trim().toUpperCase()
+  const perfilTecnico = produtosTecnicos.find(p => {
+    const codigo = nomeNormalizado(String(p.codigo || '')).replace(/[^a-z0-9]/g, '')
+    const nome = nomeNormalizado(p.nome || '').replace(/[^a-z0-9]/g, '')
+    return p.categoria === 'perfil' && (codigo === perfilContramarco.toLowerCase() || nome.includes(perfilContramarco.toLowerCase()))
+  }) || null
 
   useEffect(() => {
     if (!produto) return
@@ -193,7 +246,7 @@ export default function PlanoCortePage() {
   }
 
   async function gerarPlano() {
-    if (!podeEditar || !produto || !tipologia?.receita) return
+    if (!podeEditar || !produto || !tipologia?.receita || carregandoOrdem || (ordemSolicitada && !ordemVinculada)) return
     setSalvando(true)
     setMensagem('')
     const componentesResolvidos = componentesReceita.map(c => aplicarVarianteAoComponente(
@@ -205,14 +258,23 @@ export default function PlanoCortePage() {
       tipologia,
       receita: tipologia.receita,
       componentesReceita: componentesResolvidos,
-      largura_mm: largura ? numero(largura) : null,
-      altura_mm: altura ? numero(altura) : null,
-      quantidade: Math.max(1, numero(quantidade, 1)),
-      folga_largura_mm: numero(folgaLargura, 4),
-      folga_altura_mm: numero(folgaAltura, 4),
+      largura_mm: larguraVinculada ?? (largura ? numero(largura) : null),
+      altura_mm: alturaVinculada ?? (altura ? numero(altura) : null),
+      quantidade: quantidadeVinculada ?? Math.max(1, numero(quantidade, 1)),
+      folga_largura_mm: ordemVinculada ? 0 : numero(folgaLargura, 4),
+      folga_altura_mm: ordemVinculada ? 0 : numero(folgaAltura, 4),
       variaveis,
       observacoes: observacoes || null,
       usuario,
+      vinculo: ordemVinculada ? {
+        ordem_producao_id: ordemVinculada.id,
+        cliente_id: ordemVinculada.cliente_id,
+        obra_id: ordemVinculada.obra_id,
+        venda_obra_id: ordemVinculada.venda_obra_id,
+        orcamento_id: ordemVinculada.orcamento_id,
+        item_ref: ordemVinculada.item_ref,
+        tipo_producao: 'contramarco',
+      } : undefined,
     })
     setSalvando(false)
     if (!plano) {
@@ -226,6 +288,7 @@ export default function PlanoCortePage() {
   }
 
   async function abrirPlano(plano: PlanoCorte) {
+    if (ordemVinculada && plano.ordem_producao_id !== ordemVinculada.id) return
     setPlanoAtual(plano)
     setComponentesPlano(await carregarComponentesPlano(plano.id))
     setLargura(plano.largura_mm ? String(plano.largura_mm) : '')
@@ -241,11 +304,11 @@ export default function PlanoCortePage() {
     if (!podeEditar || !planoAtual) return
     setSalvando(true)
     const ok = await atualizarPlanoCorte(planoAtual.id, {
-      largura_mm: largura ? numero(largura) : null,
-      altura_mm: altura ? numero(altura) : null,
-      quantidade: Math.max(1, numero(quantidade, 1)),
-      folga_largura_mm: numero(folgaLargura, 4),
-      folga_altura_mm: numero(folgaAltura, 4),
+      largura_mm: ordemVinculada ? larguraVinculada : (largura ? numero(largura) : null),
+      altura_mm: ordemVinculada ? alturaVinculada : (altura ? numero(altura) : null),
+      quantidade: quantidadeVinculada ?? Math.max(1, numero(quantidade, 1)),
+      folga_largura_mm: ordemVinculada ? 0 : numero(folgaLargura, 4),
+      folga_altura_mm: ordemVinculada ? 0 : numero(folgaAltura, 4),
       variaveis,
       observacoes: observacoes || null,
     })
@@ -299,6 +362,38 @@ export default function PlanoCortePage() {
         <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${podeEditar ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{podeEditar ? 'Edição liberada' : 'Somente consulta'}</span>
       </div>
 
+      {ordemSolicitada && <section className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+        {carregandoOrdem ? 'Carregando a ordem de contramarco…' : erroOrdem ? <strong>{erroOrdem}</strong> : ordemVinculada ? <>
+          <strong>Plano vinculado à OP #{ordemVinculada.numero} — {ordemVinculada.titulo}</strong>
+          <p className="mt-1">{ordemVinculada.cliente_nome || 'Cliente'}{ordemVinculada.obra_nome ? ` · ${ordemVinculada.obra_nome}` : ''} · {larguraVinculada} × {alturaVinculada} mm · {quantidadeVinculada} un.</p>
+          <p className="mt-1 text-xs">Medidas de fabricação aprovadas: as folgas já foram descontadas na medição. Selecione o perfil e a receita técnica para montar o plano; confira as fórmulas de corte antes de fabricar.</p>
+        </> : null}
+      </section>}
+      {ordemVinculada && <section className="mb-4 rounded-xl border border-emerald-200 bg-white p-4">
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="grid h-24 w-32 shrink-0 place-items-center overflow-hidden rounded-lg border border-emerald-200 bg-slate-50">
+            {perfilTecnico?.foto_url
+              ? <img src={perfilTecnico.foto_url} alt={`Perfil ${perfilContramarco} cadastrado`} className="h-full w-full object-contain" />
+              : <span className="px-2 text-center text-xs text-slate-500">Foto técnica não cadastrada</span>}
+          </div>
+          <div className="min-w-[220px] flex-1">
+            <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Perfil sugerido para o contramarco</p>
+            <label className="mt-2 block text-sm font-semibold text-slate-900">
+              <span className="sr-only">Perfil do contramarco</span>
+              <select value={perfilContramarco} onChange={e => setVariaveis(atual => ({ ...atual, contramarco: e.target.value.toLowerCase() }))} disabled={!podeEditar || !!ordemVinculada}
+                className="w-full max-w-md rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm disabled:bg-emerald-50">
+                {perfilContramarco !== 'CM200' && perfilContramarco !== 'CM060' &&
+                  <option value={perfilContramarco}>{perfilContramarco} · Perfil aprovado</option>}
+                <option value="CM200">{descricaoPerfilContramarco('CM200')}</option>
+                <option value="CM060">{descricaoPerfilContramarco('CM060')}</option>
+              </select>
+            </label>
+            <p className="mt-2 text-xs text-slate-600">{ordemVinculada ? 'Perfil aprovado na conferência da Medida Final: alterações exigem nova validação, não podem ser feitas no Plano de Corte.' : 'Padrão: CM 200 para porta de giro, maxim-ar e basculante; CM 060 para os demais. A sugestão pode ser alterada conforme a obra.'}</p>
+            <p className="mt-1 text-xs text-slate-500">{perfilTecnico ? `Cadastro encontrado: ${perfilTecnico.nome}` : 'Ainda não foi encontrada foto técnica desse perfil no catálogo. Cadastre a imagem real antes de emitir a ficha técnica.'}</p>
+            <p className="mt-1 text-xs text-amber-700">A seleção não modifica automaticamente fórmulas de corte não validadas. Confira a receita técnica antes de liberar para fabricação.</p>
+          </div>
+        </div>
+      </section>}
       <div className="grid gap-5 xl:grid-cols-[340px_1fr]">
         <aside className="space-y-4">
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -314,7 +409,7 @@ export default function PlanoCortePage() {
             <p className="mt-2 text-xs leading-5 text-slate-500">A receita é a base de perfis, acessórios, reforços e fórmulas. O plano gerado vira um snapshot editável e não altera a receita original.</p>
           </section>
 
-          {planos.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Planos recentes</p><div className="mt-3 space-y-2">{planos.slice(0, 8).map(pl => <button key={pl.id} onClick={() => void abrirPlano(pl)} className="w-full rounded-xl border border-slate-100 p-3 text-left hover:bg-slate-50"><div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-semibold text-slate-800">{pl.nome}</p><span className="text-[10px] font-semibold uppercase text-slate-400">{pl.status}</span></div><p className="mt-1 text-xs text-slate-400">{pl.largura_mm || '-'} × {pl.altura_mm || '-'} mm · {pl.quantidade} un.</p></button>)}</div></section>}
+          {planosVisiveis.length > 0 && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Planos recentes</p><div className="mt-3 space-y-2">{planosVisiveis.slice(0, 8).map(pl => <button key={pl.id} onClick={() => void abrirPlano(pl)} className="w-full rounded-xl border border-slate-100 p-3 text-left hover:bg-slate-50"><div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-semibold text-slate-800">{pl.nome}</p><span className="text-[10px] font-semibold uppercase text-slate-400">{pl.status}</span></div><p className="mt-1 text-xs text-slate-400">{pl.largura_mm || '-'} × {pl.altura_mm || '-'} mm · {pl.quantidade} un.</p></button>)}</div></section>}
         </aside>
 
         <main className="space-y-5">
@@ -330,11 +425,11 @@ export default function PlanoCortePage() {
             </div>}
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="text-xs font-medium text-slate-600">Largura (mm)<input value={largura} onChange={e => setLargura(e.target.value)} disabled={!podeEditar} inputMode="numeric" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
-              <label className="text-xs font-medium text-slate-600">Altura (mm)<input value={altura} onChange={e => setAltura(e.target.value)} disabled={!podeEditar} inputMode="numeric" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
-              <label className="text-xs font-medium text-slate-600">Quantidade<input value={quantidade} onChange={e => setQuantidade(e.target.value)} disabled={!podeEditar} inputMode="numeric" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
-              <label className="text-xs font-medium text-slate-600">Folga largura (mm)<input value={folgaLargura} onChange={e => setFolgaLargura(e.target.value)} disabled={!podeEditar} inputMode="decimal" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
-              <label className="text-xs font-medium text-slate-600">Folga altura (mm)<input value={folgaAltura} onChange={e => setFolgaAltura(e.target.value)} disabled={!podeEditar} inputMode="decimal" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
+              <label className="text-xs font-medium text-slate-600">Largura (mm)<input value={ordemVinculada ? String(larguraVinculada) : largura} onChange={e => setLargura(e.target.value)} disabled={!podeEditar || !!ordemVinculada} inputMode="numeric" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
+              <label className="text-xs font-medium text-slate-600">Altura (mm)<input value={ordemVinculada ? String(alturaVinculada) : altura} onChange={e => setAltura(e.target.value)} disabled={!podeEditar || !!ordemVinculada} inputMode="numeric" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
+              <label className="text-xs font-medium text-slate-600">Quantidade<input value={ordemVinculada ? String(quantidadeVinculada) : quantidade} onChange={e => setQuantidade(e.target.value)} disabled={!podeEditar || !!ordemVinculada} inputMode="numeric" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
+              <label className="text-xs font-medium text-slate-600">Folga largura (mm)<input value={ordemVinculada ? '0' : folgaLargura} onChange={e => setFolgaLargura(e.target.value)} disabled={!podeEditar || !!ordemVinculada} inputMode="decimal" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
+              <label className="text-xs font-medium text-slate-600">Folga altura (mm)<input value={ordemVinculada ? '0' : folgaAltura} onChange={e => setFolgaAltura(e.target.value)} disabled={!podeEditar || !!ordemVinculada} inputMode="decimal" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50"/></label>
               {variaveisTipologia.map(vt => <label key={vt.id} className="text-xs font-medium text-slate-600">{vt.variavel.label}{vt.obrigatorio && <span className="text-red-500"> *</span>}
                 <select value={String(variaveis[vt.variavel.chave] || '')} onChange={e => alterarVariavel(vt.variavel.chave, e.target.value)} disabled={!podeEditar} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm disabled:bg-slate-50">
                   <option value="">Selecione…</option>
@@ -352,14 +447,15 @@ export default function PlanoCortePage() {
               <button onClick={() => void salvarComoPreset()} disabled={!nomePreset.trim() || salvando} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40">Salvar variáveis como preset</button>
             </div>}
 
-            <div className="mt-4 flex flex-wrap justify-end gap-2">{planoAtual && <button onClick={() => void salvarCabecalhoPlano()} disabled={!podeEditar || salvando} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-40"><Save size={16}/>Salvar variáveis</button>}<button onClick={() => void gerarPlano()} disabled={!podeEditar || salvando || !produto || !tipologia?.receita} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{salvando ? <Loader2 size={16} className="animate-spin"/> : <FileSpreadsheet size={16}/>}Gerar plano</button></div>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">{planoAtual && <button onClick={() => void salvarCabecalhoPlano()} disabled={!podeEditar || salvando} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-40"><Save size={16}/>Salvar variáveis</button>}<button onClick={() => void gerarPlano()} disabled={!podeEditar || salvando || !produto || !tipologia?.receita || carregandoOrdem || (ordemSolicitada && !ordemVinculada)} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{salvando ? <Loader2 size={16} className="animate-spin"/> : <FileSpreadsheet size={16}/>}Gerar plano</button></div>
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">4. Perfis, acessórios e cortes</p><h2 className="mt-1 font-bold text-slate-900">{planoAtual ? `Plano · ${planoAtual.nome}` : 'Aguardando geração'}</h2></div>{planoAtual && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><Check size={13}/>Snapshot editável</span>}</div>
             {!planoAtual ? <div className="mt-4 rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">Selecione produto + receita e clique em Gerar plano.</div> : componentesPlano.length === 0 ? <div className="mt-4 rounded-xl border border-dashed border-amber-200 bg-amber-50 p-5 text-sm text-amber-700">A receita selecionada não possui componentes. Cadastre os perfis e acessórios em Engenharia → Receitas técnicas.</div> : <div className="mt-4 space-y-3">{componentesPlano.map(componente => {
               const produtosCompativeis = produtosTecnicos.filter(p => componente.tipo === 'perfil' ? p.categoria === 'perfil' : componente.tipo === 'acessorio' ? p.categoria === 'acessorio' : true)
-              return <article key={componente.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{componente.tipo}</span><p className="mt-2 text-sm font-semibold text-slate-800">{componente.nome}</p></div><button onClick={() => void salvarComponente(componente)} disabled={!podeEditar || salvando} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"><Save size={13}/>Salvar</button></div>
+              const produtoVinculado = produtosTecnicos.find(p => p.id === componente.produto_id)
+              return <article key={componente.id} className="rounded-xl border border-slate-200 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div className="flex items-center gap-3"><div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50">{produtoVinculado?.foto_url ? <img src={produtoVinculado.foto_url} alt={`Foto do produto ${produtoVinculado.nome}`} className="h-full w-full object-contain"/> : <div className="flex flex-col items-center text-center text-[9px] text-slate-400"><ImageOff size={18}/><span>Sem foto</span></div>}</div><div><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{componente.tipo}</span><p className="mt-2 text-sm font-semibold text-slate-800">{componente.nome}</p>{!produtoVinculado?.foto_url && <p className="mt-1 text-[10px] text-amber-700">Cadastre a imagem deste perfil/acessório.</p>}</div></div><button onClick={() => void salvarComponente(componente)} disabled={!podeEditar || salvando} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"><Save size={13}/>Salvar</button></div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[11px] font-medium text-slate-500">Trocar perfil/acessório<select value={componente.produto_id || ''} onChange={e => trocarProdutoComponente(componente, e.target.value)} disabled={!podeEditar} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs disabled:bg-slate-50"><option value="">Manual / manter descrição</option>{produtosCompativeis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></label><label className="text-[11px] font-medium text-slate-500">Quantidade<input value={componente.quantidade} onChange={e => alterarComponente(componente.id, 'quantidade', numero(e.target.value))} disabled={!podeEditar} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs disabled:bg-slate-50"/></label><label className="text-[11px] font-medium text-slate-500">Corte final (mm)<input value={componente.corte_mm ?? ''} onChange={e => alterarComponente(componente.id, 'corte_mm', e.target.value === '' ? null : numero(e.target.value))} disabled={!podeEditar} placeholder="Preencher/ajustar" className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs disabled:bg-slate-50"/></label><label className="text-[11px] font-medium text-slate-500">Unidade<input value={componente.unidade} onChange={e => alterarComponente(componente.id, 'unidade', e.target.value)} disabled={!podeEditar} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-xs disabled:bg-slate-50"/></label></div>
               {(componente.formula_quantidade || componente.formula_corte) && <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">{componente.formula_quantidade && <p>Fórmula quantidade: <code>{componente.formula_quantidade}</code></p>}{componente.formula_corte && <p className="mt-1">Fórmula corte: <code>{componente.formula_corte}</code></p>}<p className="mt-2 text-[11px] text-amber-700">Enquanto a fórmula desta tipologia não estiver validada, o sistema não inventa o resultado: o corte final fica editável para conferência.</p></div>}
               </article>

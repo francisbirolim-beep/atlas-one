@@ -18,6 +18,10 @@ import {
 } from '@/lib/medicaoFinal'
 import { listarTipologias } from '@/lib/tipologias'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
+import { gerarPdfPlanoCorteContramarcos } from '@/lib/contramarcoPlanoCortePdf'
+import { listarProdutos } from '@/lib/produtos'
+import type { Produto } from '@/lib/tipos'
+import { perfilAprovadoContramarco, sugerirPerfilContramarco } from '@/lib/contramarcoRegrasCorte'
 import { supabase } from '@/lib/supabase'
 import { tokenAtual } from '@/lib/auth'
 
@@ -98,8 +102,59 @@ export default function ContramarcoFlow({
   const [salvandoMedida, setSalvandoMedida] = useState(false)
   const [salvandoUso, setSalvandoUso] = useState<string | null>(null)
   const [decisaoUso, setDecisaoUso] = useState<'sim' | 'nao' | ''>('')
+  const [perfisCadastrados, setPerfisCadastrados] = useState<Produto[]>([])
+  const [escolhasPerfilPendentes, setEscolhasPerfilPendentes] = useState<Record<string, string>>({})
+  const [salvandoPerfilId, setSalvandoPerfilId] = useState<string | null>(null)
+  const [carregandoPerfis, setCarregandoPerfis] = useState(false)
 
   useEffect(() => setItens(itensIniciais), [itensIniciais])
+  useEffect(() => {
+    if (usuario?.role === 'master') void atualizarCatalogoPerfis()
+  }, [usuario?.role])
+
+  async function atualizarCatalogoPerfis() {
+    setCarregandoPerfis(true)
+    try {
+      const todos = await listarProdutos(true)
+      setPerfisCadastrados(todos.filter(p => p.categoria === 'perfil' && p.ativo && p.codigo))
+    } finally { setCarregandoPerfis(false) }
+  }
+
+  function escolhaAtualDoItem(item: MedicaoItem): string {
+    const produtoId = String(item.campos_extras?.contramarco_perfil_produto_id || '')
+    return produtoId ? `produto:${produtoId}` : `padrao:${perfilAprovadoContramarco(item)}`
+  }
+
+  async function salvarPerfilDoItem(item: MedicaoItem) {
+    const escolha = escolhasPerfilPendentes[item.id]
+    if (!escolha) return
+    const produtoId = escolha.startsWith('produto:') ? escolha.slice(8) : ''
+    const produto = produtoId ? perfisCadastrados.find(p => p.id === produtoId) : null
+    if (produtoId && (!produto || !produto.foto_url)) {
+      setErroFluxo('Este perfil não tem desenho técnico cadastrado. Cadastre a imagem antes de selecioná-lo.')
+      return
+    }
+    const codigo = produto ? String(produto.codigo || '').trim().toUpperCase().replace(/\s+/g, '') : escolha.replace(/^padrao:/, '')
+    const token = await tokenAtual()
+    if (!token) return setErroFluxo('Sessão expirada. Entre novamente no Atlas.')
+    setSalvandoPerfilId(item.id)
+    setErroFluxo('')
+    try {
+      const resposta = await fetch(`/api/medicao-final/${medicao.id}/conferencia`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'definir_perfil', itemId: item.id, perfilCodigo: codigo, perfilProdutoId: produtoId }),
+      })
+      const json = await resposta.json().catch(() => ({}))
+      if (!resposta.ok || !json.ok) throw new Error(json.error || 'Não foi possível salvar a escolha do perfil.')
+      setItens(prev => prev.map(i => i.id !== item.id ? i : {
+        ...i, campos_extras: { ...(i.campos_extras || {}), contramarco_perfil_codigo: codigo, contramarco_perfil_produto_id: produtoId },
+      }))
+      setEscolhasPerfilPendentes(prev => { const novo = { ...prev }; delete novo[item.id]; return novo })
+      setMensagemFluxo(`Perfil ${codigo} registrado para ${item.ambiente || 'a posição'}.`)
+    } catch (erro: any) {
+      setErroFluxo(erro?.message || 'Não foi possível salvar o perfil.')
+    } finally { setSalvandoPerfilId(null) }
+  }
 
   useEffect(() => {
     void listarTipologias().then(setTipos)
@@ -418,7 +473,11 @@ export default function ContramarcoFlow({
   }
 
   async function aprovarContramarcos() {
-    if (!master || processandoFluxo) return
+    if (!master || processandoFluxo || salvandoPerfilId) return
+    if (Object.keys(escolhasPerfilPendentes).length > 0) {
+      setErroFluxo('Salve as escolhas de perfil antes de aprovar a medição para produção.')
+      return
+    }
     const paraAprovar = itens.filter(item => item.medido && item.status_medicao === 'aguardando_conferencia')
     if (!paraAprovar.length) return
     if (!window.confirm(`Aprovar ${paraAprovar.length} posição(ões) de contramarco e liberar as ordens de produção quando o Projeto já estiver conferido?`)) return
@@ -905,6 +964,46 @@ export default function ContramarcoFlow({
             })}
           </div>
 
+          {aguardandoConferencia && master && <section className="mt-4 rounded-2xl border border-emerald-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-black text-emerald-900">Validar perfil de cada contramarco</h3>
+                <p className="mt-1 text-xs text-slate-600">Sugestão automática CM 200 ou CM 060. Você pode trocar pelo perfil cadastrado na Esquadrifácio antes de liberar a Produção.</p>
+              </div>
+              <button type="button" onClick={() => void atualizarCatalogoPerfis()} disabled={carregandoPerfis} className="rounded-lg border px-2.5 py-2 text-xs font-semibold text-slate-600 disabled:opacity-50">{carregandoPerfis ? 'Atualizando...' : 'Atualizar perfis'}</button>
+            </div>
+            <div className="mt-3 space-y-3">{itens.filter(i => i.medido && i.contramarco === 'sim' && i.status_medicao === 'aguardando_conferencia').map(item => {
+              const escolha = escolhasPerfilPendentes[item.id] ?? escolhaAtualDoItem(item)
+              const produtoSelecionado = escolha.startsWith('produto:') ? perfisCadastrados.find(p => p.id === escolha.slice(8)) : null
+              return <div key={item.id} className="rounded-xl border border-slate-200 p-3">
+                <p className="mb-2 text-xs font-black text-slate-800">{item.ambiente || 'Sem ambiente'} · {nomeTipo(item, tipos)} · {item.producao_largura_mm} × {item.producao_altura_mm} mm</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select aria-label={`Perfil de ${item.ambiente || 'contramarco'}`} value={escolha}
+                    onChange={e => setEscolhasPerfilPendentes(prev => ({ ...prev, [item.id]: e.target.value }))}
+                    className="min-w-[190px] flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs">
+                    <option value={`padrao:${sugerirPerfilContramarco(item)}`}>{sugerirPerfilContramarco(item)} · Sugerido</option>
+                    {sugerirPerfilContramarco(item) !== 'CM200' && <option value="padrao:CM200">CM200 · Estreito</option>}
+                    {sugerirPerfilContramarco(item) !== 'CM060' && <option value="padrao:CM060">CM060 · Largo</option>}
+                    {perfisCadastrados.map(p => <option key={p.id} value={`produto:${p.id}`} disabled={!p.foto_url}>
+                      {p.codigo} · {p.nome}{!p.foto_url ? ' (sem desenho técnico)' : ''}
+                    </option>)}
+                  </select>
+                  <button type="button" onClick={() => void salvarPerfilDoItem(item)}
+                    disabled={!escolhasPerfilPendentes[item.id] || salvandoPerfilId !== null || processandoFluxo}
+                    className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">
+                    {salvandoPerfilId === item.id ? 'Salvando...' : 'Salvar perfil'}
+                  </button>
+                </div>
+                {produtoSelecionado?.foto_url && <img src={produtoSelecionado.foto_url} alt={`Desenho técnico do perfil ${produtoSelecionado.codigo}`} className="mt-2 h-20 w-28 rounded-lg border object-contain" />}
+                <p className="mt-2 text-[11px] text-slate-500">Em caso de perfil especial, confirme também a receita técnica dos descontos de corte.</p>
+              </div>
+            })}</div>
+            <Link href="/cadastro/produtos?categoria=perfil&novo=1&origem=contramarco" target="_blank" rel="noopener noreferrer"
+              className="mt-3 inline-flex rounded-lg border border-emerald-300 px-3 py-2 text-xs font-bold text-emerald-800">
+              <Plus size={14} className="mr-1" /> Cadastrar outro contramarco com código e desenho técnico
+            </Link>
+          </section>}
+
           <button
             onClick={abrirNovo}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-600 bg-white px-4 py-3 text-sm font-bold text-blue-700"
@@ -931,6 +1030,11 @@ export default function ContramarcoFlow({
             </button>
           </div>
 
+          {comContramarco > 0 && <button type="button"
+            onClick={() => void gerarPdfPlanoCorteContramarcos(medicao, itens)}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-black text-white"
+          ><FileText size={16} /> Plano de Corte A4 — {contramarcoAprovado ? 'Aprovado' : 'Prévia para conferir'}</button>}
+
           {!aguardandoConferencia && !contramarcoAprovado && (
             <button
               onClick={() => void enviarParaConferencia()}
@@ -945,7 +1049,7 @@ export default function ContramarcoFlow({
           {aguardandoConferencia && master && (
             <button
               onClick={() => void aprovarContramarcos()}
-              disabled={processandoFluxo}
+              disabled={processandoFluxo || salvandoPerfilId !== null || Object.keys(escolhasPerfilPendentes).length > 0}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3.5 text-sm font-black text-white disabled:opacity-40"
             >
               {processandoFluxo ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />}
