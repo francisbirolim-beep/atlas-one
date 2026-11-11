@@ -169,7 +169,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').eq('empresa_id', empresaId).order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,updated_at,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId).or('modo_entrada.is.null,modo_entrada.neq.wvetro_api_vinculado'),
+    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,updated_at,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId),
   ])
   for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
 
@@ -198,12 +198,18 @@ async function carregarContexto(empresaId: string) {
   const colunaFazer = colunas.find(c => norm(c.nome) === 'FAZER ORCAMENTO') || null
   const colunaFeito = colunas.find(c => norm(c.nome) === 'ORCAMENTO FEITO') || null
   const existentes = new Map<string, any>()
+  const vinculados = new Map<string, any>()
   for (const o of orcR.data || []) {
     const fluxo = obj(o.wvetro_fluxo)
     const numero = txt(fluxo?.numero, fluxo?.numero_wvetro)
-    if (numero) existentes.set(numero, o)
+    if (!numero) continue
+    if (o.modo_entrada === 'wvetro_api_vinculado') {
+      vinculados.set(numero, o)
+      continue
+    }
+    existentes.set(numero, o)
   }
-  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, colunaFazer, colunaFeito, existentes }
+  return { refs, linhas, tipologias, clientes, porDoc, porFone, porNome, coluna, colunaFazer, colunaFeito, existentes, vinculados }
 }
 
 function enderecoClienteWVetro(p: Record<string, any>) {
@@ -465,6 +471,12 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       const p = registro.payload
       const numeroW = txt(p.Nro, p.OrcamentoId, p.Orcamentoid)
       if (!numeroW) continue
+      const importadoVinculado = ctx.vinculados.get(numeroW)
+      if (importadoVinculado?.modo_entrada === 'wvetro_api_vinculado') {
+        semAlteracao += 1
+        resultados.push({ id: importadoVinculado.id, numeroWvetro: numeroW, acao: 'ja_vinculado_a_venda_atlas' })
+        continue
+      }
       const nome = nomeCliente(p)
       if (clienteAlvo && !nomesClientesCompativeis(nome, clienteAlvo.nome) && !vinculoManualValidado) {
         ignoradosClienteDivergente += 1
