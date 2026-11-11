@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { usuarioTemDelegacaoExplicitaServer } from '@/lib/acessoUsuarioServer'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -12,6 +13,14 @@ export async function GET(req:NextRequest){
 
  try{
   const modo=req.nextUrl.searchParams.get('modo')||'historico'
+  if(modo==='permissoes'){
+   const base={usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'portal-cliente'}
+   const [substituir,aprovar]=await Promise.all([
+    usuarioTemDelegacaoExplicitaServer({...base,acaoId:'clientes.portal.tipologias_substituir'}),
+    usuarioTemDelegacaoExplicitaServer({...base,acaoId:'clientes.portal.tipologias_aprovar'})
+   ])
+   return NextResponse.json({substituir,aprovar},{headers:{'Cache-Control':'private, no-store'}})
+  }
   if(modo==='catalogo'){
    const busca=String(req.nextUrl.searchParams.get('busca')||'').trim().replace(/[%_,()]/g,' ').slice(0,70)
    if(busca.length<2)return NextResponse.json({produtos:[]})
@@ -54,7 +63,6 @@ export async function GET(req:NextRequest){
 export async function POST(req:NextRequest){
  const u=await autenticarTenant(req)
  if(!u)return erro('Sessão inválida.',401)
- if(u.role!=='master')return erro('Edição técnica disponível para o Master.',403)
  const b=await req.json().catch(()=>null)
  if(!b||!uuid.test(b.vendaId||'')||!uuid.test(b.pacoteId||'')||
     typeof b.itemRef!=='string'||!b.itemRef.trim()||b.itemRef.length>150||
@@ -62,12 +70,37 @@ export async function POST(req:NextRequest){
     (b.acao!=='incluir'&&!uuid.test(b.materialId||''))||
     typeof b.justificativa!=='string'||b.justificativa.trim().length<5||b.justificativa.length>1000)
     return erro('Informe a tipologia, a ação e a justificativa (mínimo 5 caracteres).')
+ if(u.role!=='master'){
+  if(b.acao!=='substituir')return erro('Esta operação técnica exige autorização Master.',403)
+  try{
+   const permitido=await usuarioTemDelegacaoExplicitaServer({
+    usuarioId:u.id,role:u.role,empresaId:u.empresa_id,
+    setorId:'portal-cliente',acaoId:'clientes.portal.tipologias_substituir'
+   })
+   if(!permitido)return erro('Substituição de perfis não autorizada para este usuário.',403)
+  }catch{return erro('Não foi possível verificar a autorização técnica.',503)}
+ }
  const novo=b.novo||{}
  if(b.acao!=='excluir'&&(!tipos.includes(novo.categoria)||typeof novo.descricao!=='string'||
    !novo.descricao.trim()||!Number.isFinite(Number(novo.quantidade_ajustada))||
    Number(novo.quantidade_ajustada)<=0||Number(novo.quantidade_ajustada)>1000000||
    (novo.produto_id&&!uuid.test(novo.produto_id))))
    return erro('Selecione um material, categoria e quantidade positiva.')
+ if(u.role!=='master'){
+  if(!['perfil','contramarco'].includes(novo.categoria))return erro('Esta autorização permite substituir somente perfis e contramarcos.',403)
+  const {data:original,error:erroOriginal}=await supabaseAdmin.from('pacote_tecnico_materiais')
+   .select('categoria').eq('empresa_id',u.empresa_id).eq('pacote_id',b.pacoteId)
+   .eq('item_ref',b.itemRef).eq('id',b.materialId).eq('excluido',false).maybeSingle()
+  if(erroOriginal)return erro('Não foi possível conferir o material original.',503)
+  if(!original||!['perfil','contramarco'].includes(original.categoria))return erro('Somente perfis ativos desta tipologia podem ser substituídos.',403)
+  if(!uuid.test(novo.produto_id||''))return erro('Escolha o perfil substituto no catálogo.',403)
+  const {data:substituto,error:erroSubstituto}=await supabaseAdmin.from('produtos')
+   .select('categoria,foto_url').eq('id',novo.produto_id).eq('empresa_id',u.empresa_id)
+   .eq('ativo',true).maybeSingle()
+  if(erroSubstituto)return erro('Não foi possível conferir o substituto.',503)
+  if(!substituto||!['perfil','contramarco'].includes(substituto.categoria)||!substituto.foto_url)
+   return erro('Selecione um perfil ativo com imagem técnica no catálogo.',403)
+ }
  try{
   const {data,error}=await supabaseAdmin.rpc('fn_venda_tipologia_material_editar_v1',{
    p_empresa:u.empresa_id,p_venda:b.vendaId,p_pacote:b.pacoteId,
