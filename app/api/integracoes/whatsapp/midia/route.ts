@@ -3,6 +3,7 @@ import { autenticarTenant } from '@/lib/tenantServer'
 import {
   assinarDownloadMidiaAtendimento,
   enviarMidiaWhatsApp,
+  encaminharImagemWhatsApp,
   prepararUploadMidiaAtendimento,
 } from '@/lib/whatsappServer'
 
@@ -39,6 +40,16 @@ export async function POST(req: NextRequest) {
 
     if (!conversaId) {
       return NextResponse.json({ error: 'Conversa nao informada.' }, { status: 400 })
+    }
+
+    if (acao === 'encaminhar_imagem') {
+      const resultado = await encaminharImagemWhatsApp(
+        String(body.conversaOrigemId || ''),
+        String(body.mensagemId || ''),
+        conversaId,
+        usuario,
+      )
+      return NextResponse.json({ ok: true, ...resultado })
     }
 
     if (acao === 'preparar') {
