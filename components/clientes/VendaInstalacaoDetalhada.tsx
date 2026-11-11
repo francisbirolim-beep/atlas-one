@@ -73,7 +73,8 @@ export default function VendaInstalacaoDetalhada({
       supabase.from('ordens_producao').select('id,item_ref,tipo_producao,status,bloqueada,quantidade,quantidade_produzida').eq('venda_obra_id',vendaId),
     ])
     if(ir.error||pr.error){setErro('Instalação indisponível: '+(ir.error?.message||pr.error?.message));setCarregando(false);return}
-    setLista((ir.data||[]) as InstalacaoItem[])
+    const refsEmEscopo=new Set((Array.isArray(itens)?itens:[]).map((item,idx)=>refItem(item,idx)))
+    setLista(((ir.data||[]) as InstalacaoItem[]).filter(registro=>refsEmEscopo.size===0||refsEmEscopo.has(registro.item_ref)))
     setOrdens((pr.data||[]) as OrdemParaInstalacao[])
     setDocs((dr.data||[]) as Doc[])
     setCarregando(false)
