@@ -25,6 +25,8 @@ export const ACOES_CMV_DELEGACAO_EXPLICITA = [
  'comercial.orcamento.corrigir_data_venda',
  'compras.geral.corrigir_imagem_produto',
  'compras.geral.inativar_produto',
+ 'clientes.portal.tipologias_substituir',
+ 'clientes.portal.tipologias_aprovar',
 ] as const
 const DELEGACOES_EXPLICITAS = new Set<string>(ACOES_CMV_DELEGACAO_EXPLICITA)
 export function fallbackAcaoPermissao(id:string,setor:NivelPermissao):NivelPermissao {
@@ -189,6 +191,8 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('clientes.portal.financeiro','Consultar financeiro','Ver posição financeira do cliente.'),
     a('clientes.portal.documentos','Consultar documentos','Ver documentos disponíveis no portal.'),
     a('clientes.portal.editar','Editar cadastro','Alterar dados do cliente.'),
+    a('clientes.portal.tipologias_substituir','Substituir perfis na tipologia','Substituir perfis e contramarcos com histórico, sem alterar catálogo ou orçamento original.'),
+    a('clientes.portal.tipologias_aprovar','Confirmar / Aprovar tipologia','Validar manualmente a composição técnica de uma tipologia, sem liberar produção ou compras.'),
     a('clientes.portal.excluir_venda','Excluir venda incorreta','Permitir exclusão lógica auditada de venda lançada por engano, com justificativa obrigatória. Não exclui vendas com pagamentos ou movimentação operacional.'),
   ]),
   m('kanban-obra','portal-cliente','Kanban individual por obra','Acompanhar cada venda e gerenciar cartões manuais auditados.','clientes',[
