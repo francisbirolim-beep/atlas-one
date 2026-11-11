@@ -218,6 +218,11 @@ export default function WhatsAppAtendimentoPage() {
   const [carregandoSupervisao, setCarregandoSupervisao] = useState(false)
   const [midiaAmpliada, setMidiaAmpliada] = useState<Mensagem | null>(null)
   const [imagemEncaminhar, setImagemEncaminhar] = useState<{mensagem: Mensagem; origemId: string} | null>(null)
+  const [imagemInternaEncaminhar, setImagemInternaEncaminhar] = useState<{mensagem: ChatMensagem; origemId: string} | null>(null)
+  const [buscaEncaminhamentoInterno, setBuscaEncaminhamentoInterno] = useState('')
+  const [destinoEncaminhamentoInterno, setDestinoEncaminhamentoInterno] = useState('')
+  const [encaminhandoInterno, setEncaminhandoInterno] = useState(false)
+  const [erroEncaminhamentoInterno, setErroEncaminhamentoInterno] = useState('')
   const [buscaEncaminhamento, setBuscaEncaminhamento] = useState('')
   const [destinoEncaminhamentoId, setDestinoEncaminhamentoId] = useState('')
   const [encaminhandoImagem, setEncaminhandoImagem] = useState(false)
@@ -539,6 +544,58 @@ export default function WhatsAppAtendimentoPage() {
     if (eu?.id) {
       setConversasInternas(lista=>lista.map(item=>item.id===conversa.id?{...item,nao_lidas:0}:item))
       void marcarConversaComoLida(conversa.id,eu.id).then(()=>atualizarConversasInternas(eu.id))
+    }
+  }
+
+  function abrirCompartilhamentoInterno(mensagem: ChatMensagem) {
+    if (!conversaInternaAtiva || !mensagem.anexo_url || !/\.(jpg|jpeg|png|webp|heic)$/i.test(mensagem.anexo_nome || '')) return
+    setImagemInternaEncaminhar({ mensagem, origemId: conversaInternaAtiva.id })
+    setBuscaEncaminhamentoInterno('')
+    setDestinoEncaminhamentoInterno('')
+    setErroEncaminhamentoInterno('')
+  }
+
+  async function confirmarCompartilhamentoInterno() {
+    if (!imagemInternaEncaminhar || !destinoEncaminhamentoInterno || encaminhandoInterno) return
+    setEncaminhandoInterno(true)
+    setErroEncaminhamentoInterno('')
+    try {
+      let conversaDestinoId = ''
+      let nomeDestino = ''
+      if (destinoEncaminhamentoInterno.startsWith('conversa:')) {
+        conversaDestinoId = destinoEncaminhamentoInterno.slice('conversa:'.length)
+        nomeDestino = conversasInternas.find(c => c.id === conversaDestinoId)?.nome || 'a conversa'
+      } else if (destinoEncaminhamentoInterno.startsWith('usuario:')) {
+        const usuarioId = destinoEncaminhamentoInterno.slice('usuario:'.length)
+        const destinatario = usuarios.find(u => u.id === usuarioId)
+        if (!destinatario) throw new Error('O usuário selecionado não está disponível.')
+        const nova = await criarConversaInterna(destinatario.nome, 'direta', [{ id: destinatario.id, nome: destinatario.nome }])
+        if (!nova?.id) throw new Error('Não foi possível criar a conversa com este usuário.')
+        conversaDestinoId = nova.id
+        nomeDestino = destinatario.nome
+      } else {
+        throw new Error('Escolha uma conversa ou pessoa.')
+      }
+
+      const headers = await headersJson()
+      const resposta = await fetch('/api/comunicacao/chat/encaminhar-imagem', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          conversaOrigemId: imagemInternaEncaminhar.origemId,
+          conversaDestinoId,
+          mensagemId: imagemInternaEncaminhar.mensagem.id,
+        }),
+      })
+      const json = await resposta.json()
+      if (!resposta.ok) throw new Error(json.error || 'Não foi possível compartilhar a imagem.')
+      setImagemInternaEncaminhar(null)
+      setAvisoEncaminhamento('Imagem encaminhada para ' + nomeDestino + ' na Equipe interna.')
+      await atualizarConversasInternas()
+    } catch (error) {
+      setErroEncaminhamentoInterno(error instanceof Error ? error.message : 'Não foi possível encaminhar a imagem.')
+    } finally {
+      setEncaminhandoInterno(false)
     }
   }
 
@@ -1915,6 +1972,15 @@ export default function WhatsAppAtendimentoPage() {
       (numeroEncaminhamento.length >= 2 && c.telefone.replace(/\D/g, '').includes(numeroEncaminhamento)))
     .sort((a,b) => (b.ultima_mensagem_em || '').localeCompare(a.ultima_mensagem_em || ''))
 
+  const termoBuscaEncaminhamentoInterno = buscaEncaminhamentoInterno.trim().toLocaleLowerCase('pt-BR')
+  const conversasParaEncaminharInterno = conversasInternas.filter(c =>
+    c.id !== imagemInternaEncaminhar?.origemId &&
+    (!termoBuscaEncaminhamentoInterno || (c.nome || '').toLocaleLowerCase('pt-BR').includes(termoBuscaEncaminhamentoInterno))
+  )
+  const pessoasParaEncaminharInterno = usuarios
+    .filter(u => u.id !== eu?.id)
+    .filter(u => !termoBuscaEncaminhamentoInterno || u.nome.toLocaleLowerCase('pt-BR').includes(termoBuscaEncaminhamentoInterno))
+
   const cadastroNome = ativa?.contato_nome || ''
   const cadastroWhatsApp = ativa?.telefone || ''
   const cadastroConversaId = ativa?.id || ''
@@ -2393,6 +2459,7 @@ export default function WhatsAppAtendimentoPage() {
                               </div>
                             )}
                             <div className={`mt-2 flex items-center justify-between gap-2 ${minha?'text-blue-100':'text-slate-500'}`}>
+                              <div className="flex flex-wrap items-center gap-1">
                               <button type="button"
                                 onClick={()=>setReacaoInternaMensagemId(id=>id===m.id?null:m.id)}
                                 disabled={Boolean(reagindoInternoId)}
@@ -2401,6 +2468,16 @@ export default function WhatsAppAtendimentoPage() {
                                 className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold hover:bg-black/10 disabled:opacity-40`}>
                                 <SmilePlus size={15}/> Reagir
                               </button>
+                              {m.anexo_url && /\.(jpg|jpeg|png|webp|heic)$/i.test(m.anexo_nome || '') && (
+                                <button type="button"
+                                  onClick={()=>abrirCompartilhamentoInterno(m)}
+                                  title="Encaminhar foto ou print para outra conversa, sem baixar"
+                                  aria-label="Compartilhar foto ou print"
+                                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold hover:bg-black/10">
+                                  <Forward size={15}/> Compartilhar
+                                </button>
+                              )}
+                              </div>
                               <span className="text-[10px]">{hora(m.created_at)}</span>
                             </div>
                             {reacaoInternaMensagemId === m.id && (
@@ -3375,6 +3452,84 @@ export default function WhatsAppAtendimentoPage() {
           </div>
         )}
       </div>
+
+        {imagemInternaEncaminhar && (
+          <div className="fixed inset-0 z-[207] flex items-center justify-center bg-slate-950/75 p-3 sm:p-5"
+            role="dialog" aria-modal="true" aria-label="Compartilhar foto na equipe interna"
+            onKeyDown={e=>{if(e.key==='Escape'&&!encaminhandoInterno)setImagemInternaEncaminhar(null)}}>
+            <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold text-slate-900">Compartilhar foto ou print</h2>
+                  <p className="text-xs text-slate-500">Envie diretamente para outra conversa da Equipe interna.</p>
+                </div>
+                <button type="button" disabled={encaminhandoInterno} onClick={()=>setImagemInternaEncaminhar(null)}
+                  className="rounded-lg p-2 text-slate-700 hover:bg-slate-100 disabled:opacity-40" aria-label="Fechar compartilhamento">
+                  <X size={19}/>
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                <div className="flex justify-center rounded-xl bg-slate-100 p-2">
+                  <img src={imagemInternaEncaminhar.mensagem.anexo_url || undefined}
+                    alt={imagemInternaEncaminhar.mensagem.anexo_nome || 'Imagem selecionada'}
+                    className="max-h-36 max-w-full rounded-lg object-contain"/>
+                </div>
+                <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-3">
+                  <Search size={17} className="text-slate-500"/>
+                  <input autoFocus value={buscaEncaminhamentoInterno}
+                    onChange={e=>setBuscaEncaminhamentoInterno(e.target.value)}
+                    placeholder="Pesquisar conversa ou colaborador..."
+                    className="w-full bg-transparent py-3 text-sm text-slate-800 outline-none"/>
+                </label>
+                <div className="max-h-56 overflow-y-auto rounded-xl border">
+                  {conversasParaEncaminharInterno.length > 0 && (
+                    <p className="border-b bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Conversas internas</p>
+                  )}
+                  {conversasParaEncaminharInterno.map(c=>(
+                    <button key={'c:'+c.id} type="button"
+                      disabled={encaminhandoInterno}
+                      onClick={()=>setDestinoEncaminhamentoInterno('conversa:'+c.id)}
+                      className={`flex w-full items-center gap-2 border-b px-3 py-2.5 text-left hover:bg-blue-50 disabled:opacity-50 ${destinoEncaminhamentoInterno==='conversa:'+c.id?'bg-blue-50':''}`}>
+                      <MessageCircle size={17} className="shrink-0 text-slate-500"/>
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{c.nome || 'Conversa interna'}</span>
+                      {destinoEncaminhamentoInterno==='conversa:'+c.id && <CheckCircle2 size={18} className="text-blue-600"/>}
+                    </button>
+                  ))}
+                  {pessoasParaEncaminharInterno.length > 0 && (
+                    <p className="border-b bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Colaboradores</p>
+                  )}
+                  {pessoasParaEncaminharInterno.map(u=>(
+                    <button key={'u:'+u.id} type="button"
+                      disabled={encaminhandoInterno}
+                      onClick={()=>setDestinoEncaminhamentoInterno('usuario:'+u.id)}
+                      className={`flex w-full items-center gap-2 border-b px-3 py-2.5 text-left hover:bg-blue-50 disabled:opacity-50 ${destinoEncaminhamentoInterno==='usuario:'+u.id?'bg-blue-50':''}`}>
+                      <Users size={17} className="shrink-0 text-slate-500"/>
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{u.nome}</span>
+                      {destinoEncaminhamentoInterno==='usuario:'+u.id && <CheckCircle2 size={18} className="text-blue-600"/>}
+                    </button>
+                  ))}
+                  {!conversasParaEncaminharInterno.length && !pessoasParaEncaminharInterno.length && (
+                    <p className="p-5 text-center text-sm text-slate-500">Nenhum destinatário encontrado.</p>
+                  )}
+                </div>
+                {erroEncaminhamentoInterno && (
+                  <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{erroEncaminhamentoInterno}</p>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t bg-slate-50 px-4 py-3">
+                <button type="button" disabled={encaminhandoInterno} onClick={()=>setImagemInternaEncaminhar(null)}
+                  className="rounded-lg border px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">
+                  Cancelar
+                </button>
+                <button type="button" disabled={!destinoEncaminhamentoInterno||encaminhandoInterno}
+                  onClick={()=>void confirmarCompartilhamentoInterno()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+                  <Forward size={16}/>{encaminhandoInterno?'Enviando...':'Compartilhar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {imagemEncaminhar && (
           <div className="fixed inset-0 z-[205] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
