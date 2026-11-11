@@ -297,11 +297,23 @@ export async function gerarPdfPlanoCorteContramarcos(
     } catch {
       doc.text(['Receita técnica', 'pendente de conferência'], xl[6] + 1.4, pos + 14)
     }
+    // Ícones técnicos compactos, preservando o mesmo significado da prévia aprovada.
+    const xConexao = xl[7] + 3.2
+    doc.setDrawColor(...GREEN)
+    doc.setLineWidth(1.05)
+    doc.line(xConexao, pos + 13, xConexao, pos + 19)
+    doc.line(xConexao, pos + 13, xConexao + 4.5, pos + 13)
+    const xGrapa = xl[8] + 2.5
+    doc.setDrawColor(...GRAY)
+    doc.setLineWidth(0.8)
+    doc.line(xGrapa, pos + 18, xGrapa + 6, pos + 15)
+    doc.line(xGrapa + 6, pos + 15, xGrapa + 6, pos + 12)
+    doc.circle(xGrapa + 3, pos + 16, 0.4, 'S')
     cor(doc, GREEN)
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.text(conex, xl[7] + colunas[7] / 2, pos + 20, { align: 'center' })
-    doc.text(grapas, xl[8] + colunas[8] / 2, pos + 20, { align: 'center' })
+    doc.setFontSize(7.7)
+    doc.text(conex, xl[7] + colunas[7] / 2, pos + 28, { align: 'center' })
+    doc.text(grapas, xl[8] + colunas[8] / 2, pos + 28, { align: 'center' })
     y += alturaLinha
   })
 

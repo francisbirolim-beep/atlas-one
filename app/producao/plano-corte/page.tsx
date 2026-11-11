@@ -133,7 +133,8 @@ export default function PlanoCortePage() {
         setErroOrdem('A ordem não tem largura e altura de fabricação válidas. Confira a medição aprovada.')
       } else {
         setOrdemVinculada(ordem)
-        setVariaveis(atual => ({ ...atual, contramarco: sugerirPerfilContramarco(ordem.item_snapshot || {}).toLowerCase() }))
+        const codigoAprovado = String(ordem.item_snapshot?.medicao_contramarco?.perfil_codigo || '').trim().replace(/\s+/g, '').toUpperCase()
+        setVariaveis(atual => ({ ...atual, contramarco: (codigoAprovado || sugerirPerfilContramarco(ordem.item_snapshot || {})).toLowerCase() }))
         setQuantidade(String(ordem.quantidade || 1))
         setLargura(String(ordem.largura_mm))
         setAltura(String(ordem.altura_mm))
@@ -161,9 +162,9 @@ export default function PlanoCortePage() {
   const larguraVinculada = ordemVinculada ? Number(ordemVinculada.largura_mm) : null
   const alturaVinculada = ordemVinculada ? Number(ordemVinculada.altura_mm) : null
   const quantidadeVinculada = ordemVinculada ? Math.max(1, Number(ordemVinculada.quantidade) || 1) : null
-  const perfilContramarco: CodigoPerfilContramarco = variaveis.contramarco === 'cm200' || variaveis.contramarco === 'cm060'
-    ? variaveis.contramarco.toUpperCase() as CodigoPerfilContramarco
-    : ordemVinculada ? sugerirPerfilContramarco(ordemVinculada.item_snapshot || {}) : 'CM060'
+  const codigoAprovado = String(ordemVinculada?.item_snapshot?.medicao_contramarco?.perfil_codigo || '').trim().replace(/\s+/g, '').toUpperCase()
+  const perfilContramarco: string = String(variaveis.contramarco || codigoAprovado ||
+    (ordemVinculada ? sugerirPerfilContramarco(ordemVinculada.item_snapshot || {}) : 'CM060')).trim().toUpperCase()
   const perfilTecnico = produtosTecnicos.find(p => {
     const codigo = nomeNormalizado(String(p.codigo || '')).replace(/[^a-z0-9]/g, '')
     const nome = nomeNormalizado(p.nome || '').replace(/[^a-z0-9]/g, '')
@@ -379,13 +380,15 @@ export default function PlanoCortePage() {
             <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Perfil sugerido para o contramarco</p>
             <label className="mt-2 block text-sm font-semibold text-slate-900">
               <span className="sr-only">Perfil do contramarco</span>
-              <select value={perfilContramarco} onChange={e => setVariaveis(atual => ({ ...atual, contramarco: e.target.value.toLowerCase() }))} disabled={!podeEditar}
-                className="w-full max-w-md rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm">
+              <select value={perfilContramarco} onChange={e => setVariaveis(atual => ({ ...atual, contramarco: e.target.value.toLowerCase() }))} disabled={!podeEditar || !!ordemVinculada}
+                className="w-full max-w-md rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm disabled:bg-emerald-50">
+                {perfilContramarco !== 'CM200' && perfilContramarco !== 'CM060' &&
+                  <option value={perfilContramarco}>{perfilContramarco} · Perfil aprovado</option>}
                 <option value="CM200">{descricaoPerfilContramarco('CM200')}</option>
                 <option value="CM060">{descricaoPerfilContramarco('CM060')}</option>
               </select>
             </label>
-            <p className="mt-2 text-xs text-slate-600">Padrão: CM 200 para porta de giro, maxim-ar e basculante; CM 060 para os demais. A escolha pode ser alterada conforme a obra e fica salva nas variáveis do plano.</p>
+            <p className="mt-2 text-xs text-slate-600">{ordemVinculada ? 'Perfil aprovado na conferência da Medida Final: alterações exigem nova validação, não podem ser feitas no Plano de Corte.' : 'Padrão: CM 200 para porta de giro, maxim-ar e basculante; CM 060 para os demais. A sugestão pode ser alterada conforme a obra.'}</p>
             <p className="mt-1 text-xs text-slate-500">{perfilTecnico ? `Cadastro encontrado: ${perfilTecnico.nome}` : 'Ainda não foi encontrada foto técnica desse perfil no catálogo. Cadastre a imagem real antes de emitir a ficha técnica.'}</p>
             <p className="mt-1 text-xs text-amber-700">A seleção não modifica automaticamente fórmulas de corte não validadas. Confira a receita técnica antes de liberar para fabricação.</p>
           </div>
