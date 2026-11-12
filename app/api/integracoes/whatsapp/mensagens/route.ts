@@ -20,11 +20,26 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const mensagens = await listarMensagensAtendimento(conversaId, usuario)
-    if (!mensagens) {
+    const antesRaw = req.nextUrl.searchParams.get('antes') || ''
+    let antes: { createdAt: string; id: string } | null = null
+    if (antesRaw) {
+      const partes = antesRaw.split('|')
+      const [createdAt, id] = partes
+      if (
+        partes.length !== 2 ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(createdAt) ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ||
+        !Number.isFinite(Date.parse(createdAt))
+      ) {
+        return NextResponse.json({ error: 'Cursor de historico invalido.' }, { status: 400 })
+      }
+      antes = { createdAt, id }
+    }
+    const resultado = await listarMensagensAtendimento(conversaId, usuario, antes)
+    if (!resultado) {
       return NextResponse.json({ error: 'Conversa nao disponivel.' }, { status: 403 })
     }
-    return NextResponse.json({ ok: true, mensagens })
+    return NextResponse.json({ ok: true, ...resultado })
   } catch (error) {
     console.error('Erro ao listar mensagens WhatsApp:', error)
     return NextResponse.json(

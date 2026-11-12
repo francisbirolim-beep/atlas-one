@@ -1914,17 +1914,31 @@ async function idsHistoricoConversa(conversa: AtendimentoConversa) {
   return ids
 }
 
-export async function listarMensagensAtendimento(conversaId: string, usuario: UsuarioTenant) {
+export async function listarMensagensAtendimento(
+  conversaId: string,
+  usuario: UsuarioTenant,
+  antes?: { createdAt: string; id: string } | null,
+) {
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) return null
   const conversaIds = await idsHistoricoConversa(conversa)
-  const { data, error } = await supabaseAdmin.from('atendimento_mensagens')
+  // A API do banco limita respostas a 1000 linhas. Consultar em ordem crescente
+  // prendia grupos grandes em 19/10 mesmo com mensagens novas em novembro.
+  const PAGE_SIZE = 250
+  let query = supabaseAdmin.from('atendimento_mensagens')
     .select('id,conversa_id,sessao_id,direcao,tipo,texto,media_url,media_id,mime_type,payload,whatsapp_message_id,usuario_id,usuario_nome,created_at')
     .in('conversa_id', conversaIds.length ? conversaIds : [conversaId])
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(PAGE_SIZE + 1)
+  if (antes) {
+    query = query.or(`created_at.lt.${antes.createdAt},and(created_at.eq.${antes.createdAt},id.lt.${antes.id})`)
+  }
+  const { data, error } = await query
   if (error) throw error
-
-  const mensagens = ((data || []) as any[])
+  const temAnteriores = (data || []).length > PAGE_SIZE
+  const mensagens = ((data || []).slice(0, PAGE_SIZE) as any[])
+    .reverse()
     .filter(m => !ehStatusOuBroadcastPayload(m.payload))
   const caminhos = [...new Set(
     mensagens
@@ -1942,15 +1956,18 @@ export async function listarMensagensAtendimento(conversaId: string, usuario: Us
     }
   }
 
-  return mensagens.map(m => ({
-    ...m,
-    media_url: m.media_url
-      ? (/^https?:\/\//i.test(m.media_url) ? m.media_url : assinadas.get(m.media_url) || null)
-      : null,
-    arquivo_nome: m.payload && typeof m.payload === 'object'
-      ? String((m.payload as any).fileName || '') || null
-      : null,
-  })) as AtendimentoMensagem[]
+  return {
+    mensagens: mensagens.map(m => ({
+      ...m,
+      media_url: m.media_url
+        ? (/^https?:\/\//i.test(m.media_url) ? m.media_url : assinadas.get(m.media_url) || null)
+        : null,
+      arquivo_nome: m.payload && typeof m.payload === 'object'
+        ? String((m.payload as any).fileName || '') || null
+        : null,
+    })) as AtendimentoMensagem[],
+    temAnteriores,
+  }
 }
 
 /**

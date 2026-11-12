@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from 'react'
 import {
   Archive, ArrowLeft, Ban, BriefcaseBusiness, Building2, CalendarDays, CheckCircle2, Clock3,
   BellRing, ExternalLink, Eye, EyeOff, Info, MapPin, MessageCircle, Mic, Paperclip, Search,
@@ -205,6 +205,8 @@ export default function WhatsAppAtendimentoPage() {
   const [acessos, setAcessos] = useState<AcessoCanal[]>([])
   const [ativa, setAtiva] = useState<Conversa | null>(null)
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
+  const [temMensagensAnteriores, setTemMensagensAnteriores] = useState(false)
+  const [carregandoMensagensAnteriores, setCarregandoMensagensAnteriores] = useState(false)
   const [texto, setTexto] = useState('')
   const [mensagemRespondendo, setMensagemRespondendo] = useState<Mensagem | null>(null)
   const [emojiMensagemId, setEmojiMensagemId] = useState<string | null>(null)
@@ -301,6 +303,9 @@ export default function WhatsAppAtendimentoPage() {
   const [gravando, setGravando] = useState(false)
   const [segundosGravacao, setSegundosGravacao] = useState(0)
   const fimRef = useRef<HTMLDivElement | null>(null)
+  const listaMensagensRef = useRef<HTMLDivElement | null>(null)
+  const scrollHistoricoAntesRef = useRef<{ altura: number; topo: number } | null>(null)
+  const historicoExpandidoRef = useRef(false)
   const arquivoInputRef = useRef<HTMLInputElement | null>(null)
   const gravadorRef = useRef<MediaRecorder | null>(null)
   const partesAudioRef = useRef<Blob[]>([])
@@ -473,6 +478,9 @@ export default function WhatsAppAtendimentoPage() {
     setMensagensInternas([])
     setParticipantesConversaInterna([])
     conversaAtivaIdRef.current = conversa.id
+    historicoExpandidoRef.current = false
+    scrollHistoricoAntesRef.current = null
+    setTemMensagensAnteriores(false)
     setMensagens([])
     setEtiquetas([])
     setEtiquetasAtivas([])
@@ -944,10 +952,55 @@ export default function WhatsAppAtendimentoPage() {
       const json = await resp.json()
       if (!resp.ok) throw new Error(json.error || 'Falha ao carregar mensagens.')
       if (conversaAtivaIdRef.current !== conversaId) return
-      setMensagens(json.mensagens || [])
+      const recentes = (json.mensagens || []) as Mensagem[]
+      if (!historicoExpandidoRef.current) setTemMensagensAnteriores(json.temAnteriores === true)
+      // Atualizacoes de 10s nao podem apagar paginas antigas ja consultadas.
+      setMensagens(anteriores => {
+        if (!anteriores.length) return recentes
+        const porId = new Map(anteriores.map(m => [m.id, m]))
+        for (const msg of recentes) porId.set(msg.id, msg)
+        return [...porId.values()].sort((a, b) =>
+          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+      })
     } catch (e) {
       if (conversaAtivaIdRef.current !== conversaId) return
       setErro(e instanceof Error ? e.message : 'Falha ao carregar mensagens.')
+    }
+  }
+
+  async function carregarMensagensAnteriores() {
+    if (!ativa?.id || !temMensagensAnteriores || carregandoMensagensAnteriores || !mensagens.length) return
+    const conversaId = ativa.id
+    const primeira = mensagens[0]
+    const container = listaMensagensRef.current
+    setCarregandoMensagensAnteriores(true)
+    try {
+      const headers = await headersJson()
+      const antes = encodeURIComponent(`${primeira.created_at}|${primeira.id}`)
+      const resp = await fetch(
+        `/api/integracoes/whatsapp/mensagens?conversaId=${encodeURIComponent(conversaId)}&antes=${antes}`,
+        { headers, cache: 'no-store' },
+      )
+      const json = await resp.json()
+      if (!resp.ok) throw new Error(json.error || 'Falha ao carregar histórico anterior.')
+      if (conversaAtivaIdRef.current !== conversaId) return
+      historicoExpandidoRef.current = true
+      scrollHistoricoAntesRef.current = container
+        ? { altura: container.scrollHeight, topo: container.scrollTop } : null
+      setTemMensagensAnteriores(json.temAnteriores === true)
+      setMensagens(atuais => {
+        const porId = new Map(atuais.map(m => [m.id, m]))
+        for (const msg of (json.mensagens || []) as Mensagem[]) porId.set(msg.id, msg)
+        return [...porId.values()].sort((a, b) =>
+          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))
+      })
+    } catch (e) {
+      scrollHistoricoAntesRef.current = null
+      if (conversaAtivaIdRef.current === conversaId) {
+        setErro(e instanceof Error ? e.message : 'Falha ao carregar histórico anterior.')
+      }
+    } finally {
+      setCarregandoMensagensAnteriores(false)
     }
   }
 
@@ -1240,6 +1293,9 @@ export default function WhatsAppAtendimentoPage() {
 
   useEffect(() => {
     conversaAtivaIdRef.current = ativa?.id || null
+    historicoExpandidoRef.current = false
+    scrollHistoricoAntesRef.current = null
+    setTemMensagensAnteriores(false)
     if (!ativa?.id) {
       setMensagens([])
       setEtiquetas([])
@@ -1377,7 +1433,14 @@ export default function WhatsAppAtendimentoPage() {
     }
   }, [eu?.id, ativa?.id])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const anterior = scrollHistoricoAntesRef.current
+    if (anterior) {
+      const container = listaMensagensRef.current
+      if (container) container.scrollTop = anterior.topo + container.scrollHeight - anterior.altura
+      scrollHistoricoAntesRef.current = null
+      return
+    }
     fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [mensagens.length])
 
@@ -2882,7 +2945,16 @@ export default function WhatsAppAtendimentoPage() {
                 </div>
               )}
 
-              <div className="min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto bg-[#fbfcfe] p-2.5 sm:p-4">
+              <div ref={listaMensagensRef} className="min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto bg-[#fbfcfe] p-2.5 sm:p-4">
+                {temMensagensAnteriores && (
+                  <div className="flex justify-center py-2">
+                    <button type="button" onClick={() => void carregarMensagensAnteriores()}
+                      disabled={carregandoMensagensAnteriores}
+                      className="rounded-full border border-blue-200 bg-white px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60">
+                      {carregandoMensagensAnteriores ? 'Carregando mensagens antigas...' : 'Carregar mensagens anteriores'}
+                    </button>
+                  </div>
+                )}
                 {mensagensVisiveis.map(m => {
                   const saida = m.direcao === 'saida'
                   const texto = m.texto === '[reactionMessage]' ? 'Reação no WhatsApp' : m.texto
