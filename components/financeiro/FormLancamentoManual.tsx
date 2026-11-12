@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, X, Loader2 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { dinheiro, isoLocal } from '@/lib/financeiroPeriodo'
@@ -33,6 +33,7 @@ export default function FormLancamentoManual({tipo,onSalvo}:{tipo:Tipo;onSalvo:(
  const[valoresIndividuais,setValoresIndividuais]=useState<string[]|null>(null)
  const[simulado,setSimulado]=useState(false)
  const[chaveLote,setChaveLote]=useState(()=>crypto.randomUUID())
+ const dialogRef=useRef<HTMLDivElement>(null)
  const cadastrados=tipo==='pagar'?look.fornecedores:look.clientes
  const cadastroSelecionado=cadastrados.find(c=>c.id===identificador)
  const cadastrosFiltrados=useMemo(()=>cadastrados.filter(c=>correspondeBuscaAtlas(buscaCadastro,c.nome,c.cnpj_cpf,c.cpf_cnpj,c.telefone,c.whatsapp,c.cidade,c.endereco,c.contato)),[cadastrados,buscaCadastro])
@@ -47,6 +48,16 @@ export default function FormLancamentoManual({tipo,onSalvo}:{tipo:Tipo;onSalvo:(
  const diferencaCentavos=somaCentavos-totalCentavos
  const valoresVisiveis=valoresIndividuais??valores.map(v=>v.toFixed(2))
  const demonstracao=typeof window!=='undefined' && (window.location.hostname.endsWith('.vercel.app') || window.location.hostname==='localhost')
+ function limparFormularioAposSalvar(){
+  setIdentificador('');setBuscaCadastro('');setCategoriaId('');setObraId('');setCompraId('')
+  setNomeNovo('');setDocumentoNovo('');setTelefoneNovo('');setCidadeNova('');setEnderecoNovo('');setEmailNovo('')
+  setGrupoNovo('despesa_operacional');setCategoriaNova('');setCodigoNovo('')
+  setGerenciarCategorias(false);setCategoriaEditandoId('');setCodigoEdicao('');setNomeEdicao('');setGrupoEdicao('despesa_operacional')
+  setAdicionarPessoa(false);setAdicionarCategoria(false)
+  setDescricao('');setDocumento('');setValorTotal('');setForma('boleto');setObservacoes('')
+  const dataAtual=hoje();setDataEmissao(dataAtual);setQuantidade(1);setVencimentos([dataAtual]);setValoresIndividuais(null)
+  setSimulado(false);setChaveLote(crypto.randomUUID())
+ }
  const auth=async()=>{const t=await tokenAtual();if(!t)throw new Error('Sessão expirada. Faça login novamente.');return t}
  async function carregar(){setConsultando(true);setErro('');try{
   const t=await auth(),r=await fetch('/api/financeiro/lancamentos-manuais',{headers:{Authorization:`Bearer ${t}`},cache:'no-store'}),j=await r.json()
@@ -110,12 +121,12 @@ export default function FormLancamentoManual({tipo,onSalvo}:{tipo:Tipo;onSalvo:(
   }
   if(demonstracao){setSimulado(true);setAviso(`Simulação concluída: ${quantidade} título(s), total ${dinheiro(Number(valorTotal))}. Nenhum dado real foi salvo.`);return}
   setSalvando(true)
-  try{const t=await auth(),r=await fetch('/api/financeiro/lancamentos-manuais',{method:'POST',headers:{Authorization:`Bearer ${t}`,'Content-Type':'application/json'},body:JSON.stringify({tipo,operacao:'titulo',identificador,categoriaId,obraId,compraId,valorTotal:Number(valorTotal),dataEmissao,vencimentos,quantidade,documento,descricao,forma,observacoes,chaveLote,valoresParcelas:valoresIndividuais?.map(Number)??null})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Falha ao salvar.');setAviso(`${j.quantidade} título(s) criado(s).`);onSalvo();setChaveLote(crypto.randomUUID());setAberto(false)}
+  try{const t=await auth(),r=await fetch('/api/financeiro/lancamentos-manuais',{method:'POST',headers:{Authorization:`Bearer ${t}`,'Content-Type':'application/json'},body:JSON.stringify({tipo,operacao:'titulo',identificador,categoriaId,obraId,compraId,valorTotal:Number(valorTotal),dataEmissao,vencimentos,quantidade,documento,descricao,forma,observacoes,chaveLote,valoresParcelas:valoresIndividuais?.map(Number)??null})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Falha ao salvar.');if(tipo==='pagar'){limparFormularioAposSalvar();setAviso(`${j.quantidade} título(s) salvo(s) com sucesso. Preencha os campos para o próximo lançamento.`);onSalvo();dialogRef.current?.scrollTo({top:0,behavior:'smooth'})}else{setAviso(`${j.quantidade} título(s) criado(s).`);onSalvo();setChaveLote(crypto.randomUUID());setAberto(false)}}
   catch(e){setErro(e instanceof Error?e.message:'Erro ao salvar.')}finally{setSalvando(false)}
  }
  return <>
   <button type="button" onClick={()=>setAberto(v=>!v)} className="inline-flex items-center gap-2 rounded-xl bg-blue-900 px-4 py-2.5 text-sm font-bold text-white"><Plus size={16}/>Lançar manualmente</button>
-  {aberto&&<div role="dialog" aria-modal="true" aria-label="Lançamento financeiro manual" className="fixed inset-0 z-[60] overflow-y-auto bg-slate-900/60 p-3 sm:p-8"><section className="mx-auto max-w-4xl rounded-2xl border border-blue-200 bg-white p-4 shadow-xl" aria-label="Novo lançamento financeiro">
+  {aberto&&<div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Lançamento financeiro manual" className="fixed inset-0 z-[60] overflow-y-auto bg-slate-900/60 p-3 sm:p-8"><section className="mx-auto max-w-4xl rounded-2xl border border-blue-200 bg-white p-4 shadow-xl" aria-label="Novo lançamento financeiro">
    <header className="mb-4 flex items-start justify-between"><div><h2 className="text-lg font-bold">Novo título — Contas a {tipo==='pagar'?'Pagar':'Receber'}</h2><p className="text-xs text-slate-500">O lançamento manual ficará na mesma lista dos títulos automáticos, sem substituir nenhum cadastro.</p></div><button onClick={()=>setAberto(false)} title="Fechar" className="rounded-lg border p-2"><X size={18}/></button></header>
    {demonstracao&&<p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">Modo prévia: simule a criação sem gravar valores no financeiro real.</p>}
    {erro&&<p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
