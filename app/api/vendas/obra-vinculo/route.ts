@@ -1,9 +1,11 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {autenticarTenant} from '@/lib/tenantServer'
+import {usuarioTemDelegacaoExplicitaServer} from '@/lib/acessoUsuarioServer'
 import {supabaseAdmin} from '@/lib/supabaseAdmin'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
+const podeVincular=(u:{id:string;role:string;empresa_id:string})=>usuarioTemDelegacaoExplicitaServer({usuarioId:u.id,role:u.role,empresaId:u.empresa_id,setorId:'portal-cliente',acaoId:'clientes.portal.vincular_obra'})
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const error=(message:string,status=400)=>NextResponse.json({error:message},{status})
 
@@ -21,13 +23,13 @@ export async function GET(req:NextRequest){
     .select('id,numero,nome,cidade,status,created_at').eq('empresa_id',usuario.empresa_id)
     .eq('cliente_id',venda.cliente_id).order('created_at',{ascending:false})
   if(erroObras)return error('Não foi possível carregar obras do cliente.',500)
-  return NextResponse.json({ok:true,vendaId:venda.id,obraAtualId:venda.obra_id,obras:obras||[]})
+  return NextResponse.json({ok:true,autorizado:await podeVincular(usuario),vendaId:venda.id,obraAtualId:venda.obra_id,obras:obras||[]})
 }
 
 export async function POST(req:NextRequest){
   const usuario=await autenticarTenant(req)
   if(!usuario)return error('Sessão inválida.',401)
-  if(usuario.role!=='master')return error('Vincular obra à venda exige autorização do Master.',403)
+  if(!await podeVincular(usuario))return error('Seu usuário não tem permissão para vincular obra à venda.',403)
   const body=await req.json().catch(()=>({}))
   const vendaId=String(body?.vendaId||'')
   const obraId=body?.obraId==null?null:String(body.obraId)

@@ -27,6 +27,7 @@ export const ACOES_CMV_DELEGACAO_EXPLICITA = [
  'compras.geral.inativar_produto',
  'clientes.portal.tipologias_substituir',
  'clientes.portal.tipologias_aprovar',
+ 'clientes.portal.vincular_obra',
 ] as const
 const DELEGACOES_EXPLICITAS = new Set<string>(ACOES_CMV_DELEGACAO_EXPLICITA)
 export function fallbackAcaoPermissao(id:string,setor:NivelPermissao):NivelPermissao {
@@ -187,6 +188,7 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('clientes.portal.basico','Consultar nome e contato','Ver identificação e contato do cliente.'),
     a('clientes.portal.completo','Consultar cadastro completo','Ver endereço, documentos e informações completas.'),
     a('clientes.portal.orcamentos','Consultar orçamentos/vendas','Ver histórico comercial do cliente.'),
+    a('clientes.portal.vincular_obra','Vincular obra à venda','Selecionar obra do mesmo cliente ou criar e vincular uma nova, com confirmação explícita.'),
     a('clientes.portal.obras','Consultar obras','Ver obras e andamento.'),
     a('clientes.portal.financeiro','Consultar financeiro','Ver posição financeira do cliente.'),
     a('clientes.portal.documentos','Consultar documentos','Ver documentos disponíveis no portal.'),

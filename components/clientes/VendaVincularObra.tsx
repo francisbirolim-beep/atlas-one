@@ -1,7 +1,7 @@
 'use client'
 import {useCallback,useEffect,useState} from 'react'
 import {Building2,CheckCircle2,Loader2,RefreshCw} from 'lucide-react'
-import {tokenAtual,usuarioAtual} from '@/lib/auth'
+import {tokenAtual} from '@/lib/auth'
 
 type Opcao={id:string;numero?:number|null;nome:string;cidade?:string|null;status?:string|null}
 export default function VendaVincularObra({vendaId,clienteNome,cidadeCliente,onVinculada}:{
@@ -27,12 +27,13 @@ export default function VendaVincularObra({vendaId,clienteNome,cidadeCliente,onV
      })
      const j=await resp.json().catch(()=>({}))
      if(!resp.ok)throw Error(j.error||'Falha ao consultar as obras.')
+     setAutorizado(j.autorizado===true)
      setOpcoes(j.obras||[])
      setSelecionada(v=>v&&j.obras?.some((o:Opcao)=>o.id===v)?v:'')
    }catch(e){setErro(e instanceof Error?e.message:'Não foi possível consultar as obras.')}
    finally{setCarregando(false)}
  },[vendaId])
- useEffect(()=>{void carregar();void usuarioAtual().then(u=>setAutorizado(u?.role==='master'))},[carregar])
+ useEffect(()=>{void carregar()},[carregar])
 
  async function confirmar(){
    if(salvando)return
@@ -64,7 +65,7 @@ export default function VendaVincularObra({vendaId,clienteNome,cidadeCliente,onV
        <p className="mt-1 text-xs text-amber-900">Vincule uma obra do próprio cliente ou crie uma nova. O Atlas não faz associação automática por nome.</p></div>
    </div>
    {erro&&<p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{erro}</p>}
-   {!autorizado?<p className="mt-3 text-xs text-amber-900">Peça ao Master para conferir e vincular esta obra.</p>:<>
+   {!autorizado?<p className="mt-3 text-xs text-amber-900">Seu usuário não tem permissão para vincular obra. Solicite a liberação em Usuários e acesso.</p>:<>
      {carregando?<p className="mt-3 text-xs text-amber-800"><Loader2 size={14} className="inline animate-spin"/> Consultando obras...</p>:
        <div className="mt-3 space-y-2">
          <label className="block text-xs font-bold text-amber-950">O que deseja fazer?</label>
