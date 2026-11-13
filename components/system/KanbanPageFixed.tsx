@@ -63,6 +63,15 @@ type PreviaTrocaCliente = {
   novoWhatsapp: string | null
 }
 
+type ResultadoBuscaHistoricoKanban = {
+  id: string
+  numero: number | null
+  cliente_nome: string
+  coluna_id: string | null
+  modo_entrada: string | null
+  wvetro_fluxo: { numero?: string | number; numero_wvetro?: string | number } | null
+}
+
 type ObraKanbanLocal = {
   id: string
   nome: string
@@ -377,6 +386,9 @@ const [vendedorInfo, setVendedorInfo] = useState<Usuario | null>(null)
 const [whatsappVendedor, setWhatsappVendedor] = useState('')
 const [mensagemVendedor, setMensagemVendedor] = useState('')
 const [busca, setBusca] = useState('')
+const [resultadosBuscaHistorico, setResultadosBuscaHistorico] = useState<ResultadoBuscaHistoricoKanban[]>([])
+const [buscandoNoHistorico, setBuscandoNoHistorico] = useState(false)
+const [erroBuscaHistorico, setErroBuscaHistorico] = useState('')
 const [tipoFiltroData, setTipoFiltroData] = useState<'entrada' | 'movimentacao'>('entrada')
 const [filtroDataDe, setFiltroDataDe] = useState('')
 const [filtroDataAte, setFiltroDataAte] = useState('')
@@ -432,6 +444,52 @@ setTiposVersao(v => v + 1)
 const t = setInterval(() => {setAgora(Date.now());setMesDoSistema(mesLocalAtual())}, 60000)
 return () => clearInterval(t)
 }, [])
+
+// Pesquisa independente do mês exibido: evita que cards vendidos em meses anteriores
+// desapareçam da busca por nome. Consulta somente leitura; nenhum vínculo é modificado.
+useEffect(() => {
+  const termo = busca.trim()
+  if (termo.length < 2) {
+    setResultadosBuscaHistorico([])
+    setBuscandoNoHistorico(false)
+    setErroBuscaHistorico('')
+    return
+  }
+  let cancelado = false
+  setResultadosBuscaHistorico([])
+  setBuscandoNoHistorico(true)
+  setErroBuscaHistorico('')
+  const timer = setTimeout(async () => {
+    try {
+      const encontrados: ResultadoBuscaHistoricoKanban[] = []
+      for (let ini = 0; ini < 15000; ini += 750) {
+        const { data, error } = await supabase.from('orcamentos')
+          .select('id,numero,cliente_nome,coluna_id,modo_entrada,wvetro_fluxo')
+          .or('modo_entrada.is.null,modo_entrada.neq.balcao')
+          .is('kanban_retirado_em', null)
+          .order('created_at', { ascending: false })
+          .range(ini, ini + 749)
+        if (error) throw error
+        if (cancelado) return
+        const lote = (data || []) as ResultadoBuscaHistoricoKanban[]
+        for (const card of lote) {
+          if (card.modo_entrada === 'wvetro_api_vinculado') continue
+          const numeroWVetro = card.wvetro_fluxo?.numero || card.wvetro_fluxo?.numero_wvetro
+          if (bateBusca(termo, card.cliente_nome, card.numero, numeroWVetro == null ? '' : String(numeroWVetro))) {
+            encontrados.push(card)
+          }
+        }
+        if (lote.length < 750 || encontrados.length >= 60) break
+      }
+      if (!cancelado) setResultadosBuscaHistorico(encontrados.slice(0, 60))
+    } catch {
+      if (!cancelado) setErroBuscaHistorico('Não foi possível consultar todos os períodos. Atualize e tente novamente.')
+    } finally {
+      if (!cancelado) setBuscandoNoHistorico(false)
+    }
+  }, 350)
+  return () => { cancelado = true; clearTimeout(timer) }
+}, [busca])
 
 // Recarrega os estágios finalizados somente quando o período muda.
 useEffect(() => { void carregar() }, [modoHistorico, mesHistorico, mesDoSistema, filtroDataDe, filtroDataAte])
@@ -626,6 +684,16 @@ try {
   if(idCarga===cargaId.current)setErroKanban('Não foi possível carregar os cards. Nada foi alterado. Atualize para tentar novamente.')
   console.error('[kanban mensal carregar]',e)
 } finally {if(idCarga===cargaId.current)setCarregando(false)}
+}
+
+async function abrirResultadoBuscaHistorico(id: string) {
+  try {
+    const { data, error } = await supabase.from('orcamentos').select('*').eq('id', id).maybeSingle()
+    if (error || !data) throw error || new Error('Orçamento não encontrado.')
+    await abrirCard(data as OrcamentoRapido)
+  } catch {
+    setErroBuscaHistorico('Não foi possível abrir este orçamento. Atualize e tente novamente.')
+  }
 }
 
 function passaFiltro(c: OrcamentoRapido): boolean {
@@ -1963,6 +2031,37 @@ Limpar filtros
 </button>
 )}
 </div>
+
+{busca.trim().length >= 2 && (
+  <section className="mb-4 rounded-xl border border-blue-200 bg-white p-3" aria-label="Busca no histórico completo do Kanban">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm font-bold text-slate-800">Orçamentos encontrados em todos os meses</p>
+      <span className="text-xs text-slate-500">{buscandoNoHistorico ? 'Pesquisando histórico...' : `${resultadosBuscaHistorico.length} resultado(s)`}</span>
+    </div>
+    <p className="mt-1 text-xs text-slate-500">Busca pelo nome do cliente ou número Atlas/W.Vetro, mesmo quando o card foi vendido em outro mês. Não altera a coluna nem o vínculo.</p>
+    {erroBuscaHistorico && <p role="alert" className="mt-2 text-xs font-semibold text-red-700">{erroBuscaHistorico}</p>}
+    {!buscandoNoHistorico && !erroBuscaHistorico && resultadosBuscaHistorico.length === 0 &&
+      <p className="mt-2 text-sm text-slate-500">Nenhum orçamento encontrado com esse nome ou número.</p>}
+    {resultadosBuscaHistorico.length > 0 && (
+      <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+        {resultadosBuscaHistorico.map(resultado => (
+          <button key={resultado.id} type="button" onClick={() => void abrirResultadoBuscaHistorico(resultado.id)}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-blue-400 hover:bg-blue-50">
+            <span className="block truncate text-sm font-semibold text-slate-800">{resultado.cliente_nome || 'Cliente não informado'}</span>
+            <span className="mt-1 block text-xs text-slate-600">
+              {resultado.numero ? `Atlas #${resultado.numero}` : 'Atlas sem número'}
+              {(resultado.wvetro_fluxo?.numero || resultado.wvetro_fluxo?.numero_wvetro) ?
+                ` · W.Vetro #${resultado.wvetro_fluxo?.numero || resultado.wvetro_fluxo?.numero_wvetro}` : ''}
+            </span>
+            <span className="mt-1 block text-xs font-medium text-blue-700">
+              {colunas.find(col => col.id === resultado.coluna_id)?.nome || 'Sem coluna'} · Abrir orçamento
+            </span>
+          </button>
+        ))}
+      </div>
+    )}
+  </section>
+)}
 
 {usuario?.role === 'master' && (
   <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3">
