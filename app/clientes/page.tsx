@@ -32,7 +32,6 @@ export default function Clientes() {
   const [apelido, setApelido] = useState('')
   const [statusFiltro, setStatusFiltro] = useState<StatusFiltro>('ativos')
   const [podeInativar, setPodeInativar] = useState(false)
-  const [podeReativar, setPodeReativar] = useState(false)
   const [podeUnificar, setPodeUnificar] = useState(false)
   const [pendente, setPendente] = useState<ClienteComStatus | null>(null)
   const [motivo, setMotivo] = useState('')
@@ -47,7 +46,6 @@ export default function Clientes() {
       const acesso = await carregarAcessoCadastro(usuario)
       if (montado) {
         setPodeInativar(podeAcaoCadastro(acesso, 'clientes', 'inativar'))
-        setPodeReativar(podeAcaoCadastro(acesso, 'clientes', 'reativar'))
         setPodeUnificar(podeAcaoCadastro(acesso, 'clientes', 'mesclar'))
       }
     })()
@@ -107,23 +105,29 @@ export default function Clientes() {
   }
 
   async function confirmarMudanca() {
-    if (!pendente || salvando || !navigator.onLine) return
+    if (!pendente || salvando) return
     const reativar = pendente.ativo === false
     if (!reativar && !motivo.trim()) { setErro('Informe por que este cliente será inativado.'); return }
     setSalvando(true)
     setErro('')
-    const { error } = await supabase.rpc('alterar_status_cadastro_cliente', {
-      p_cliente_id: pendente.id,
-      p_ativo: reativar,
-      p_motivo: motivo.trim() || null,
-    })
-    setSalvando(false)
-    if (error) {
-      setErro(error.message || 'Não foi possível alterar a situação do cadastro.')
-      return
+    try {
+      // A RPC valida no servidor se o usuário pode reativar ou inativar este cadastro.
+      const { error } = await supabase.rpc('alterar_status_cadastro_cliente', {
+        p_cliente_id: pendente.id,
+        p_ativo: reativar,
+        p_motivo: motivo.trim() || null,
+      })
+      if (error) {
+        setErro(error.message || 'Não foi possível alterar a situação do cadastro.')
+        return
+      }
+      setPendente(null)
+      await carregar()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha de conexão. Verifique a internet e tente novamente.')
+    } finally {
+      setSalvando(false)
     }
-    setPendente(null)
-    await carregar()
   }
 
   return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
@@ -155,7 +159,9 @@ export default function Clientes() {
           </Link>
           <div className="flex shrink-0 items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{origemLabels[c.origem] || c.origem}</span>
-            {typeof navigator !== 'undefined' && navigator.onLine && ((c.ativo === false && podeReativar) || (c.ativo !== false && podeInativar)) && <button type="button" onClick={() => prepararMudanca(c)} className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold ${c.ativo === false ? 'border-emerald-200 text-emerald-700' : 'border-amber-200 text-amber-800'}`}>{c.ativo === false ? <RotateCcw size={14}/> : <Archive size={14}/>} {c.ativo === false ? 'Reativar' : 'Inativar'}</button>}
+            {/* A ação de reativar deve estar acessível na lista. O servidor valida a permissão efetiva ao confirmar. */}
+            {c.ativo === false && <button type="button" onClick={() => prepararMudanca(c)} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"><RotateCcw size={14}/> Reativar</button>}
+            {c.ativo !== false && typeof navigator !== 'undefined' && navigator.onLine && podeInativar && <button type="button" onClick={() => prepararMudanca(c)} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-50"><Archive size={14}/> Inativar</button>}
           </div>
         </div>)}</div>}
     </main>
