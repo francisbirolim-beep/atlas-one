@@ -387,6 +387,7 @@ const [whatsappVendedor, setWhatsappVendedor] = useState('')
 const [mensagemVendedor, setMensagemVendedor] = useState('')
 const [busca, setBusca] = useState('')
 const [resultadosBuscaHistorico, setResultadosBuscaHistorico] = useState<ResultadoBuscaHistoricoKanban[]>([])
+const [cardsBuscaHistorico, setCardsBuscaHistorico] = useState<OrcamentoRapido[]>([])
 const [buscandoNoHistorico, setBuscandoNoHistorico] = useState(false)
 const [erroBuscaHistorico, setErroBuscaHistorico] = useState('')
 const [tipoFiltroData, setTipoFiltroData] = useState<'entrada' | 'movimentacao'>('entrada')
@@ -451,12 +452,14 @@ useEffect(() => {
   const termo = busca.trim()
   if (termo.length < 2) {
     setResultadosBuscaHistorico([])
+    setCardsBuscaHistorico([])
     setBuscandoNoHistorico(false)
     setErroBuscaHistorico('')
     return
   }
   let cancelado = false
   setResultadosBuscaHistorico([])
+  setCardsBuscaHistorico([])
   setBuscandoNoHistorico(true)
   setErroBuscaHistorico('')
   const timer = setTimeout(async () => {
@@ -481,9 +484,27 @@ useEffect(() => {
         }
         if (lote.length < 750 || encontrados.length >= 60) break
       }
-      if (!cancelado) setResultadosBuscaHistorico(encontrados.slice(0, 60))
+      // Os resultados precisam alimentar as colunas, não apenas a lista auxiliar.
+      // Carregamos os cards completos somente dos IDs encontrados, preservando RLS.
+      const resultados = encontrados.slice(0, 60)
+      let completos: OrcamentoRapido[] = []
+      if (resultados.length) {
+        const { data: cardsEncontrados, error: erroCards } = await supabase.from('orcamentos')
+          .select('*').in('id', resultados.map(card => card.id))
+        if (erroCards) throw erroCards
+        if (cancelado) return
+        completos = ((cardsEncontrados || []) as OrcamentoRapido[])
+          .filter(card => (card as any).modo_entrada !== 'wvetro_api_vinculado')
+      }
+      if (!cancelado) {
+        setResultadosBuscaHistorico(resultados)
+        setCardsBuscaHistorico(completos)
+      }
     } catch {
-      if (!cancelado) setErroBuscaHistorico('Não foi possível consultar todos os períodos. Atualize e tente novamente.')
+      if (!cancelado) {
+        setCardsBuscaHistorico([])
+        setErroBuscaHistorico('Não foi possível consultar todos os períodos. Atualize e tente novamente.')
+      }
     } finally {
       if (!cancelado) setBuscandoNoHistorico(false)
     }
@@ -701,6 +722,9 @@ if (busca.trim()) {
 const bate = bateBusca(
   busca,
   c.cliente_nome,
+  c.numero,
+  (c as any).wvetro_fluxo?.numero,
+  (c as any).wvetro_fluxo?.numero_wvetro,
   c.cidade,
   c.arquiteto_nome,
   c.criado_por_nome,
@@ -733,10 +757,15 @@ frio: { emoji: '❄️', label: 'Frio', texto: 'text-blue-600', fundo: 'bg-blue-
 
 function cardsDaColuna(colunaId: string, index: number) {
 const coluna = colunas.find(c => c.id===colunaId)
-return cards
+const buscaEmTodosOsMeses = busca.trim().length >= 2
+// Mantém os cards já carregados e inclui os históricos encontrados, sem duplicá-los.
+const cardsExibidos = buscaEmTodosOsMeses
+  ? [...cards, ...cardsBuscaHistorico.filter(c => !cards.some(atual => atual.id === c.id))]
+  : cards
+return cardsExibidos
 .filter(c => (c.coluna_id || colunas[0]?.id) === colunaId || (!c.coluna_id && index === 0))
 .filter(c => {
-  if (!coluna || (!colunaDeHistorico(coluna.nome) && !colunaDeVenda(coluna)) || modoHistorico==='todos' || modoHistorico==='periodo') return true
+  if (buscaEmTodosOsMeses || !coluna || (!colunaDeHistorico(coluna.nome) && !colunaDeVenda(coluna)) || modoHistorico==='todos' || modoHistorico==='periodo') return true
   const referencia = colunaDeVenda(coluna)
     ? dataVendaCard(c) : dataLocalYmd(c.coluna_atualizada_em || c.created_at)
   const mes = modoHistorico==='atual' || !mesHistorico ? mesLocalAtual() : mesHistorico
@@ -2038,7 +2067,7 @@ Limpar filtros
       <p className="text-sm font-bold text-slate-800">Orçamentos encontrados em todos os meses</p>
       <span className="text-xs text-slate-500">{buscandoNoHistorico ? 'Pesquisando histórico...' : `${resultadosBuscaHistorico.length} resultado(s)`}</span>
     </div>
-    <p className="mt-1 text-xs text-slate-500">Busca pelo nome do cliente ou número Atlas/W.Vetro, mesmo quando o card foi vendido em outro mês. Não altera a coluna nem o vínculo.</p>
+    <p className="mt-1 text-xs text-slate-500">Ao buscar por nome ou número Atlas/W.Vetro, os resultados também aparecem nas colunas originais, inclusive de meses anteriores. Nenhum cartão é movimentado.</p>
     {erroBuscaHistorico && <p role="alert" className="mt-2 text-xs font-semibold text-red-700">{erroBuscaHistorico}</p>}
     {!buscandoNoHistorico && !erroBuscaHistorico && resultadosBuscaHistorico.length === 0 &&
       <p className="mt-2 text-sm text-slate-500">Nenhum orçamento encontrado com esse nome ou número.</p>}
@@ -2095,7 +2124,7 @@ Limpar filtros
       {retirados?'Ocultar retirados':'Cards retirados (auditoria)'}
     </button>}
   </div>
-  <p className="text-xs text-slate-500">Fazer orçamento, Em andamento e Orçamento feito permanecem visíveis mesmo após a virada do mês. Vendido mostra somente as vendas com data do mês selecionado; as anteriores ficam no histórico. Enviado ao cliente segue seu período de movimentação.</p>
+  <p className="text-xs text-slate-500">Fazer orçamento, Em andamento e Orçamento feito permanecem visíveis mesmo após a virada do mês. Vendido mostra somente as vendas com data do mês selecionado; as anteriores ficam no histórico. Enviado ao cliente segue seu período de movimentação. Ao pesquisar um nome ou número, a busca inclui todos os meses e mostra os cartões nas respectivas colunas.</p>
   {modoHistorico==='periodo'&&!filtroDataDe&&!filtroDataAte&&<p className="text-xs text-amber-700">Selecione as datas De e Até acima. Sem datas, o histórico inteiro fica disponível.</p>}
   {erroKanban&&<p role="alert" className="text-sm font-semibold text-red-700">{erroKanban}</p>}
   {retirados&&<div className="rounded-lg border border-slate-200 p-3 space-y-2">
