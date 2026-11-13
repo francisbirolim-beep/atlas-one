@@ -14,7 +14,10 @@ type Resumo = {
   semelhantes: Array<{ id: string; nome: string }>;
   podeCriarNovo: boolean; tokenConferencia: string;
 }
-type Sucesso = { cliente: { id: string; nome: string }; orcamentoAtlasId?: string; numero: string; mensagem: string }
+type Sucesso = {
+  cliente: { id: string; nome: string }; orcamentoAtlasId?: string;
+  numero: string; mensagem: string; situacaoWvetro?: string | null; valorOrigem?: number | null
+}
 const dinheiro = (v: number | null) => v == null ? 'Não informado' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const dataBR = (v: string | null) => v ? new Date(v.slice(0,10) + 'T12:00:00').toLocaleDateString('pt-BR') : 'Não informada'
 
@@ -64,7 +67,7 @@ export default function SincronizarNumeroWVetroPage() {
         setSucesso(null)
         setConfirmou(false); setDivergencia(false)
       } else {
-        setSucesso(json as Sucesso)
+        setSucesso({ ...(json as Sucesso), situacaoWvetro: previa?.situacao || null, valorOrigem: previa?.valor ?? null })
         setPrevia(null)
       }
     } catch(e) {
@@ -103,6 +106,16 @@ export default function SincronizarNumeroWVetroPage() {
         <h2 className="flex items-center gap-2 text-base font-bold text-emerald-700"><CheckCircle2 size={20}/> Vinculação confirmada!</h2>
         <p className="mt-2 text-sm text-slate-700">{sucesso.mensagem}</p>
         <p className="mt-2 text-sm">Cliente: <strong>{sucesso.cliente.nome}</strong> · W.Vetro <strong>#{sucesso.numero}</strong></p>
+        {sucesso.situacaoWvetro?.trim().toUpperCase() === 'V' && sucesso.orcamentoAtlasId && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-bold">A origem W.Vetro está vendida, mas vincular o número não confirma a venda no Atlas.</p>
+            <p className="mt-2">Confira o cadastro, a obra e o valor antes de concluir. Valor informado pelo W.Vetro: <strong>{dinheiro(sucesso.valorOrigem ?? null)}</strong>. A confirmação comercial é uma etapa separada e cria os registros operacionais e financeiros.</p>
+            <Link href={'/vendas/confirmar?orcamento=' + encodeURIComponent(sucesso.orcamentoAtlasId)}
+              className="mt-3 inline-flex rounded-lg bg-amber-800 px-4 py-2.5 font-bold text-white hover:bg-amber-900">
+              Conferir e confirmar venda no Atlas
+            </Link>
+          </div>
+        )}
         <div className="mt-4 flex flex-wrap gap-2">
           <Link href={'/clientes/' + sucesso.cliente.id} className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-bold text-white">Abrir Cliente 360</Link>
           {sucesso.orcamentoAtlasId && <Link href={'/orcamento/' + sucesso.orcamentoAtlasId + '/composicao'} className="rounded-xl border px-4 py-2.5 text-sm font-bold">Abrir orçamento</Link>}
@@ -122,6 +135,17 @@ export default function SincronizarNumeroWVetroPage() {
         {previa.existe && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           Já existe um orçamento Atlas relacionado: {previa.existe.nome || 'Cliente não identificado'}. Não será criado outro caso exista vínculo operacional.
         </div>}
+        {previa.situacao?.trim().toUpperCase() === 'V' && previa.existe && !previa.conflito &&
+          previa.existe.clienteId === clienteId && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <p className="font-bold">Vendido no W.Vetro não significa venda confirmada no Atlas.</p>
+            <p className="mt-1">O vínculo do número não cria venda nem movimenta este orçamento para Vendido. Para concluir, abra a confirmação comercial e confira os dados e valores.</p>
+            <Link href={'/vendas/confirmar?orcamento=' + encodeURIComponent(previa.existe.id)}
+              className="mt-3 inline-flex rounded-lg border border-amber-300 bg-white px-3 py-2 font-bold text-amber-900 hover:bg-amber-100">
+              Verificar e confirmar venda existente no Atlas
+            </Link>
+          </div>
+        )}
         {previa.conflito && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
           <ShieldAlert size={16} className="mr-1 inline"/> Este número já tem um vínculo incompatível. A sincronização foi bloqueada.
         </div>}
