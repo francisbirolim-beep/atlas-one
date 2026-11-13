@@ -123,7 +123,20 @@ export default function SincronizarNumeroWVetroPage() {
           Já existe um orçamento Atlas relacionado: {previa.existe.nome || 'Cliente não identificado'}. Não será criado outro caso exista vínculo operacional.
         </div>}
         {previa.conflito && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-          <ShieldAlert size={16} className="mr-1 inline"/> Este número já tem um vínculo incompatível. A sincronização foi bloqueada.
+          <ShieldAlert size={16} className="mr-1 inline"/> Este número já está vinculado a outro cadastro do Atlas. Nenhum dado foi alterado.
+          {previa.existe && <div className="mt-3 space-y-3 font-normal text-red-900">
+            <p>O orçamento W.Vetro #{previa.numero} já está relacionado a <b>{previa.existe.nome}</b>. O cliente selecionado nesta consulta é diferente do cadastro vinculado.</p>
+            <div className="flex flex-wrap gap-2">
+              <Link href={'/kanban/comercial?orcamento=' + encodeURIComponent(previa.existe.id)}
+                className="rounded-lg border border-red-300 bg-white px-3 py-2 font-bold text-red-800 hover:bg-red-50">
+                Abrir orçamento já vinculado
+              </Link>
+              {previa.existe.clienteId && <Link href={'/clientes/' + previa.existe.clienteId}
+                className="rounded-lg border border-red-300 bg-white px-3 py-2 font-bold text-red-800 hover:bg-red-50">
+                Abrir cliente vinculado
+              </Link>}
+            </div>
+          </div>}
         </div>}
         <div className="rounded-xl border border-slate-200 p-4">
           <h3 className="font-bold text-slate-900">Cliente de destino no Atlas</h3>
