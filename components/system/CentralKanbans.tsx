@@ -3,6 +3,7 @@ import { useCallback,useEffect,useMemo,useRef,useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft,ArrowUpRight,Check,ChevronRight,Columns3,Fullscreen,MessageSquare,Plus,RefreshCcw,Settings2,X } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import { bateBusca } from '@/lib/texto'
 import { QUADROS,indiceConclusaoOperacional,ehColunaConclusaoOperacional,type QuadroId,type SetorBoard,type NivelBoard } from '@/lib/centralKanban'
 
 type Coluna={id:string,setor:string,nome:string,ordem:number;nome_exibicao?:string|null;ordem_visual?:number|null}
@@ -119,14 +120,14 @@ export default function CentralKanbans(){
   return cols[0].id
  }
  const cardsVisiveis=useMemo(()=>{
-  const term=filtro.toLocaleLowerCase('pt-BR').trim()
-  return (dados?.cards||[]).filter(c=>(!term||[c.cliente,c.obra,c.cidade,String(c.numero)].join(' ').toLocaleLowerCase('pt-BR').includes(term))
+  const term=filtro.trim()
+  return (dados?.cards||[]).filter(c=>(!term||bateBusca(term,[c.cliente,c.obra,c.cidade,String(c.numero)].join(' ')))
    &&(!cidade||c.cidade===cidade)&&(!atrasados||(!!c.previsao&&new Date(c.previsao+'T23:59:59').getTime()<Date.now()&&c.percentualGeral<100)))
  },[dados,filtro,cidade,atrasados])
  const entradasVisiveis=useMemo(()=>{
-  const term=filtro.toLocaleLowerCase('pt-BR').trim()
+  const term=filtro.trim()
   return (dados?.entradasMedicao||[]).filter(c=>
-   (!term||[c.cliente,c.obra,c.cidade,c.tipologia].join(' ').toLocaleLowerCase('pt-BR').includes(term))
+   (!term||bateBusca(term,[c.cliente,c.obra,c.cidade,c.tipologia].join(' ')))
    &&(!cidade||c.cidade===cidade)&&!atrasados)
  },[dados,filtro,cidade,atrasados])
  const cidades=[...new Set((dados?.cards||[]).map(c=>c.cidade).filter(Boolean))].sort()
