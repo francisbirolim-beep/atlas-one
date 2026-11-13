@@ -637,6 +637,8 @@ const bate = bateBusca(
   c.arquiteto_nome,
   c.criado_por_nome,
   c.cliente_whatsapp,
+  c.numero,
+  numeroWVetroCard(c),
   tipoLabels[c.tipo_esquadria] || c.tipo_esquadria || ''
 )
 if (!bate) return false
@@ -1893,7 +1895,7 @@ return (
 type="text"
 value={busca}
 onChange={e => {setBusca(e.target.value);if(e.target.value.trim())setModoHistorico('todos')}}
-placeholder="Buscar por cliente, cidade, arquiteto, vendedor, tipo..."
+placeholder="Buscar por cliente, número Atlas ou W.Vetro, cidade, vendedor..."
 className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"
 />
 </div>
