@@ -89,9 +89,11 @@ export async function POST(req:NextRequest) {
   })))
   const {data:criadas,error:erroCriar}=await supabaseAdmin.from('atlas_tarefas_equipe').insert(linhas).select('id,data_hora,responsaveis_ids')
   if(erroCriar||!criadas) return NextResponse.json({error:'Não foi possível criar as tarefas.'},{status:500})
+  const primeirasIds=new Set(linhas.filter(t=>t.serie_id===null||t.id===t.serie_id).map(t=>t.id))
   const estados=criadas.flatMap(t=>t.responsaveis_ids.map((usuario_id:string)=>({
     empresa_id:usuario.empresa_id,tarefa_id:t.id,usuario_id,
-    proximo_aviso_em:(!t.data_hora || t.data_hora<=agora)?agora:t.data_hora,
+    // Primeira ocorrência avisa na atribuição, futuras só no dia previsto.
+    proximo_aviso_em:primeirasIds.has(t.id)?agora:(t.data_hora||agora),
   })))
   const {error:erroAviso}=await supabaseAdmin.from('atlas_tarefa_avisos').insert(estados)
   if(erroAviso) console.error('Não foi possível preparar todos os lembretes:',erroAviso.message)
