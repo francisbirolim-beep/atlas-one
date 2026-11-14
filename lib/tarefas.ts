@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 import { TarefaPessoal, TarefaPessoalColuna } from './tipos'
 import { TipoRecorrencia, gerarProximasOcorrencias } from './recorrencia'
 
-const COLUNAS_PADRAO = ['A fazer', 'Em andamento', 'Concluido']
+const COLUNAS_PADRAO = ['A fazer', 'Em andamento', 'Aguardando', 'Concluído']
 
 export async function listarColunasTarefas(usuarioId: string): Promise<TarefaPessoalColuna[]> {
   const { data, error } = await supabase
@@ -65,6 +65,26 @@ export async function criarColunaTarefa(usuarioId: string, nome: string): Promis
 export async function renomearColunaTarefa(id: string, nome: string): Promise<boolean> {
   const { error } = await supabase.from('tarefa_colunas').update({ nome }).eq('id', id)
   return !error
+}
+
+/** Salva a ordem das colunas do próprio usuário sem alterar seus cards. */
+export async function reordenarColunasTarefa(
+  usuarioId: string,
+  colunas: TarefaPessoalColuna[]
+): Promise<boolean> {
+  if (!usuarioId || !colunas.length || colunas.some(col => col.usuario_id !== usuarioId)) return false
+  // Atualizações restritas ao proprietário; não há mudanças em tarefas nem outros usuários.
+  for (let indice = 0; indice < colunas.length; indice++) {
+    const { error } = await supabase.from('tarefa_colunas')
+      .update({ ordem: indice })
+      .eq('id', colunas[indice].id)
+      .eq('usuario_id', usuarioId)
+    if (error) {
+      console.error('Erro ao reordenar coluna pessoal:', error)
+      return false
+    }
+  }
+  return true
 }
 
 export async function excluirColunaTarefa(id: string, colunaDestinoId: string): Promise<boolean> {
