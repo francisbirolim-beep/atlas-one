@@ -29,7 +29,7 @@ create index if not exists atlas_tarefas_equipe_periodo_idx
 create index if not exists atlas_tarefas_equipe_responsaveis_idx
   on public.atlas_tarefas_equipe using gin(responsaveis_ids);
 create unique index if not exists atlas_tarefas_equipe_serie_unica
-  on public.atlas_tarefas_equipe(serie_id, data_hora) where serie_id is not null and data_hora is not null;
+  on public.atlas_tarefas_equipe(serie_id, data_hora);
 
 create table if not exists public.atlas_tarefa_comentarios (
   id uuid primary key default gen_random_uuid(),
