@@ -3,26 +3,18 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokenAtual, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
-import { DASHBOARDS, homeConfigPadrao, lerHomeUsuarioConfig, temModulo, type DashboardId, type HomeUsuarioConfig } from '@/lib/homeUsuario'
+import { homeConfigPadrao, lerHomeUsuarioConfig, temModulo, type HomeUsuarioConfig } from '@/lib/homeUsuario'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
 import HomePainelGeralAcessos from '@/components/system/HomePainelGeralAcessos'
-import HomeRecentQuotes from '@/components/system/HomeRecentQuotes'
-import HomeManagementOverview from '@/components/system/HomeManagementOverview'
-import HomeKanbanBlock from '@/components/system/HomeKanbanBlock'
-import HomeAssistenciasBlock from '@/components/system/HomeAssistenciasBlock'
 import HomeTasksBlock from '@/components/system/HomeTasksBlock'
 import HomeCalendarBlock from '@/components/system/HomeCalendarBlock'
-import HomeSectorOverview from '@/components/system/HomeSectorOverview'
-import HomeQuotesOverview from '@/components/system/HomeQuotesOverview'
+import HomePersonalKanban from '@/components/system/HomePersonalKanban'
 
 export default function HomeDashboard() {
   const router = useRouter()
   const usuarioInicial = usuarioCacheLocal()
   const configInicial = homeConfigPadrao(usuarioInicial?.role || 'funcionario')
   const [config, setConfig] = useState<HomeUsuarioConfig>(configInicial)
-  const [dashboard, setDashboard] = useState<DashboardId | 'executivo' | null>(
-    configInicial.dashboards?.includes('pessoal') ? 'pessoal' : (configInicial.dashboardPrincipal || configInicial.dashboards?.[0] || 'geral')
-  )
 
   useEffect(() => {
     let ativo = true
@@ -31,11 +23,6 @@ export default function HomeDashboard() {
     const aplicar = (carregada: HomeUsuarioConfig) => {
       if (!ativo) return
       setConfig(carregada)
-      setDashboard(atual => atual || (
-        carregada.dashboards?.includes('pessoal')
-          ? 'pessoal'
-          : (carregada.dashboardPrincipal || carregada.dashboards?.[0] || 'geral')
-      ))
     }
 
     void (async () => {
@@ -90,55 +77,24 @@ export default function HomeDashboard() {
     return () => { ativo = false }
   }, [config.paginaInicial, router])
 
-  const atual = dashboard || (config.dashboards?.includes('pessoal') ? 'pessoal' : config.dashboardPrincipal) || 'geral'
-  const mostrarComercial = atual === 'geral' || atual === 'comercial' || atual === 'orcamentos'
-  const mostrarAssistencias = atual === 'geral' || atual === 'assistencias'
-  const mostrarOperacional = ['engenharia', 'producao', 'instalacao', 'financeiro'].includes(atual)
-  const mostrarPessoal = atual === 'geral' || atual === 'pessoal'
-  const mostrarNegocio = (mostrarComercial && temModulo(config, 'kanban')) || (mostrarAssistencias && temModulo(config, 'assistencias'))
+  const temTrabalho = temModulo(config, 'tarefas') || temModulo(config, 'calendario')
 
   return (
     <div className="atlas-home-dashboard w-full max-w-full overflow-x-hidden">
       <HomeExecutiveHero modulos={config.modulos} />
       <HomePainelGeralAcessos />
 
-      {atual === 'executivo' && temModulo(config, 'indicadores') && <HomeManagementOverview />}
-
-      {(atual === 'geral' || atual === 'comercial') && temModulo(config, 'indicadores') && <HomeManagementOverview />}
-
-      {atual === 'orcamentos' && <HomeQuotesOverview />}
-
-      {mostrarOperacional && <HomeSectorOverview dashboard={atual as DashboardId} />}
-
-      {mostrarComercial && temModulo(config, 'orcamentos') && <HomeRecentQuotes />}
-
-      {mostrarOperacional && (
-        <section className="mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Dashboard do setor</p>
-            <h2 className="mt-1 text-lg font-bold text-slate-900">{DASHBOARDS.find(item => item.id === atual)?.label}</h2>
-            <p className="mt-1 text-sm text-slate-500">Acompanhamento objetivo das pendências e do volume atual deste setor.</p>
-          </div>
-        </section>
-      )}
-
-      {mostrarNegocio && (
-        <section className="atlas-home-mobile-full mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
-          <div className="grid w-full min-w-0 gap-4 xl:grid-cols-2">
-            {mostrarComercial && temModulo(config, 'kanban') && <HomeKanbanBlock />}
-            {mostrarAssistencias && temModulo(config, 'assistencias') && <HomeAssistenciasBlock escopo={config.assistenciasEscopo} />}
-          </div>
-        </section>
-      )}
-
-      {mostrarPessoal && (
-        <section className="atlas-home-mobile-full mx-auto w-full max-w-7xl px-4 pt-4 md:px-6">
-          <div className="grid w-full min-w-0 gap-4 xl:grid-cols-2">
-            {temModulo(config, 'tarefas') && <HomeTasksBlock />}
+      {temTrabalho && (
+        <section className="atlas-home-mobile-full mx-auto w-full max-w-[1500px] px-3 pt-3 pb-6 sm:px-4 md:px-8">
+          <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_390px]">
+            {temModulo(config, 'tarefas') && <HomePersonalKanban />}
             {temModulo(config, 'calendario') && <HomeCalendarBlock />}
           </div>
         </section>
       )}
+
+      {/* O formulário original permanece ativo; a lista foi substituída pelos mesmos registros no Kanban. */}
+      {temModulo(config, 'tarefas') && <HomeTasksBlock ocultarPainel />}
     </div>
   )
 }
