@@ -344,6 +344,11 @@ export default function OrcamentoRapido() {
     let ativo = true
     const params = new URLSearchParams(window.location.search)
     const chaveSolicitada = params.get('rascunho')
+    const limparReferenciaInvalida = () => {
+      params.delete('rascunho')
+      const busca = params.toString()
+      window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
+    }
     const usuarioPromessa = usuarioAtual().then(u => {
       if (ativo && u?.id) setRascunhoUsuarioId(u.id)
       return u?.id || usuarioCacheLocal()?.id || null
@@ -361,6 +366,7 @@ export default function OrcamentoRapido() {
       return () => { ativo = false }
     }
     if (!chaveRascunhoOrcamentoValida(chaveSolicitada)) {
+      limparReferenciaInvalida()
       setErro('O link de rascunho não é válido. Um novo orçamento foi aberto em branco.')
       setRascunhoCarregado(true)
       return () => { ativo = false }
@@ -373,6 +379,7 @@ export default function OrcamentoRapido() {
         ])
         if (!ativo) return
         if (!rascunho?.dados) {
+          limparReferenciaInvalida()
           setErro('Este rascunho não está disponível neste aparelho. O novo orçamento foi aberto em branco.')
           return
         }
@@ -380,6 +387,7 @@ export default function OrcamentoRapido() {
         const clienteDaUrl = params.get('cliente')
         if ((d.usuarioCriadorId && (!usuarioId || d.usuarioCriadorId !== usuarioId)) ||
           (clienteDaUrl && d.clienteIdOrigem && clienteDaUrl !== d.clienteIdOrigem)) {
+          limparReferenciaInvalida()
           setErro('Este rascunho pertence a outro usuário ou cliente e não foi carregado.')
           return
         }
@@ -423,7 +431,10 @@ export default function OrcamentoRapido() {
         setRascunhoRestaurado(true)
         setRascunhoIniciado(true)
       } catch {
-        if (ativo) setErro('Não foi possível recuperar este rascunho no aparelho. Os outros rascunhos foram preservados.')
+        if (ativo) {
+          limparReferenciaInvalida()
+          setErro('Não foi possível recuperar este rascunho no aparelho. Os outros rascunhos foram preservados.')
+        }
       } finally {
         if (ativo) setRascunhoCarregado(true)
       }
