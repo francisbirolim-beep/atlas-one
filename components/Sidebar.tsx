@@ -144,7 +144,7 @@ export default function Sidebar() {
     const emAdministracao = ITENS_ADMIN.some(item => pathname === item.href || pathname.startsWith(`${item.href}/`))
     if (emAdministracao) setAdminAberto(true)
     if (pathname === '/balcao' || pathname.startsWith('/balcao/')) setGruposAbertos(prev => ({...prev, Comercial:true}))
-    if (pathname === '/kanban' || pathname.startsWith('/kanban/') || pathname === '/tarefas') setGruposAbertos(prev => ({...prev, Kanban:true}))
+    if (pathname === '/kanban' || pathname.startsWith('/kanban/') || pathname === '/producao') setGruposAbertos(prev => ({...prev, Kanban:true}))
     if (pathname === '/relatorios' || pathname.startsWith('/relatorios/')) setGruposAbertos(prev => ({...prev, 'Relatórios':true}))
     if (pathname === '/atlas-ia' || pathname.startsWith('/atlas-ia/')) setGruposAbertos(prev => ({...prev, 'IA Atlas':true}))
   }, [pathname])
@@ -224,18 +224,16 @@ export default function Sidebar() {
   // O Kanban tem um acesso próprio, mas cada item preserva a permissão da rota original.
   const kanbanComercialCombina = guiaLiberada('/kanban') &&
     (!termo || correspondePesquisaAtlas(termo,'Kanban Comercial','Kanban','/kanban'))
-  const kanbanPessoalCombina = (usuario?.role === 'master' || guiaLiberada('/tarefas')) &&
-    (!termo || correspondePesquisaAtlas(termo,'Kanban Pessoal','Minhas tarefas','/tarefas'))
   const kanbanGeralCombina = guiaLiberada('/producao') &&
     (!termo || correspondePesquisaAtlas(termo,'Kanban Geral','Produção','/producao'))
-  const kanbanCombina = kanbanComercialCombina || kanbanPessoalCombina || kanbanGeralCombina
+  const kanbanCombina = kanbanComercialCombina || kanbanGeralCombina
 
   // Vendas e Entrada de NF deixam de ocupar botões soltos, sem perder acesso.
   // O mesmo link não é repetido no submenu caso já exista no grupo original.
   const gruposNavegacao = useMemo(() => {
     const grupos = gruposVisiveis.map(grupo => ({
       ...grupo,
-      itens: grupo.itens.filter(guia => guia.href !== '/kanban'),
+      itens: grupo.itens.filter(guia => guia.href !== '/kanban' && guia.href !== '/producao'),
     }))
     if (balcaoCombina && !grupos.some(grupo => grupo.grupo === 'Comercial'))
       grupos.unshift({grupo:'Comercial', itens:[]})
@@ -286,8 +284,7 @@ export default function Sidebar() {
                 {(!!termo || !!gruposAbertos.Kanban) ? <ChevronDown size={15}/> : <ChevronRight size={15}/>}
               </button>
               {(!!termo || !!gruposAbertos.Kanban) && <div className="ml-3 space-y-0.5 border-l border-slate-200 pl-2">
-                {kanbanComercialCombina && <Link href="/kanban" className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] ${ativo('/kanban')?'bg-brand-navy font-semibold text-white':'text-slate-600 hover:bg-slate-100'}`}><Columns3 size={15}/> Kanban Comercial</Link>}
-                {kanbanPessoalCombina && <Link href="/#kanban-pessoal" className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-slate-600 hover:bg-slate-100"><Columns3 size={15}/> Kanban Pessoal</Link>}
+                {kanbanComercialCombina && <Link href="/kanban/comercial" className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] ${pathname === '/kanban/comercial' || pathname.startsWith('/kanban/comercial/') ? 'bg-brand-navy font-semibold text-white' : 'text-slate-600 hover:bg-slate-100'}`}><Columns3 size={15}/> Kanban Comercial</Link>}
                 {kanbanGeralCombina && <Link href="/producao" className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] ${ativo('/producao')?'bg-brand-navy font-semibold text-white':'text-slate-600 hover:bg-slate-100'}`}><Columns3 size={15}/> Kanban Geral</Link>}
               </div>}
             </section>
