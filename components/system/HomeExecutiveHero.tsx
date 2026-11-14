@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { CalendarPlus, CheckSquare, ClipboardList, FilePlus2, HardHat, ShoppingCart, Truck } from 'lucide-react'
+import { CalendarPlus, CheckSquare, FilePlus2, HardHat, ShoppingCart, Truck } from 'lucide-react'
 import type { HomeModuloId } from '@/lib/homeUsuario'
 
 const MODULOS_PADRAO:HomeModuloId[]=['orcamentos','clientes','tarefas','calendario']
