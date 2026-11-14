@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, ChevronRight, ClipboardList, Headphones, LayoutDashboard, Loader2,
+  ArrowLeft, ChevronRight, ClipboardList, Headphones, LayoutDashboard, Loader2, Clock3, WifiOff,
   PackagePlus, Pencil, Ruler, Search, ShoppingCart, UserCheck, UserPlus, Users, MapPin, Plus, RefreshCw,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import { obterOuCriarCliente } from '@/lib/clientes'
 import type { Cliente } from '@/lib/tipos'
+import { listarRascunhos, listarPendentes, type PendenteOrcamento, type RascunhoOffline } from '@/lib/offlineFila'
+import { pedidoPendentePertenceAoCliente, rascunhoPertenceAoCliente, type IdentificacaoRascunhoOrcamento } from '@/lib/rascunhosOrcamento'
+import { usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 
 type ClienteBusca = Pick<Cliente, 'id' | 'nome' | 'whatsapp' | 'telefone' | 'cidade' | 'bairro' | 'cpf_cnpj'> & { apelido?: string | null }
 // Cache anterior é desconsiderado: poderia conter clientes já inativados.
@@ -31,6 +34,67 @@ export default function IdentificarCliente() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteBusca | null>(null)
+  const [rascunhosCliente, setRascunhosCliente] = useState<RascunhoOffline<IdentificacaoRascunhoOrcamento>[]>([])
+  const [rascunhosDisponiveis, setRascunhosDisponiveis] = useState<RascunhoOffline<IdentificacaoRascunhoOrcamento>[]>([])
+  const [pendentesDisponiveis, setPendentesDisponiveis] = useState<PendenteOrcamento[]>([])
+  const [usuarioRascunhoId, setUsuarioRascunhoId] = useState<string | null>(null)
+  useEffect(() => {
+    let ativo = true
+    void (async () => {
+      const perfil = await usuarioAtual().catch(() => null)
+      const usuarioId = perfil?.id || usuarioCacheLocal()?.id || null
+      const [rascunhos, pendentes] = await Promise.all([
+        listarRascunhos<IdentificacaoRascunhoOrcamento>().catch(() => []),
+        listarPendentes().catch(() => []),
+      ])
+      if (!ativo) return
+      setUsuarioRascunhoId(usuarioId)
+      setRascunhosDisponiveis(rascunhos.filter(r =>
+        !r.dados?.usuarioCriadorId || (usuarioId && r.dados.usuarioCriadorId === usuarioId),
+      ))
+      const pendentesDoUsuario: PendenteOrcamento[] = []
+      for (const p of pendentes) {
+        if (p.tipo === 'orcamento' && (!p.usuarioCriadorId || p.usuarioCriadorId === usuarioId))
+          pendentesDoUsuario.push(p)
+      }
+      setPendentesDisponiveis(pendentesDoUsuario)
+    })()
+    return () => { ativo = false }
+  }, [])
+  const [pedidosPendentes, setPedidosPendentes] = useState<PendenteOrcamento[]>([])
+  const [consultandoRascunhos, setConsultandoRascunhos] = useState(false)
+  useEffect(() => {
+    if (!clienteSelecionado) {
+      setRascunhosCliente([])
+      setPedidosPendentes([])
+      return
+    }
+    let ativo = true
+    const { id, nome } = clienteSelecionado
+    setConsultandoRascunhos(true)
+    void (async () => {
+      const perfil = await usuarioAtual().catch(() => null)
+      const autorId = perfil?.id || usuarioCacheLocal()?.id || null
+      const [rascunhos, pendentes] = await Promise.all([
+        listarRascunhos<IdentificacaoRascunhoOrcamento>().catch(() => []),
+        listarPendentes().catch(() => []),
+      ])
+      if (!ativo) return
+      setRascunhosCliente(
+        rascunhos.filter(r => rascunhoPertenceAoCliente(r.dados, id, nome, autorId))
+          .sort((a,b) => b.atualizadoEm.localeCompare(a.atualizadoEm)),
+      )
+      const pendentesDoCliente: PendenteOrcamento[] = []
+      for (const pedido of pendentes) {
+        if (pedido.tipo !== 'orcamento') continue
+        if (( !pedido.usuarioCriadorId || pedido.usuarioCriadorId === autorId ) &&
+          pedidoPendentePertenceAoCliente(pedido.dados, id, nome)) pendentesDoCliente.push(pedido)
+      }
+      setPedidosPendentes(pendentesDoCliente.sort((a,b) => b.criadoEm.localeCompare(a.criadoEm)))
+      setConsultandoRascunhos(false)
+    })()
+    return () => { ativo = false }
+  }, [clienteSelecionado?.id])
 
   useEffect(() => {
     const termo = busca.trim()
@@ -103,6 +167,23 @@ export default function IdentificarCliente() {
       window.clearTimeout(timer)
     }
   }, [busca])
+
+  const rascunhosDaBusca = useMemo(() => {
+    if (busca.trim().length < 2) return []
+    return rascunhosDisponiveis
+      .filter(r => r.dados?.clienteNome && correspondeBuscaAtlas(busca, r.dados.clienteNome))
+      .filter(r => !r.dados.usuarioCriadorId || r.dados.usuarioCriadorId === usuarioRascunhoId)
+      .sort((a,b) => b.atualizadoEm.localeCompare(a.atualizadoEm))
+      .slice(0,8)
+  }, [busca, rascunhosDisponiveis, usuarioRascunhoId])
+
+  const pendentesDaBusca = useMemo(() => {
+    if (busca.trim().length < 2) return []
+    return pendentesDisponiveis
+      .filter(p => p.dados?.clienteNome && correspondeBuscaAtlas(busca, p.dados.clienteNome))
+      .sort((a,b) => b.criadoEm.localeCompare(a.criadoEm))
+      .slice(0,8)
+  }, [busca, pendentesDisponiveis])
 
   const encontrados = useMemo(() => {
     return clientes.filter((cliente) => correspondeBuscaAtlas(
@@ -199,6 +280,41 @@ export default function IdentificarCliente() {
               </button>
             </section>
 
+            {consultandoRascunhos && <p className="mb-3 text-xs text-slate-500">Verificando rascunhos deste cliente neste aparelho...</p>}
+            {(rascunhosCliente.length > 0 || pedidosPendentes.length > 0) && (
+              <section className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 sm:p-4" aria-label="Rascunhos e envios pendentes deste cliente">
+                <div className="mb-2 flex items-center gap-2">
+                  <Clock3 size={18} className="text-amber-700"/>
+                  <h2 className="text-sm font-bold text-amber-950">Orçamentos não finalizados deste cliente</h2>
+                </div>
+                <p className="mb-3 text-xs text-amber-900/80">Rascunhos e envios pendentes guardados neste aparelho. Abrir um orçamento novo continua começando em branco.</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {rascunhosCliente.map(r => (
+                    <div key={r.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2">
+                      <ClipboardList size={19} className="shrink-0 text-amber-700"/>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-slate-900">{r.dados.obraNome?.trim() || 'Pedido de orçamento em andamento'}</p>
+                        <p className="text-[11px] text-slate-500">Salvo em {new Date(r.atualizadoEm).toLocaleString('pt-BR')}</p>
+                      </div>
+                      <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}&rascunho=${encodeURIComponent(r.id)}`}
+                        className="shrink-0 rounded-lg bg-amber-600 px-2.5 py-2 text-[11px] font-bold text-white hover:bg-amber-700">
+                        Continuar
+                      </Link>
+                    </div>
+                  ))}
+                  {pedidosPendentes.map(p => (
+                    <div key={p.id} className="flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2">
+                      <WifiOff size={19} className="shrink-0 text-blue-700"/>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-slate-900">{p.dados?.obraNome || 'Pedido aguardando envio'}</p>
+                        <p className="text-[11px] text-blue-700">Aguardando sincronização automática · {new Date(p.criadoEm).toLocaleString('pt-BR')}</p>
+                        <p className="text-[10px] text-slate-500">Não é necessário enviar novamente.</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             <h2 className="mb-4 flex items-center gap-2 text-xl font-extrabold text-slate-950">
               <span className="text-blue-600"><UserCheck size={24}/></span> O que você deseja fazer?
             </h2>
@@ -227,6 +343,41 @@ export default function IdentificarCliente() {
             <p className="mt-1 text-sm leading-6 text-slate-500">
               Pesquise um cliente existente e selecione-o para abrir as opções. Para cadastrar um novo cliente, digite nome e sobrenome no campo de pesquisa.
             </p>
+            {rascunhosDaBusca.length > 0 && (
+              <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3" aria-label="Pedidos de orçamento em andamento pelo nome">
+                <h3 className="mb-2 text-sm font-bold text-amber-950">Rascunhos encontrados pelo nome neste aparelho</h3>
+                <div className="space-y-2">
+                  {rascunhosDaBusca.map(r => (
+                    <div key={r.id} className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2">
+                      <ClipboardList size={18} className="shrink-0 text-amber-700"/>
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-xs text-slate-900">{r.dados.clienteNome}</strong>
+                        <span className="block truncate text-[11px] text-slate-500">{r.dados.obraNome || 'Pedido em andamento'} · {new Date(r.atualizadoEm).toLocaleString('pt-BR')}</span>
+                      </span>
+                      <Link href={`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}${r.dados.clienteIdOrigem ? '&cliente='+encodeURIComponent(r.dados.clienteIdOrigem) : ''}`}
+                        className="shrink-0 rounded-lg bg-amber-600 px-2.5 py-2 text-[11px] font-bold text-white hover:bg-amber-700">Continuar</Link>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            {pendentesDaBusca.length > 0 && (
+              <section className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3" aria-label="Orçamentos aguardando envio pelo nome">
+                <h3 className="mb-2 text-sm font-bold text-blue-950">Pedidos aguardando envio encontrados pelo nome</h3>
+                <div className="space-y-2">
+                  {pendentesDaBusca.map(p => (
+                    <div key={p.id} className="flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2">
+                      <WifiOff size={18} className="shrink-0 text-blue-700"/>
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-xs text-slate-900">{p.dados.clienteNome}</strong>
+                        <span className="block truncate text-[11px] text-blue-700">{p.dados.obraNome || 'Pedido de orçamento'} · aguarda sincronização automática</span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold text-blue-700">Salvo</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             {carregando && <div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin"/> Buscando clientes...</div>}
             {erroBusca && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{erroBusca}</p>}
             {encontrados.length > 0 && (

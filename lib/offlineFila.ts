@@ -34,6 +34,9 @@ export interface PendenteOrcamento {
   id: string
   tipo: 'orcamento'
   criadoEm: string
+  // Autor opcional: compatível com a fila legada e protege a lista compartilhada
+  // do aparelho quando usuários diferentes entram no Atlas.
+  usuarioCriadorId?: string | null
   dados: any
 }
 
@@ -141,6 +144,18 @@ export async function obterRascunho<T>(id: string): Promise<RascunhoOffline<T> |
     const tx = db.transaction(STORE_RASCUNHOS, 'readonly')
     const pedido = tx.objectStore(STORE_RASCUNHOS).get(id)
     pedido.onsuccess = () => resolve((pedido.result as RascunhoOffline<T> | undefined) || null)
+    pedido.onerror = () => reject(pedido.error)
+  })
+}
+
+// Permite encontrar pedidos em andamento pelo cliente, sem restaurar um
+// rascunho de outra pessoa quando o usuário abre um orçamento NOVO.
+export async function listarRascunhos<T = any>(): Promise<RascunhoOffline<T>[]> {
+  const db = await abrirDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_RASCUNHOS, 'readonly')
+    const pedido = tx.objectStore(STORE_RASCUNHOS).getAll()
+    pedido.onsuccess = () => resolve((pedido.result as RascunhoOffline<T>[]) || [])
     pedido.onerror = () => reject(pedido.error)
   })
 }
