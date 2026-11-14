@@ -1,13 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, Clock3, Columns3, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Clock3, Columns3, GripVertical, MessageSquare, MoreHorizontal, Pencil, Plus, Users } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import {
   concluirTarefa, criarColunaTarefa, listarColunasTarefas, listarTarefas,
   moverTarefa, reabrirTarefa, renomearColunaTarefa, reordenarColunasTarefa,
 } from '@/lib/tarefas'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+import { comentarTarefa, listarComentariosTarefa, listarMovimentacoesTarefa, type TarefaComentario, type TarefaMovimentacao } from '@/lib/tarefaComentarios'
 import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
 
 const cores = {
@@ -68,6 +70,10 @@ export default function HomePersonalKanban() {
   const [arrastando, setArrastando] = useState<string | null>(null)
   const [menuTarefaAberto, setMenuTarefaAberto] = useState<string | null>(null)
   const [erro, setErro] = useState('')
+  const [comentarios, setComentarios] = useState<Record<string, TarefaComentario[]>>({})
+  const [movimentacoes, setMovimentacoes] = useState<Record<string, TarefaMovimentacao[]>>({})
+  const [textoComentario, setTextoComentario] = useState('')
+  const [salvandoComentario, setSalvandoComentario] = useState(false)
   const [mesSelecionado, setMesSelecionado] = useState(mesAtual)
   const [todosPeriodos, setTodosPeriodos] = useState(false)
   const [manterPendenciasAnteriores, setManterPendenciasAnteriores] = useState(true)
@@ -102,13 +108,41 @@ export default function HomePersonalKanban() {
     const aoFocar = () => { if (document.visibilityState === 'visible') aoAtualizar() }
     window.addEventListener('atlas:tarefas-atualizadas', aoAtualizar)
     window.addEventListener('focus', aoFocar)
+    const canal = supabase.channel('home-tarefas-pessoais-' + usuario.id)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'tarefas', filter: 'usuario_id=eq.' + usuario.id,
+      }, aoAtualizar)
+      .subscribe()
     const intervalo = window.setInterval(aoFocar, 45000)
     return () => {
       window.removeEventListener('atlas:tarefas-atualizadas', aoAtualizar)
       window.removeEventListener('focus', aoFocar)
       window.clearInterval(intervalo)
+      void supabase.removeChannel(canal)
     }
   }, [usuario, atualizar])
+
+  // Enquanto o detalhe estiver aberto, novos comentários e movimentos chegam de outros usuários.
+  const grupoAberto = tarefas.find(t => t.id === menuTarefaAberto)?.tarefa_grupo_id
+  useEffect(() => {
+    if (!grupoAberto) return
+    const atualizarGrupo = () => {
+      void Promise.all([
+        listarComentariosTarefa(grupoAberto),
+        listarMovimentacoesTarefa(grupoAberto),
+      ]).then(([lista, historico]) => {
+        setComentarios(prev => ({ ...prev, [grupoAberto]: lista }))
+        setMovimentacoes(prev => ({ ...prev, [grupoAberto]: historico }))
+      }).catch(() => {})
+    }
+    const canal = supabase.channel('home-grupo-' + grupoAberto)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tarefa_comentarios',
+        filter: 'tarefa_grupo_id=eq.' + grupoAberto }, atualizarGrupo)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tarefa_movimentacoes',
+        filter: 'tarefa_grupo_id=eq.' + grupoAberto }, atualizarGrupo)
+      .subscribe()
+    return () => { void supabase.removeChannel(canal) }
+  }, [grupoAberto])
 
   const final = useMemo(() => colunas.find((c, i) => tipoColuna(c, i) === 'concluido'), [colunas])
   const colunaExibida = (t: TarefaPessoal) => t.concluida_em && final ? final.id : t.coluna_id
@@ -185,6 +219,41 @@ export default function HomePersonalKanban() {
     else window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
     await atualizar()
     setSalvando(false)
+  }
+
+  async function abrirMenu(t: TarefaPessoal) {
+    const abrir = menuTarefaAberto !== t.id
+    setMenuTarefaAberto(abrir ? t.id : null)
+    setTextoComentario('')
+    if (!abrir || !t.tarefa_grupo_id) return
+    try {
+      const [lista, historico] = await Promise.all([
+        listarComentariosTarefa(t.tarefa_grupo_id),
+        listarMovimentacoesTarefa(t.tarefa_grupo_id),
+      ])
+      setComentarios(antes => ({ ...antes, [t.tarefa_grupo_id!]: lista }))
+      setMovimentacoes(antes => ({ ...antes, [t.tarefa_grupo_id!]: historico }))
+    } catch {
+      setErro('Não foi possível carregar os comentários da tarefa.')
+    }
+  }
+
+  async function salvarComentario(t: TarefaPessoal) {
+    if (!usuario || !t.tarefa_grupo_id || !usuario.empresa_id || !textoComentario.trim() || salvandoComentario) return
+    setSalvandoComentario(true)
+    try {
+      await comentarTarefa({
+        grupoId: t.tarefa_grupo_id, empresaId: usuario.empresa_id,
+        usuarioId: usuario.id, usuarioNome: usuario.nome, comentario: textoComentario,
+      })
+      setTextoComentario('')
+      const lista = await listarComentariosTarefa(t.tarefa_grupo_id)
+      setComentarios(antes => ({ ...antes, [t.tarefa_grupo_id!]: lista }))
+    } catch {
+      setErro('Não foi possível salvar o comentário. Verifique sua conexão e tente novamente.')
+    } finally {
+      setSalvandoComentario(false)
+    }
   }
 
   async function novaColuna() {
@@ -328,13 +397,17 @@ export default function HomePersonalKanban() {
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-semibold leading-4 text-slate-800" title={t.titulo}>{t.titulo}</p>
                             {t.descricao && <p className="mt-0.5 truncate text-[11px] leading-4 text-slate-500" title={t.descricao}>{t.descricao}</p>}
+                            {t.tarefa_grupo_id && t.responsaveis_nomes && t.responsaveis_nomes.length > 0 &&
+                              <p className="mt-1 flex items-center gap-1 truncate text-[10px] text-blue-700" title={t.responsaveis_nomes.join(', ')}>
+                                <Users size={10} />{t.responsaveis_nomes.join(', ')}
+                              </p>}
                           </div>
                           <span className={'flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-1 text-[9px] whitespace-nowrap ' +
                             (atrasada ? 'bg-red-50 font-semibold text-red-700' : 'bg-slate-100 text-slate-600')}>
                             <Clock3 size={10} />{dataPrazo(t.data_hora)}
                           </span>
                           <button type="button" aria-label={'Opções da tarefa ' + t.titulo} aria-expanded={menuAberto}
-                            onClick={() => setMenuTarefaAberto(atual => atual === t.id ? null : t.id)}
+                            onClick={() => void abrirMenu(t)}
                             className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100">
                             <MoreHorizontal size={14} />
                           </button>
@@ -343,6 +416,8 @@ export default function HomePersonalKanban() {
                           <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2" aria-label={'Ações da tarefa ' + t.titulo}>
                             {t.solicitante_nome && <p className="text-[10px] text-slate-500">De: {t.solicitante_nome}</p>}
                             {t.prioridade && t.prioridade !== 'normal' && <p className="text-[10px] font-semibold uppercase text-amber-700">{t.prioridade}</p>}
+                            {t.created_at && <p className="text-[10px] text-slate-500">Criada em {dataPrazo(t.created_at)}</p>}
+                            {atrasada && <p className="text-[10px] font-semibold text-red-700">Prazo vencido há {Math.max(1, Math.floor((Date.now() - new Date(t.data_hora!).getTime()) / 3600000))} hora(s)</p>}
                             <div className="flex items-center gap-1.5">
                               <select aria-label={'Mover tarefa ' + t.titulo} value={colunaExibida(t)} disabled={salvando}
                                 onChange={e => void mudarColuna(t, e.target.value)}
@@ -356,6 +431,33 @@ export default function HomePersonalKanban() {
                                 <Check size={13}/>
                               </button>
                             </div>
+                            {t.tarefa_grupo_id && (
+                              <div className="mt-2 border-t border-slate-100 pt-2">
+                                {(movimentacoes[t.tarefa_grupo_id] || []).length > 0 &&
+                                  <div className="mb-2 max-h-20 space-y-1 overflow-y-auto">
+                                    {(movimentacoes[t.tarefa_grupo_id] || []).slice(0, 5).map(m =>
+                                      <p key={m.id} className="text-[10px] text-slate-500">
+                                        {m.usuario_nome}: {m.concluida ? 'Concluiu' : m.coluna_nome} · {dataPrazo(m.created_at)}
+                                      </p>)}
+                                  </div>}
+                                <p className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-700"><MessageSquare size={12}/> Comentários compartilhados</p>
+                                <div className="max-h-32 space-y-1.5 overflow-y-auto">
+                                  {(comentarios[t.tarefa_grupo_id] || []).map(c => (
+                                    <div key={c.id} className="rounded-md bg-slate-50 p-1.5 text-[11px] text-slate-600">
+                                      <strong>{c.usuario_nome}:</strong> {c.comentario}
+                                    </div>
+                                  ))}
+                                  {comentarios[t.tarefa_grupo_id]?.length === 0 && <p className="text-[10px] text-slate-400">Sem comentários ainda.</p>}
+                                </div>
+                                <textarea rows={2} value={textoComentario} onChange={e => setTextoComentario(e.target.value)}
+                                  placeholder="Atualização ou pendência..." className="mt-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+                                <button type="button" disabled={salvandoComentario || !textoComentario.trim()}
+                                  onClick={() => void salvarComentario(t)}
+                                  className="mt-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] font-semibold text-white disabled:opacity-50">
+                                  Enviar comentário
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

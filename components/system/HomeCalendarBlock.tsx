@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, RotateCcw, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
+import { criarRecorrenciaAtlas } from '@/lib/agendaRecorrenciaCliente'
+import RecurrenceFields, { type OpcaoRecorrencia } from './RecurrenceFields'
 import { concluirEventoUsuario, criarEvento, listarConclusoesEventosUsuario, listarEventosDoUsuario, listarUsuariosConvidaveis, reabrirEventoUsuario, type EventoComConvite } from '@/lib/eventos'
 import type { Usuario } from '@/lib/tipos'
 
@@ -41,6 +43,10 @@ export default function HomeCalendarBlock() {
   const [local, setLocal] = useState('')
   const [usuarios, setUsuarios] = useState<{ id: string; nome: string }[]>([])
   const [convidados, setConvidados] = useState<string[]>([])
+  const [buscaUsuario, setBuscaUsuario] = useState('')
+  const [repeticao, setRepeticao] = useState<OpcaoRecorrencia>('nenhuma')
+  const [diasSemana, setDiasSemana] = useState<number[]>([])
+  const [nDiaUtil, setNDiaUtil] = useState(5)
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
@@ -99,24 +105,44 @@ export default function HomeCalendarBlock() {
       return
     }
     setSalvando(true)
-    const criado = await criarEvento(usuario.id, {
-      titulo: titulo.trim(),
-      local: local.trim() || undefined,
-      data_inicio: dataInicio.toISOString(),
-      data_fim: dataFim.toISOString(),
-    }, convidados)
-    if (criado) {
+    try {
+      if (repeticao === 'nenhuma') {
+        const criado = await criarEvento(usuario.id, {
+          titulo: titulo.trim(),
+          local: local.trim() || undefined,
+          data_inicio: dataInicio.toISOString(),
+          data_fim: dataFim.toISOString(),
+        }, convidados)
+        if (!criado) { alert('Não foi possível salvar o compromisso.'); return }
+      } else {
+        const resultado = await criarRecorrenciaAtlas({
+          tipoRegistro: 'agenda', titulo: titulo.trim(),
+          baseData: data, horaInicio: inicio, local: local.trim(),
+          duracaoMinutos: Math.round((dataFim.getTime() - dataInicio.getTime()) / 60_000),
+          convidadosIds: convidados, frequencia: repeticao, diasSemana, nDiaUtil,
+        })
+        if (!resultado.ok) {
+          alert(resultado.error || 'Não foi possível cadastrar o compromisso recorrente.')
+          return
+        }
+        if (resultado.aviso) alert(resultado.aviso)
+      }
       setEventos(await listarEventosDoUsuario(usuario.id))
       setDiaSelecionado(dataInicio)
       const novoMes = new Date(dataInicio)
       novoMes.setDate(1)
       setMes(novoMes)
+      setTitulo('')
+      setLocal('')
+      setConvidados([])
+      setBuscaUsuario('')
+      setRepeticao('nenhuma')
+      setDiasSemana([])
+      setNDiaUtil(5)
+      setModal(false)
+    } finally {
+      setSalvando(false)
     }
-    setTitulo('')
-    setLocal('')
-    setConvidados([])
-    setModal(false)
-    setSalvando(false)
   }
 
   async function alternarConclusao(evento: EventoComConvite) {
@@ -201,14 +227,22 @@ export default function HomeCalendarBlock() {
 
       {modal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold text-slate-900">Novo compromisso</h3><p className="text-xs text-slate-500">Adicione à sua agenda e convide usuários.</p></div><button type="button" onClick={() => setModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={17}/></button></div>
             <div className="space-y-3">
               <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do compromisso" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
               <input type="date" value={data} onChange={e => setData(e.target.value)} className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
+              <RecurrenceFields repeticao={repeticao} onRepeticao={setRepeticao}
+                diasSemana={diasSemana} onDiasSemana={setDiasSemana} nDiaUtil={nDiaUtil} onNDiaUtil={setNDiaUtil} />
               <div className="grid grid-cols-2 gap-2"><label className="text-xs text-slate-500">Início<input type="time" value={inicio} onChange={e => setInicio(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label><label className="text-xs text-slate-500">Fim<input type="time" value={fim} onChange={e => setFim(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label></div>
               <input value={local} onChange={e => setLocal(e.target.value)} placeholder="Local (opcional)" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
-              {usuarios.length > 0 && <div><p className="mb-2 text-xs font-medium text-slate-600">Convidar usuários</p><div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">{usuarios.map(u => <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><input type="checkbox" checked={convidados.includes(u.id)} onChange={() => alternarConvidado(u.id)} />{u.nome}</label>)}</div></div>}
+              {usuarios.length > 0 && <div><p className="mb-2 text-xs font-medium text-slate-600">Convidar usuários</p>
+                <input type="search" value={buscaUsuario} onChange={e => setBuscaUsuario(e.target.value)} placeholder="Pesquisar usuário pelo nome" className="mb-2 w-full rounded-lg border border-slate-200 p-2 text-xs" />
+                <div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
+                  {usuarios.filter(u => u.nome.toLocaleLowerCase('pt-BR').includes(buscaUsuario.trim().toLocaleLowerCase('pt-BR')))
+                    .map(u => <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><input type="checkbox" checked={convidados.includes(u.id)} onChange={() => alternarConvidado(u.id)} />{u.nome}</label>)}
+                </div>
+              </div>}
               <button type="button" onClick={() => void salvar()} disabled={salvando || !titulo.trim()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"><Clock3 size={15}/>{salvando ? 'Salvando...' : 'Salvar compromisso'}</button>
             </div>
           </div>

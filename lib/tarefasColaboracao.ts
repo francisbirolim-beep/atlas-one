@@ -4,8 +4,10 @@ import type { TarefaPessoal } from './tipos'
 export type PrioridadeTarefa = 'baixa' | 'normal' | 'alta' | 'urgente'
 export type CodigoErroColaboracao = 'COLABORACAO_INATIVA'
 
+/** Compatível com atribuição individual anterior e com o novo card compartilhado. */
 export async function atribuirTarefa(dados: {
-  responsavelId: string
+  responsavelId?: string
+  responsaveisIds?: string[]
   titulo: string
   descricao?: string
   dataHora?: string | null
@@ -17,10 +19,7 @@ export async function atribuirTarefa(dados: {
   try {
     const resp = await fetch('/api/tarefas/atribuir', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify(dados),
     })
     const json = await resp.json()
