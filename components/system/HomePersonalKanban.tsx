@@ -8,6 +8,9 @@ import {
   moverTarefa, reabrirTarefa, renomearColunaTarefa, reordenarColunasTarefa,
 } from '@/lib/tarefas'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
+import { listarEquipe, movimentarEquipe, avisarMudancaEquipe, type EquipeTarefa, type StatusEquipe } from '@/lib/tarefasEquipeCliente'
+import CardTarefaEquipe from '@/components/system/CardTarefaEquipe'
+import DetalheTarefaEquipe from '@/components/system/DetalheTarefaEquipe'
 import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
 
 type Delegada = TarefaPessoal & { responsavel_nome: string; coluna_nome: string }
@@ -91,6 +94,9 @@ export default function HomePersonalKanban() {
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
   const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
   const [delegadas, setDelegadas] = useState<Delegada[]>([])
+  const [equipe, setEquipe] = useState<EquipeTarefa[]>([])
+  const [aba, setAba] = useState<'minhas'|'delegadas'>('delegadas')
+  const [detalheId, setDetalheId] = useState<string|null>(null)
   const [carregando, setCarregando] = useState(true)
   const [personalizando, setPersonalizando] = useState(false)
   const [salvando, setSalvando] = useState(false)
@@ -110,8 +116,8 @@ export default function HomePersonalKanban() {
       if (!ativo) return
       setUsuario(u)
       if (u) {
-        const [cls, ts, ds] = await Promise.all([listarColunasTarefas(u.id), listarTarefas(u.id), buscarDelegadas()])
-        if (ativo) { setColunas(cls); setTarefas(ts); setDelegadas(ds) }
+        const [cls, ts, ds, es] = await Promise.all([listarColunasTarefas(u.id), listarTarefas(u.id), buscarDelegadas(), listarEquipe().catch(()=>[])])
+        if (ativo) { setColunas(cls); setTarefas(ts); setDelegadas(ds); setEquipe(es) }
       }
       if (ativo) setCarregando(false)
     }).catch(() => { if (ativo) setCarregando(false) })
@@ -120,10 +126,11 @@ export default function HomePersonalKanban() {
 
   const atualizar = useCallback(async () => {
     if (!usuario) return
-    const [cls, ts, ds] = await Promise.all([listarColunasTarefas(usuario.id), listarTarefas(usuario.id), buscarDelegadas()])
+    const [cls, ts, ds, es] = await Promise.all([listarColunasTarefas(usuario.id), listarTarefas(usuario.id), buscarDelegadas(), listarEquipe().catch(()=>[])])
     setColunas(cls)
     setTarefas(ts)
     setDelegadas(ds)
+    setEquipe(es)
   }, [usuario])
 
   useEffect(() => {
@@ -131,14 +138,24 @@ export default function HomePersonalKanban() {
     const aoAtualizar = () => { void atualizar() }
     const aoFocar = () => { if (document.visibilityState === 'visible') aoAtualizar() }
     window.addEventListener('atlas:tarefas-atualizadas', aoAtualizar)
+    window.addEventListener('atlas:tarefas-equipe-atualizadas', aoAtualizar)
     window.addEventListener('focus', aoFocar)
     const intervalo = window.setInterval(aoFocar, 45000)
     return () => {
       window.removeEventListener('atlas:tarefas-atualizadas', aoAtualizar)
+      window.removeEventListener('atlas:tarefas-equipe-atualizadas', aoAtualizar)
       window.removeEventListener('focus', aoFocar)
       window.clearInterval(intervalo)
     }
   }, [usuario, atualizar])
+
+  useEffect(()=>{
+    const aoAbrir=(ev:Event)=>{ const id=(ev as CustomEvent<{id?:string}>).detail?.id; if(id)setDetalheId(id) }
+    window.addEventListener('atlas:abrir-tarefa-equipe',aoAbrir)
+    const id=new URLSearchParams(window.location.search).get('tarefa')
+    if(id)setDetalheId(id)
+    return()=>window.removeEventListener('atlas:abrir-tarefa-equipe',aoAbrir)
+  },[])
 
   const final = useMemo(() => colunas.find((c, i) => tipoColuna(c, i) === 'concluido'), [colunas])
   const colunaExibida = (t: TarefaPessoal) => t.concluida_em && final ? final.id : t.coluna_id
@@ -184,6 +201,50 @@ export default function HomePersonalKanban() {
       return true
     })
   }, [delegadas, todosPeriodos, mesSelecionado, manterPendenciasAnteriores, busca, filtro])
+
+  const equipeFiltrada = useMemo(()=>{
+    const consulta=semAcentos(busca.trim())
+    return equipe.filter(t=>{
+      const envolve=aba==='minhas'
+        ? t.responsaveis_ids.includes(usuario?.id||'')
+        : t.criado_por_id===usuario?.id || t.responsaveis_ids.includes(usuario?.id||'')
+      if(!envolve)return false
+      const concluida=t.status==='concluido'
+      const mes=mesDaData(concluida?t.concluida_em:t.data_hora||t.created_at)
+      if(!todosPeriodos && (concluida?mes!==mesSelecionado:
+        mes!==mesSelecionado && (!manterPendenciasAnteriores || Boolean(mes&&mes>mesSelecionado))))return false
+      if(consulta && !semAcentos([t.titulo,t.descricao||'',t.criador_nome,...t.responsaveis_nomes].join(' ')).includes(consulta))return false
+      if(filtro==='atrasadas')return !concluida&&Boolean(t.data_hora)&&new Date(t.data_hora!).getTime()<Date.now()
+      if(filtro==='urgentes')return t.prioridade==='urgente'
+      if(filtro==='alta')return t.prioridade==='alta'
+      if(filtro==='sem-prazo')return !t.data_hora
+      return true
+    })
+  },[equipe,aba,usuario,mesSelecionado,todosPeriodos,manterPendenciasAnteriores,busca,filtro])
+
+  function etapaEquipe(t:EquipeTarefa):'pedido'|'a_fazer'|'em_andamento'|'aguardando'|'concluido'{
+    if(t.status==='a_fazer' && t.criado_por_id===usuario?.id &&
+       !t.responsaveis_ids.includes(usuario.id))return 'pedido'
+    return t.status
+  }
+
+  async function mudarEquipe(t:EquipeTarefa,destino:StatusEquipe){
+    if(salvando||t.status===destino)return
+    if(!usuario||!t.responsaveis_ids.includes(usuario.id)){
+      setErro('Somente os responsáveis movimentam pedidos. O andamento é atualizado automaticamente.')
+      return
+    }
+    const nomes:Record<StatusEquipe,string>={a_fazer:'A fazer',em_andamento:'Em andamento',aguardando:'Aguardando',concluido:'Concluído'}
+    if(!confirmarMovimentoKanban({
+      card:t.titulo,origem:nomes[t.status],destino:nomes[destino],
+      retrocesso:['a_fazer','em_andamento','aguardando','concluido'].indexOf(destino)<
+        ['a_fazer','em_andamento','aguardando','concluido'].indexOf(t.status),
+    }))return
+    setSalvando(true);setErro('')
+    try{await movimentarEquipe(t.id,destino);avisarMudancaEquipe();await atualizar()}
+    catch(e){setErro(e instanceof Error?e.message:'Não foi possível alterar a tarefa.')}
+    finally{setSalvando(false)}
+  }
 
   function limparFiltros() {
     setMesSelecionado(mesAtual())
@@ -268,6 +329,7 @@ export default function HomePersonalKanban() {
   }
 
   return (
+    <>
     <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -277,7 +339,7 @@ export default function HomePersonalKanban() {
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => void novaColuna()} disabled={salvando} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Plus size={14}/> Adicionar coluna</button>
           <button type="button" aria-pressed={personalizando} onClick={() => setPersonalizando(v => !v)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Personalizar colunas</button>
-          <button type="button" onClick={() => window.dispatchEvent(new Event('atlas:nova-tarefa'))} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"><Plus size={14}/> Adicionar card</button>
+          <button type="button" onClick={() => window.dispatchEvent(new Event('atlas:tarefa-equipe-nova'))} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"><Plus size={14}/> Adicionar card</button>
         </div>
       </div>
       <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5" aria-label="Filtros e período do Kanban pessoal">
@@ -319,7 +381,7 @@ export default function HomePersonalKanban() {
           Limpar filtros
         </button>
         <div className="flex w-full flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
-          <span>Exibindo: <strong className="text-slate-800">{todosPeriodos ? 'Todos os períodos' : periodoExtenso(mesSelecionado)}</strong> · {tarefasFiltradas.length + delegadasFiltradas.length} tarefa(s)</span>
+          <span>Exibindo: <strong className="text-slate-800">{todosPeriodos ? 'Todos os períodos' : periodoExtenso(mesSelecionado)}</strong> · {tarefasFiltradas.length + (aba==='delegadas'?delegadasFiltradas.length:0) + equipeFiltrada.length} tarefa(s)</span>
           {!todosPeriodos && (
             <label className="flex cursor-pointer items-center gap-1.5 text-slate-600" title="Mantém visíveis tarefas abertas de meses anteriores, sem alterar os concluídos do mês">
               <input type="checkbox" checked={manterPendenciasAnteriores} onChange={e => setManterPendenciasAnteriores(e.target.checked)} className="accent-blue-600" />
@@ -327,6 +389,15 @@ export default function HomePersonalKanban() {
             </label>
           )}
         </div>
+      </div>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
+          <button type="button" onClick={()=>setAba('minhas')} className={'rounded-md px-3 py-1.5 font-semibold '+(aba==='minhas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-white')}>Minhas tarefas</button>
+          <button type="button" onClick={()=>setAba('delegadas')} className={'rounded-md px-3 py-1.5 font-semibold '+(aba==='delegadas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-white')}>
+            Pedidos que fiz ({equipe.filter(t=>t.criado_por_id===usuario?.id&&!t.responsaveis_ids.includes(usuario.id)).length+delegadas.length})
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-500">{aba==='delegadas'?'Acompanhe pedidos quando os responsáveis movimentam os cartões.':'Suas próprias tarefas e as recebidas da equipe.'}</p>
       </div>
       {erro && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{erro}</p>}
       {personalizando && (
@@ -342,17 +413,22 @@ export default function HomePersonalKanban() {
             <div className="mb-2 flex min-h-10 items-center gap-1.5 bg-violet-200 px-2.5 py-2">
               <span className="h-2 w-2 shrink-0 rounded-full bg-violet-600"/>
               <h3 className="truncate text-xs font-bold text-violet-900">Pedidos de tarefa</h3>
-              <span className="rounded-full bg-white px-1.5 text-[10px] text-violet-700">{delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').length}</span>
+              <span className="rounded-full bg-white px-1.5 text-[10px] text-violet-700">{(aba==='delegadas'?delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').length:0) + equipeFiltrada.filter(t=>etapaEquipe(t)==='pedido').length}</span>
             </div>
             <div className="max-h-[260px] min-h-[220px] space-y-1.5 overflow-y-auto px-2 pb-2">
-              {delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').length === 0 &&
+              {(aba!=='delegadas'||delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').length === 0) && equipeFiltrada.filter(t=>etapaEquipe(t)==='pedido').length === 0 &&
                 <p className="rounded-lg border border-dashed border-violet-200 bg-white/70 px-2 py-5 text-center text-[11px] text-violet-400">Nenhum pedido aguardando início</p>}
-              {delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').map(t => <CardDelegado key={t.id} tarefa={t}/>)}
+              {aba==='delegadas'&&delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').map(t => <CardDelegado key={t.id} tarefa={t}/>)}
+              {equipeFiltrada.filter(t=>etapaEquipe(t)==='pedido').map(t=><CardTarefaEquipe key={t.id} tarefa={t} onAbrir={()=>setDetalheId(t.id)}/>)}
             </div>
           </section>
           {colunas.map((col, i) => {
             const visual = cores[tipoColuna(col, i)]
-            const delegadasDaEtapa = delegadasFiltradas.filter(t => etapaDelegada(t) === tipoColuna(col, i))
+            const delegadasDaEtapa = aba==='delegadas' ? delegadasFiltradas.filter(t => etapaDelegada(t) === tipoColuna(col, i)) : []
+            const etapa: StatusEquipe = tipoColuna(col,i)==='concluido'?'concluido':
+              tipoColuna(col,i)==='andamento'?'em_andamento':
+              tipoColuna(col,i)==='aguardando'?'aguardando':'a_fazer'
+            const equipesDaEtapa = equipeFiltrada.filter(t=>etapaEquipe(t)===etapa)
             const itens = tarefasFiltradas.filter(t => colunaExibida(t) === col.id).sort((a, b) =>
               (a.data_hora ? new Date(a.data_hora).getTime() : Infinity) - (b.data_hora ? new Date(b.data_hora).getTime() : Infinity))
             return (
@@ -360,13 +436,16 @@ export default function HomePersonalKanban() {
                 e.preventDefault(); setArrastando(null)
                 const id = e.dataTransfer.getData('text/plain')
                 const tarefa = tarefas.find(t => t.id === id)
-                if (tarefa) void mudarColuna(tarefa, col.id)
+                if (id.startsWith('equipe:')) {
+                  const compartilhada = equipe.find(t=>t.id===id.slice(7))
+                  if(compartilhada)void mudarEquipe(compartilhada,etapa)
+                } else if (tarefa) void mudarColuna(tarefa, col.id)
               }} className={'w-[224px] min-w-[224px] flex-1 overflow-hidden rounded-xl border border-slate-200 border-l-4 p-0 sm:min-w-[235px] ' + visual.lateral + ' ' + visual.fundo + (arrastando === col.id ? ' ring-2 ring-blue-400' : '')}>
                 <div className={'mb-2 flex min-h-10 items-center justify-between gap-1 px-2.5 py-2 ' + visual.cabecalho}>
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className={'h-2 w-2 shrink-0 rounded-full ' + visual.marcador}/>
                     <h3 className={'truncate text-xs font-bold ' + visual.texto} title={col.nome}>{col.nome}</h3>
-                    <span className="rounded-full bg-white px-1.5 text-[10px] text-slate-500">{itens.length + delegadasDaEtapa.length}</span>
+                    <span className="rounded-full bg-white px-1.5 text-[10px] text-slate-500">{itens.length + delegadasDaEtapa.length + equipesDaEtapa.length}</span>
                   </div>
                   {personalizando && <div className="flex items-center gap-0.5">
                     <button type="button" disabled={salvando || i === 0} onClick={() => void deslocarColuna(i, -1)} aria-label={'Mover ' + col.nome + ' para a esquerda'} className="rounded p-1 text-slate-500 hover:bg-white disabled:opacity-30"><ArrowLeft size={12}/></button>
@@ -375,8 +454,10 @@ export default function HomePersonalKanban() {
                   </div>}
                 </div>
                 <div className="max-h-[260px] min-h-[220px] space-y-1.5 overflow-y-auto px-2 pb-2 pr-2">
-                  {itens.length === 0 && delegadasDaEtapa.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa neste período</p>}
+                  {itens.length === 0 && delegadasDaEtapa.length === 0 && equipesDaEtapa.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa neste período</p>}
                   {delegadasDaEtapa.map(t => <CardDelegado key={t.id} tarefa={t}/>)}
+                  {equipesDaEtapa.map(t=><CardTarefaEquipe key={t.id} tarefa={t} onAbrir={()=>setDetalheId(t.id)}
+                    podeArrastar={Boolean(usuario&&t.responsaveis_ids.includes(usuario.id))}/> )}
                   {itens.map(t => {
                     const atrasada = !t.concluida_em && t.data_hora && new Date(t.data_hora).getTime() < Date.now()
                     const menuAberto = menuTarefaAberto === t.id
@@ -428,5 +509,7 @@ export default function HomePersonalKanban() {
         </div>
       )}
     </article>
+    <DetalheTarefaEquipe id={detalheId} onFechar={()=>setDetalheId(null)}/>
+    </>
   )
 }
