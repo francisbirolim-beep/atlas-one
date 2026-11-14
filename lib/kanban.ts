@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { ehEmAndamento, ehOrcamentoFeito, nomeEtapa, podeIrParaOrcamentoFeitoWVetro } from './wvetroEtapaComercial'
+import { ehEmAndamento } from './wvetroEtapaComercial'
 import { KanbanColuna } from './tipos'
 import { executarAutomacoesColuna } from './automacoes'
 import { executarAutomacoesSetor } from './automacoesSetor'
@@ -106,13 +106,8 @@ export async function moverCard(
 
   const paraAndamento = ehEmAndamento(colunaDestino?.nome)
   if (paraAndamento && (motivoAndamento || '').trim().length < 8) return false
-  const { data: atual, error: erroAtual } = await supabase.from('orcamentos')
-    .select('wvetro_fluxo,itens').eq('id', orcamentoId).maybeSingle()
-  if (erroAtual || !atual) return false
-  const fluxo = (atual.wvetro_fluxo || {}) as Record<string, any>
-  const importado = String(fluxo.origem || '').toLowerCase().includes('wvetro')
-  if (importado && !podeIrParaOrcamentoFeitoWVetro(atual) &&
-    !paraAndamento && nomeEtapa(colunaDestino?.nome) !== 'fazer orcamento') return false
+  // A movimentação operacional é independente da conferência dos itens W.Vetro.
+  // Não altera wvetro_fluxo, não aprova itens e não confirma venda.
 
   if (colunaDestino?.gera_medicao_final) {
     if (typeof window !== 'undefined') {

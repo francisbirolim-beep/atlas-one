@@ -807,11 +807,8 @@ if (card?.eh_assistencia) return
 const colunaAnterior = colunas.find(c => c.id === (card?.coluna_id || colunas[0]?.id))
 const colunaNova = colunas.find(c => c.id === colunaId)
 if (!card || !colunaNova || colunaAnterior?.id===colunaNova.id) return
-if (wvetroAguardandoValidacao(card) &&
-    !ehEmAndamento(colunaNova.nome) && nomeEtapa(colunaNova.nome) !== 'fazer orcamento') {
-  alert('O W.Vetro precisa ser validado antes de ir para Orçamento feito ou avançar. Mantenha em Em andamento.')
-  return
-}
+// A posição operacional no Kanban é independente da conferência W.Vetro.
+// Cards pendentes podem mudar de coluna; a validação segue pendente no próprio card.
 if (!confirmarMovimentoKanban({card:card.cliente_nome||'Orçamento',origem:colunaAnterior?.nome||'Etapa anterior',destino:colunaNova.nome,retrocesso:colunas.findIndex(c=>c.id===colunaNova.id)<colunas.findIndex(c=>c.id===colunaAnterior?.id),aviso:'Automações anteriores precisam de revisão quando retornar de etapa.'})) return
 let motivoAndamento = ''
 if (ehEmAndamento(colunaNova.nome)) {
@@ -1879,11 +1876,8 @@ const rascunhoWVetro = ehOrcamentoWVetro(cardSelecionado)
 const colunaAnterior = cardSelecionado.coluna_id
 const mudouColuna = colunaAnterior !== editando.coluna_id
 const destinoEditado = colunas.find(c => c.id === editando.coluna_id)
-if (mudouColuna && wvetroAguardandoValidacao(cardSelecionado) &&
-    !ehEmAndamento(destinoEditado?.nome) && nomeEtapa(destinoEditado?.nome) !== 'fazer orcamento') {
-  alert('É obrigatório validar o orçamento W.Vetro antes de avançar de Em andamento.')
-  return
-}
+// Trocar de coluna pelo editor também não valida automaticamente o W.Vetro.
+// A conclusão técnica do orçamento continua exigindo a conferência própria.
 let motivoAndamento = cardSelecionado.kanban_motivo_andamento || ''
 if (mudouColuna && ehEmAndamento(destinoEditado?.nome)) {
   const resposta = window.prompt('Qual informação ou validação está pendente? (mínimo 8 caracteres):', motivoAndamento || 'Aguardando validação do orçamento.')
