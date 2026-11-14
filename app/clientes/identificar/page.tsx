@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowLeft, ChevronRight, ClipboardList, Headphones, LayoutDashboard, Loader2,
+  ArrowLeft, ChevronRight, ClipboardList, Headphones, LayoutDashboard, Loader2, Clock3, WifiOff,
   PackagePlus, Pencil, Ruler, Search, ShoppingCart, UserCheck, UserPlus, Users, MapPin, Plus, RefreshCw,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import { obterOuCriarCliente } from '@/lib/clientes'
 import type { Cliente } from '@/lib/tipos'
+import { listarRascunhos, listarPendentes, type PendenteOrcamento, type RascunhoOffline } from '@/lib/offlineFila'
+import { pedidoPendentePertenceAoCliente, rascunhoPertenceAoCliente, type IdentificacaoRascunhoOrcamento } from '@/lib/rascunhosOrcamento'
+import { usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 
 type ClienteBusca = Pick<Cliente, 'id' | 'nome' | 'whatsapp' | 'telefone' | 'cidade' | 'bairro' | 'cpf_cnpj'> & { apelido?: string | null }
 // Cache anterior é desconsiderado: poderia conter clientes já inativados.
@@ -31,6 +34,39 @@ export default function IdentificarCliente() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteBusca | null>(null)
+  const [rascunhosCliente, setRascunhosCliente] = useState<RascunhoOffline<IdentificacaoRascunhoOrcamento>[]>([])
+  const [pedidosPendentes, setPedidosPendentes] = useState<PendenteOrcamento[]>([])
+  const [consultandoRascunhos, setConsultandoRascunhos] = useState(false)
+  useEffect(() => {
+    if (!clienteSelecionado) {
+      setRascunhosCliente([])
+      setPedidosPendentes([])
+      return
+    }
+    let ativo = true
+    const { id, nome } = clienteSelecionado
+    setConsultandoRascunhos(true)
+    void (async () => {
+      const perfil = await usuarioAtual().catch(() => null)
+      const autorId = perfil?.id || usuarioCacheLocal()?.id || null
+      const [rascunhos, pendentes] = await Promise.all([
+        listarRascunhos<IdentificacaoRascunhoOrcamento>().catch(() => []),
+        listarPendentes().catch(() => []),
+      ])
+      if (!ativo) return
+      setRascunhosCliente(
+        rascunhos.filter(r => rascunhoPertenceAoCliente(r.dados, id, nome, autorId))
+          .sort((a,b) => b.atualizadoEm.localeCompare(a.atualizadoEm)),
+      )
+      setPedidosPendentes(
+        pendentes.filter((p): p is PendenteOrcamento => p.tipo === 'orcamento')
+          .filter(p => pedidoPendentePertenceAoCliente(p.dados, id, nome))
+          .sort((a,b) => b.criadoEm.localeCompare(a.criadoEm)),
+      )
+      setConsultandoRascunhos(false)
+    })()
+    return () => { ativo = false }
+  }, [clienteSelecionado?.id])
 
   useEffect(() => {
     const termo = busca.trim()
@@ -199,6 +235,40 @@ export default function IdentificarCliente() {
               </button>
             </section>
 
+            {(rascunhosCliente.length > 0 || pedidosPendentes.length > 0) && (
+              <section className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 sm:p-4" aria-label="Rascunhos e envios pendentes deste cliente">
+                <div className="mb-2 flex items-center gap-2">
+                  <Clock3 size={18} className="text-amber-700"/>
+                  <h2 className="text-sm font-bold text-amber-950">Orçamentos não finalizados deste cliente</h2>
+                </div>
+                <p className="mb-3 text-xs text-amber-900/80">Rascunhos e envios pendentes guardados neste aparelho. Abrir um orçamento novo continua começando em branco.</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {rascunhosCliente.map(r => (
+                    <div key={r.id} className="flex min-w-0 items-center gap-2 rounded-xl border border-amber-200 bg-white px-3 py-2">
+                      <ClipboardList size={19} className="shrink-0 text-amber-700"/>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-slate-900">{r.dados.obraNome?.trim() || 'Pedido de orçamento em andamento'}</p>
+                        <p className="text-[11px] text-slate-500">Salvo em {new Date(r.atualizadoEm).toLocaleString('pt-BR')}</p>
+                      </div>
+                      <Link href={`/orcamento-rapido?cliente=${encodeURIComponent(clienteSelecionado.id)}&rascunho=${encodeURIComponent(r.id)}`}
+                        className="shrink-0 rounded-lg bg-amber-600 px-2.5 py-2 text-[11px] font-bold text-white hover:bg-amber-700">
+                        Continuar
+                      </Link>
+                    </div>
+                  ))}
+                  {pedidosPendentes.map(p => (
+                    <div key={p.id} className="flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2">
+                      <WifiOff size={19} className="shrink-0 text-blue-700"/>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-slate-900">{p.dados?.obraNome || 'Pedido aguardando envio'}</p>
+                        <p className="text-[11px] text-blue-700">Aguardando sincronização automática · {new Date(p.criadoEm).toLocaleString('pt-BR')}</p>
+                        <p className="text-[10px] text-slate-500">Não é necessário enviar novamente.</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             <h2 className="mb-4 flex items-center gap-2 text-xl font-extrabold text-slate-950">
               <span className="text-blue-600"><UserCheck size={24}/></span> O que você deseja fazer?
             </h2>
