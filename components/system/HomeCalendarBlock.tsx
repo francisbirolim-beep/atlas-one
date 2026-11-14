@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, RotateCcw, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
-import { concluirEventoUsuario, criarEvento, listarConclusoesEventosUsuario, listarEventosDoUsuario, listarUsuariosConvidaveis, reabrirEventoUsuario, type EventoComConvite } from '@/lib/eventos'
+import { concluirEventoUsuario, criarEvento, criarEventoRecorrente, listarConclusoesEventosUsuario, listarEventosDoUsuario, listarUsuariosConvidaveis, reabrirEventoUsuario, type EventoComConvite } from '@/lib/eventos'
+import type { TipoRecorrencia } from '@/lib/recorrencia'
+import BotaoMicrofone from '@/components/BotaoMicrofone'
+import { interpretarComandoDeVoz } from '@/lib/comandoVoz'
 import type { Usuario } from '@/lib/tipos'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -41,6 +44,10 @@ export default function HomeCalendarBlock() {
   const [local, setLocal] = useState('')
   const [usuarios, setUsuarios] = useState<{ id: string; nome: string }[]>([])
   const [convidados, setConvidados] = useState<string[]>([])
+  const [buscaUsuario, setBuscaUsuario] = useState('')
+  const [recorrencia, setRecorrencia] = useState<TipoRecorrencia | ''>('')
+  const [valorRecorrencia, setValorRecorrencia] = useState(5)
+  const [erroAgenda, setErroAgenda] = useState('')
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
@@ -99,12 +106,16 @@ export default function HomeCalendarBlock() {
       return
     }
     setSalvando(true)
-    const criado = await criarEvento(usuario.id, {
+    const dadosEvento = {
       titulo: titulo.trim(),
       local: local.trim() || undefined,
       data_inicio: dataInicio.toISOString(),
       data_fim: dataFim.toISOString(),
-    }, convidados)
+    }
+    const criado = recorrencia
+      ? await criarEventoRecorrente(usuario.id,dadosEvento,recorrencia,
+        recorrencia==='dia_util_mes'?5:recorrencia==='dia_fixo_mes'?new Date(dataInicio).getDate():valorRecorrencia,convidados)
+      : await criarEvento(usuario.id,dadosEvento,convidados)
     if (criado) {
       setEventos(await listarEventosDoUsuario(usuario.id))
       setDiaSelecionado(dataInicio)
@@ -112,9 +123,11 @@ export default function HomeCalendarBlock() {
       novoMes.setDate(1)
       setMes(novoMes)
     }
+    if(!criado){setErroAgenda('Não foi possível salvar. Verifique os dados e tente novamente.');setSalvando(false);return}
     setTitulo('')
     setLocal('')
     setConvidados([])
+    setRecorrencia('');setBuscaUsuario('');setErroAgenda('')
     setModal(false)
     setSalvando(false)
   }
@@ -139,6 +152,11 @@ export default function HomeCalendarBlock() {
     setAlterandoId(null)
   }
 
+  function aoFalar(texto:string){
+    const interpretado=interpretarComandoDeVoz(texto)
+    setTitulo(interpretado.titulo)
+    if(interpretado.data){setData(dataInput(interpretado.data));setInicio(new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(interpretado.data))}
+  }
   function alternarConvidado(id: string) {
     setConvidados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
@@ -204,11 +222,29 @@ export default function HomeCalendarBlock() {
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold text-slate-900">Novo compromisso</h3><p className="text-xs text-slate-500">Adicione à sua agenda e convide usuários.</p></div><button type="button" onClick={() => setModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={17}/></button></div>
             <div className="space-y-3">
-              <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do compromisso" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
+              <div className="flex items-center gap-2"><input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Título do compromisso" className="w-full min-w-0 rounded-xl border border-slate-300 p-3 text-sm" /><BotaoMicrofone onResultado={aoFalar} titulo="Ditar compromisso" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-blue-700"/></div>
               <input type="date" value={data} onChange={e => setData(e.target.value)} className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
               <div className="grid grid-cols-2 gap-2"><label className="text-xs text-slate-500">Início<input type="time" value={inicio} onChange={e => setInicio(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label><label className="text-xs text-slate-500">Fim<input type="time" value={fim} onChange={e => setFim(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm"/></label></div>
               <input value={local} onChange={e => setLocal(e.target.value)} placeholder="Local (opcional)" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
-              {usuarios.length > 0 && <div><p className="mb-2 text-xs font-medium text-slate-600">Convidar usuários</p><div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">{usuarios.map(u => <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><input type="checkbox" checked={convidados.includes(u.id)} onChange={() => alternarConvidado(u.id)} />{u.nome}</label>)}</div></div>}
+              {usuarios.length > 0 && <div><p className="mb-2 text-xs font-medium text-slate-600">Convidar usuários</p>
+                <input value={buscaUsuario} onChange={e=>setBuscaUsuario(e.target.value)} placeholder="Pesquisar usuário pelo nome..."
+                  className="mb-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-xs"/>
+                <div className="max-h-32 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
+                  {usuarios.filter(u=>u.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes(buscaUsuario.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''))).map(u=>
+                    <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><input type="checkbox" checked={convidados.includes(u.id)} onChange={()=>alternarConvidado(u.id)}/>{u.nome}</label>)}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-500">{convidados.length} participante(s) selecionado(s)</p>
+              </div>}
+              <div className="space-y-2 rounded-xl border border-slate-200 p-2.5">
+                <p className="text-xs font-semibold text-slate-700">Repetição do compromisso</p>
+                <select value={recorrencia} onChange={e=>setRecorrencia(e.target.value as TipoRecorrencia | '')}
+                  className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs">
+                  <option value="">Uma vez</option><option value="semanal">Toda semana (mesmo dia)</option>
+                  <option value="dia_fixo_mes">Todo mês (mesmo dia)</option><option value="dia_util_mes">Todo 5º dia útil</option>
+                </select>
+                {recorrencia==='dia_util_mes'&&<p className="text-[11px] text-amber-700">Conferir feriados aplicáveis ao setor antes de confirmar o vencimento.</p>}
+              </div>
+              {erroAgenda&&<p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-red-700">{erroAgenda}</p>}
               <button type="button" onClick={() => void salvar()} disabled={salvando || !titulo.trim()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"><Clock3 size={15}/>{salvando ? 'Salvando...' : 'Salvar compromisso'}</button>
             </div>
           </div>

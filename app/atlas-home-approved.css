@@ -1,0 +1,42 @@
+/* Tema da Home aprovada: restrito à rota Início. Nenhum outro módulo é afetado. */
+.atlas-home-aprovada .atlas-sidebar-nav {
+  background: #121d31 !important;
+  border-right-color: #26344c !important;
+  color: #dce7f6 !important;
+}
+.atlas-home-aprovada .atlas-sidebar-nav .text-slate-900,
+.atlas-home-aprovada .atlas-sidebar-nav .text-slate-800,
+.atlas-home-aprovada .atlas-sidebar-nav .text-slate-700,
+.atlas-home-aprovada .atlas-sidebar-nav .text-slate-600 {
+  color: #dce7f6 !important;
+}
+.atlas-home-aprovada .atlas-sidebar-nav .text-slate-500,
+.atlas-home-aprovada .atlas-sidebar-nav .text-slate-400 {
+  color: #9aacc8 !important;
+}
+.atlas-home-aprovada .atlas-sidebar-nav .bg-slate-50,
+.atlas-home-aprovada .atlas-sidebar-nav .bg-slate-100 {
+  background: #1b2940 !important;
+}
+.atlas-home-aprovada .atlas-sidebar-nav .border-slate-100,
+.atlas-home-aprovada .atlas-sidebar-nav .border-slate-200 {
+  border-color: #2d3d54 !important;
+}
+.atlas-home-aprovada .atlas-sidebar-nav a:hover,
+.atlas-home-aprovada .atlas-sidebar-nav button:hover {
+  background: #203656;
+}
+.atlas-home-aprovada .atlas-sidebar-nav input {
+  background: #1b2940 !important;
+  border-color: #30425f !important;
+  color: #f8fafc !important;
+}
+.atlas-home-aprovada .atlas-sidebar-nav a.bg-brand-navy {
+  background: #0a67ef !important;
+  color: #fff !important;
+}
+@media (min-width:1280px) {
+  .atlas-home-aprovada .atlas-home-dashboard > section {
+    max-width: 1660px;
+  }
+}

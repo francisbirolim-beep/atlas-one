@@ -184,18 +184,27 @@ export default function AppTopbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
+      <header className={'sticky top-0 z-30 border-b backdrop-blur-xl '+(pathname==='/'?'border-slate-800 bg-[#111b2d]':'border-slate-200/70 bg-white/90')}>
         <div className="flex h-[60px] items-center gap-1.5 px-2.5 sm:h-[68px] sm:gap-3 sm:px-4 md:px-6 lg:px-7">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 xl:max-w-[340px]">
             <Link href="/atlas-ia/especialistas" className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm transition hover:bg-slate-800 md:hidden" title="Abrir IA Atlas" aria-label="Abrir IA Atlas"><Sparkles size={17} /></Link>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-[0.18em]"><span>{contexto.grupo}</span><span className="hidden h-1 w-1 rounded-full bg-emerald-500 sm:block" /><span className="hidden normal-case tracking-normal text-slate-400 sm:block">Atlas One</span></div>
-              <div className="mt-0.5 truncate text-sm font-semibold tracking-tight text-slate-950 sm:text-base">{contexto.titulo}</div>
+              {pathname==='/'?(
+                <>
+                  <h1 className="truncate text-lg font-bold leading-6 tracking-tight text-white sm:text-xl">Olá, {usuario?.nome?.trim().split(/\\s+/)[0]||'equipe'}!</h1>
+                  <p className="truncate text-[10px] text-slate-300 sm:text-xs">Bem-vindo ao Atlas One da Esquadrifácio.</p>
+                </>
+              ):(
+                <>
+                  <div className="flex items-center gap-2 whitespace-nowrap text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 sm:text-[11px] sm:tracking-[0.18em]"><span>{contexto.grupo}</span><span className="hidden h-1 w-1 rounded-full bg-emerald-500 sm:block" /><span className="hidden normal-case tracking-normal text-slate-400 sm:block">Atlas One</span></div>
+                  <div className="mt-0.5 truncate text-sm font-semibold tracking-tight text-slate-950 sm:text-base">{contexto.titulo}</div>
+                </>
+              )}
             </div>
           </div>
 
           <div className="hidden min-w-0 flex-1 justify-center xl:flex">
-            <button type="button" onClick={abrirBusca} className="group flex h-10 w-full max-w-2xl items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 text-left text-sm text-slate-400 shadow-inner transition hover:border-slate-300 hover:bg-white" title="Busca global"><Search size={16} className="text-slate-400 group-hover:text-slate-600" /><span className="flex-1 truncate">Buscar cliente, obra, orçamento, medição...</span><span className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-slate-400 shadow-sm"><Command size={10} /> K</span></button>
+            <button type="button" onClick={abrirBusca} className={'group flex h-10 w-full max-w-2xl items-center gap-2.5 rounded-xl border px-3.5 text-left text-sm shadow-inner transition '+(pathname==='/'?'border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700':'border-slate-200 bg-slate-50/80 text-slate-400 hover:border-slate-300 hover:bg-white')} title="Busca global"><Search size={16} className="text-slate-400 group-hover:text-slate-600" /><span className="flex-1 truncate">Buscar cliente, obra, orçamento, medição...</span><span className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-slate-400 shadow-sm"><Command size={10} /> K</span></button>
           </div>
 
           <div className="relative flex flex-none items-center justify-end gap-1.5 sm:flex-1 sm:gap-2 xl:max-w-[430px]">
@@ -205,8 +214,8 @@ export default function AppTopbar() {
             <button type="button" onClick={abrirBusca} className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 xl:hidden" title="Busca global"><Search size={16} /></button>
 
             <button type="button" onClick={() => setPerfilAberto(v => !v)} className="flex h-10 items-center gap-2.5 rounded-xl border border-transparent px-0.5 transition hover:border-slate-200 hover:bg-slate-50 sm:ml-1 sm:h-11 sm:px-1.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-xs font-bold text-white shadow-sm">{iniciais(usuario?.nome)}</div>
-              <div className="hidden min-w-0 text-left sm:block"><div className="max-w-32 truncate text-sm font-semibold text-slate-800">{usuario?.nome || 'Usuário'}</div><div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{usuario?.role || 'usuário'}</div></div>
+              <div className={'flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold text-white shadow-sm '+(pathname==='/'?'bg-blue-700':'bg-slate-950')}>{iniciais(usuario?.nome)}</div>
+              <div className="hidden min-w-0 text-left sm:block"><div className={'max-w-32 truncate text-sm font-semibold '+(pathname==='/'?'text-white':'text-slate-800')}>{usuario?.nome || 'Usuário'}</div><div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{usuario?.role || 'usuário'}</div></div>
               <ChevronDown size={14} className="hidden text-slate-400 sm:block" />
             </button>
 

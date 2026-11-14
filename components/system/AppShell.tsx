@@ -17,6 +17,7 @@ import MedicaoParcialPanel from '@/components/system/MedicaoParcialPanel'
 import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAccessPanel'
 import ChatNotificationToast from '@/components/system/ChatNotificationToast'
 import TaskReminderToast from '@/components/system/TaskReminderToast'
+import TarefaEquipeToast from '@/components/system/TarefaEquipeToast'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -33,7 +34,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const medicaoFinalId = medicaoIdDaRota(pathname)
 
   return (
-    <div className="atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex">
+    <div className={'atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex '+(ehHome?'atlas-home-aprovada':'')}>
       {!ehWhatsAppAtendimento && (
         <div className="atlas-sidebar-shell contents md:block [&>nav]:hidden md:[&>nav]:flex">
           <Sidebar />
@@ -45,6 +46,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         {!ehWhatsAppAtendimento && !ehHome && <AtlasVoltar />}
         {ehWhatsAppAtendimento && <ChatNotificationToast />}
         <TaskReminderToast />
+        <TarefaEquipeToast />
         <main className={`atlas-app-main atlas-main-surface w-full max-w-full overflow-x-hidden ${ehWhatsAppAtendimento ? 'min-h-screen bg-white pb-0' : 'min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0'} ${ehHome ? 'atlas-home-v2' : ''}`}>
           {ehHome && <HomeDashboard />}
           {!ehWhatsAppAtendimento && <MobileFavorites mostrarAcessoRapido={ehHome} />}
