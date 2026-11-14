@@ -58,17 +58,17 @@ export function gerarDatasEquipe(inicioISO: string, tipo: RepeticaoEquipe, valor
   const base = camposSaoPaulo(inicio)
   const limite = new Date(inicio)
   limite.setUTCMonth(limite.getUTCMonth()+meses)
-  const datas = new Set<string>([inicio.toISOString()])
+  const datas = new Set<string>()
   const add = (ano:number, mes:number, dia:number) => {
     if(dia<1||dia>new Date(Date.UTC(ano,mes,0)).getUTCDate()) return
     const valor = instanteSaoPaulo(ano,mes,dia,base.hora,base.minuto)
-    if(valor>inicio&&valor<=limite) datas.add(valor.toISOString())
+    if(valor>=inicio&&valor<=limite) datas.add(valor.toISOString())
   }
   if(tipo==='semanal') {
     const dias = diasSemana.length?diasSemana:[new Date(Date.UTC(base.ano,base.mes-1,base.dia)).getUTCDay()]
     const data = new Date(Date.UTC(base.ano,base.mes-1,base.dia,12))
-    for(let i=1;i<=200;i++){
-      data.setUTCDate(data.getUTCDate()+1)
+    for(let i=0;i<=200;i++){
+      if(i>0)data.setUTCDate(data.getUTCDate()+1)
       if(dias.includes(data.getUTCDay())) add(data.getUTCFullYear(),data.getUTCMonth()+1,data.getUTCDate())
       if(instanteSaoPaulo(data.getUTCFullYear(),data.getUTCMonth()+1,data.getUTCDate(),base.hora,base.minuto)>limite) break
     }
