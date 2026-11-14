@@ -35,6 +35,22 @@ export default function IdentificarCliente() {
   const [erro, setErro] = useState('')
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteBusca | null>(null)
   const [rascunhosCliente, setRascunhosCliente] = useState<RascunhoOffline<IdentificacaoRascunhoOrcamento>[]>([])
+  const [rascunhosDisponiveis, setRascunhosDisponiveis] = useState<RascunhoOffline<IdentificacaoRascunhoOrcamento>[]>([])
+  const [usuarioRascunhoId, setUsuarioRascunhoId] = useState<string | null>(null)
+  useEffect(() => {
+    let ativo = true
+    void (async () => {
+      const perfil = await usuarioAtual().catch(() => null)
+      const usuarioId = perfil?.id || usuarioCacheLocal()?.id || null
+      const rascunhos = await listarRascunhos<IdentificacaoRascunhoOrcamento>().catch(() => [])
+      if (!ativo) return
+      setUsuarioRascunhoId(usuarioId)
+      setRascunhosDisponiveis(rascunhos.filter(r =>
+        !r.dados?.usuarioCriadorId || (usuarioId && r.dados.usuarioCriadorId === usuarioId),
+      ))
+    })()
+    return () => { ativo = false }
+  }, [])
   const [pedidosPendentes, setPedidosPendentes] = useState<PendenteOrcamento[]>([])
   const [consultandoRascunhos, setConsultandoRascunhos] = useState(false)
   useEffect(() => {
@@ -139,6 +155,15 @@ export default function IdentificarCliente() {
       window.clearTimeout(timer)
     }
   }, [busca])
+
+  const rascunhosDaBusca = useMemo(() => {
+    if (busca.trim().length < 2) return []
+    return rascunhosDisponiveis
+      .filter(r => r.dados?.clienteNome && correspondeBuscaAtlas(busca, r.dados.clienteNome))
+      .filter(r => !r.dados.usuarioCriadorId || r.dados.usuarioCriadorId === usuarioRascunhoId)
+      .sort((a,b) => b.atualizadoEm.localeCompare(a.atualizadoEm))
+      .slice(0,8)
+  }, [busca, rascunhosDisponiveis, usuarioRascunhoId])
 
   const encontrados = useMemo(() => {
     return clientes.filter((cliente) => correspondeBuscaAtlas(
@@ -298,6 +323,24 @@ export default function IdentificarCliente() {
             <p className="mt-1 text-sm leading-6 text-slate-500">
               Pesquise um cliente existente e selecione-o para abrir as opções. Para cadastrar um novo cliente, digite nome e sobrenome no campo de pesquisa.
             </p>
+            {rascunhosDaBusca.length > 0 && (
+              <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3" aria-label="Pedidos de orçamento em andamento pelo nome">
+                <h3 className="mb-2 text-sm font-bold text-amber-950">Rascunhos encontrados pelo nome neste aparelho</h3>
+                <div className="space-y-2">
+                  {rascunhosDaBusca.map(r => (
+                    <div key={r.id} className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2">
+                      <ClipboardList size={18} className="shrink-0 text-amber-700"/>
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-xs text-slate-900">{r.dados.clienteNome}</strong>
+                        <span className="block truncate text-[11px] text-slate-500">{r.dados.obraNome || 'Pedido em andamento'} · {new Date(r.atualizadoEm).toLocaleString('pt-BR')}</span>
+                      </span>
+                      <Link href={`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}${r.dados.clienteIdOrigem ? '&cliente='+encodeURIComponent(r.dados.clienteIdOrigem) : ''}`}
+                        className="shrink-0 rounded-lg bg-amber-600 px-2.5 py-2 text-[11px] font-bold text-white hover:bg-amber-700">Continuar</Link>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             {carregando && <div className="mt-4 flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin"/> Buscando clientes...</div>}
             {erroBusca && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{erroBusca}</p>}
             {encontrados.length > 0 && (
