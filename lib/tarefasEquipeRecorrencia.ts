@@ -67,7 +67,8 @@ export function gerarDatasEquipe(inicioISO: string, tipo: RepeticaoEquipe, valor
   if(tipo==='semanal') {
     const dias = diasSemana.length?diasSemana:[new Date(Date.UTC(base.ano,base.mes-1,base.dia)).getUTCDay()]
     const data = new Date(Date.UTC(base.ano,base.mes-1,base.dia,12))
-    for(let i=0;i<=200;i++){
+    const maxDias=Math.min(4000,Math.ceil((limite.getTime()-inicio.getTime())/86400000)+2)
+    for(let i=0;i<=maxDias;i++){
       if(i>0)data.setUTCDate(data.getUTCDate()+1)
       if(dias.includes(data.getUTCDay())) add(data.getUTCFullYear(),data.getUTCMonth()+1,data.getUTCDate())
       if(instanteSaoPaulo(data.getUTCFullYear(),data.getUTCMonth()+1,data.getUTCDate(),base.hora,base.minuto)>limite) break
