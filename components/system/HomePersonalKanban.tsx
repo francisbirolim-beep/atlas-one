@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, Columns3, GripVertical, Pencil, Plus, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, Columns3, GripVertical, Pencil, Plus } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import {
   concluirTarefa, criarColunaTarefa, listarColunasTarefas, listarTarefas,
@@ -22,7 +22,7 @@ function semAcentos(s: string) {
   return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
-function tipoColuna(coluna: TarefaPessoalColuna, indice: number) {
+function tipoColuna(coluna: TarefaPessoalColuna, indice: number): keyof typeof cores {
   const nome = semAcentos(coluna.nome)
   if (/conclu|finaliz|feito|feita/.test(nome)) return 'concluido'
   if (/aguard|espera|pendente/.test(nome)) return 'aguardando'
