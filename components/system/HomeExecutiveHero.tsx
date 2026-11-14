@@ -46,7 +46,7 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
   const tem = (modulo: HomeModuloId) => modulos.includes(modulo)
 
   function novaTarefa() {
-    window.dispatchEvent(new Event('atlas:nova-tarefa'))
+    window.dispatchEvent(new Event('atlas:tarefa-equipe-nova'))
   }
 
   function novoCompromisso() {
