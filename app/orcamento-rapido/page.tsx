@@ -733,7 +733,7 @@ export default function OrcamentoRapido() {
       if (resultado.ok) {
         const temPendenciasTecnicas = itens.some(item => item.itemTipo === 'sob_medida' && (!item.tipologiaId || item.configuracaoStatus === 'pendente'))
         setSalvando(false)
-        await removerRascunho(RASCUNHO_ID).catch(() => {})
+        await removerRascunho(rascunhoChave).catch(() => {})
         setRascunhoSalvoEm(null)
         setPedidoEnviadoId(resultado.id || null)
         setSalvoComPendenciasTecnicas(temPendenciasTecnicas)
