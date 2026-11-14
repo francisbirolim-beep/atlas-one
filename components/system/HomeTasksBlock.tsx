@@ -77,9 +77,6 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
   const agora = new Date()
   const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime()
   const fimHoje = inicioHoje + 86400000
-  const atrasadas = abertas.filter(t => t.data_hora && new Date(t.data_hora).getTime() < inicioHoje)
-  const hoje = abertas.filter(t => { if (!t.data_hora) return false; const ts = new Date(t.data_hora).getTime(); return ts >= inicioHoje && ts < fimHoje })
-  const proximas = abertas.filter(t => !t.data_hora || new Date(t.data_hora).getTime() >= fimHoje)
 
   async function abrirModal() {
     if (!usuario) return
@@ -133,38 +130,50 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
   return (
     <>
       {!ocultarPainel && (
-      <article className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm md:p-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2"><CheckSquare size={17} className="text-blue-600" /><h2 className="font-semibold">Minhas tarefas</h2></div>
-          <button type="button" onClick={() => void abrirModal()} className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"><Plus size={13}/> Nova</button>
-        </div>
-
-        <div className="mb-3 flex flex-wrap gap-2 text-[11px]">
-          <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">Minhas tarefas ({abertas.length})</span>
-          <span className="rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-600">Atrasadas ({atrasadas.length})</span>
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 font-medium text-amber-700">Hoje ({hoje.length})</span>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">Próximas ({proximas.length})</span>
-        </div>
-        <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <article className="h-full min-w-0 rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 shadow-sm sm:p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={19} className="text-blue-600" />
+              <h2 className="text-base font-bold">Minhas tarefas</h2>
+            </div>
+            <Link href="/tarefas" className="text-xs font-semibold text-blue-700 hover:underline">Ver todas</Link>
+          </div>
           {carregando ? (
-            <p className="p-4 text-sm text-slate-400">Carregando tarefas...</p>
+            <p className="py-8 text-sm text-slate-400">Carregando tarefas...</p>
           ) : abertas.length === 0 ? (
-            <div className="p-5 text-sm text-slate-500"><Check size={16} className="mb-2 text-emerald-600" />Nenhuma tarefa aberta.</div>
-          ) : abertas.slice(0, 5).map(tarefa => {
-            const atrasada = !!tarefa.data_hora && new Date(tarefa.data_hora).getTime() < Date.now()
-            return (
-              <div key={tarefa.id} className="flex items-center gap-3 px-3 py-3 hover:bg-slate-50">
-                <button type="button" onClick={() => void concluir(tarefa)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-300 text-transparent transition hover:border-emerald-500 hover:text-emerald-600" title="Concluir tarefa"><Check size={14}/></button>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800">{tarefa.titulo}</p>
-                  <p className={`mt-0.5 flex items-center gap-1 text-[11px] ${atrasada ? 'font-medium text-red-600' : 'text-slate-500'}`}><Clock3 size={11}/>{dataHoraLabel(tarefa.data_hora)}</p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        <Link href="/tarefas" className="mt-3 inline-block text-xs font-medium text-blue-700 hover:text-blue-800">Ver todas as tarefas →</Link>
-      </article>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+              <Check size={16} className="mb-2 text-emerald-600" />Nenhuma tarefa aberta.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {abertas.slice(0, 4).map(tarefa => {
+                const prazo = tarefa.data_hora ? new Date(tarefa.data_hora).getTime() : null
+                const vencida = prazo !== null && prazo < Date.now()
+                const venceHoje = prazo !== null && prazo >= inicioHoje && prazo < fimHoje
+                const cor = vencida ? 'border-l-red-500' : venceHoje ? 'border-l-amber-400' : 'border-l-blue-500'
+                return (
+                  <div key={tarefa.id} className={'flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 border-l-4 bg-white px-2.5 py-2 shadow-sm ' + cor}>
+                    <button type="button" onClick={() => void concluir(tarefa)}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-300 text-transparent transition hover:border-emerald-500 hover:text-emerald-600"
+                      title="Marcar como concluída" aria-label={'Concluir tarefa ' + tarefa.titulo}>
+                      <Check size={14} />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-slate-900" title={tarefa.titulo}>{tarefa.titulo}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                        {tarefa.descricao || (tarefa.solicitante_nome ? 'De: ' + tarefa.solicitante_nome : 'Tarefa pessoal')}
+                      </p>
+                    </div>
+                    <span className={'shrink-0 rounded-md px-1.5 py-1 text-[10px] font-semibold ' + (vencida ? 'bg-red-50 text-red-700' : venceHoje ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600')}>
+                      <Clock3 size={11} className="mr-0.5 inline" />{dataHoraLabel(tarefa.data_hora)}
+                    </span>
+                  </div>
+                )
+              })}
+              {abertas.length > 4 && <Link href="/tarefas" className="block pt-1 text-center text-xs font-semibold text-blue-700 hover:underline">Mais {abertas.length - 4} tarefa(s)</Link>}
+            </div>
+          )}
+        </article>
       )}
 
       {modal && (

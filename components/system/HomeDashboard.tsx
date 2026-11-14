@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { tokenAtual, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import { homeConfigPadrao, lerHomeUsuarioConfig, temModulo, type HomeUsuarioConfig } from '@/lib/homeUsuario'
 import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
-import HomePainelGeralAcessos from '@/components/system/HomePainelGeralAcessos'
 import HomeTasksBlock from '@/components/system/HomeTasksBlock'
 import HomeCalendarBlock from '@/components/system/HomeCalendarBlock'
 import HomePersonalKanban from '@/components/system/HomePersonalKanban'
@@ -77,24 +76,25 @@ export default function HomeDashboard() {
     return () => { ativo = false }
   }, [config.paginaInicial, router])
 
-  const temTrabalho = temModulo(config, 'tarefas') || temModulo(config, 'calendario')
+  const mostraTarefas = temModulo(config, 'tarefas')
+  const mostraCalendario = temModulo(config, 'calendario')
+  const temTrabalho = mostraTarefas || mostraCalendario
 
   return (
     <div className="atlas-home-dashboard w-full max-w-full overflow-x-hidden">
       <HomeExecutiveHero modulos={config.modulos} />
-      <HomePainelGeralAcessos />
 
       {temTrabalho && (
-        <section className="atlas-home-mobile-full mx-auto w-full max-w-[1500px] px-3 pt-3 pb-6 sm:px-4 md:px-8">
-          <div className="grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,1fr)_390px]">
-            {temModulo(config, 'tarefas') && <HomePersonalKanban />}
-            {temModulo(config, 'calendario') && <HomeCalendarBlock />}
+        <section className="atlas-home-mobile-full mx-auto w-full max-w-[1500px] px-3 pt-4 pb-6 sm:px-4 md:px-8">
+          <div className={mostraTarefas && mostraCalendario
+            ? 'grid min-w-0 items-stretch gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.3fr)]'
+            : 'grid min-w-0 grid-cols-1 gap-4'}>
+            {mostraTarefas && <HomeTasksBlock />}
+            {mostraCalendario && <HomeCalendarBlock />}
           </div>
+          {mostraTarefas && <div className="mt-4"><HomePersonalKanban /></div>}
         </section>
       )}
-
-      {/* O formulário original permanece ativo; a lista foi substituída pelos mesmos registros no Kanban. */}
-      {temModulo(config, 'tarefas') && <HomeTasksBlock ocultarPainel />}
     </div>
   )
 }
