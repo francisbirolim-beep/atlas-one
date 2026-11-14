@@ -695,7 +695,7 @@ export default function OrcamentoRapido() {
 
   async function salvarComoPendente(dadosForm: DadosOrcamentoForm, motivo = '') {
     try {
-      await salvarPendente({ id: uuidv4(), tipo: 'orcamento', criadoEm: new Date().toISOString(), dados: dadosForm })
+      await salvarPendente({ id: uuidv4(), tipo: 'orcamento', criadoEm: new Date().toISOString(), usuarioCriadorId: rascunhoUsuarioId, dados: dadosForm })
       await removerRascunho(rascunhoChave).catch(() => {})
       setRascunhoSalvoEm(null)
       setMotivoPendente(motivo)
