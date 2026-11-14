@@ -94,7 +94,7 @@ export default function HomeDashboard() {
             {mostraTarefas && <HomeTarefasResumo />}
             {mostraCalendario && <HomeCalendarBlock />}
           </div>
-          {mostraTarefas && <div className="mt-4"><HomePersonalKanban /></div>}
+          {mostraTarefas && <div id="kanban-pessoal" className="mt-4 scroll-mt-24"><HomePersonalKanban /></div>}
         </section>
       )}
       {mostraTarefas && <HomeTasksBlock ocultarPainel />}
