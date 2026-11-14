@@ -34,6 +34,9 @@ export interface PendenteOrcamento {
   id: string
   tipo: 'orcamento'
   criadoEm: string
+  // Autor opcional: compatível com a fila legada e protege a lista compartilhada
+  // do aparelho quando usuários diferentes entram no Atlas.
+  usuarioCriadorId?: string | null
   dados: any
 }
 
