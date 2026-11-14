@@ -56,8 +56,8 @@ export async function POST(req:NextRequest) {
   const dataHora=typeof body.dataHora==='string'&&body.dataHora?body.dataHora:null
   const compartilhada=body.modo!=='individual'
   const recorrenciaValor = Number.isInteger(body.recorrenciaValor)?body.recorrenciaValor:null
-  const recorrenciaDias = Array.isArray(body.diasSemana)?
-    [...new Set(body.diasSemana.filter((n:unknown)=>Number.isInteger(n)&&Number(n)>=0&&Number(n)<=6))]:[]
+  const recorrenciaDias: number[] = Array.isArray(body.diasSemana)?
+    [...new Set<number>(body.diasSemana.filter((n:unknown):n is number=>typeof n==='number'&&Number.isInteger(n)&&n>=0&&n<=6))]:[]
   if (!titulo || titulo.length>300 || descricao.length>2000) return NextResponse.json({error:'Verifique o título e a descrição.'},{status:400})
   if (!responsaveis.length||responsaveis.length>15) return NextResponse.json({error:'Selecione de 1 a 15 responsáveis.'},{status:400})
   if (tipo!=='uma_vez'&&!dataHora) return NextResponse.json({error:'Informe data e horário para recorrência.'},{status:400})
