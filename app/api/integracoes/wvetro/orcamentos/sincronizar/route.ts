@@ -167,7 +167,7 @@ async function carregarContexto(empresaId: string) {
     supabaseAdmin.from('wvetro_referencias_tipologias').select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url'),
     supabaseAdmin.from('wvetro_referencias_linhas').select('linha_raw,linha_tecnica_id'),
     supabaseAdmin.from('tipologias').select('id,chave,label'),
-    supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
+    supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId).eq('ativo', true).is('mesclado_em_cliente_id', null),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').eq('empresa_id', empresaId).order('ordem'),
     supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,updated_at,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId),
   ])
@@ -234,12 +234,19 @@ function acharCliente(p: Record<string, any>, ctx: Awaited<ReturnType<typeof car
   // Regra principal: o nome do cliente vindo do W.Vetro precisa ser compatível.
   // CPF/CNPJ e telefone servem apenas para desempatar nomes compatíveis; nunca
   // podem vincular um orçamento a um nome diferente.
-  const exatos = ctx.porNome.get(chaveNome) || []
+  // Nunca vincular automaticamente CPFs distintos, mesmo com nomes idênticos.
+  const documentoInformado = digitos(documentoCliente(p))
+  const d = [11, 14].includes(documentoInformado.length) ? documentoInformado : ''
+  const documentoCompativel = (c: any) => {
+    const existente = digitos(c?.cpf_cnpj)
+    return !d || !existente || d === existente
+  }
+  const exatos = (ctx.porNome.get(chaveNome) || []).filter(documentoCompativel)
   if (exatos.length === 1) return exatos[0]
 
-  const compativeis = ctx.clientes.filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
+  const compativeis = ctx.clientes.filter((c: any) =>
+    nomesClientesCompativeis(nome, c?.nome) && documentoCompativel(c))
 
-  const d = digitos(documentoCliente(p))
   if (d) {
     const porDocumento = (ctx.porDoc.get(d) || []).filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
     if (porDocumento.length === 1) return porDocumento[0]
@@ -247,7 +254,7 @@ function acharCliente(p: Record<string, any>, ctx: Awaited<ReturnType<typeof car
 
   const f = digitos(telefoneCliente(p)).slice(-11)
   if (f) {
-    const porTelefone = (ctx.porFone.get(f) || []).filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
+    const porTelefone = (ctx.porFone.get(f) || []).filter((c: any) => nomesClientesCompativeis(nome, c?.nome) && documentoCompativel(c))
     if (porTelefone.length === 1) return porTelefone[0]
   }
 
@@ -335,20 +342,19 @@ async function garantirCliente(
   const telefone = telefoneCliente(p)
   const nomeNorm = normalizarNomeClienteWVetro(nome)
   const codigoWvetro = txt(p.ClienteCodigo, p.PessoaCodigo, p.PessoaId, p.ClienteId)
-  const semIdentificadorForte = !digitos(documento) && !digitos(telefone)
+  // Mesmo com documento/telefone, nomes já presentes mas não identificados
+  // de forma inequívoca exigem conferência; nunca criar outro Cliente 360.
+  const candidatos = ctx.clientes
+    .filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
+    .slice(0, 20)
 
-  if (semIdentificadorForte) {
-    const candidatos = ctx.clientes
-      .filter((c: any) => nomesClientesCompativeis(nome, c?.nome))
-      .slice(0, 20)
-
-    if (candidatos.length > 0) {
-      await registrarPendenciaCadastro({
+  if (candidatos.length > 0) {
+    await registrarPendenciaCadastro({
         empresaId,
         tipo: 'vinculo_wvetro',
         chaveUnica: `wvetro:cliente:nome:${nomeNorm}`,
         titulo: `Vincular cliente W.Vetro: ${nome}`,
-        descricao: 'O W.Vetro enviou o cliente sem CPF/CNPJ ou telefone confiável e há cadastro compatível no Atlas. Confirme o vínculo antes de unir os históricos.',
+        descricao: 'Há cadastro com nome compatível no Atlas, mas o vínculo não foi identificado com segurança. Confira CPF/CNPJ e demais dados antes de criar ou vincular clientes.',
         origem: 'wvetro',
         dados: {
           numero_wvetro: numeroWvetro,
@@ -366,8 +372,7 @@ async function garantirCliente(
           })),
         },
       })
-      return { cliente: null, criado: false, pendencia: true }
-    }
+    return { cliente: null, criado: false, pendencia: true }
   }
 
   const endereco = enderecoClienteWVetro(p)
