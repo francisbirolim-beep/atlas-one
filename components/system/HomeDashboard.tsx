@@ -8,6 +8,7 @@ import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
 import HomeTasksBlock from '@/components/system/HomeTasksBlock'
 import HomeCalendarBlock from '@/components/system/HomeCalendarBlock'
 import HomePersonalKanban from '@/components/system/HomePersonalKanban'
+import NovaTarefaEquipeModal from '@/components/system/NovaTarefaEquipeModal'
 
 export default function HomeDashboard() {
   const router = useRouter()
@@ -95,6 +96,7 @@ export default function HomeDashboard() {
           {mostraTarefas && <div className="mt-4"><HomePersonalKanban /></div>}
         </section>
       )}
+      {mostraTarefas && <NovaTarefaEquipeModal />}
     </div>
   )
 }
