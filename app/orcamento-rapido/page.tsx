@@ -260,6 +260,7 @@ interface RascunhoOrcamentoRapido {
   clienteNome: string
   usuarioCriadorId?: string | null
   fluxoSobMedida?: boolean
+  orcamentoIdDestino?: string | null
   clienteWhatsapp: string
   cidade: string
   obraNome?: string
@@ -384,6 +385,12 @@ export default function OrcamentoRapido() {
         }
 
         if (d.fluxoSobMedida === true) setFluxoSobMedida(true)
+        // Preservar a operação "Adicionar ao orçamento existente" quando o
+        // atendimento interrompido é retomado pelo Cliente 360.
+        if (d.orcamentoIdDestino && !params.get('adicionarAo')) {
+          params.set('adicionarAo', d.orcamentoIdDestino)
+          window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`)
+        }
         if (Array.isArray(d.itens) && d.itens.length) setItens(d.itens.map(item => {
           const fotos = (item.fotos || []).map((foto: any) => foto instanceof File ? foto : arquivoDoRascunho(foto))
           const fotoLargura = item.fotoLargura ? (item.fotoLargura instanceof File ? item.fotoLargura : arquivoDoRascunho(item.fotoLargura as any)) : undefined
@@ -439,7 +446,7 @@ export default function OrcamentoRapido() {
   function montarRascunhoAtual(): RascunhoOrcamentoRapido {
     return {
       itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-      clienteIdOrigem, clienteNome, usuarioCriadorId: rascunhoUsuarioId, fluxoSobMedida, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
+      clienteIdOrigem, clienteNome, usuarioCriadorId: rascunhoUsuarioId, fluxoSobMedida, orcamentoIdDestino: new URLSearchParams(window.location.search).get('adicionarAo'), clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
       acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
       arquivos: arquivos.map(arquivoParaRascunho),
     }
