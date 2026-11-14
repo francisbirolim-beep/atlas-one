@@ -320,6 +320,7 @@ export default function OrcamentoRapido() {
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
+  const [rascunhoIniciado, setRascunhoIniciado] = useState(false)
   const [rascunhoChave, setRascunhoChave] = useState(() => PREFIXO_RASCUNHO_ORCAMENTO + uuidv4())
   const [rascunhoUsuarioId, setRascunhoUsuarioId] = useState<string | null>(() => usuarioCacheLocal()?.id || null)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
@@ -413,6 +414,7 @@ export default function OrcamentoRapido() {
         if (Array.isArray(d.arquivos)) setArquivos(d.arquivos.map(arquivoDoRascunho))
         setRascunhoSalvoEm(rascunho.atualizadoEm)
         setRascunhoRestaurado(true)
+        setRascunhoIniciado(true)
       } catch {
         if (ativo) setErro('Não foi possível recuperar este rascunho no aparelho. Os outros rascunhos foram preservados.')
       } finally {
@@ -462,14 +464,14 @@ export default function OrcamentoRapido() {
   }
 
   useEffect(() => {
-    if (!rascunhoCarregado || salvando || salvo || salvoOffline || !clienteNome.trim() || !rascunhoUsuarioId) return
+    if (!rascunhoCarregado || !rascunhoIniciado || salvando || salvo || salvoOffline || !clienteNome.trim() || !rascunhoUsuarioId) return
     const timer = window.setTimeout(() => {
       salvarRascunho(rascunhoChave, montarRascunhoAtual())
         .then(() => { setRascunhoSalvoEm(new Date().toISOString()); setErroSalvamentoLocal('') })
         .catch(() => setErroSalvamentoLocal('Falha ao salvar localmente. Mantenha esta tela aberta e toque em “Salvar medição agora”.'))
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, rascunhoChave, rascunhoUsuarioId, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, fluxoSobMedida, salvando, salvo, salvoOffline])
+  }, [rascunhoCarregado, rascunhoIniciado, rascunhoChave, rascunhoUsuarioId, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, fluxoSobMedida, salvando, salvo, salvoOffline])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
@@ -846,6 +848,7 @@ export default function OrcamentoRapido() {
     const busca = params.toString()
     window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
     setRascunhoRestaurado(false)
+    setRascunhoIniciado(false)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
     setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
@@ -866,7 +869,7 @@ export default function OrcamentoRapido() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
       <header className="bg-white border-b border-slate-200"><div className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-4 flex items-center gap-4`}><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-800">{fluxoSobMedida ? 'Orçamento Sob Medida' : 'Orçamento'}</h1>{fluxoSobMedida && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">FLUXO W.VETRO</span>}</div><p className="text-sm text-slate-500">{fluxoSobMedida ? 'Configure a esquadria tecnicamente e siga até composição, custos e impressão' : 'Registre o pedido e mande pro painel'}</p></div></div></header>
       {fluxoSobMedida && <div className="border-b border-slate-200 bg-white"><div className="mx-auto max-w-7xl overflow-x-auto px-4 py-3"><div className="flex min-w-[980px] items-center gap-2">{[['1','Cliente / Obra'],['2','Medidas'],['3','O que precisa'],['4','Linha / Tipologia'],['5','Variáveis'],['6','Acabamento'],['7','Composição'],['8','Custos'],['9','Impressão']].map(([n,label],i)=><div key={n} className="flex flex-1 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i<2?'bg-blue-600 text-white':'bg-slate-100 text-slate-500'}`}>{n}</span><span className={`whitespace-nowrap text-xs font-semibold ${i<2?'text-slate-800':'text-slate-500'}`}>{label}</span>{i<8&&<span className="h-px flex-1 bg-slate-200"/>}</div>)}</div></div></div>}
-      <main className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-8 space-y-6`}>
+      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-8 space-y-6`}>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
           <div className="text-xs text-slate-600">{rascunhoSalvoEm ? 'Rascunho de ' + clienteNome + ' salvo neste aparelho às ' + new Date(rascunhoSalvoEm).toLocaleTimeString('pt-BR') : clienteNome.trim() ? 'O rascunho deste cliente será salvo automaticamente durante o preenchimento.' : 'Novo orçamento em branco. Informe o cliente para começar a salvar o rascunho.'}</div>
           <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual || !clienteNome.trim() || !rascunhoUsuarioId} className="rounded-lg border border-brand-navy px-3 py-2 text-xs font-semibold text-brand-navy disabled:opacity-60">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
