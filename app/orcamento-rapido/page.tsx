@@ -10,11 +10,11 @@ import { criarOrcamentoNoServidor, DadosOrcamentoForm } from '@/lib/orcamentos'
 import { descricaoMedidaPadrao } from '@/lib/orcamentoRapidoProdutoLivre'
 import { obterRascunho, removerRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
-import { usuarioAtual } from '@/lib/auth'
+import { usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
+import { chaveRascunhoOrcamentoValida, PREFIXO_RASCUNHO_ORCAMENTO } from '@/lib/rascunhosOrcamento'
 import { formatarEnderecoObra, coordenadasDaObra, coordenadasEmTexto, decomporEnderecoObra, linkRotaObra, localizacaoRegistradaNaObra } from '@/lib/enderecoObra'
 import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
 
-const RASCUNHO_ID = 'orcamento-rapido-layout-restaurado-v1'
 
 const acabamentos: { value: Acabamento; label: string }[] = [
   { value: 'preto', label: 'Preto' },
@@ -258,6 +258,7 @@ interface RascunhoOrcamentoRapido {
   itens: ItemForm[]
   clienteIdOrigem: string | null
   clienteNome: string
+  usuarioCriadorId?: string | null
   clienteWhatsapp: string
   cidade: string
   obraNome?: string
@@ -318,6 +319,8 @@ export default function OrcamentoRapido() {
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
   const [conferenciaAberta, setConferenciaAberta] = useState(false)
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
+  const [rascunhoChave, setRascunhoChave] = useState(() => PREFIXO_RASCUNHO_ORCAMENTO + uuidv4())
+  const [rascunhoUsuarioId, setRascunhoUsuarioId] = useState<string | null>(() => usuarioCacheLocal()?.id || null)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
   const [rascunhoSalvoEm, setRascunhoSalvoEm] = useState<string | null>(null)
   const [erroSalvamentoLocal, setErroSalvamentoLocal] = useState('')
@@ -332,20 +335,59 @@ export default function OrcamentoRapido() {
     return new File([item.blob], item.nome, { type: item.tipo, lastModified: item.ultimaModificacao })
   }
 
+  // "Novo orçamento" nunca lê um rascunho automaticamente. Somente a ação
+  // explícita "Continuar rascunho", pelo Cliente 360, autoriza a restauração.
   useEffect(() => {
     let ativo = true
     const params = new URLSearchParams(window.location.search)
-    const inicioNovoSobMedida = params.get('modo') === 'sob-medida' && params.get('novo') === '1'
-    obterRascunho<RascunhoOrcamentoRapido>(RASCUNHO_ID).then(rascunho => {
-      if (!ativo) return
-      if (rascunho?.dados) {
+    const chaveSolicitada = params.get('rascunho')
+    const usuarioPromessa = usuarioAtual().then(u => {
+      if (ativo && u?.id) setRascunhoUsuarioId(u.id)
+      return u?.id || usuarioCacheLocal()?.id || null
+    }).catch(() => usuarioCacheLocal()?.id || null)
+
+    if (!chaveSolicitada) {
+      // Preserva cliente/obra informados na URL, mas não reaproveita medições
+      // nem dados antigos de outro atendimento.
+      if (params.has('novo')) {
+        params.delete('novo')
+        const busca = params.toString()
+        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
+      }
+      setRascunhoCarregado(true)
+      return () => { ativo = false }
+    }
+    if (!chaveRascunhoOrcamentoValida(chaveSolicitada)) {
+      setErro('O link de rascunho não é válido. Um novo orçamento foi aberto em branco.')
+      setRascunhoCarregado(true)
+      return () => { ativo = false }
+    }
+
+    void (async () => {
+      try {
+        const [usuarioId, rascunho] = await Promise.all([
+          usuarioPromessa, obterRascunho<RascunhoOrcamentoRapido>(chaveSolicitada),
+        ])
+        if (!ativo) return
+        if (!rascunho?.dados) {
+          setErro('Este rascunho não está disponível neste aparelho. O novo orçamento foi aberto em branco.')
+          return
+        }
         const d = rascunho.dados
+        const clienteDaUrl = params.get('cliente')
+        if ((d.usuarioCriadorId && (!usuarioId || d.usuarioCriadorId !== usuarioId)) ||
+          (clienteDaUrl && d.clienteIdOrigem && clienteDaUrl !== d.clienteIdOrigem)) {
+          setErro('Este rascunho pertence a outro usuário ou cliente e não foi carregado.')
+          return
+        }
+
         if (Array.isArray(d.itens) && d.itens.length) setItens(d.itens.map(item => {
           const fotos = (item.fotos || []).map((foto: any) => foto instanceof File ? foto : arquivoDoRascunho(foto))
           const fotoLargura = item.fotoLargura ? (item.fotoLargura instanceof File ? item.fotoLargura : arquivoDoRascunho(item.fotoLargura as any)) : undefined
           const fotoAltura = item.fotoAltura ? (item.fotoAltura instanceof File ? item.fotoAltura : arquivoDoRascunho(item.fotoAltura as any)) : undefined
           return recuperarMedidasKitAnotadas({ ...item, larguraBatenteMm: item.larguraBatenteMm || item.larguraBatenteCm || '', larguraGuarnicaoMm: item.larguraGuarnicaoMm || item.larguraGuarnicaoCm || '', observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined })
         }))
+        setRascunhoChave(chaveSolicitada)
         setClienteIdOrigem(d.clienteIdOrigem || null)
         setClienteNome(d.clienteNome || '')
         setClienteWhatsapp(d.clienteWhatsapp || '')
@@ -369,22 +411,12 @@ export default function OrcamentoRapido() {
         if (Array.isArray(d.arquivos)) setArquivos(d.arquivos.map(arquivoDoRascunho))
         setRascunhoSalvoEm(rascunho.atualizadoEm)
         setRascunhoRestaurado(true)
-
-        // Um rascunho existente sempre vence o contexto de uma nova navegação.
-        // Assim, abrir outro cliente/obra nunca reaproveita nem apaga o trabalho pendente.
-        params.delete('novo')
-        params.delete('cliente')
-        params.delete('obra')
-        params.delete('adicionarAo')
-        const busca = params.toString()
-        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
-      } else if (inicioNovoSobMedida) {
-        params.delete('novo')
-        const busca = params.toString()
-        window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
+      } catch {
+        if (ativo) setErro('Não foi possível recuperar este rascunho no aparelho. Os outros rascunhos foram preservados.')
+      } finally {
+        if (ativo) setRascunhoCarregado(true)
       }
-      setRascunhoCarregado(true)
-    }).catch(() => setRascunhoCarregado(true))
+    })()
     return () => { ativo = false }
   }, [])
 
@@ -403,7 +435,7 @@ export default function OrcamentoRapido() {
   function montarRascunhoAtual(): RascunhoOrcamentoRapido {
     return {
       itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-      clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
+      clienteIdOrigem, clienteNome, usuarioCriadorId: rascunhoUsuarioId, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
       acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
       arquivos: arquivos.map(arquivoParaRascunho),
     }
@@ -411,9 +443,13 @@ export default function OrcamentoRapido() {
 
   async function salvarRascunhoAgora() {
     if (salvandoRascunhoManual) return
+    if (!clienteNome.trim() || !rascunhoUsuarioId) {
+      setErroSalvamentoLocal('Selecione ou informe o cliente e aguarde sua sessão para salvar o rascunho.')
+      return
+    }
     setSalvandoRascunhoManual(true)
     try {
-      await salvarRascunho(RASCUNHO_ID, montarRascunhoAtual())
+      await salvarRascunho(rascunhoChave, montarRascunhoAtual())
       setRascunhoSalvoEm(new Date().toISOString())
       setErroSalvamentoLocal('')
     } catch {
@@ -424,14 +460,14 @@ export default function OrcamentoRapido() {
   }
 
   useEffect(() => {
-    if (!rascunhoCarregado || salvo || salvoOffline) return
+    if (!rascunhoCarregado || salvo || salvoOffline || !clienteNome.trim() || !rascunhoUsuarioId) return
     const timer = window.setTimeout(() => {
-      salvarRascunho(RASCUNHO_ID, montarRascunhoAtual())
+      salvarRascunho(rascunhoChave, montarRascunhoAtual())
         .then(() => { setRascunhoSalvoEm(new Date().toISOString()); setErroSalvamentoLocal('') })
         .catch(() => setErroSalvamentoLocal('Falha ao salvar localmente. Mantenha esta tela aberta e toque em “Salvar medição agora”.'))
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, rascunhoChave, rascunhoUsuarioId, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
@@ -658,7 +694,7 @@ export default function OrcamentoRapido() {
   async function salvarComoPendente(dadosForm: DadosOrcamentoForm, motivo = '') {
     try {
       await salvarPendente({ id: uuidv4(), tipo: 'orcamento', criadoEm: new Date().toISOString(), dados: dadosForm })
-      await removerRascunho(RASCUNHO_ID).catch(() => {})
+      await removerRascunho(rascunhoChave).catch(() => {})
       setRascunhoSalvoEm(null)
       setMotivoPendente(motivo)
       setSalvando(false)
@@ -798,8 +834,16 @@ export default function OrcamentoRapido() {
   }
 
   function resetar() {
-    void removerRascunho(RASCUNHO_ID).catch(() => {})
+    void removerRascunho(rascunhoChave).catch(() => {})
     setRascunhoSalvoEm(null)
+    setRascunhoChave(PREFIXO_RASCUNHO_ORCAMENTO + uuidv4())
+    // Um novo atendimento não pode herdar cliente, obra ou chave de recuperação
+    // da URL usada para continuar o pedido anterior.
+    const params = new URLSearchParams(window.location.search)
+    for (const chave of ['rascunho','cliente','obra','adicionarAo','novo']) params.delete(chave)
+    const busca = params.toString()
+    window.history.replaceState({}, '', `${window.location.pathname}${busca ? `?${busca}` : ''}`)
+    setRascunhoRestaurado(false)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
     setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
@@ -822,11 +866,11 @@ export default function OrcamentoRapido() {
       {fluxoSobMedida && <div className="border-b border-slate-200 bg-white"><div className="mx-auto max-w-7xl overflow-x-auto px-4 py-3"><div className="flex min-w-[980px] items-center gap-2">{[['1','Cliente / Obra'],['2','Medidas'],['3','O que precisa'],['4','Linha / Tipologia'],['5','Variáveis'],['6','Acabamento'],['7','Composição'],['8','Custos'],['9','Impressão']].map(([n,label],i)=><div key={n} className="flex flex-1 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i<2?'bg-blue-600 text-white':'bg-slate-100 text-slate-500'}`}>{n}</span><span className={`whitespace-nowrap text-xs font-semibold ${i<2?'text-slate-800':'text-slate-500'}`}>{label}</span>{i<8&&<span className="h-px flex-1 bg-slate-200"/>}</div>)}</div></div></div>}
       <main className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-8 space-y-6`}>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-600">{rascunhoSalvoEm ? 'Rascunho salvo neste aparelho às ' + new Date(rascunhoSalvoEm).toLocaleTimeString('pt-BR') : 'A medição é salva automaticamente neste aparelho.'}</div>
-          <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual} className="rounded-lg border border-brand-navy px-3 py-2 text-xs font-semibold text-brand-navy disabled:opacity-60">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
+          <div className="text-xs text-slate-600">{rascunhoSalvoEm ? 'Rascunho de ' + clienteNome + ' salvo neste aparelho às ' + new Date(rascunhoSalvoEm).toLocaleTimeString('pt-BR') : clienteNome.trim() ? 'O rascunho deste cliente será salvo automaticamente durante o preenchimento.' : 'Novo orçamento em branco. Informe o cliente para começar a salvar o rascunho.'}</div>
+          <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual || !clienteNome.trim() || !rascunhoUsuarioId} className="rounded-lg border border-brand-navy px-3 py-2 text-xs font-semibold text-brand-navy disabled:opacity-60">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
           {erroSalvamentoLocal && <p role="alert" className="w-full text-xs font-semibold text-red-700">{erroSalvamentoLocal}</p>}
         </div>
-        {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Levantamento, fotos e arquivos salvos automaticamente neste aparelho. Pode continuar mesmo se a internet cair.</div>}
+        {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Rascunho deste cliente salvo neste aparelho, incluindo levantamento, fotos e arquivos. Se o envio falhar, poderá ser recuperado no Cliente 360 deste mesmo aparelho.</div>}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<div className="relative"><input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value); setClienteIdOrigem(null); setObraIdSelecionada(null); setObrasDoCliente([]) }} placeholder="Nome do cliente * — digite para localizar cadastro" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={selecionarClienteExistente} /></div><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
