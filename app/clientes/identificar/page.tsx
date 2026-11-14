@@ -36,18 +36,28 @@ export default function IdentificarCliente() {
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteBusca | null>(null)
   const [rascunhosCliente, setRascunhosCliente] = useState<RascunhoOffline<IdentificacaoRascunhoOrcamento>[]>([])
   const [rascunhosDisponiveis, setRascunhosDisponiveis] = useState<RascunhoOffline<IdentificacaoRascunhoOrcamento>[]>([])
+  const [pendentesDisponiveis, setPendentesDisponiveis] = useState<PendenteOrcamento[]>([])
   const [usuarioRascunhoId, setUsuarioRascunhoId] = useState<string | null>(null)
   useEffect(() => {
     let ativo = true
     void (async () => {
       const perfil = await usuarioAtual().catch(() => null)
       const usuarioId = perfil?.id || usuarioCacheLocal()?.id || null
-      const rascunhos = await listarRascunhos<IdentificacaoRascunhoOrcamento>().catch(() => [])
+      const [rascunhos, pendentes] = await Promise.all([
+        listarRascunhos<IdentificacaoRascunhoOrcamento>().catch(() => []),
+        listarPendentes().catch(() => []),
+      ])
       if (!ativo) return
       setUsuarioRascunhoId(usuarioId)
       setRascunhosDisponiveis(rascunhos.filter(r =>
         !r.dados?.usuarioCriadorId || (usuarioId && r.dados.usuarioCriadorId === usuarioId),
       ))
+      const pendentesDoUsuario: PendenteOrcamento[] = []
+      for (const p of pendentes) {
+        if (p.tipo === 'orcamento' && (!p.usuarioCriadorId || p.usuarioCriadorId === usuarioId))
+          pendentesDoUsuario.push(p)
+      }
+      setPendentesDisponiveis(pendentesDoUsuario)
     })()
     return () => { ativo = false }
   }, [])
@@ -77,7 +87,8 @@ export default function IdentificarCliente() {
       const pendentesDoCliente: PendenteOrcamento[] = []
       for (const pedido of pendentes) {
         if (pedido.tipo !== 'orcamento') continue
-        if (pedidoPendentePertenceAoCliente(pedido.dados, id, nome)) pendentesDoCliente.push(pedido)
+        if (( !pedido.usuarioCriadorId || pedido.usuarioCriadorId === autorId ) &&
+          pedidoPendentePertenceAoCliente(pedido.dados, id, nome)) pendentesDoCliente.push(pedido)
       }
       setPedidosPendentes(pendentesDoCliente.sort((a,b) => b.criadoEm.localeCompare(a.criadoEm)))
       setConsultandoRascunhos(false)
@@ -165,6 +176,14 @@ export default function IdentificarCliente() {
       .sort((a,b) => b.atualizadoEm.localeCompare(a.atualizadoEm))
       .slice(0,8)
   }, [busca, rascunhosDisponiveis, usuarioRascunhoId])
+
+  const pendentesDaBusca = useMemo(() => {
+    if (busca.trim().length < 2) return []
+    return pendentesDisponiveis
+      .filter(p => p.dados?.clienteNome && correspondeBuscaAtlas(busca, p.dados.clienteNome))
+      .sort((a,b) => b.criadoEm.localeCompare(a.criadoEm))
+      .slice(0,8)
+  }, [busca, pendentesDisponiveis])
 
   const encontrados = useMemo(() => {
     return clientes.filter((cliente) => correspondeBuscaAtlas(
@@ -337,6 +356,23 @@ export default function IdentificarCliente() {
                       </span>
                       <Link href={`/orcamento-rapido?rascunho=${encodeURIComponent(r.id)}${r.dados.clienteIdOrigem ? '&cliente='+encodeURIComponent(r.dados.clienteIdOrigem) : ''}`}
                         className="shrink-0 rounded-lg bg-amber-600 px-2.5 py-2 text-[11px] font-bold text-white hover:bg-amber-700">Continuar</Link>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            {pendentesDaBusca.length > 0 && (
+              <section className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3" aria-label="Orçamentos aguardando envio pelo nome">
+                <h3 className="mb-2 text-sm font-bold text-blue-950">Pedidos aguardando envio encontrados pelo nome</h3>
+                <div className="space-y-2">
+                  {pendentesDaBusca.map(p => (
+                    <div key={p.id} className="flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2">
+                      <WifiOff size={18} className="shrink-0 text-blue-700"/>
+                      <span className="min-w-0 flex-1">
+                        <strong className="block truncate text-xs text-slate-900">{p.dados.clienteNome}</strong>
+                        <span className="block truncate text-[11px] text-blue-700">{p.dados.obraNome || 'Pedido de orçamento'} · aguarda sincronização automática</span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold text-blue-700">Salvo</span>
                     </div>
                   ))}
                 </div>
