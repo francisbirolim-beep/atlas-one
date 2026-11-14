@@ -99,6 +99,7 @@ export default function HomePersonalKanban() {
   const [detalheId, setDetalheId] = useState<string|null>(null)
   const [carregando, setCarregando] = useState(true)
   const [personalizando, setPersonalizando] = useState(false)
+  const [filtrosAbertos,setFiltrosAbertos] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [arrastando, setArrastando] = useState<string | null>(null)
   const [menuTarefaAberto, setMenuTarefaAberto] = useState<string | null>(null)
@@ -333,72 +334,63 @@ export default function HomePersonalKanban() {
     <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2"><Columns3 size={18} className="text-blue-700" /><h2 className="text-base font-bold text-slate-900" title={`${abertas.length} tarefas em aberto, ${atrasadas} atrasadas`}>Meu Kanban pessoal</h2></div>
-          <p className="mt-1 text-xs text-slate-500">Organize suas demandas, mova os cartões e personalize as colunas conforme sua rotina.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => void novaColuna()} disabled={salvando} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Plus size={14}/> Adicionar coluna</button>
-          <button type="button" aria-pressed={personalizando} onClick={() => setPersonalizando(v => !v)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Personalizar colunas</button>
-          <button type="button" onClick={() => window.dispatchEvent(new Event('atlas:tarefa-equipe-nova'))} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"><Plus size={14}/> Adicionar card</button>
-        </div>
-      </div>
-      <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5" aria-label="Filtros e período do Kanban pessoal">
-        <div className="min-w-0">
-          <label htmlFor="kanban-pessoal-mes" className="mb-1 block text-[11px] font-semibold text-slate-600">Período</label>
-          <div className="flex items-center gap-1">
-            <button type="button" disabled={todosPeriodos} title="Mês anterior" aria-label="Mês anterior"
-              onClick={() => setMesSelecionado(m => mesAdjacente(m, -1))}
-              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40"><ArrowLeft size={13}/></button>
-            <input id="kanban-pessoal-mes" aria-label="Selecionar mês do Kanban" type="month" value={mesSelecionado}
-              onChange={e => { if (/^\d{4}-\d{2}$/.test(e.target.value)) { setMesSelecionado(e.target.value); setTodosPeriodos(false) } }}
-              disabled={todosPeriodos} className="h-8 w-[146px] rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 disabled:opacity-50" />
-            <button type="button" disabled={todosPeriodos} title="Próximo mês" aria-label="Próximo mês"
-              onClick={() => setMesSelecionado(m => mesAdjacente(m, 1))}
-              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40"><ArrowRight size={13}/></button>
+          <div className="flex items-center gap-2"><Columns3 size={18} className="text-blue-700"/>
+            <h2 className="text-base font-bold text-slate-900" title={`${abertas.length} abertas, ${atrasadas} atrasadas`}>Meu Kanban pessoal</h2>
           </div>
+          <p className="mt-0.5 text-[11px] text-slate-500">Organize suas demandas, mova os cartões e personalize as colunas conforme sua rotina.</p>
         </div>
-        <label className="flex min-h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700">
-          <input type="checkbox" checked={todosPeriodos} onChange={e => setTodosPeriodos(e.target.checked)} className="accent-blue-600" />
-          Todos os períodos
-        </label>
-        <label className="min-w-[165px] flex-1">
-          <span className="mb-1 block text-[11px] font-semibold text-slate-600">Pesquisar tarefa ou cliente</span>
-          <input type="search" value={busca} onChange={e => setBusca(e.target.value)}
-            placeholder="Nome, cliente ou descrição..." className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-700" />
-        </label>
-        <label className="min-w-[120px]">
-          <span className="mb-1 block text-[11px] font-semibold text-slate-600">Filtro</span>
-          <select value={filtro} onChange={e => setFiltro(e.target.value as typeof filtro)}
-            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700">
-            <option value="todos">Todas as tarefas</option>
-            <option value="atrasadas">Atrasadas</option>
-            <option value="urgentes">Urgentes</option>
-            <option value="alta">Prioridade alta</option>
-            <option value="sem-prazo">Sem prazo</option>
-          </select>
-        </label>
-        <button type="button" onClick={limparFiltros} className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-          Limpar filtros
-        </button>
-        <div className="flex w-full flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
-          <span>Exibindo: <strong className="text-slate-800">{todosPeriodos ? 'Todos os períodos' : periodoExtenso(mesSelecionado)}</strong> · {tarefasFiltradas.length + (aba==='delegadas'?delegadasFiltradas.length:0) + equipeFiltrada.length} tarefa(s)</span>
-          {!todosPeriodos && (
-            <label className="flex cursor-pointer items-center gap-1.5 text-slate-600" title="Mantém visíveis tarefas abertas de meses anteriores, sem alterar os concluídos do mês">
-              <input type="checkbox" checked={manterPendenciasAnteriores} onChange={e => setManterPendenciasAnteriores(e.target.checked)} className="accent-blue-600" />
-              Incluir pendências anteriores
-            </label>
-          )}
-        </div>
-      </div>
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
-          <button type="button" onClick={()=>setAba('minhas')} className={'rounded-md px-3 py-1.5 font-semibold '+(aba==='minhas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-white')}>Minhas tarefas</button>
-          <button type="button" onClick={()=>setAba('delegadas')} className={'rounded-md px-3 py-1.5 font-semibold '+(aba==='delegadas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-white')}>
-            Pedidos que fiz ({equipe.filter(t=>t.criado_por_id===usuario?.id&&!t.responsaveis_ids.includes(usuario.id)).length+delegadas.length})
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-[11px]">
+            <button type="button" onClick={()=>setAba('minhas')}
+              className={'rounded-md px-2.5 py-1.5 font-semibold '+(aba==='minhas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-white')}>Minhas tarefas</button>
+            <button type="button" onClick={()=>setAba('delegadas')}
+              className={'rounded-md px-2.5 py-1.5 font-semibold '+(aba==='delegadas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-white')}>
+              Pedidos que fiz
+            </button>
+          </div>
+          <button type="button" disabled={todosPeriodos} title="Mês anterior" aria-label="Mês anterior"
+            onClick={()=>setMesSelecionado(m=>mesAdjacente(m,-1))} className="rounded-lg border border-slate-200 p-1.5 text-slate-600 disabled:opacity-40"><ArrowLeft size={13}/></button>
+          <input type="month" aria-label="Mês das tarefas" value={mesSelecionado} disabled={todosPeriodos}
+            onChange={e=>{if(/^\d{4}-\d{2}$/.test(e.target.value)){setMesSelecionado(e.target.value);setTodosPeriodos(false)}}}
+            className="h-8 w-[125px] rounded-lg border border-slate-200 bg-white px-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"/>
+          <button type="button" disabled={todosPeriodos} title="Próximo mês" aria-label="Próximo mês"
+            onClick={()=>setMesSelecionado(m=>mesAdjacente(m,1))} className="rounded-lg border border-slate-200 p-1.5 text-slate-600 disabled:opacity-40"><ArrowRight size={13}/></button>
+          <input type="search" aria-label="Pesquisar tarefa ou cliente" value={busca} onChange={e=>setBusca(e.target.value)}
+            placeholder="Pesquisar tarefa ou cliente..." className="h-8 w-[190px] rounded-lg border border-slate-200 bg-white px-2 text-[11px] text-slate-700"/>
+          <button type="button" onClick={()=>window.dispatchEvent(new Event('atlas:tarefa-equipe-nova'))}
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-600 px-2.5 text-[11px] font-semibold text-white hover:bg-blue-700">
+            <Plus size={13}/> Nova tarefa
           </button>
+          <button type="button" onClick={()=>window.dispatchEvent(new Event('atlas:novo-compromisso'))}
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-violet-600 px-2.5 text-[11px] font-semibold text-white hover:bg-violet-700">
+            <Plus size={13}/> Novo compromisso
+          </button>
+          <details className="relative">
+            <summary aria-label="Mais opções do Kanban" title="Colunas e filtros"
+              className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 bg-white font-bold text-slate-600 hover:bg-slate-50">•••</summary>
+            <div className="absolute right-0 top-9 z-30 flex w-48 flex-col gap-1 rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-xl">
+              <button type="button" onClick={()=>void novaColuna()} disabled={salvando} className="rounded-lg p-2 text-left text-xs text-slate-700 hover:bg-slate-50">+ Adicionar coluna</button>
+              <button type="button" onClick={()=>setPersonalizando(p=>!p)} className="rounded-lg p-2 text-left text-xs text-slate-700 hover:bg-slate-50">Personalizar colunas</button>
+              <button type="button" onClick={()=>setFiltrosAbertos(p=>!p)} className="rounded-lg p-2 text-left text-xs text-slate-700 hover:bg-slate-50">Filtros avançados</button>
+            </div>
+          </details>
         </div>
-        <p className="text-[11px] text-slate-500">{aba==='delegadas'?'Acompanhe pedidos quando os responsáveis movimentam os cartões.':'Suas próprias tarefas e as recebidas da equipe.'}</p>
       </div>
+      {filtrosAbertos && <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs">
+        <label className="flex cursor-pointer items-center gap-1.5">
+          <input type="checkbox" checked={todosPeriodos} onChange={e=>setTodosPeriodos(e.target.checked)} className="accent-blue-600"/> Todos os períodos
+        </label>
+        <label className="flex cursor-pointer items-center gap-1.5">
+          <input type="checkbox" checked={manterPendenciasAnteriores} onChange={e=>setManterPendenciasAnteriores(e.target.checked)} className="accent-blue-600"/> Incluir pendências anteriores
+        </label>
+        <select value={filtro} onChange={e=>setFiltro(e.target.value as typeof filtro)}
+          aria-label="Filtrar prioridades ou atrasos" className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs">
+          <option value="todos">Todas as tarefas</option><option value="atrasadas">Atrasadas</option>
+          <option value="urgentes">Urgentes</option><option value="alta">Prioridade alta</option><option value="sem-prazo">Sem prazo</option>
+        </select>
+        <button type="button" onClick={limparFiltros} className="rounded-lg bg-white px-2.5 py-2 font-semibold text-blue-700">Limpar filtros</button>
+        <span className="text-slate-500">Exibindo: {todosPeriodos?'Todos os períodos':periodoExtenso(mesSelecionado)} · {tarefasFiltradas.length+(aba==='delegadas'?delegadasFiltradas.length:0)+equipeFiltrada.length} tarefa(s)</span>
+      </div>}
       {erro && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{erro}</p>}
       {personalizando && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50/50 p-2.5">
