@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, Clock3, Columns3, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import {
