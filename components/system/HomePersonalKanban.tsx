@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Clock3, Columns3, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react'
-import { usuarioAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import {
   concluirTarefa, criarColunaTarefa, listarColunasTarefas, listarTarefas,
   moverTarefa, reabrirTarefa, renomearColunaTarefa, reordenarColunasTarefa,
@@ -10,6 +10,34 @@ import {
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
 
+type Delegada = TarefaPessoal & { responsavel_nome: string; coluna_nome: string }
+async function buscarDelegadas(): Promise<Delegada[]> {
+  const token = await tokenAtual()
+  if (!token) return []
+  try {
+    const r = await fetch('/api/tarefas/delegadas', { cache: 'no-store', headers: { Authorization: 'Bearer ' + token } })
+    if (!r.ok) return []
+    const json = await r.json()
+    return Array.isArray(json.tarefas) ? json.tarefas : []
+  } catch { return [] }
+}
+function etapaDelegada(t: Delegada): 'pedido' | 'andamento' | 'aguardando' | 'concluido' {
+  if (t.concluida_em) return 'concluido'
+  const nome = semAcentos(t.coluna_nome || '')
+  if (/andamento|execucao|fazendo/.test(nome)) return 'andamento'
+  if (/aguard|espera/.test(nome)) return 'aguardando'
+  return 'pedido'
+}
+function CardDelegado({ tarefa }: { tarefa: Delegada }) {
+  return (
+    <div className="rounded-lg border border-violet-200 bg-white px-2 py-2 shadow-sm">
+      <p className="truncate text-xs font-semibold text-slate-800" title={tarefa.titulo}>{tarefa.titulo}</p>
+      <p className="mt-0.5 truncate text-[11px] text-violet-700">Responsável: {tarefa.responsavel_nome}</p>
+      <p className="mt-0.5 truncate text-[10px] text-slate-600">Prazo: {dataPrazo(tarefa.data_hora)}</p>
+      <p className="mt-0.5 truncate text-[10px] text-slate-500">Situação: {tarefa.concluida_em ? 'Concluído' : tarefa.coluna_nome}</p>
+    </div>
+  )
+}
 const cores = {
   inicial: { lateral: 'border-l-slate-500', fundo: 'bg-slate-100/70', cabecalho: 'bg-slate-200', texto: 'text-slate-800', marcador: 'bg-slate-500' },
   andamento: { lateral: 'border-l-blue-600', fundo: 'bg-blue-50/70', cabecalho: 'bg-blue-200', texto: 'text-blue-900', marcador: 'bg-blue-600' },
@@ -62,6 +90,7 @@ export default function HomePersonalKanban() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
   const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
+  const [delegadas, setDelegadas] = useState<Delegada[]>([])
   const [carregando, setCarregando] = useState(true)
   const [personalizando, setPersonalizando] = useState(false)
   const [salvando, setSalvando] = useState(false)
@@ -81,8 +110,8 @@ export default function HomePersonalKanban() {
       if (!ativo) return
       setUsuario(u)
       if (u) {
-        const [cls, ts] = await Promise.all([listarColunasTarefas(u.id), listarTarefas(u.id)])
-        if (ativo) { setColunas(cls); setTarefas(ts) }
+        const [cls, ts, ds] = await Promise.all([listarColunasTarefas(u.id), listarTarefas(u.id), buscarDelegadas()])
+        if (ativo) { setColunas(cls); setTarefas(ts); setDelegadas(ds) }
       }
       if (ativo) setCarregando(false)
     }).catch(() => { if (ativo) setCarregando(false) })
@@ -91,9 +120,10 @@ export default function HomePersonalKanban() {
 
   const atualizar = useCallback(async () => {
     if (!usuario) return
-    const [cls, ts] = await Promise.all([listarColunasTarefas(usuario.id), listarTarefas(usuario.id)])
+    const [cls, ts, ds] = await Promise.all([listarColunasTarefas(usuario.id), listarTarefas(usuario.id), buscarDelegadas()])
     setColunas(cls)
     setTarefas(ts)
+    setDelegadas(ds)
   }, [usuario])
 
   useEffect(() => {
@@ -138,6 +168,22 @@ export default function HomePersonalKanban() {
       return true
     })
   }, [tarefas, todosPeriodos, mesSelecionado, manterPendenciasAnteriores, busca, filtro])
+
+  const delegadasFiltradas = useMemo(() => {
+    const consulta = semAcentos(busca.trim())
+    return delegadas.filter(t => {
+      const concluida = Boolean(t.concluida_em)
+      const mes = mesDaData(concluida ? t.concluida_em : t.data_hora || t.atribuida_em || t.created_at)
+      if (!todosPeriodos && (concluida ? mes !== mesSelecionado : mes !== mesSelecionado &&
+        (!manterPendenciasAnteriores || Boolean(mes && mes > mesSelecionado)))) return false
+      if (consulta && !semAcentos([t.titulo, t.descricao || '', t.responsavel_nome].join(' ')).includes(consulta)) return false
+      if (filtro === 'atrasadas') return !concluida && Boolean(t.data_hora) && new Date(t.data_hora!).getTime() < Date.now()
+      if (filtro === 'urgentes') return t.prioridade === 'urgente'
+      if (filtro === 'alta') return t.prioridade === 'alta'
+      if (filtro === 'sem-prazo') return !t.data_hora
+      return true
+    })
+  }, [delegadas, todosPeriodos, mesSelecionado, manterPendenciasAnteriores, busca, filtro])
 
   function limparFiltros() {
     setMesSelecionado(mesAtual())
@@ -273,7 +319,7 @@ export default function HomePersonalKanban() {
           Limpar filtros
         </button>
         <div className="flex w-full flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
-          <span>Exibindo: <strong className="text-slate-800">{todosPeriodos ? 'Todos os períodos' : periodoExtenso(mesSelecionado)}</strong> · {tarefasFiltradas.length} tarefa(s)</span>
+          <span>Exibindo: <strong className="text-slate-800">{todosPeriodos ? 'Todos os períodos' : periodoExtenso(mesSelecionado)}</strong> · {tarefasFiltradas.length + delegadasFiltradas.length} tarefa(s)</span>
           {!todosPeriodos && (
             <label className="flex cursor-pointer items-center gap-1.5 text-slate-600" title="Mantém visíveis tarefas abertas de meses anteriores, sem alterar os concluídos do mês">
               <input type="checkbox" checked={manterPendenciasAnteriores} onChange={e => setManterPendenciasAnteriores(e.target.checked)} className="accent-blue-600" />
@@ -292,8 +338,21 @@ export default function HomePersonalKanban() {
         <div className="py-8 text-center text-sm text-slate-500">As colunas ainda não estão disponíveis. <button type="button" onClick={() => void atualizar()} className="text-blue-700 underline">Tentar novamente</button></div>
       ) : (
         <div className="flex min-w-0 gap-3 overflow-x-auto pb-2" aria-label="Colunas do Kanban pessoal">
+          <section className="w-[224px] min-w-[224px] flex-1 overflow-hidden rounded-xl border border-violet-200 border-l-4 border-l-violet-600 bg-violet-50/70 p-0 sm:min-w-[235px]">
+            <div className="mb-2 flex min-h-10 items-center gap-1.5 bg-violet-200 px-2.5 py-2">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-violet-600"/>
+              <h3 className="truncate text-xs font-bold text-violet-900">Pedidos de tarefa</h3>
+              <span className="rounded-full bg-white px-1.5 text-[10px] text-violet-700">{delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').length}</span>
+            </div>
+            <div className="max-h-[260px] min-h-[220px] space-y-1.5 overflow-y-auto px-2 pb-2">
+              {delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').length === 0 &&
+                <p className="rounded-lg border border-dashed border-violet-200 bg-white/70 px-2 py-5 text-center text-[11px] text-violet-400">Nenhum pedido aguardando início</p>}
+              {delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').map(t => <CardDelegado key={t.id} tarefa={t}/>)}
+            </div>
+          </section>
           {colunas.map((col, i) => {
             const visual = cores[tipoColuna(col, i)]
+            const delegadasDaEtapa = delegadasFiltradas.filter(t => etapaDelegada(t) === tipoColuna(col, i))
             const itens = tarefasFiltradas.filter(t => colunaExibida(t) === col.id).sort((a, b) =>
               (a.data_hora ? new Date(a.data_hora).getTime() : Infinity) - (b.data_hora ? new Date(b.data_hora).getTime() : Infinity))
             return (
@@ -307,7 +366,7 @@ export default function HomePersonalKanban() {
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className={'h-2 w-2 shrink-0 rounded-full ' + visual.marcador}/>
                     <h3 className={'truncate text-xs font-bold ' + visual.texto} title={col.nome}>{col.nome}</h3>
-                    <span className="rounded-full bg-white px-1.5 text-[10px] text-slate-500">{itens.length}</span>
+                    <span className="rounded-full bg-white px-1.5 text-[10px] text-slate-500">{itens.length + delegadasDaEtapa.length}</span>
                   </div>
                   {personalizando && <div className="flex items-center gap-0.5">
                     <button type="button" disabled={salvando || i === 0} onClick={() => void deslocarColuna(i, -1)} aria-label={'Mover ' + col.nome + ' para a esquerda'} className="rounded p-1 text-slate-500 hover:bg-white disabled:opacity-30"><ArrowLeft size={12}/></button>
@@ -316,7 +375,8 @@ export default function HomePersonalKanban() {
                   </div>}
                 </div>
                 <div className="max-h-[260px] min-h-[220px] space-y-1.5 overflow-y-auto px-2 pb-2 pr-2">
-                  {itens.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa neste período</p>}
+                  {itens.length === 0 && delegadasDaEtapa.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa neste período</p>}
+                  {delegadasDaEtapa.map(t => <CardDelegado key={t.id} tarefa={t}/>)}
                   {itens.map(t => {
                     const atrasada = !t.concluida_em && t.data_hora && new Date(t.data_hora).getTime() < Date.now()
                     const menuAberto = menuTarefaAberto === t.id
