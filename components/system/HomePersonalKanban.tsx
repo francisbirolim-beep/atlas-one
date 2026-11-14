@@ -12,10 +12,10 @@ import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
 
 const cores = {
-  inicial: { lateral: 'border-l-slate-500', fundo: 'bg-slate-50', texto: 'text-slate-700', marcador: 'bg-slate-500' },
-  andamento: { lateral: 'border-l-blue-600', fundo: 'bg-blue-50/60', texto: 'text-blue-800', marcador: 'bg-blue-600' },
-  aguardando: { lateral: 'border-l-amber-500', fundo: 'bg-amber-50/60', texto: 'text-amber-800', marcador: 'bg-amber-500' },
-  concluido: { lateral: 'border-l-emerald-600', fundo: 'bg-emerald-50/60', texto: 'text-emerald-800', marcador: 'bg-emerald-600' },
+  inicial: { lateral: 'border-l-slate-500', fundo: 'bg-slate-100/70', cabecalho: 'bg-slate-200', texto: 'text-slate-800', marcador: 'bg-slate-500' },
+  andamento: { lateral: 'border-l-blue-600', fundo: 'bg-blue-50/70', cabecalho: 'bg-blue-200', texto: 'text-blue-900', marcador: 'bg-blue-600' },
+  aguardando: { lateral: 'border-l-amber-500', fundo: 'bg-amber-50/70', cabecalho: 'bg-amber-200', texto: 'text-amber-900', marcador: 'bg-amber-500' },
+  concluido: { lateral: 'border-l-emerald-600', fundo: 'bg-emerald-50/70', cabecalho: 'bg-emerald-200', texto: 'text-emerald-900', marcador: 'bg-emerald-600' },
 }
 
 function semAcentos(s: string) {
@@ -162,12 +162,13 @@ export default function HomePersonalKanban() {
     <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2"><Columns3 size={18} className="text-blue-700" /><h2 className="text-base font-bold text-slate-900">Meu Kanban de Trabalho</h2></div>
-          <p className="mt-1 text-xs text-slate-500">Suas tarefas entram em A fazer; organize as etapas do seu jeito.</p>
+          <div className="flex items-center gap-2"><Columns3 size={18} className="text-blue-700" /><h2 className="text-base font-bold text-slate-900">Meu Kanban pessoal</h2></div>
+          <p className="mt-1 text-xs text-slate-500">Organize suas demandas, mova os cartões e personalize as colunas conforme sua rotina.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => window.dispatchEvent(new Event('atlas:nova-tarefa'))} className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"><Plus size={14}/> Nova tarefa</button>
-          <button type="button" aria-pressed={personalizando} onClick={() => setPersonalizando(v => !v)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Personalizar colunas</button>
+          <button type="button" onClick={() => void novaColuna()} disabled={salvando} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><Plus size={14}/> Adicionar coluna</button>
+          <button type="button" aria-pressed={personalizando} onClick={() => setPersonalizando(v => !v)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Personalizar colunas</button>
+          <button type="button" onClick={() => window.dispatchEvent(new Event('atlas:nova-tarefa'))} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"><Plus size={14}/> Adicionar card</button>
         </div>
       </div>
       <div className="mb-3 flex flex-wrap gap-2 text-[11px]">
@@ -178,8 +179,7 @@ export default function HomePersonalKanban() {
       {erro && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{erro}</p>}
       {personalizando && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50/50 p-2.5">
-          <p className="text-xs text-slate-600">Renomeie e mude a ordem das suas colunas. A organização vale só para você.</p>
-          <button type="button" onClick={() => void novaColuna()} disabled={salvando} className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-blue-700 shadow-sm disabled:opacity-50"><Plus size={14}/> Adicionar coluna</button>
+          <p className="text-xs text-slate-600">Renomeie e reordene suas colunas usando os controles de cada título. A organização vale só para você.</p>
         </div>
       )}
       {carregando ? <p className="py-8 text-center text-sm text-slate-500">Carregando seu Kanban...</p> : colunas.length === 0 ? (
@@ -196,8 +196,8 @@ export default function HomePersonalKanban() {
                 const id = e.dataTransfer.getData('text/plain')
                 const tarefa = tarefas.find(t => t.id === id)
                 if (tarefa) void mudarColuna(tarefa, col.id)
-              }} className={'w-[224px] min-w-[224px] flex-1 rounded-xl border border-slate-200 border-l-4 p-2.5 sm:min-w-[235px] ' + visual.lateral + ' ' + visual.fundo + (arrastando === col.id ? ' ring-2 ring-blue-400' : '')}>
-                <div className="mb-2 flex min-h-7 items-center justify-between gap-1">
+              }} className={'w-[224px] min-w-[224px] flex-1 overflow-hidden rounded-xl border border-slate-200 border-l-4 p-0 sm:min-w-[235px] ' + visual.lateral + ' ' + visual.fundo + (arrastando === col.id ? ' ring-2 ring-blue-400' : '')}>
+                <div className={'mb-2 flex min-h-10 items-center justify-between gap-1 px-2.5 py-2 ' + visual.cabecalho}>
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className={'h-2 w-2 shrink-0 rounded-full ' + visual.marcador}/>
                     <h3 className={'truncate text-xs font-bold ' + visual.texto} title={col.nome}>{col.nome}</h3>
@@ -209,7 +209,7 @@ export default function HomePersonalKanban() {
                     <button type="button" disabled={salvando} onClick={() => void editarColuna(col)} aria-label={'Renomear ' + col.nome} className="rounded p-1 text-slate-500 hover:bg-white disabled:opacity-30"><Pencil size={12}/></button>
                   </div>}
                 </div>
-                <div className="max-h-[460px] min-h-[120px] space-y-2 overflow-y-auto pr-0.5">
+                <div className="max-h-[460px] min-h-[180px] space-y-2 overflow-y-auto px-2 pb-2 pr-2">
                   {itens.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa</p>}
                   {itens.map(t => {
                     const atrasada = !t.concluida_em && t.data_hora && new Date(t.data_hora).getTime() < Date.now()
