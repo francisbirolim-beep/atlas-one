@@ -259,6 +259,7 @@ interface RascunhoOrcamentoRapido {
   clienteIdOrigem: string | null
   clienteNome: string
   usuarioCriadorId?: string | null
+  fluxoSobMedida?: boolean
   clienteWhatsapp: string
   cidade: string
   obraNome?: string
@@ -381,6 +382,7 @@ export default function OrcamentoRapido() {
           return
         }
 
+        if (d.fluxoSobMedida === true) setFluxoSobMedida(true)
         if (Array.isArray(d.itens) && d.itens.length) setItens(d.itens.map(item => {
           const fotos = (item.fotos || []).map((foto: any) => foto instanceof File ? foto : arquivoDoRascunho(foto))
           const fotoLargura = item.fotoLargura ? (item.fotoLargura instanceof File ? item.fotoLargura : arquivoDoRascunho(item.fotoLargura as any)) : undefined
@@ -423,19 +425,19 @@ export default function OrcamentoRapido() {
   useEffect(() => {
     if (!rascunhoCarregado || typeof window === 'undefined') return
     const modo = new URLSearchParams(window.location.search).get('modo')
-    const sobMedida = modo === 'sob-medida'
+    const sobMedida = modo === 'sob-medida' || (rascunhoRestaurado && fluxoSobMedida)
     setFluxoSobMedida(sobMedida)
     if (!sobMedida) return
     setItens(prev => {
       if (prev.length !== 1 || prev[0].itemTipo) return prev
       return [{ ...prev[0], itemTipo: 'sob_medida' }]
     })
-  }, [rascunhoCarregado])
+  }, [rascunhoCarregado, rascunhoRestaurado])
 
   function montarRascunhoAtual(): RascunhoOrcamentoRapido {
     return {
       itens: itens.map(item => ({ ...item, fotos: item.fotos.map(arquivoParaRascunho) as any, fotosPreviews: [], fotoLargura: item.fotoLargura ? arquivoParaRascunho(item.fotoLargura) as any : undefined, fotoLarguraPreview: undefined, fotoAltura: item.fotoAltura ? arquivoParaRascunho(item.fotoAltura) as any : undefined, fotoAlturaPreview: undefined })),
-      clienteIdOrigem, clienteNome, usuarioCriadorId: rascunhoUsuarioId, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
+      clienteIdOrigem, clienteNome, usuarioCriadorId: rascunhoUsuarioId, fluxoSobMedida, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura,
       acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato,
       arquivos: arquivos.map(arquivoParaRascunho),
     }
@@ -467,7 +469,7 @@ export default function OrcamentoRapido() {
         .catch(() => setErroSalvamentoLocal('Falha ao salvar localmente. Mantenha esta tela aberta e toque em “Salvar medição agora”.'))
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, rascunhoChave, rascunhoUsuarioId, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, salvo, salvoOffline])
+  }, [rascunhoCarregado, rascunhoChave, rascunhoUsuarioId, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, fluxoSobMedida, salvo, salvoOffline])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
