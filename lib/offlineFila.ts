@@ -145,6 +145,18 @@ export async function obterRascunho<T>(id: string): Promise<RascunhoOffline<T> |
   })
 }
 
+// Permite encontrar pedidos em andamento pelo cliente, sem restaurar um
+// rascunho de outra pessoa quando o usuário abre um orçamento NOVO.
+export async function listarRascunhos<T = any>(): Promise<RascunhoOffline<T>[]> {
+  const db = await abrirDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_RASCUNHOS, 'readonly')
+    const pedido = tx.objectStore(STORE_RASCUNHOS).getAll()
+    pedido.onsuccess = () => resolve((pedido.result as RascunhoOffline<T>[]) || [])
+    pedido.onerror = () => reject(pedido.error)
+  })
+}
+
 export async function removerRascunho(id: string): Promise<void> {
   const db = await abrirDB()
   return new Promise((resolve, reject) => {
