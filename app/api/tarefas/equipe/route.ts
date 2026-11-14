@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { autenticarTarefasEquipe, notificarEnvolvidos, prioridadesTarefa, registrarHistorico } from '@/lib/servidorTarefasEquipe'
 import { gerarDatasEquipe, type RepeticaoEquipe } from '@/lib/tarefasEquipeRecorrencia'
+import { materializarTarefasEquipe } from '@/lib/materializarTarefasEquipe'
 
 const REGRAS = new Set<RepeticaoEquipe>(['uma_vez','semanal','mensal','dia_util_mes'])
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -9,6 +10,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export async function GET(req: NextRequest) {
   const usuario = await autenticarTarefasEquipe(req)
   if (!usuario) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  await materializarTarefasEquipe(usuario)
   const cols = 'id,empresa_id,criado_por_id,titulo,descricao,responsaveis_ids,prioridade,data_hora,status,compartilhada,lote_id,serie_id,recorrencia_tipo,concluida_em,concluida_por_id,iniciada_em,created_at,updated_at'
   const base = () => supabaseAdmin.from('atlas_tarefas_equipe').select(cols).eq('empresa_id',usuario.empresa_id)
   const [autor, responsavel] = await Promise.all([
