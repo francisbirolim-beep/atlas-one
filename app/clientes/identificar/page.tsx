@@ -235,6 +235,7 @@ export default function IdentificarCliente() {
               </button>
             </section>
 
+            {consultandoRascunhos && <p className="mb-3 text-xs text-slate-500">Verificando rascunhos deste cliente neste aparelho...</p>}
             {(rascunhosCliente.length > 0 || pedidosPendentes.length > 0) && (
               <section className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 sm:p-4" aria-label="Rascunhos e envios pendentes deste cliente">
                 <div className="mb-2 flex items-center gap-2">
