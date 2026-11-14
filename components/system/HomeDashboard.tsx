@@ -12,7 +12,6 @@ import HomeKanbanBlock from '@/components/system/HomeKanbanBlock'
 import HomeAssistenciasBlock from '@/components/system/HomeAssistenciasBlock'
 import HomeTasksBlock from '@/components/system/HomeTasksBlock'
 import HomeCalendarBlock from '@/components/system/HomeCalendarBlock'
-import HomeAlertsBlock from '@/components/system/HomeAlertsBlock'
 import HomeSectorOverview from '@/components/system/HomeSectorOverview'
 import HomeQuotesOverview from '@/components/system/HomeQuotesOverview'
 
@@ -137,11 +136,6 @@ export default function HomeDashboard() {
           <div className="grid w-full min-w-0 gap-4 xl:grid-cols-2">
             {temModulo(config, 'tarefas') && <HomeTasksBlock />}
             {temModulo(config, 'calendario') && <HomeCalendarBlock />}
-            {temModulo(config, 'notificacoes') && (
-              <div className={temModulo(config, 'tarefas') && temModulo(config, 'calendario') ? 'xl:col-span-2' : ''}>
-                <HomeAlertsBlock />
-              </div>
-            )}
           </div>
         </section>
       )}
