@@ -11,6 +11,8 @@ import ImagemProdutoTecnico from '@/components/engenharia/ImagemProdutoTecnico'
 import { normalizarComponentes, tipoCroquiSeguro, type ComponenteCandidato } from '@/lib/bancadaCriacaoTipologia'
 
 type RespostaAnalise = {
+  dados_orientativo?: { largura_mm: number | null; altura_mm: number | null; orcamento: string;
+    folga_largura_mm: number | null; folga_altura_mm: number | null }
   componentes: ComponenteCandidato[]
   descricao: string
   tipo_croqui: string
@@ -141,12 +143,16 @@ export default function NovaTipologiaPage() {
     return json
   }
   async function analisar() {
-    if (!arquivo || !consentimento) throw new Error('Selecione um documento e autorize a análise por IA.')
+    if (!arquivo) throw new Error('Selecione um PDF ou imagem.')
     setErro(''); setProcessando('analisar')
     try {
       const resposta = await chamada('analisar') as RespostaAnalise
       setAnalise(resposta)
       setComponentes(resposta.componentes)
+      if (resposta.dados_orientativo?.largura_mm) setLargura(String(resposta.dados_orientativo.largura_mm))
+      if (resposta.dados_orientativo?.altura_mm) setAltura(String(resposta.dados_orientativo.altura_mm))
+      if (resposta.dados_orientativo?.orcamento && !origem.trim())
+        setOrigem('W.Vetro — orçamento ' + resposta.dados_orientativo.orcamento)
       if (resposta.tipo_croqui && resposta.tipo_croqui !== 'outro') setTipo(resposta.tipo_croqui)
       setRevisado(false)
     } catch (e) { setErro(e instanceof Error ? e.message : 'Não foi possível analisar o documento.') }
@@ -207,8 +213,8 @@ export default function NovaTipologiaPage() {
             <input type="checkbox" className="mt-0.5" checked={consentimento} onChange={e => setConsentimento(e.target.checked)}/>
             Autorizo o envio dos dados técnicos ao provedor gratuito de IA configurado no Atlas, quando disponível. O serviço externo pode manter informações para melhorar seus modelos. Conferirei os dados antes do cadastro.
           </label>
-          <button type="button" className={botao + ' w-full bg-indigo-700 text-white'} disabled={!arquivo || !consentimento || !!processando} onClick={() => void analisar()}>
-            {processando === 'analisar' ? <Loader2 className="animate-spin" size={17}/> : <Sparkles size={17}/>} Analisar documento com IA
+          <button type="button" className={botao + ' w-full bg-indigo-700 text-white'} disabled={!arquivo || !!processando} onClick={() => void analisar()}>
+            {processando === 'analisar' ? <Loader2 className="animate-spin" size={17}/> : <Sparkles size={17}/>} Ler documento (IA opcional)
           </button>
           {analise && <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
             <p><b>Resultado:</b> {analise.estado_documento === 'link_wvetro' ? 'Atalho/Link, não é relatório técnico' : analise.origem_ia} · {analise.componentes.length} linhas sugeridas · {analise.quantidade_cortes_completos ?? analise.componentes.filter(c => c.eixo && c.comprimento_mm != null).length} cortes com orientação identificada.</p>
