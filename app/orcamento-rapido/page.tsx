@@ -462,14 +462,14 @@ export default function OrcamentoRapido() {
   }
 
   useEffect(() => {
-    if (!rascunhoCarregado || salvo || salvoOffline || !clienteNome.trim() || !rascunhoUsuarioId) return
+    if (!rascunhoCarregado || salvando || salvo || salvoOffline || !clienteNome.trim() || !rascunhoUsuarioId) return
     const timer = window.setTimeout(() => {
       salvarRascunho(rascunhoChave, montarRascunhoAtual())
         .then(() => { setRascunhoSalvoEm(new Date().toISOString()); setErroSalvamentoLocal('') })
         .catch(() => setErroSalvamentoLocal('Falha ao salvar localmente. Mantenha esta tela aberta e toque em “Salvar medição agora”.'))
     }, 350)
     return () => window.clearTimeout(timer)
-  }, [rascunhoCarregado, rascunhoChave, rascunhoUsuarioId, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, fluxoSobMedida, salvo, salvoOffline])
+  }, [rascunhoCarregado, rascunhoChave, rascunhoUsuarioId, itens, clienteIdOrigem, clienteNome, clienteWhatsapp, cidade, obraNome, obraRua, obraNumero, obraBairro, obraCep, obraLocalizacao, obraIdSelecionada, obraLocalizacaoConfirmada, obraPrecisaoMetros, origem, temperatura, acabamento, acabamentoOutroTexto, contramarco, arquitetoNome, arquitetoContato, arquivos, fluxoSobMedida, salvando, salvo, salvoOffline])
 
   useEffect(() => {
     if (!rascunhoCarregado || rascunhoRestaurado) return
