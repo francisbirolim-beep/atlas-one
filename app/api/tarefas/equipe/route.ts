@@ -49,7 +49,7 @@ export async function POST(req:NextRequest) {
   try {body=await req.json()}catch{return NextResponse.json({error:'Dados inválidos'},{status:400})}
   const titulo = typeof body.titulo==='string'?body.titulo.trim():''
   const descricao = typeof body.descricao==='string'?body.descricao.trim():''
-  const responsaveis = [...new Set((Array.isArray(body.responsaveisIds)?body.responsaveisIds:[])
+  const responsaveis: string[] = [...new Set<string>(((Array.isArray(body.responsaveisIds)?body.responsaveisIds:[]) as unknown[])
     .filter((id:unknown):id is string=>typeof id==='string' && UUID.test(id)))]
   const prioridade = prioridadesTarefa.includes(body.prioridade)?body.prioridade:'normal'
   const tipo:RepeticaoEquipe = REGRAS.has(body.recorrencia)?body.recorrencia:'uma_vez'
