@@ -223,7 +223,7 @@ export default function HomePersonalKanban() {
   },[equipe,aba,usuario,mesSelecionado,todosPeriodos,manterPendenciasAnteriores,busca,filtro])
 
   function etapaEquipe(t:EquipeTarefa):'pedido'|'a_fazer'|'em_andamento'|'aguardando'|'concluido'{
-    if(t.status==='a_fazer' && t.criado_por_id===usuario?.id &&
+    if(usuario && t.status==='a_fazer' && t.criado_por_id===usuario.id &&
        !t.responsaveis_ids.includes(usuario.id))return 'pedido'
     return t.status
   }
