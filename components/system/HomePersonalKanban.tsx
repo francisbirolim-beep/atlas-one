@@ -34,6 +34,30 @@ function dataPrazo(iso?: string | null) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 }
 
+
+/** Mês local do usuário; não usar recorte UTC para evitar trocas de dia perto da meia-noite. */
+function mesDaData(iso?: string | null): string | null {
+  if (!iso) return null
+  const data = new Date(iso)
+  if (Number.isNaN(data.getTime())) return null
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`
+}
+
+function mesAtual() {
+  return mesDaData(new Date().toISOString())!
+}
+
+function mesAdjacente(mes: string, deslocamento: number): string {
+  const [ano, numero] = mes.split('-').map(Number)
+  const nova = new Date(ano, numero - 1 + deslocamento, 1)
+  return `${nova.getFullYear()}-${String(nova.getMonth() + 1).padStart(2, '0')}`
+}
+
+function periodoExtenso(mes: string) {
+  const [ano, numero] = mes.split('-').map(Number)
+  return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(ano, numero - 1, 1))
+}
+
 export default function HomePersonalKanban() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
@@ -44,6 +68,12 @@ export default function HomePersonalKanban() {
   const [arrastando, setArrastando] = useState<string | null>(null)
   const [menuTarefaAberto, setMenuTarefaAberto] = useState<string | null>(null)
   const [erro, setErro] = useState('')
+  const [mesSelecionado, setMesSelecionado] = useState(mesAtual)
+  const [todosPeriodos, setTodosPeriodos] = useState(false)
+  const [manterPendenciasAnteriores, setManterPendenciasAnteriores] = useState(true)
+  const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState<'todos' | 'atrasadas' | 'urgentes' | 'alta' | 'sem-prazo'>('todos')
+
 
   useEffect(() => {
     let ativo = true
@@ -84,6 +114,39 @@ export default function HomePersonalKanban() {
   const colunaExibida = (t: TarefaPessoal) => t.concluida_em && final ? final.id : t.coluna_id
   const abertas = tarefas.filter(t => !t.concluida_em)
   const atrasadas = abertas.filter(t => t.data_hora && new Date(t.data_hora).getTime() < Date.now()).length
+
+  const tarefasFiltradas = useMemo(() => {
+    const consulta = semAcentos(busca.trim())
+    const agora = Date.now()
+    return tarefas.filter(t => {
+      const concluida = Boolean(t.concluida_em)
+      if (!todosPeriodos) {
+        // Concluídos: mês de conclusão. Abertos: prazo (ou criação, quando não houver prazo).
+        const mesReferencia = mesDaData(concluida ? t.concluida_em : t.data_hora || t.atribuida_em || t.created_at)
+        if (concluida) {
+          if (mesReferencia !== mesSelecionado) return false
+        } else if (mesReferencia !== mesSelecionado) {
+          // Uma pendência antiga nunca deve sumir silenciosamente do fluxo de trabalho.
+          if (!manterPendenciasAnteriores || (mesReferencia !== null && mesReferencia > mesSelecionado)) return false
+        }
+      }
+      if (consulta && !semAcentos([t.titulo, t.descricao || '', t.solicitante_nome || ''].join(' ')).includes(consulta)) return false
+      if (filtro === 'atrasadas') return !concluida && Boolean(t.data_hora) && new Date(t.data_hora!).getTime() < agora
+      if (filtro === 'urgentes') return t.prioridade === 'urgente'
+      if (filtro === 'alta') return t.prioridade === 'alta'
+      if (filtro === 'sem-prazo') return !t.data_hora
+      return true
+    })
+  }, [tarefas, todosPeriodos, mesSelecionado, manterPendenciasAnteriores, busca, filtro])
+
+  function limparFiltros() {
+    setMesSelecionado(mesAtual())
+    setTodosPeriodos(false)
+    setManterPendenciasAnteriores(true)
+    setBusca('')
+    setFiltro('todos')
+  }
+
 
   async function mudarColuna(t: TarefaPessoal, destinoId: string) {
     if (salvando || colunaExibida(t) === destinoId) return
@@ -171,6 +234,54 @@ export default function HomePersonalKanban() {
           <button type="button" onClick={() => window.dispatchEvent(new Event('atlas:nova-tarefa'))} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"><Plus size={14}/> Adicionar card</button>
         </div>
       </div>
+      <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2.5" aria-label="Filtros e período do Kanban pessoal">
+        <div className="min-w-0">
+          <label htmlFor="kanban-pessoal-mes" className="mb-1 block text-[11px] font-semibold text-slate-600">Período</label>
+          <div className="flex items-center gap-1">
+            <button type="button" disabled={todosPeriodos} title="Mês anterior" aria-label="Mês anterior"
+              onClick={() => setMesSelecionado(m => mesAdjacente(m, -1))}
+              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40"><ArrowLeft size={13}/></button>
+            <input id="kanban-pessoal-mes" aria-label="Selecionar mês do Kanban" type="month" value={mesSelecionado}
+              onChange={e => { if (/^\d{4}-\d{2}$/.test(e.target.value)) { setMesSelecionado(e.target.value); setTodosPeriodos(false) } }}
+              disabled={todosPeriodos} className="h-8 w-[146px] rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 disabled:opacity-50" />
+            <button type="button" disabled={todosPeriodos} title="Próximo mês" aria-label="Próximo mês"
+              onClick={() => setMesSelecionado(m => mesAdjacente(m, 1))}
+              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-100 disabled:opacity-40"><ArrowRight size={13}/></button>
+          </div>
+        </div>
+        <label className="flex min-h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700">
+          <input type="checkbox" checked={todosPeriodos} onChange={e => setTodosPeriodos(e.target.checked)} className="accent-blue-600" />
+          Todos os períodos
+        </label>
+        <label className="min-w-[165px] flex-1">
+          <span className="mb-1 block text-[11px] font-semibold text-slate-600">Pesquisar tarefa ou cliente</span>
+          <input type="search" value={busca} onChange={e => setBusca(e.target.value)}
+            placeholder="Nome, cliente ou descrição..." className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-700" />
+        </label>
+        <label className="min-w-[120px]">
+          <span className="mb-1 block text-[11px] font-semibold text-slate-600">Filtro</span>
+          <select value={filtro} onChange={e => setFiltro(e.target.value as typeof filtro)}
+            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700">
+            <option value="todos">Todas as tarefas</option>
+            <option value="atrasadas">Atrasadas</option>
+            <option value="urgentes">Urgentes</option>
+            <option value="alta">Prioridade alta</option>
+            <option value="sem-prazo">Sem prazo</option>
+          </select>
+        </label>
+        <button type="button" onClick={limparFiltros} className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+          Limpar filtros
+        </button>
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+          <span>Exibindo: <strong className="text-slate-800">{todosPeriodos ? 'Todos os períodos' : periodoExtenso(mesSelecionado)}</strong> · {tarefasFiltradas.length} tarefa(s)</span>
+          {!todosPeriodos && (
+            <label className="flex cursor-pointer items-center gap-1.5 text-slate-600" title="Mantém visíveis tarefas abertas de meses anteriores, sem alterar os concluídos do mês">
+              <input type="checkbox" checked={manterPendenciasAnteriores} onChange={e => setManterPendenciasAnteriores(e.target.checked)} className="accent-blue-600" />
+              Incluir pendências anteriores
+            </label>
+          )}
+        </div>
+      </div>
       {erro && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{erro}</p>}
       {personalizando && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50/50 p-2.5">
@@ -183,7 +294,7 @@ export default function HomePersonalKanban() {
         <div className="flex min-w-0 gap-3 overflow-x-auto pb-2" aria-label="Colunas do Kanban pessoal">
           {colunas.map((col, i) => {
             const visual = cores[tipoColuna(col, i)]
-            const itens = tarefas.filter(t => colunaExibida(t) === col.id).sort((a, b) =>
+            const itens = tarefasFiltradas.filter(t => colunaExibida(t) === col.id).sort((a, b) =>
               (a.data_hora ? new Date(a.data_hora).getTime() : Infinity) - (b.data_hora ? new Date(b.data_hora).getTime() : Infinity))
             return (
               <section key={col.id} onDragOver={e => { e.preventDefault(); setArrastando(col.id) }} onDragLeave={() => setArrastando(null)} onDrop={e => {
@@ -205,7 +316,7 @@ export default function HomePersonalKanban() {
                   </div>}
                 </div>
                 <div className="max-h-[260px] min-h-[220px] space-y-1.5 overflow-y-auto px-2 pb-2 pr-2">
-                  {itens.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa</p>}
+                  {itens.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa neste período</p>}
                   {itens.map(t => {
                     const atrasada = !t.concluida_em && t.data_hora && new Date(t.data_hora).getTime() < Date.now()
                     const menuAberto = menuTarefaAberto === t.id
