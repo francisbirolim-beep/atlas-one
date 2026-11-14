@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock3, Columns3, GripVertical, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Clock3, Columns3, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import {
   concluirTarefa, criarColunaTarefa, listarColunasTarefas, listarTarefas,
@@ -43,6 +42,7 @@ export default function HomePersonalKanban() {
   const [personalizando, setPersonalizando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [arrastando, setArrastando] = useState<string | null>(null)
+  const [menuTarefaAberto, setMenuTarefaAberto] = useState<string | null>(null)
   const [erro, setErro] = useState('')
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export default function HomePersonalKanban() {
     <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2"><Columns3 size={18} className="text-blue-700" /><h2 className="text-base font-bold text-slate-900">Meu Kanban pessoal</h2></div>
+          <div className="flex items-center gap-2"><Columns3 size={18} className="text-blue-700" /><h2 className="text-base font-bold text-slate-900" title={`${abertas.length} tarefas em aberto, ${atrasadas} atrasadas`}>Meu Kanban pessoal</h2></div>
           <p className="mt-1 text-xs text-slate-500">Organize suas demandas, mova os cartões e personalize as colunas conforme sua rotina.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -170,11 +170,6 @@ export default function HomePersonalKanban() {
           <button type="button" aria-pressed={personalizando} onClick={() => setPersonalizando(v => !v)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Personalizar colunas</button>
           <button type="button" onClick={() => window.dispatchEvent(new Event('atlas:nova-tarefa'))} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"><Plus size={14}/> Adicionar card</button>
         </div>
-      </div>
-      <div className="mb-3 flex flex-wrap gap-2 text-[11px]">
-        <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">{abertas.length} em aberto</span>
-        <span className="rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-700">{atrasadas} atrasadas</span>
-        <Link href="/tarefas" className="ml-auto text-blue-700 hover:underline">Abrir Kanban completo</Link>
       </div>
       {erro && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{erro}</p>}
       {personalizando && (
@@ -209,23 +204,51 @@ export default function HomePersonalKanban() {
                     <button type="button" disabled={salvando} onClick={() => void editarColuna(col)} aria-label={'Renomear ' + col.nome} className="rounded p-1 text-slate-500 hover:bg-white disabled:opacity-30"><Pencil size={12}/></button>
                   </div>}
                 </div>
-                <div className="max-h-[460px] min-h-[180px] space-y-2 overflow-y-auto px-2 pb-2 pr-2">
+                <div className="max-h-[260px] min-h-[220px] space-y-1.5 overflow-y-auto px-2 pb-2 pr-2">
                   {itens.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa</p>}
                   {itens.map(t => {
                     const atrasada = !t.concluida_em && t.data_hora && new Date(t.data_hora).getTime() < Date.now()
-                    return <div key={t.id} draggable={!salvando} onDragStart={e => e.dataTransfer.setData('text/plain', t.id)} className={'rounded-lg border bg-white p-2.5 shadow-sm ' + (atrasada ? 'border-red-300' : 'border-slate-200')}>
-                      <div className="flex items-start gap-1.5"><GripVertical size={13} className="mt-0.5 shrink-0 text-slate-300"/><p className="min-w-0 flex-1 break-words text-xs font-semibold text-slate-800">{t.titulo}</p></div>
-                      {t.descricao && <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{t.descricao}</p>}
-                      {t.solicitante_nome && <p className="mt-1 truncate text-[10px] text-slate-500">De: {t.solicitante_nome}</p>}
-                      <p className={'mt-1.5 flex items-center gap-1 text-[10px] ' + (atrasada ? 'font-semibold text-red-600' : 'text-slate-500')}><Clock3 size={11}/>{dataPrazo(t.data_hora)}</p>
-                      {t.prioridade && t.prioridade !== 'normal' && <p className="mt-1 text-[10px] font-semibold uppercase text-amber-700">{t.prioridade}</p>}
-                      <div className="mt-2 flex items-center gap-1">
-                        <select aria-label={'Mover tarefa ' + t.titulo} value={colunaExibida(t)} disabled={salvando} onChange={e => void mudarColuna(t, e.target.value)} className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] text-slate-600">
-                          {colunas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                        </select>
-                        <button type="button" title={t.concluida_em ? 'Reabrir tarefa' : 'Marcar como concluída'} aria-label={t.concluida_em ? 'Reabrir tarefa' : 'Concluir tarefa'} disabled={salvando} onClick={() => void alternarConclusao(t)} className={'rounded p-1.5 disabled:opacity-50 ' + (t.concluida_em ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-emerald-100')}><Check size={13}/></button>
+                    const menuAberto = menuTarefaAberto === t.id
+                    return (
+                      <div key={t.id} draggable={!salvando} onDragStart={e => e.dataTransfer.setData('text/plain', t.id)}
+                        className={'rounded-lg border bg-white px-2 py-2 shadow-sm ' + (atrasada ? 'border-red-300' : 'border-slate-200')}>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <GripVertical size={13} className="shrink-0 cursor-grab text-slate-400" aria-hidden="true" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-semibold leading-4 text-slate-800" title={t.titulo}>{t.titulo}</p>
+                            {t.descricao && <p className="mt-0.5 truncate text-[11px] leading-4 text-slate-500" title={t.descricao}>{t.descricao}</p>}
+                          </div>
+                          <span className={'flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-1 text-[9px] whitespace-nowrap ' +
+                            (atrasada ? 'bg-red-50 font-semibold text-red-700' : 'bg-slate-100 text-slate-600')}>
+                            <Clock3 size={10} />{dataPrazo(t.data_hora)}
+                          </span>
+                          <button type="button" aria-label={'Opções da tarefa ' + t.titulo} aria-expanded={menuAberto}
+                            onClick={() => setMenuTarefaAberto(atual => atual === t.id ? null : t.id)}
+                            className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100">
+                            <MoreHorizontal size={14} />
+                          </button>
+                        </div>
+                        {menuAberto && (
+                          <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2" aria-label={'Ações da tarefa ' + t.titulo}>
+                            {t.solicitante_nome && <p className="text-[10px] text-slate-500">De: {t.solicitante_nome}</p>}
+                            {t.prioridade && t.prioridade !== 'normal' && <p className="text-[10px] font-semibold uppercase text-amber-700">{t.prioridade}</p>}
+                            <div className="flex items-center gap-1.5">
+                              <select aria-label={'Mover tarefa ' + t.titulo} value={colunaExibida(t)} disabled={salvando}
+                                onChange={e => void mudarColuna(t, e.target.value)}
+                                className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-1.5 py-1 text-[11px] text-slate-600">
+                                {colunas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                              </select>
+                              <button type="button" title={t.concluida_em ? 'Reabrir tarefa' : 'Marcar como concluída'}
+                                aria-label={t.concluida_em ? 'Reabrir tarefa' : 'Concluir tarefa'} disabled={salvando}
+                                onClick={() => void alternarConclusao(t)}
+                                className={'rounded p-1.5 disabled:opacity-50 ' + (t.concluida_em ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600 hover:bg-emerald-100')}>
+                                <Check size={13}/>
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )
                   })}
                 </div>
               </section>
@@ -233,7 +256,6 @@ export default function HomePersonalKanban() {
           })}
         </div>
       )}
-      <p className="mt-2 text-[11px] text-slate-400"><CheckCircle2 size={12} className="mr-1 inline"/> Organização pessoal. Mover cards não muda o status comercial ou financeiro.</p>
     </article>
   )
 }
