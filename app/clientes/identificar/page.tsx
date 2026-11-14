@@ -74,11 +74,12 @@ export default function IdentificarCliente() {
         rascunhos.filter(r => rascunhoPertenceAoCliente(r.dados, id, nome, autorId))
           .sort((a,b) => b.atualizadoEm.localeCompare(a.atualizadoEm)),
       )
-      setPedidosPendentes(
-        pendentes.filter((p): p is PendenteOrcamento => p.tipo === 'orcamento')
-          .filter(p => pedidoPendentePertenceAoCliente(p.dados, id, nome))
-          .sort((a,b) => b.criadoEm.localeCompare(a.criadoEm)),
-      )
+      const pendentesDoCliente: PendenteOrcamento[] = []
+      for (const pedido of pendentes) {
+        if (pedido.tipo !== 'orcamento') continue
+        if (pedidoPendentePertenceAoCliente(pedido.dados, id, nome)) pendentesDoCliente.push(pedido)
+      }
+      setPedidosPendentes(pendentesDoCliente.sort((a,b) => b.criadoEm.localeCompare(a.criadoEm)))
       setConsultandoRascunhos(false)
     })()
     return () => { ativo = false }
