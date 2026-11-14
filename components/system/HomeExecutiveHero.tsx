@@ -11,6 +11,7 @@ import {
   Columns3,
   ImageIcon,
   MapPinned,
+  Search,
   UserPlus,
 } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
@@ -68,32 +69,32 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
     window.dispatchEvent(new Event('atlas:novo-compromisso'))
   }
 
-  const classeAtalho = 'group flex min-h-16 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md sm:min-h-20 sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3'
-  const classeIcone = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 sm:h-10 sm:w-10'
-  const classeTextoAtalho = 'block text-[13px] leading-4 text-slate-900 sm:text-sm sm:leading-5'
-  const classeSubtituloAtalho = 'mt-0.5 hidden text-xs text-slate-400 sm:block'
+  const classeAtalho = 'group flex min-h-14 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-left shadow-sm transition hover:border-blue-200 hover:shadow-md sm:min-h-16 sm:gap-2.5 sm:px-3 sm:py-2.5'
+  const classeIcone = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 sm:h-9 sm:w-9'
+  const classeTextoAtalho = 'block text-xs leading-4 text-slate-900 sm:text-[13px] sm:leading-5'
+  const classeSubtituloAtalho = 'mt-0.5 hidden text-[11px] text-slate-500 xl:block'
 
   return (
-    <section className="mx-auto w-full max-w-[1500px] px-3 pt-3 sm:px-4 sm:pt-4 md:px-8 md:pt-4">
+    <section className="mx-auto w-full max-w-[1500px] px-3 pt-3 sm:px-4 md:px-8">
       <div className="atlas-home-hero overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:rounded-2xl">
         <div className="h-1 w-full" style={{ backgroundColor: corPrincipal }} />
-        <div className="grid gap-3 px-4 py-4 sm:gap-5 sm:px-5 sm:py-4 md:px-6 md:py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="grid gap-2 px-4 py-3 sm:px-5 md:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div className="min-w-0">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-700 sm:mb-3 sm:text-[11px] sm:tracking-[0.2em]">Visão geral</p>
-            <h1 className="text-lg font-semibold tracking-tight text-slate-950 sm:text-xl md:text-2xl">{saudacao()}, {primeiroNome(usuario?.nome)}.</h1>
-            <p className="mt-1.5 max-w-2xl text-[13px] leading-5 text-slate-500 sm:mt-2 sm:text-sm sm:leading-6">Seu centro de trabalho: tarefas, agenda e acessos rápidos do dia.</p>
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-500 sm:mt-4 sm:gap-x-4 sm:gap-y-2 sm:text-xs">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-700">Visão geral</p>
+            <h1 className="text-lg font-semibold tracking-tight text-slate-950 sm:text-xl">{saudacao()}, {primeiroNome(usuario?.nome)}.</h1>
+            <p className="mt-0.5 max-w-2xl text-xs text-slate-500 sm:text-[13px]">Seu centro de trabalho: tarefas, agenda e acessos rápidos do dia.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
               <span className="inline-flex items-center gap-1.5"><Building2 size={13} className="text-blue-600" /> {nomeEmpresa}</span>
               <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} className="text-blue-600" /> {hoje}</span>
             </div>
           </div>
 
           <div className={empresa?.logoUrl
-            ? 'flex min-h-14 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 sm:min-h-16 sm:min-w-40 sm:rounded-2xl sm:px-4 sm:py-2'
-            : 'hidden min-h-24 min-w-52 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4 sm:flex'}>
+            ? 'hidden items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 sm:flex sm:min-w-32'
+            : 'hidden'}>
             {empresa?.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={empresa.logoUrl} alt={`Logo ${nomeEmpresa}`} className="max-h-10 max-w-36 object-contain" />
+              <img src={empresa.logoUrl} alt={`Logo ${nomeEmpresa}`} className="max-h-8 max-w-28 object-contain" />
             ) : (
               <div className="text-center text-slate-400">
                 <ImageIcon size={24} className="mx-auto mb-2" />
@@ -106,7 +107,7 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
       </div>
 
       {modulos.length > 0 && (
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 lg:grid-cols-3 2xl:grid-cols-6">
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {(tem('orcamentos') || tem('clientes')) && (
             <Link href="/clientes/identificar" onClick={(e) => { if (!navigator.onLine) { e.preventDefault(); window.location.assign('/orcamento-rapido?offline=1') } }} className={classeAtalho}>
               <span className={classeIcone}><UserPlus size={19} /></span>
@@ -123,6 +124,12 @@ export default function HomeExecutiveHero({ modulos = MODULOS_PADRAO }: { modulo
             <Link href="/kanban" className={classeAtalho}>
               <span className={classeIcone}><Columns3 size={19} /></span>
               <span className="min-w-0"><strong className={classeTextoAtalho}>Kanban</strong><span className={classeSubtituloAtalho}>Abrir comercial</span></span>
+            </Link>
+          )}
+          {(tem('orcamentos') || tem('clientes')) && (
+            <Link href="/balcao/consulta-preco" className={classeAtalho}>
+              <span className={classeIcone}><Search size={18} /></span>
+              <span className="min-w-0"><strong className={classeTextoAtalho}>Consulta de preço</strong><span className={classeSubtituloAtalho}>Produtos e valores</span></span>
             </Link>
           )}
           {tem('tarefas') && (

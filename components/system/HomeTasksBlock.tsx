@@ -22,7 +22,7 @@ function dataHoraLabel(iso?: string | null) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 }
 
-export default function HomeTasksBlock() {
+export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPainel?: boolean }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [tarefas, setTarefas] = useState<TarefaPessoal[]>([])
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
@@ -132,6 +132,7 @@ export default function HomeTasksBlock() {
 
   return (
     <>
+      {!ocultarPainel && (
       <article className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm md:p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2"><CheckSquare size={17} className="text-blue-600" /><h2 className="font-semibold">Minhas tarefas</h2></div>
@@ -164,6 +165,7 @@ export default function HomeTasksBlock() {
         </div>
         <Link href="/tarefas" className="mt-3 inline-block text-xs font-medium text-blue-700 hover:text-blue-800">Ver todas as tarefas →</Link>
       </article>
+      )}
 
       {modal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
