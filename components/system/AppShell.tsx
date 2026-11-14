@@ -34,7 +34,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const medicaoFinalId = medicaoIdDaRota(pathname)
 
   return (
-    <div className="atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex">
+    <div className={'atlas-app-shell min-h-screen w-full max-w-full overflow-x-hidden bg-slate-100 md:flex '+(ehHome?'atlas-home-aprovada':'')}>
       {!ehWhatsAppAtendimento && (
         <div className="atlas-sidebar-shell contents md:block [&>nav]:hidden md:[&>nav]:flex">
           <Sidebar />
