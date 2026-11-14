@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { Check, CheckSquare, Clock3, Plus, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarUsuariosConvidaveis } from '@/lib/eventos'
-import { concluirTarefa, criarTarefa, listarColunasTarefas, listarTarefas, primeiraColunaTarefaId } from '@/lib/tarefas'
+import { concluirTarefa, listarColunasTarefas, listarTarefas } from '@/lib/tarefas'
 import { atribuirTarefa, type PrioridadeTarefa } from '@/lib/tarefasColaboracao'
+import { criarRecorrenciaAtlas } from '@/lib/agendaRecorrenciaCliente'
+import RecurrenceFields, { type OpcaoRecorrencia } from './RecurrenceFields'
 import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
 
 function dataHoje() {
@@ -31,9 +33,14 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
   const [titulo, setTitulo] = useState('')
   const [data, setData] = useState(dataHoje())
   const [hora, setHora] = useState('09:00')
-  const [responsavelId, setResponsavelId] = useState('')
+  const [responsaveisIds, setResponsaveisIds] = useState<string[]>([])
+  const [buscaResponsavel, setBuscaResponsavel] = useState('')
+  const [descricao, setDescricao] = useState('')
   const [responsaveis, setResponsaveis] = useState<{ id: string; nome: string }[]>([])
   const [prioridade, setPrioridade] = useState<PrioridadeTarefa>('normal')
+  const [repeticao, setRepeticao] = useState<OpcaoRecorrencia>('nenhuma')
+  const [diasSemana, setDiasSemana] = useState<number[]>([])
+  const [nDiaUtil, setNDiaUtil] = useState(5)
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
@@ -80,7 +87,7 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
 
   async function abrirModal() {
     if (!usuario) return
-    setResponsavelId(usuario.id)
+    setResponsaveisIds([usuario.id])
     setModal(true)
     if (responsaveis.length === 0) {
       const outros = await listarUsuariosConvidaveis(usuario.id)
@@ -100,31 +107,46 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
   }
 
   async function salvar() {
-    if (!usuario || !titulo.trim()) return
+    if (!usuario || !titulo.trim() || responsaveisIds.length === 0 || salvando) return
     setSalvando(true)
-    const destino = responsavelId || usuario.id
-    const dataHora = data ? new Date(`${data}T${hora || '09:00'}:00`).toISOString() : null
-
-    if (destino === usuario.id) {
-      const colunaId = colunas[0]?.id || await primeiraColunaTarefaId(usuario.id)
-      if (colunaId) {
-        const criada = await criarTarefa(usuario.id, colunaId, titulo.trim(), undefined, dataHora)
-        if (criada) setTarefas(prev => [...prev, criada])
+    const dataHora = data ? new Date(data + 'T' + (hora || '09:00') + ':00').toISOString() : null
+    try {
+      if (repeticao === 'nenhuma') {
+        const resultado = await atribuirTarefa({
+          responsaveisIds, titulo: titulo.trim(), descricao: descricao.trim(),
+          dataHora, prioridade,
+        })
+        if (!resultado.ok) {
+          alert(resultado.error || 'Não foi possível atribuir a tarefa.')
+          return
+        }
+      } else {
+        const resultado = await criarRecorrenciaAtlas({
+          tipoRegistro: 'tarefa', responsaveisIds, titulo: titulo.trim(),
+          descricao: descricao.trim(), baseData: data, horaInicio: hora,
+          prioridade, frequencia: repeticao, diasSemana, nDiaUtil,
+        })
+        if (!resultado.ok) {
+          alert(resultado.error || 'Não foi possível cadastrar a tarefa recorrente.')
+          return
+        }
+        if (resultado.aviso) alert(resultado.aviso)
       }
-    } else {
-      const resultado = await atribuirTarefa({ responsavelId: destino, titulo: titulo.trim(), dataHora, prioridade })
-      if (!resultado.ok) {
-        alert(resultado.error || 'Não foi possível atribuir a tarefa.')
-        setSalvando(false)
-        return
-      }
+      setTarefas(await listarTarefas(usuario.id))
+      window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
+      setTitulo('')
+      setDescricao('')
+      setBuscaResponsavel('')
+      setPrioridade('normal')
+      setRepeticao('nenhuma')
+      setDiasSemana([])
+      setNDiaUtil(5)
+      setModal(false)
+    } catch {
+      alert('Falha ao criar a tarefa. Nenhum cartão foi atualizado nesta tela.')
+    } finally {
+      setSalvando(false)
     }
-
-    window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
-    setTitulo('')
-    setPrioridade('normal')
-    setModal(false)
-    setSalvando(false)
   }
 
   return (
@@ -178,14 +200,30 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
 
       {modal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold text-slate-900">Nova tarefa</h3><p className="text-xs text-slate-500">Crie para você ou atribua a outro usuário.</p></div><button type="button" onClick={() => setModal(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={17}/></button></div>
             <div className="space-y-3">
               <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="O que precisa ser feito?" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
+              <textarea rows={2} value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Instruções ou observações (opcional)" className="w-full rounded-xl border border-slate-300 p-3 text-sm" />
               <div className="grid grid-cols-2 gap-2"><input type="date" value={data} onChange={e => setData(e.target.value)} className="rounded-xl border border-slate-300 p-3 text-sm"/><input type="time" value={hora} onChange={e => setHora(e.target.value)} className="rounded-xl border border-slate-300 p-3 text-sm"/></div>
-              <select value={responsavelId} onChange={e => setResponsavelId(e.target.value)} className="w-full rounded-xl border border-slate-300 p-3 text-sm">{responsaveis.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}</select>
+              <RecurrenceFields repeticao={repeticao} onRepeticao={setRepeticao}
+                diasSemana={diasSemana} onDiasSemana={setDiasSemana} nDiaUtil={nDiaUtil} onNDiaUtil={setNDiaUtil} />
+              <div className="rounded-xl border border-slate-200 p-2">
+                <p className="mb-2 text-xs font-semibold text-slate-700">Responsáveis ({responsaveisIds.length}) — selecione um ou vários</p>
+                <input type="search" value={buscaResponsavel} onChange={e => setBuscaResponsavel(e.target.value)}
+                  placeholder="Pesquisar funcionário pelo nome" className="mb-2 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm" />
+                <div className="max-h-32 space-y-1 overflow-y-auto">
+                  {responsaveis.filter(r => r.nome.toLocaleLowerCase('pt-BR').includes(buscaResponsavel.trim().toLocaleLowerCase('pt-BR')))
+                    .map(r => <label key={r.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+                      <input type="checkbox" checked={responsaveisIds.includes(r.id)} onChange={() => setResponsaveisIds(antes =>
+                        antes.includes(r.id) ? antes.filter(id => id !== r.id) : [...antes, r.id])} />
+                      {r.nome}{r.id === usuario?.id ? ' (você)' : ''}
+                    </label>)}
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-500">A mesma tarefa aparece no Kanban dos responsáveis e de quem criou.</p>
+              </div>
               <select value={prioridade} onChange={e => setPrioridade(e.target.value as PrioridadeTarefa)} className="w-full rounded-xl border border-slate-300 p-3 text-sm"><option value="baixa">Prioridade baixa</option><option value="normal">Prioridade normal</option><option value="alta">Prioridade alta</option><option value="urgente">Urgente</option></select>
-              <button type="button" onClick={() => void salvar()} disabled={salvando || !titulo.trim()} className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50">{salvando ? 'Salvando...' : 'Salvar tarefa'}</button>
+              <button type="button" onClick={() => void salvar()} disabled={salvando || !titulo.trim() || responsaveisIds.length === 0} className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50">{salvando ? 'Salvando...' : 'Salvar tarefa'}</button>
             </div>
           </div>
         </div>

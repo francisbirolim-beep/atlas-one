@@ -430,6 +430,9 @@ export interface TarefaPessoal {
       solicitante_nome?: string | null
       atribuida_em?: string | null
       prioridade?: 'baixa' | 'normal' | 'alta' | 'urgente'
+      tarefa_grupo_id?: string | null
+      responsaveis_nomes?: string[]
+      empresa_id?: string
       created_at?: string
 }
 
