@@ -45,11 +45,13 @@ export default function PreviaVenda(){
   const [buscaProduto,setBuscaProduto]=useState('')
   const [categoria,setCategoria]=useState<Categoria>('todos')
   const [linha,setLinha]=useState('')
+  const [precoFiltro,setPrecoFiltro]=useState<'todos'|'com'|'sem'>('todos')
   const [linhas,setLinhas]=useState<Linha[]>([])
   const [produtos,setProdutos]=useState<Produto[]>([])
   const [buscandoProdutos,setBuscandoProdutos]=useState(false)
   const [erroProdutos,setErroProdutos]=useState('')
   const [itens,setItens]=useState<Item[]>([])
+  const [quantidadeDigitada,setQuantidadeDigitada]=useState<Record<string,string>>({})
   const [tipoDesconto,setTipoDesconto]=useState<'sem'|'valor'|'percentual'>('sem')
   const [descontoEntrada,setDescontoEntrada]=useState('')
   const [tipoRecebimento,setTipoRecebimento]=useState<'agora'|'marcar'>('agora')
@@ -59,7 +61,7 @@ export default function PreviaVenda(){
   const [reciboAberto,setReciboAberto]=useState(false)
   const [dataRecibo,setDataRecibo]=useState('')
   const [fotosLocais,setFotosLocais]=useState<Record<string,string>>({})
-  const [fotosConfirmadas,setFotosConfirmadas]=useState<Record<string,boolean>>({})
+  const [fotosOcultas,setFotosOcultas]=useState<Record<string,boolean>>({})
   const fotosRef=useRef<Record<string,string>>({})
   const consultaClientesSeq=useRef(0)
   const consultaProdutosSeq=useRef(0)
@@ -120,7 +122,7 @@ export default function PreviaVenda(){
     const timer=setTimeout(()=>void (async()=>{
       try{
         const t=await tokenAtual();if(!t)throw Error('Sessão expirada.')
-        const params=new URLSearchParams({tipo:'produtos',q:buscaProduto,categoria})
+        const params=new URLSearchParams({tipo:'produtos',q:buscaProduto,categoria,precoFiltro})
         if(linha)params.set('linhaId',linha)
         const r=await fetch('/api/previews/comercial?'+params.toString(),{headers:{Authorization:'Bearer '+t},signal:ctrl.signal,cache:'no-store'})
         const j=await r.json();if(!r.ok)throw Error(j.error||'Falha ao procurar produtos.')
@@ -129,7 +131,7 @@ export default function PreviaVenda(){
       finally{if(seq===consultaProdutosSeq.current)setBuscandoProdutos(false)}
     })(),buscaProduto?230:60)
     return()=>{ctrl.abort();clearTimeout(timer)}
-  },[etapa,buscaProduto,categoria,linha])
+  },[etapa,buscaProduto,categoria,linha,precoFiltro])
 
   const nomeCliente=modo==='consumidor'?'Consumidor final':cliente?.nome||'Cliente não escolhido'
   const obra=obras.find(o=>o.id===obraId)
@@ -173,8 +175,16 @@ export default function PreviaVenda(){
   function adicionar(p:Produto){
     setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1}]})
   }
-  function quantidade(id:string,d:number){
-    setItens(a=>a.map(i=>i.produto.id===id?{...i,quantidade:Math.max(0,i.quantidade+d)}:i).filter(i=>i.quantidade>0))
+  function digitarQuantidade(id:string,valor:string){
+    // Permite escrever diretamente 10, 25, 100 etc., sem perder o texto durante a digitação.
+    if(!/^\d{0,5}$/.test(valor))return
+    setQuantidadeDigitada(a=>({...a,[id]:valor}))
+    const qtd=Number(valor)
+    if(valor!=='' && Number.isInteger(qtd)&&qtd>=1&&qtd<=99999)
+      setItens(a=>a.map(i=>i.produto.id===id?{...i,quantidade:qtd}:i))
+  }
+  function confirmarQuantidade(id:string){
+    setQuantidadeDigitada(a=>{const b={...a};delete b[id];return b})
   }
   function revisar(){
     if(!itens.length){setAviso('Adicione pelo menos um produto para continuar.');return}
@@ -206,7 +216,7 @@ export default function PreviaVenda(){
     setDataRecibo(new Date().toISOString())
     setReciboAberto(true)
   }
-  function resetar(){setEtapa(1);setModo('busca');setCliente(null);setBuscaCliente('');setObraId('');setCadastro(vazio);setItens([]);setAviso('');setTipoRecebimento('agora');setTipoDesconto('sem');setDescontoEntrada('');setPagamentos([{id:1,forma:'pix',valor:''}]);setNomeAssinatura('');setReciboAberto(false)}
+  function resetar(){setEtapa(1);setModo('busca');setCliente(null);setBuscaCliente('');setObraId('');setCadastro(vazio);setItens([]);setQuantidadeDigitada({});setAviso('');setTipoRecebimento('agora');setTipoDesconto('sem');setDescontoEntrada('');setPagamentos([{id:1,forma:'pix',valor:''}]);setNomeAssinatura('');setReciboAberto(false)}
 
   return <main className="min-h-screen bg-[#f3f6fb] px-3 pb-16 pt-5 text-slate-900 sm:px-6 lg:px-8">
    <div className="mx-auto max-w-[1420px] space-y-5">
@@ -322,29 +332,42 @@ export default function PreviaVenda(){
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
             {categorias.map(cat=><button type="button" key={cat.id} aria-pressed={categoria===cat.id} onClick={()=>{setCategoria(cat.id);setLinha('')}} className={'rounded-xl border px-2 py-2.5 text-xs font-bold '+(categoria===cat.id?'border-blue-700 bg-blue-700 text-white':'border-slate-200 bg-slate-50 text-slate-600')}>{cat.nome}</button>)}
           </div>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <label className="min-w-[220px] flex-1 text-xs font-bold text-slate-600">Filtrar por linha técnica<select className={input+' mt-1.5'} value={linha} onChange={e=>setLinha(e.target.value)}><option value="">Todas as linhas vinculadas</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}{!l.ativa?' (histórica)':''}</option>)}</select></label>
-            <button type="button" onClick={()=>{setBuscaProduto('');setCategoria('todos');setLinha('')}} className="rounded-xl border px-4 py-2.5 text-xs font-bold">Limpar filtros</button>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+            <label className="block text-xs font-bold text-slate-600">Filtrar por linha técnica
+              <select className={input+' mt-1.5'} value={linha} onChange={e=>setLinha(e.target.value)}><option value="">Todas as linhas vinculadas</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}{!l.ativa?' (histórica)':''}</option>)}</select>
+            </label>
+            <label className="block text-xs font-bold text-slate-600">Filtrar por preço
+              <select className={input+' mt-1.5'} value={precoFiltro} onChange={e=>setPrecoFiltro(e.target.value as 'todos'|'com'|'sem')}><option value="todos">Todos os preços</option><option value="com">Com preço</option><option value="sem">Sem preço</option></select>
+            </label>
+            <button type="button" onClick={()=>{setBuscaProduto('');setCategoria('todos');setLinha('');setPrecoFiltro('todos')}} className="rounded-xl border px-4 py-2.5 text-xs font-bold">Limpar filtros</button>
           </div>
           {buscandoProdutos&&<p className="mt-3 text-xs text-slate-500">Buscando no catálogo...</p>}
           {erroProdutos&&<p role="alert" className="mt-3 text-xs text-red-700">{erroProdutos}</p>}
           {!buscandoProdutos&&!erroProdutos&&!produtos.length&&<p className="mt-4 rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500">Nenhum produto vinculado à seleção. Troque a linha, categoria ou busca.</p>}
           <div className="mt-3 max-h-[600px] space-y-2 overflow-y-auto">{produtos.map(p=>
             <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
-              <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} fotoCandidataUrl={p.fotoCandidataUrl} candidataConfirmada={!!fotosConfirmadas[p.id]} onConfirmarCandidata={confirmado=>setFotosConfirmadas(a=>({...a,[p.id]:confirmado}))} tamanho="pequeno" imagemLocal={fotosLocais[p.id]} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
+              <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} fotoCandidataUrl={p.fotoCandidataUrl} oculta={!!fotosOcultas[p.id]} onOcultarFoto={valor=>setFotosOcultas(a=>({...a,[p.id]:valor}))} tamanho="pequeno" imagemLocal={fotosLocais[p.id]} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
               <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{p.nome}</b><p className="mt-1 text-[11px] text-slate-500">{p.codigo||'Sem código'} · {p.unidade}{p.linha?' · '+p.linha:''}</p><p className={preco(p)!=null?'mt-1 text-sm font-extrabold text-blue-700':'mt-1 text-xs font-bold text-amber-700'}>{preco(p)!=null?moeda(preco(p)!):'Preço a cadastrar'}</p></div>
               <button type="button" onClick={()=>adicionar(p)} className="shrink-0 rounded-lg bg-blue-700 p-2.5 text-white" aria-label={'Adicionar '+p.nome}><Plus size={18}/></button>
             </div>)}
           </div>
-          <p className="mt-3 text-[11px] text-amber-700">Fotos importadas vinculadas ao produto precisam de conferência antes de aparecer. Use “Conferir foto cadastrada” ou “Adicionar imagem correta”. Nenhuma imagem é salva na prévia.</p>
+          <p className="mt-3 text-[11px] text-amber-700">Todas as imagens cadastradas aparecem automaticamente, inclusive as de perfis e acessórios. Se alguma estiver incorreta, use “Trocar imagem” ou “Remover imagem” nesta prévia, sem modificar o banco.</p>
         </section>
         <aside className="rounded-2xl border bg-white p-4 shadow-sm lg:sticky lg:top-4">
           <h3 className="flex items-center gap-2 font-black"><ShoppingCart size={19} className="text-blue-700"/> Itens da venda <span className="ml-auto rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{unidades}</span></h3>
           {!itens.length&&<div className="mt-4 grid min-h-32 place-items-center rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500">Escolha um item à esquerda para começar a venda.</div>}
           <div className="mt-3 space-y-3">{itens.map(i=><div key={i.produto.id} className="border-b pb-3 last:border-0">
-            <div className="flex gap-2"><FotoProdutoPreview nome={i.produto.nome} fotoUrl={i.produto.fotoUrl} fotoCandidataUrl={i.produto.fotoCandidataUrl} candidataConfirmada={!!fotosConfirmadas[i.produto.id]} onConfirmarCandidata={confirmado=>setFotosConfirmadas(a=>({...a,[i.produto.id]:confirmado}))} tamanho="pequeno" imagemLocal={fotosLocais[i.produto.id]} onSelecionarImagem={arquivo=>selecionarFoto(i.produto.id,arquivo)}/>
+            <div className="flex gap-2"><FotoProdutoPreview nome={i.produto.nome} fotoUrl={i.produto.fotoUrl} fotoCandidataUrl={i.produto.fotoCandidataUrl} oculta={!!fotosOcultas[i.produto.id]} onOcultarFoto={valor=>setFotosOcultas(a=>({...a,[i.produto.id]:valor}))} tamanho="pequeno" imagemLocal={fotosLocais[i.produto.id]} onSelecionarImagem={arquivo=>selecionarFoto(i.produto.id,arquivo)}/>
               <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] text-slate-500">{preco(i.produto)!=null?moeda(preco(i.produto)!):'Preço pendente'} /{i.produto.unidade}</p>
-                <div className="mt-2 flex items-center gap-1"><button type="button" onClick={()=>quantidade(i.produto.id,-1)} className="rounded border p-1.5" aria-label="Diminuir quantidade"><Minus size={13}/></button><span className="min-w-7 text-center text-xs font-bold">{i.quantidade}</span><button type="button" onClick={()=>quantidade(i.produto.id,1)} className="rounded border p-1.5" aria-label="Aumentar quantidade"><Plus size={13}/></button><button type="button" onClick={()=>setItens(a=>a.filter(x=>x.produto.id!==i.produto.id))} className="ml-auto rounded p-1.5 text-red-600" aria-label="Remover produto"><Trash2 size={14}/></button></div>
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="text-[11px] font-semibold text-slate-600" htmlFor={'qtd-'+i.produto.id}>Qtd.</label>
+                  <input id={'qtd-'+i.produto.id} className="w-20 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-sm font-bold tabular-nums focus:border-blue-600 focus:outline-none" inputMode="numeric" pattern="[0-9]*" aria-label={'Quantidade de '+i.produto.nome}
+                    value={quantidadeDigitada[i.produto.id]??String(i.quantidade)}
+                    onChange={e=>digitarQuantidade(i.produto.id,e.target.value)}
+                    onBlur={()=>confirmarQuantidade(i.produto.id)}
+                    onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur()}} />
+                  <button type="button" onClick={()=>{setItens(a=>a.filter(x=>x.produto.id!==i.produto.id));confirmarQuantidade(i.produto.id)}} className="ml-auto rounded p-1.5 text-red-600 hover:bg-red-50" aria-label="Remover produto"><Trash2 size={15}/></button>
+                </div>
               </div>
             </div>
           </div>)}</div>
