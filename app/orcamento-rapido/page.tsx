@@ -861,7 +861,7 @@ export default function OrcamentoRapido() {
       setConferenciaAberta(false)
       setErroEhValidacao(true)
       setErro(mensagem)
-      if (/cliente|cidade|obra|rua|número|localização|cep|temperatura|cor|acabamento|contramarco/i.test(mensagem)) setDetalhesAbertos(true)
+      if (/temperatura|cor|acabamento|contramarco/i.test(mensagem)) setDetalhesAbertos(true)
       return false
     }
 
@@ -1063,29 +1063,92 @@ export default function OrcamentoRapido() {
           {erroSalvamentoLocal && <p role="alert" className="w-full text-xs font-semibold text-red-700">{erroSalvamentoLocal}</p>}
         </div>
 
-        <section className={painel + ' p-4 sm:p-5'}>
-          <div className="mb-4 flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-700"><ClipboardList size={19}/></span>
+        <section className={painel + ' overflow-hidden'}>
+          <div className="flex items-center gap-3 bg-slate-900 px-4 py-3 text-white sm:px-5">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10"><ClipboardList size={19}/></span>
             <div>
               <h2 className="text-base font-extrabold">Cliente e obra</h2>
-              <p className="text-xs text-slate-500">Identificação do atendimento</p>
+              <p className="text-xs text-slate-300">Identificação do atendimento</p>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="relative"><label className={rotulo}>Cliente</label><input className={campo} data-preserve-case="true" value={clienteNome} onChange={e=>{ limparErroValidacaoAoEditar();setClienteNome(e.target.value);setClienteIdOrigem(null);setObraIdSelecionada(null);setObrasDoCliente([]) }} placeholder="Nome do cliente"/><BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={selecionarClienteExistente}/></div>
-            <div><label className={rotulo}>Nome da obra / local</label><input className={campo} value={obraNome} onChange={e=>{limparErroValidacaoAoEditar();setObraNome(e.target.value)}} disabled={!!obraIdSelecionada} placeholder="Ex.: Residência / reforma"/></div>
-            <div><label className={rotulo}>Cidade</label><input className={campo} value={cidade} onChange={e=>{limparErroValidacaoAoEditar();setCidade(e.target.value)}} placeholder="Cidade da obra"/></div>
-            <div><label className={rotulo}>Cor geral (opcional)</label><input className={campo} value={corGeral} onChange={e=>{limparErroValidacaoAoEditar();setAcabamento('outro');setAcabamentoOutroTexto(e.target.value)}} placeholder="Ex.: Preto fosco"/></div>
-            <div className="sm:col-span-2">
-              <label className={rotulo}>Contramarco geral</label>
-              <div className="grid grid-cols-3 gap-2">
-                {([['indefinido','A definir'],['com','Com'],['sem','Sem']] as const).map(([value,label])=>
-                  <button key={value} type="button" onClick={()=>{limparErroValidacaoAoEditar();setContramarco(value === 'indefinido' ? '' : value)}} className={'rounded-xl border px-2 py-2.5 text-xs font-semibold ' + (contramarcoGeral===value?'border-blue-700 bg-blue-700 text-white':'border-slate-200 bg-white text-slate-600')}>{label}</button>)}
+          <div className="space-y-4 p-4 sm:p-5">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="relative"><label className={rotulo}>Cliente</label><input className={campo} data-preserve-case="true" value={clienteNome} onChange={e=>{ limparErroValidacaoAoEditar();setClienteNome(e.target.value);setClienteIdOrigem(null);setObraIdSelecionada(null);setObrasDoCliente([]) }} placeholder="Nome do cliente"/><BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={selecionarClienteExistente}/></div>
+              <div><label className={rotulo}>Nome da obra / local</label><input className={campo} value={obraNome} onChange={e=>{limparErroValidacaoAoEditar();setObraNome(e.target.value)}} disabled={!!obraIdSelecionada} placeholder="Ex.: Residência / reforma"/></div>
+              <div><label className={rotulo}>Cidade</label><input className={campo} value={cidade} onChange={e=>{limparErroValidacaoAoEditar();setCidade(e.target.value)}} placeholder="Cidade da obra"/></div>
+            </div>
+            {clienteIdOrigem && obrasDoCliente.length > 0 && (
+              <label className="block text-xs font-medium text-slate-600">Obra existente (opcional)
+                <select value={obraIdSelecionada || ''} onChange={e=>escolherObraExistente(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
+                  <option value="">Nova obra — cadastrar abaixo</option>
+                  {obrasDoCliente.map(obra=><option key={obra.id} value={obra.id}>{obra.nome} · {obra.cidade || 'Cidade não informada'}</option>)}
+                </select>
+                <span className="mt-1 block text-[11px] text-slate-500">Escolha uma obra para reutilizar seu endereço, GPS e histórico, sem misturar obras distintas.</span>
+              </label>
+            )}
+            <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-3 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Endereço da obra</h3>
+                  <p className="text-xs text-slate-500">Na obra, use o GPS para sugerir rua, bairro, cidade e CEP. Confira o número.</p>
+                </div>
+                <button type="button" onClick={capturarEnderecoDaObra} disabled={capturandoLocalizacao} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-60">
+                  {capturandoLocalizacao ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
+                  {capturandoLocalizacao ? 'Localizando...' : 'Usar localização atual'}
+                </button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12">
+                <label className="block text-xs font-medium text-slate-600 lg:col-span-5">Rua / avenida da obra
+                  <input data-preserve-case="true" value={obraRua} onChange={e=>{limparErroValidacaoAoEditar();setObraRua(e.target.value)}} placeholder="Rua, avenida ou estrada" className={campo + ' mt-1'}/>
+                </label>
+                <label className="block text-xs font-medium text-slate-600 lg:col-span-2">Número
+                  <input data-preserve-case="true" value={obraNumero} onChange={e=>{limparErroValidacaoAoEditar();setObraNumero(e.target.value)}} placeholder="123 / S/N" className={campo + ' mt-1'}/>
+                </label>
+                <label className="block text-xs font-medium text-slate-600 lg:col-span-3">Bairro
+                  <input data-preserve-case="true" value={obraBairro} onChange={e=>setObraBairro(e.target.value)} placeholder="Bairro da obra" className={campo + ' mt-1'}/>
+                </label>
+                <label className="block text-xs font-medium text-slate-600 lg:col-span-2">CEP
+                  <input data-preserve-case="true" value={obraCep} maxLength={9} inputMode="numeric" onChange={e=>{limparErroValidacaoAoEditar();setObraCep(e.target.value)}} placeholder="00000-000" className={campo + ' mt-1'}/>
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] text-slate-500">Informe rua e número (ou S/N), ou confirme o GPS no mapa.</p>
+                <button type="button" disabled={consultandoCepObra||obraCep.replace(/\D/g,'').length!==8} onClick={()=>void consultarCepDaObra()} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-40">{consultandoCepObra?'Consultando CEP...':'Consultar CEP e completar endereço'}</button>
+              </div>
+              {avisoLocalizacao && <p role="status" className="rounded-lg bg-blue-100 px-3 py-2 text-xs text-blue-900">{avisoLocalizacao}</p>}
+              <details className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                <summary className="cursor-pointer text-xs font-semibold text-blue-800">Informar ou conferir coordenadas GPS (opcional)</summary>
+                <label className="mt-2 block text-xs font-medium text-slate-600">Latitude, longitude
+                  <input data-preserve-case="true" value={obraLocalizacao} onChange={e=>{limparErroValidacaoAoEditar();setObraLocalizacao(e.target.value);setObraLocalizacaoConfirmada('');setObraPrecisaoMetros(null)}} placeholder="Ex.: -21.052812,-49.690112 (pode colar)" className={campo + ' mt-1'}/>
+                </label>
+                <p className="mt-2 text-[11px] text-slate-500">O GPS é solicitado apenas ao tocar no botão. Se estiver fora da obra, digite o endereço ou cole as coordenadas recebidas.</p>
+                <p className="mt-1 text-[11px] text-slate-500">O mapa só sugere número quando existe uma referência confiável; confira o número do imóvel.</p>
+              </details>
+              {obraLocalizacao && !coordenadasEmTexto(obraLocalizacao) && <p className="text-xs font-medium text-amber-700">Informe duas coordenadas válidas separadas por vírgula.</p>}
+              {obraPrecisaoMetros !== null && <p className={'rounded-lg px-3 py-2 text-xs ' + (obraPrecisaoMetros > 30 ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800')}>Precisão estimada pelo aparelho: raio de aproximadamente {Math.round(obraPrecisaoMetros)} m. {obraPrecisaoMetros > 30 ? 'Sinal impreciso: tente capturar novamente ao ar livre antes de confirmar.' : 'Confira o ponto no mapa antes de validar.'}</p>}
+              {coordenadasEmTexto(obraLocalizacao) && <div className="space-y-2 rounded-xl border border-blue-200 bg-white p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-semibold text-slate-800">GPS: {obraLocalizacao}. A localização no mapa está correta?</p>
+                  <button type="button" onClick={()=>{limparErroValidacaoAoEditar();setObraLocalizacaoConfirmada('sim')}} className={'rounded-lg border px-3 py-1.5 text-xs font-bold ' + (obraLocalizacaoConfirmada==='sim'?'border-emerald-600 bg-emerald-600 text-white':'bg-white')}>Sim, está certa</button>
+                  <button type="button" onClick={()=>{limparErroValidacaoAoEditar();setObraLocalizacaoConfirmada('nao')}} className={'rounded-lg border px-3 py-1.5 text-xs font-bold ' + (obraLocalizacaoConfirmada==='nao'?'border-red-600 bg-red-600 text-white':'bg-white')}>Não, corrigir</button>
+                  <a href={linkRotaObra({coordenadas:obraLocalizacao})||'#'} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-700 underline">Ver ponto no mapa</a>
+                </div>
+                {obraLocalizacaoConfirmada==='nao' && <p className="text-xs text-amber-800">Esta coordenada não será usada para navegação. Capture novamente ou informe rua e número; a rejeição será registrada para revisão.</p>}
+                {obraLocalizacaoConfirmada==='sim' && <p className="text-xs text-emerald-700">Localização confirmada. Rua e número são opcionais; complete-os se souber.</p>}
+              </div>}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div><label className={rotulo}>Cor geral (opcional)</label><input className={campo} value={corGeral} onChange={e=>{limparErroValidacaoAoEditar();setAcabamento('outro');setAcabamentoOutroTexto(e.target.value)}} placeholder="Ex.: Preto fosco"/></div>
+              <div className="sm:col-span-2">
+                <label className={rotulo}>Contramarco geral</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([['indefinido','A definir'],['com','Com'],['sem','Sem']] as const).map(([value,label])=>
+                    <button key={value} type="button" onClick={()=>{limparErroValidacaoAoEditar();setContramarco(value === 'indefinido' ? '' : value)}} className={'rounded-xl border px-2 py-2.5 text-xs font-semibold ' + (contramarcoGeral===value?'border-blue-700 bg-blue-700 text-white':'border-slate-200 bg-white text-slate-600')}>{label}</button>)}
+                </div>
               </div>
             </div>
           </div>
         </section>
-
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -1240,98 +1303,10 @@ export default function OrcamentoRapido() {
           <button type="button" onClick={adicionar} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 px-3 py-3.5 text-sm font-extrabold text-blue-700 transition hover:bg-blue-100"><Plus size={18}/> Adicionar outra esquadria</button>
         </section>
         <details open={detalhesAbertos} onToggle={e=>setDetalhesAbertos(e.currentTarget.open)} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-          <summary className="cursor-pointer text-sm font-bold text-blue-800">Dados complementares para envio · contato, endereço/GPS, temperatura e outros detalhes</summary>
+          <summary className="cursor-pointer text-sm font-bold text-blue-800">Dados complementares para envio · contato, temperatura e outros detalhes</summary>
           <p className="mb-3 mt-2 text-xs text-slate-500">Campos do formulário original, mantidos para o envio. Você pode coletar as esquadrias primeiro.</p>
           <div className="space-y-3">
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<div className="relative"><input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value); setClienteIdOrigem(null); setObraIdSelecionada(null); setObrasDoCliente([]) }} placeholder="Nome do cliente * — digite para localizar cadastro" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={selecionarClienteExistente} /></div><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
-
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-800">Dados da obra</h3>
-            <p className="mt-1 text-xs text-slate-500">Nome da obra e endereço OU localização são obrigatórios. O endereço pertence à obra, não ao cadastro pessoal do cliente.</p>
-          </div>
-          {clienteIdOrigem && obrasDoCliente.length > 0 && <label className="block text-xs font-medium text-slate-600">
-            Obra existente (opcional)
-            <select value={obraIdSelecionada || ''} onChange={e => escolherObraExistente(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
-              <option value="">Nova obra — cadastrar abaixo</option>
-              {obrasDoCliente.map(obra => <option key={obra.id} value={obra.id}>{obra.nome} · {obra.cidade || 'Cidade não informada'}</option>)}
-            </select>
-            <span className="mt-1 block text-[11px] text-slate-500">Escolha a obra para reutilizar endereço, GPS e histórico. Outras obras do cliente continuam separadas.</span>
-          </label>}
-          <label className="block text-xs font-medium text-slate-600">
-            Obra *
-            <input data-preserve-case="true" value={obraNome}
-              onChange={e => { limparErroValidacaoAoEditar(); setObraNome(e.target.value) }}
-              disabled={!!obraIdSelecionada}
-              placeholder="Ex.: Residência Silva, Reforma centro..."
-              className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm disabled:bg-slate-100" />
-          </label>
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={capturarEnderecoDaObra} disabled={capturandoLocalizacao}
-              className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-blue-800 disabled:opacity-60">
-              {capturandoLocalizacao ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
-              {capturandoLocalizacao ? 'Localizando...' : 'Usar localização atual'}
-            </button>
-            <span className="text-xs text-slate-500">Na obra, use o GPS. Fora dela, digite o endereço ou cole as coordenadas recebidas.</span>
-          </div>
-          {avisoLocalizacao && <p role="status" className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">{avisoLocalizacao}</p>}
-          <label className="block text-xs font-medium text-slate-600">
-            Localização da obra (latitude, longitude)
-            <input data-preserve-case="true" value={obraLocalizacao}
-              onChange={e => { limparErroValidacaoAoEditar(); setObraLocalizacao(e.target.value); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null) }}
-              placeholder="Ex.: -21.052812,-49.690112 (pode colar)"
-              className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
-          </label>
-          {obraPrecisaoMetros !== null && <p className={`rounded-lg px-3 py-2 text-xs ${obraPrecisaoMetros > 30 ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'}`}>Precisão estimada pelo aparelho: raio de aproximadamente {Math.round(obraPrecisaoMetros)} m. {obraPrecisaoMetros > 30 ? 'O sinal está impreciso: tente capturar novamente ao ar livre antes de confirmar.' : 'Confira o ponto no mapa antes de validar.'}</p>}
-          {obraLocalizacao && !coordenadasEmTexto(obraLocalizacao) && <p className="text-xs font-medium text-amber-700">Informe duas coordenadas válidas separadas por vírgula.</p>}
-          {coordenadasEmTexto(obraLocalizacao) && <div className="space-y-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs font-semibold text-slate-800">A localização mostrada no mapa está correta?</p>
-              <button type="button" onClick={() => { limparErroValidacaoAoEditar(); setObraLocalizacaoConfirmada('sim') }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${obraLocalizacaoConfirmada === 'sim' ? 'border-emerald-600 bg-emerald-600 text-white' : 'bg-white'}`}>Sim, está certa</button>
-              <button type="button" onClick={() => { limparErroValidacaoAoEditar(); setObraLocalizacaoConfirmada('nao') }}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${obraLocalizacaoConfirmada === 'nao' ? 'border-red-600 bg-red-600 text-white' : 'bg-white'}`}>Não, corrigir</button>
-              <a href={linkRotaObra({ coordenadas: obraLocalizacao }) || '#'} target="_blank" rel="noreferrer"
-                className="text-xs font-bold text-blue-700 underline">Ver ponto no mapa</a>
-            </div>
-            {obraLocalizacaoConfirmada === 'nao' && <p className="text-xs text-amber-800">Esta coordenada não será usada para navegação. Capture novamente ou informe rua e número. Ao enviar, a rejeição será registrada para revisão.</p>}
-            {obraLocalizacaoConfirmada === 'sim' && <p className="text-xs text-emerald-700">Localização confirmada. Rua e número são opcionais; complete-os se souber.</p>}
-          </div>}
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
-            <label className="block text-xs font-medium text-slate-600">
-              Rua / avenida da obra
-              <input data-preserve-case="true" value={obraRua}
-                onChange={e => { limparErroValidacaoAoEditar(); setObraRua(e.target.value) }}
-                placeholder="Rua, avenida ou estrada" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
-            </label>
-            <label className="block text-xs font-medium text-slate-600">
-              Número
-              <input data-preserve-case="true" value={obraNumero}
-                onChange={e => { limparErroValidacaoAoEditar(); setObraNumero(e.target.value) }}
-                placeholder="123 / S/N" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
-            </label>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-xs font-medium text-slate-600">
-              Bairro
-              <input data-preserve-case="true" value={obraBairro}
-                onChange={e => setObraBairro(e.target.value)}
-                placeholder="Bairro da obra" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
-            </label>
-            <label className="block text-xs font-medium text-slate-600">
-              CEP
-              <input data-preserve-case="true" value={obraCep} maxLength={9} inputMode="numeric"
-                onChange={e => { limparErroValidacaoAoEditar(); setObraCep(e.target.value) }}
-                placeholder="00000-000" className="mt-1 w-full rounded-xl border border-slate-300 p-3 text-sm" />
-            </label>
-            <button type="button" disabled={consultandoCepObra||obraCep.replace(/\D/g,'').length!==8} onClick={()=>void consultarCepDaObra()} className="rounded-xl border border-blue-300 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700 disabled:opacity-40 sm:col-span-2">{consultandoCepObra?'Consultando CEP...':'Consultar CEP e completar endereço da obra'}</button>
-          </div>
-          <p className="text-xs text-slate-500">Cidade da obra: <strong className="text-slate-700">{cidade || 'preencha no bloco acima'}</strong>. É atualizada também pelo GPS, quando encontrada.</p>
-          <p className="text-xs text-slate-500">Número do imóvel: o mapa só sugere quando existe um número cadastrado próximo. Não estimamos faixas de números sem fonte confiável.</p>
-          <p className="text-xs font-semibold text-slate-600">Obrigatório: rua e número (ou S/N), ou localização confirmada no mapa.</p>
-          <p className="text-[11px] text-slate-400">Endereço automático com dados do OpenStreetMap. O GPS só é solicitado quando você toca no botão.</p>
-        </section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label><p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p><div className="grid grid-cols-3 gap-2">{(['quente','morno','frio'] as const).map(t => <button key={t} onClick={() => { limparErroValidacaoAoEditar(); setTemperatura(t) }} className={`p-3 rounded-xl text-sm border ${temperatura === t ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{t === 'quente' ? '🔥 Quente' : t === 'morno' ? '🌤️ Morno' : '❄️ Frio'}</button>)}</div></section>
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{acabamentos.map(a => <button key={a.value} onClick={() => { limparErroValidacaoAoEditar(); setAcabamento(a.value) }} className={`p-3 rounded-xl text-sm border ${acabamento === a.value ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{a.label}</button>)}</div>{acabamento === 'outro' && <input data-preserve-case="true" value={acabamentoOutroTexto} onChange={e => { limparErroValidacaoAoEditar(); setAcabamentoOutroTexto(e.target.value) }} placeholder="Qual cor?" className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3" />}</section>
