@@ -5,10 +5,11 @@ import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, ChevronRight, ClipboardCheck, MapPin, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, UserPlus, UsersRound } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
+import ReciboVendaPreview, { cents, valorEntrada, rotuloPagamento, type LinhaPagamento, type FormaPagamento, type StatusPagamento } from '@/components/previews/ReciboVendaPreview'
 
 type Cliente={id:string;nome:string;apelido?:string|null;cpf_cnpj?:string|null;telefone?:string|null;whatsapp?:string|null;cidade?:string|null}
 type Obra={id:string;nome:string;cidade?:string|null;bairro?:string|null;endereco?:string|null}
-type Produto={id:string;codigo:string;nome:string;descricao:string;categoria:string;unidade:string;linha:string|null;fotoUrl:string|null;preco:number|null;precoPromocional:number|null}
+type Produto={id:string;codigo:string;nome:string;descricao:string;categoria:string;unidade:string;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null}
 type Linha={id:string;nome:string;ativa:boolean}
 type Item={produto:Produto;quantidade:number}
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
@@ -49,8 +50,16 @@ export default function PreviaVenda(){
   const [buscandoProdutos,setBuscandoProdutos]=useState(false)
   const [erroProdutos,setErroProdutos]=useState('')
   const [itens,setItens]=useState<Item[]>([])
-  const [pagamento,setPagamento]=useState('pix')
+  const [tipoDesconto,setTipoDesconto]=useState<'sem'|'valor'|'percentual'>('sem')
+  const [descontoEntrada,setDescontoEntrada]=useState('')
+  const [tipoRecebimento,setTipoRecebimento]=useState<'agora'|'marcar'>('agora')
+  const [pagamentos,setPagamentos]=useState<LinhaPagamento[]>([{id:1,forma:'pix',valor:''}])
+  const proximoPagamentoId=useRef(1)
+  const [nomeAssinatura,setNomeAssinatura]=useState('')
+  const [reciboAberto,setReciboAberto]=useState(false)
+  const [dataRecibo,setDataRecibo]=useState('')
   const [fotosLocais,setFotosLocais]=useState<Record<string,string>>({})
+  const [fotosConfirmadas,setFotosConfirmadas]=useState<Record<string,boolean>>({})
   const fotosRef=useRef<Record<string,string>>({})
   const consultaClientesSeq=useRef(0)
   const consultaProdutosSeq=useRef(0)
@@ -124,7 +133,22 @@ export default function PreviaVenda(){
 
   const nomeCliente=modo==='consumidor'?'Consumidor final':cliente?.nome||'Cliente não escolhido'
   const obra=obras.find(o=>o.id===obraId)
-  const total=useMemo(()=>itens.reduce((s,i)=>s+(preco(i.produto)||0)*i.quantidade,0),[itens])
+  // Valores em centavos para não somar frações de real com erro de arredondamento.
+  const subtotalCent=useMemo(()=>itens.reduce((s,i)=>s+cents(preco(i.produto)||0)*i.quantidade,0),[itens])
+  const brutoDesconto=cents(tipoDesconto==='percentual'?subtotalCent/100*valorEntrada(descontoEntrada)/100:tipoDesconto==='valor'?valorEntrada(descontoEntrada):0)
+  const descontoInvalido=tipoDesconto==='percentual'?valorEntrada(descontoEntrada)>100:brutoDesconto>subtotalCent
+  const descontoCent=tipoDesconto==='percentual'?Math.round(subtotalCent*valorEntrada(descontoEntrada)/100):brutoDesconto
+  const totalLiquidoCent=Math.max(0,subtotalCent-descontoCent)
+  const recebidoCent=tipoRecebimento==='marcar'?0:pagamentos.reduce((s,p)=>s+cents(valorEntrada(p.valor)),0)
+  const saldoCent=Math.max(0,totalLiquidoCent-recebidoCent)
+  const total=subtotalCent/100
+  const totalLiquido=totalLiquidoCent/100
+  const recebido=recebidoCent/100
+  const saldo=saldoCent/100
+  const podeMarcar=!!cliente&&(modo==='busca'||(modo==='cadastro'&&tipoCadastro==='completo'))
+  const statusFinanceiro:StatusPagamento=tipoRecebimento==='marcar'?'marcada':saldoCent>0?'parcial':'quitada'
+  const formasRecibo=tipoRecebimento==='marcar'?[]:pagamentos.filter(p=>cents(valorEntrada(p.valor))>0).map(p=>({forma:p.forma,valor:cents(valorEntrada(p.valor))/100}))
+
   const pendentes=itens.filter(i=>preco(i.produto)==null).length
   const unidades=itens.reduce((s,i)=>s+i.quantidade,0)
 
@@ -154,9 +178,35 @@ export default function PreviaVenda(){
   }
   function revisar(){
     if(!itens.length){setAviso('Adicione pelo menos um produto para continuar.');return}
+    if(pendentes>0){setAviso('Há itens sem preço cadastrado. Informe os preços no catálogo antes de finalizar uma venda.');return}
+    if(descontoInvalido){setAviso('O desconto não pode ultrapassar o subtotal nem 100%.');return}
+    if(totalLiquidoCent<=0){setAviso('O valor final da venda deve ser maior que zero.');return}
+    if(tipoRecebimento==='marcar'){
+      if(!podeMarcar){setAviso('Para deixar a venda marcada, escolha um cliente cadastrado ou faça o cadastro completo.');return}
+    }else{
+      if(recebidoCent<=0){setAviso('Informe o valor que será recebido, ou escolha deixar marcado no cliente.');return}
+      if(recebidoCent>totalLiquidoCent){setAviso('A soma dos recebimentos supera o total com desconto.');return}
+      if(saldoCent>0&&!podeMarcar){setAviso('Pagamento parcial exige cliente cadastrado ou cadastro completo para marcar o saldo.');return}
+    }
     setAviso('');setEtapa(3)
   }
-  function resetar(){setEtapa(1);setModo('busca');setCliente(null);setBuscaCliente('');setObraId('');setCadastro(vazio);setItens([]);setAviso('')}
+  function atualizarPagamento(id:number,parcial:Partial<LinhaPagamento>){
+    setPagamentos(a=>a.map(p=>p.id===id?{...p,...parcial}:p))
+    setAviso('')
+  }
+  function adicionarPagamento(){
+    proximoPagamentoId.current+=1
+    setPagamentos(a=>[...a,{id:proximoPagamentoId.current,forma:'pix',valor:''}])
+  }
+  function completarRestante(id:number){
+    const outros=pagamentos.filter(p=>p.id!==id).reduce((s,p)=>s+cents(valorEntrada(p.valor)),0)
+    atualizarPagamento(id,{valor:(Math.max(0,totalLiquidoCent-outros)/100).toFixed(2).replace('.',',')})
+  }
+  function simularFinalizacao(){
+    setDataRecibo(new Date().toISOString())
+    setReciboAberto(true)
+  }
+  function resetar(){setEtapa(1);setModo('busca');setCliente(null);setBuscaCliente('');setObraId('');setCadastro(vazio);setItens([]);setAviso('');setTipoRecebimento('agora');setTipoDesconto('sem');setDescontoEntrada('');setPagamentos([{id:1,forma:'pix',valor:''}]);setNomeAssinatura('');setReciboAberto(false)}
 
   return <main className="min-h-screen bg-[#f3f6fb] px-3 pb-16 pt-5 text-slate-900 sm:px-6 lg:px-8">
    <div className="mx-auto max-w-[1420px] space-y-5">
@@ -281,18 +331,18 @@ export default function PreviaVenda(){
           {!buscandoProdutos&&!erroProdutos&&!produtos.length&&<p className="mt-4 rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500">Nenhum produto vinculado à seleção. Troque a linha, categoria ou busca.</p>}
           <div className="mt-3 max-h-[600px] space-y-2 overflow-y-auto">{produtos.map(p=>
             <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
-              <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} tamanho="pequeno" imagemLocal={fotosLocais[p.id]} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
+              <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} fotoCandidataUrl={p.fotoCandidataUrl} candidataConfirmada={!!fotosConfirmadas[p.id]} onConfirmarCandidata={confirmado=>setFotosConfirmadas(a=>({...a,[p.id]:confirmado}))} tamanho="pequeno" imagemLocal={fotosLocais[p.id]} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
               <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{p.nome}</b><p className="mt-1 text-[11px] text-slate-500">{p.codigo||'Sem código'} · {p.unidade}{p.linha?' · '+p.linha:''}</p><p className={preco(p)!=null?'mt-1 text-sm font-extrabold text-blue-700':'mt-1 text-xs font-bold text-amber-700'}>{preco(p)!=null?moeda(preco(p)!):'Preço a cadastrar'}</p></div>
               <button type="button" onClick={()=>adicionar(p)} className="shrink-0 rounded-lg bg-blue-700 p-2.5 text-white" aria-label={'Adicionar '+p.nome}><Plus size={18}/></button>
             </div>)}
           </div>
-          <p className="mt-3 text-[11px] text-amber-700">Imagens não validadas não são exibidas. A escolha de nova imagem é local nesta prévia.</p>
+          <p className="mt-3 text-[11px] text-amber-700">Fotos importadas vinculadas ao produto precisam de conferência antes de aparecer. Use “Conferir foto cadastrada” ou “Adicionar imagem correta”. Nenhuma imagem é salva na prévia.</p>
         </section>
         <aside className="rounded-2xl border bg-white p-4 shadow-sm lg:sticky lg:top-4">
           <h3 className="flex items-center gap-2 font-black"><ShoppingCart size={19} className="text-blue-700"/> Itens da venda <span className="ml-auto rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{unidades}</span></h3>
           {!itens.length&&<div className="mt-4 grid min-h-32 place-items-center rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500">Escolha um item à esquerda para começar a venda.</div>}
           <div className="mt-3 space-y-3">{itens.map(i=><div key={i.produto.id} className="border-b pb-3 last:border-0">
-            <div className="flex gap-2"><FotoProdutoPreview nome={i.produto.nome} fotoUrl={i.produto.fotoUrl} tamanho="pequeno" imagemLocal={fotosLocais[i.produto.id]} onSelecionarImagem={arquivo=>selecionarFoto(i.produto.id,arquivo)}/>
+            <div className="flex gap-2"><FotoProdutoPreview nome={i.produto.nome} fotoUrl={i.produto.fotoUrl} fotoCandidataUrl={i.produto.fotoCandidataUrl} candidataConfirmada={!!fotosConfirmadas[i.produto.id]} onConfirmarCandidata={confirmado=>setFotosConfirmadas(a=>({...a,[i.produto.id]:confirmado}))} tamanho="pequeno" imagemLocal={fotosLocais[i.produto.id]} onSelecionarImagem={arquivo=>selecionarFoto(i.produto.id,arquivo)}/>
               <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] text-slate-500">{preco(i.produto)!=null?moeda(preco(i.produto)!):'Preço pendente'} /{i.produto.unidade}</p>
                 <div className="mt-2 flex items-center gap-1"><button type="button" onClick={()=>quantidade(i.produto.id,-1)} className="rounded border p-1.5" aria-label="Diminuir quantidade"><Minus size={13}/></button><span className="min-w-7 text-center text-xs font-bold">{i.quantidade}</span><button type="button" onClick={()=>quantidade(i.produto.id,1)} className="rounded border p-1.5" aria-label="Aumentar quantidade"><Plus size={13}/></button><button type="button" onClick={()=>setItens(a=>a.filter(x=>x.produto.id!==i.produto.id))} className="ml-auto rounded p-1.5 text-red-600" aria-label="Remover produto"><Trash2 size={14}/></button></div>
               </div>
