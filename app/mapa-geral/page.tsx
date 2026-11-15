@@ -180,7 +180,7 @@ export default function MapaGeralPage(){
   const labelClass='mb-1.5 block text-[11px] font-semibold text-slate-500'
   const cards=[
     {nome:'Prospecções',valor:kpis.prospeccao,icone:'◎',cor:'#2563eb',fundo:'#eff6ff',borda:'#bfdbfe'},
-    {nome:'Visitas',valor:kpis.visita,icone:'◉',cor:'#0f766e',fundo:'#f0fdfa',borda:'#99f6e4'},
+    {nome:'Visitas registradas',valor:kpis.visita,icone:'◉',cor:'#0f766e',fundo:'#f0fdfa',borda:'#99f6e4'},
     {nome:'Orçamentos',valor:kpis.orcamento,icone:'▤',cor:'#b45309',fundo:'#fffbeb',borda:'#fde68a'},
     {nome:'Vendas fechadas',valor:kpis.venda,icone:'✓',cor:'#15803d',fundo:'#f0fdf4',borda:'#bbf7d0'},
     {nome:'Em produção',valor:kpis.producao,icone:'⚙',cor:'#7e22ce',fundo:'#faf5ff',borda:'#e9d5ff'},
@@ -292,7 +292,7 @@ export default function MapaGeralPage(){
         </div>
       </section>
       </>}
-      <p className="pb-5 text-center text-[11px] text-slate-500">Leitura de registros reais do Atlas One. Este mapa não altera orçamentos, prospecções nem obras. Pontos sem GPS confirmado aparecem na lista, mas não são posicionados no mapa.</p>
+      <p className="pb-5 text-center text-[11px] text-slate-500">Leitura dos registros existentes, sem alterações em obras ou orçamentos. Visitas contabilizadas pelas interações de prospecção. A união de registros usa o ID da obra, sem misturar obras diferentes do mesmo cliente. Pontos sem GPS aparecem somente na lista.</p>
     </main>
   </div>
 }
