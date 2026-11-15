@@ -348,11 +348,61 @@ export default function PreviaVenda(){
               </div>
             </div>
           </div>)}</div>
-          <div className="mt-4 border-t pt-4"><p className="flex justify-between text-xs text-slate-500"><span>Quantidade de unidades</span><b>{unidades}</b></p><div className="mt-2 flex justify-between"><b>Total conhecido</b><b className="text-xl text-blue-800">{moeda(total)}</b></div>{pendentes>0&&<p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">{pendentes} produto(s) sem preço. O total não é definitivo.</p>}</div>
-          <label className="mt-4 block text-xs font-bold text-slate-600">Forma de pagamento (prévia)
-            <select className={input+' mt-1.5'} value={pagamento} onChange={e=>setPagamento(e.target.value)}><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="debito">Cartão de débito</option><option value="credito">Cartão de crédito</option>{modo!=='consumidor'&&<><option value="boleto">Boleto</option><option value="prazo">A prazo</option></>}</select>
-          </label>
-          <button type="button" onClick={revisar} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-extrabold text-white">Revisar venda <ArrowRight size={17}/></button>
+          <div className="mt-4 space-y-4 border-t pt-4">
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between text-slate-500"><span>Quantidade de unidades</span><b>{unidades}</b></div>
+              <div className="flex justify-between"><span>Subtotal</span><b>{moeda(total)}</b></div>
+              {pendentes>0&&<p className="rounded-lg bg-amber-50 p-2 font-semibold text-amber-800">{pendentes} item(ns) sem preço cadastrado. É preciso precificar para simular a finalização.</p>}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <h4 className="mb-2 text-xs font-black">Desconto na venda</h4>
+              <div className="grid grid-cols-[1fr_1fr] gap-2">
+                <select className={input+' text-xs'} aria-label="Tipo de desconto" value={tipoDesconto} onChange={e=>{setTipoDesconto(e.target.value as 'sem'|'valor'|'percentual');setAviso('')}}>
+                  <option value="sem">Sem desconto</option><option value="valor">Desconto R$</option><option value="percentual">Desconto %</option>
+                </select>
+                <input className={input+' text-xs'} disabled={tipoDesconto==='sem'} inputMode="decimal" aria-label="Valor do desconto"
+                  placeholder={tipoDesconto==='percentual'?'Ex.: 10':'Ex.: 25,00'} value={descontoEntrada}
+                  onChange={e=>{setDescontoEntrada(e.target.value);setAviso('')}}/>
+              </div>
+              {descontoInvalido&&<p className="mt-2 text-xs font-bold text-red-700">Desconto superior ao valor permitido.</p>}
+              <div className="mt-3 flex justify-between text-xs text-slate-600"><span>Desconto aplicado</span><b>- {moeda(Math.max(0,descontoCent)/100)}</b></div>
+              <div className="mt-2 flex justify-between border-t pt-2 text-sm font-black text-blue-800"><span>Total final</span><span>{moeda(totalLiquido)}</span></div>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-3">
+              <h4 className="text-sm font-black">Recebimento da venda</h4>
+              <p className="mt-1 text-[11px] text-slate-500">É possível receber em várias formas ou deixar marcado no cliente/obra.</p>
+              <div className="mt-3 grid gap-2">
+                <label className={'flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 text-xs font-bold '+(tipoRecebimento==='agora'?'border-blue-600 bg-blue-50':'border-slate-200')}>
+                  <input type="radio" checked={tipoRecebimento==='agora'} onChange={()=>{setTipoRecebimento('agora');setAviso('')}} name="quitacao-preview"/> Receber agora (PIX, cartão, dinheiro...)
+                </label>
+                {podeMarcar&&<label className={'flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 text-xs font-bold '+(tipoRecebimento==='marcar'?'border-blue-600 bg-blue-50':'border-slate-200')}>
+                  <input type="radio" checked={tipoRecebimento==='marcar'} onChange={()=>{setTipoRecebimento('marcar');setAviso('')}} name="quitacao-preview"/> Deixar tudo marcado {obra?'na obra':'no cliente'}
+                </label>}
+                {!podeMarcar&&<p className="rounded-lg bg-amber-50 p-2 text-[11px] text-amber-800">Para deixar marcado ou receber apenas uma parte, é necessário cliente cadastrado ou cadastro completo. Venda avulsa e cadastro simples exigem quitação integral.</p>}
+              </div>
+              {tipoRecebimento==='agora'&&<div className="mt-3 space-y-3">
+                {pagamentos.map((pg,i)=><div key={pg.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                  <div className="mb-2 flex items-center justify-between"><b className="text-[11px]">Forma de pagamento {i+1}</b>{pagamentos.length>1&&<button type="button" aria-label={'Remover pagamento '+(i+1)} onClick={()=>setPagamentos(a=>a.filter(x=>x.id!==pg.id))} className="rounded p-1 text-red-600 hover:bg-red-50"><Trash2 size={14}/></button>}</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select className={input+' min-w-0 text-xs'} aria-label={'Meio de pagamento '+(i+1)} value={pg.forma} onChange={e=>atualizarPagamento(pg.id,{forma:e.target.value as FormaPagamento})}>
+                      {(Object.keys(rotuloPagamento) as FormaPagamento[]).map(forma=><option value={forma} key={forma}>{rotuloPagamento[forma]}</option>)}
+                    </select>
+                    <input className={input+' min-w-0 text-xs'} aria-label={'Valor do pagamento '+(i+1)} inputMode="decimal" placeholder="R$ 0,00" value={pg.valor} onChange={e=>atualizarPagamento(pg.id,{valor:e.target.value})}/>
+                  </div>
+                  <button type="button" className="mt-2 text-[11px] font-bold text-blue-700 hover:underline" onClick={()=>completarRestante(pg.id)}>Preencher valor restante ({moeda(Math.max(0,totalLiquidoCent-pagamentos.filter(p=>p.id!==pg.id).reduce((s,p)=>s+cents(valorEntrada(p.valor)),0))/100)})</button>
+                </div>)}
+                <button type="button" onClick={adicionarPagamento} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700"><Plus size={15}/> Adicionar outra forma de pagamento</button>
+              </div>}
+            </div>
+            <div className="rounded-xl bg-slate-100 p-3 text-xs">
+              <div className="flex justify-between"><span>Recebido {tipoRecebimento==='agora'?'(simulação)':''}</span><b>{moeda(recebido)}</b></div>
+              <div className="mt-1 flex justify-between"><span>Saldo a receber</span><b className={saldoCent>0?'text-amber-700':'text-emerald-700'}>{moeda(saldo)}</b></div>
+              {tipoRecebimento==='agora'&&recebidoCent>totalLiquidoCent&&<p className="mt-2 font-bold text-red-700">A soma dos pagamentos ultrapassa o total da venda.</p>}
+              {podeMarcar&&saldoCent>0&&<p className="mt-2 text-[11px] text-slate-600">O saldo ficará marcado {obra?'na obra '+obra.nome:'no cadastro de '+nomeCliente}.</p>}
+            </div>
+            {modo==='consumidor'&&<label className="block text-xs font-semibold text-slate-600">Nome para assinatura do consumidor (opcional)<input className={input+' mt-1.5'} value={nomeAssinatura} onChange={e=>setNomeAssinatura(e.target.value)} placeholder="Nome a imprimir abaixo da assinatura"/></label>}
+            <button type="button" onClick={revisar} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-extrabold text-white">Revisar venda <ArrowRight size={17}/></button>
+          </div>
         </aside>
       </div>
     </>}
