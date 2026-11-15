@@ -25,11 +25,12 @@ function moeda(n:number){return n.toLocaleString('pt-BR',{style:'currency',curre
 function categoriaNome(v:string){return v==='perfil'?'Perfil':v==='acessorio'?'Acessório':v==='vidro'?'Vidro':(['produto','kit','pu','porta_janela_padrao'].includes(v)?'Produto pronto':v)}
 export default function PreviaConsultaPreco(){
  const [busca,setBusca]=useState(''),[categoria,setCategoria]=useState<Categoria>('todos'),[linha,setLinha]=useState('')
+ const [precoFiltro,setPrecoFiltro]=useState<'todos'|'com'|'sem'>('todos')
  const [produtos,setProdutos]=useState<Produto[]>([]),[linhas,setLinhas]=useState<Linha[]>([])
  const [carregando,setCarregando]=useState(false),[erro,setErro]=useState(''),[selecionado,setSelecionado]=useState<Produto|null>(null)
  const [versao,setVersao]=useState(0)
  const [fotosLocais,setFotosLocais]=useState<Record<string,string>>({})
- const [fotosConfirmadas,setFotosConfirmadas]=useState<Record<string,boolean>>({})
+ const [fotosOcultas,setFotosOcultas]=useState<Record<string,boolean>>({})
  const fotosRef=useRef<Record<string,string>>({})
  const requisicao=useRef(0)
  useEffect(()=>()=>{Object.values(fotosRef.current).forEach(url=>URL.revokeObjectURL(url))},[])
@@ -50,7 +51,7 @@ export default function PreviaConsultaPreco(){
        try{
          const token=await tokenAtual()
          if(!token)throw new Error('Faça login para consultar o cadastro.')
-         const params=new URLSearchParams({tipo:'produtos',q:busca,categoria})
+         const params=new URLSearchParams({tipo:'produtos',q:busca,categoria,precoFiltro})
          if(linha)params.set('linhaId',linha)
          const response=await fetch('/api/previews/comercial?'+params.toString(),{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:ctrl.signal})
          const json=await response.json()
@@ -65,7 +66,7 @@ export default function PreviaConsultaPreco(){
      })()
    },busca?240:50)
    return()=>{ctrl.abort();clearTimeout(timer)}
- },[busca,categoria,linha,versao])
+ },[busca,categoria,linha,precoFiltro,versao])
 
  const input='w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
  return <main className="min-h-screen bg-[#f3f6fb] px-3 pb-16 pt-5 text-slate-900 sm:px-6 lg:px-8">
@@ -88,24 +89,29 @@ export default function PreviaConsultaPreco(){
      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
        {categorias.map(c=><button key={c.id} type="button" aria-pressed={categoria===c.id} onClick={()=>{setCategoria(c.id);setLinha('');setSelecionado(null)}} className={'flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-bold transition '+(categoria===c.id?'border-blue-600 bg-blue-700 text-white shadow-sm':'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300')}><span className="text-lg">{c.icone}</span>{c.nome}</button>)}
      </div>
-     <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+     <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
        <label className="block"><span className="mb-1.5 flex items-center gap-1 text-xs font-bold text-slate-600"><Layers3 size={14}/> Filtrar pela linha técnica do produto</span>
          <select value={linha} onChange={e=>{setLinha(e.target.value);setSelecionado(null)}} className={input}><option value="">Todas as linhas vinculadas</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}{!l.ativa?' (histórica)':''}</option>)}</select>
        </label>
-       <div className="flex items-end"><p className="mb-1 rounded-xl bg-blue-50 px-3 py-2.5 text-[11px] leading-relaxed text-blue-800"><ShieldCheck size={14} className="mr-1 inline"/> Preços reais do cadastro. Produto sem valor aparece como <b>“Preço a cadastrar”</b>. Linhas filtradas por vínculo real.</p></div>
-       <button type="button" onClick={()=>{setBusca('');setCategoria('todos');setLinha('');setSelecionado(null);setVersao(v=>v+1)}} className="self-end rounded-xl border border-slate-200 px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50"><RefreshCw size={14} className="mr-1 inline"/> Limpar filtros</button>
+       <label className="block"><span className="mb-1.5 block text-xs font-bold text-slate-600">Filtrar por preço</span>
+          <select value={precoFiltro} onChange={e=>setPrecoFiltro(e.target.value as 'todos'|'com'|'sem')} className={input}>
+            <option value="todos">Todos os preços</option><option value="com">Com preço</option><option value="sem">Sem preço</option>
+          </select>
+        </label>
+        <div className="flex items-end"><p className="mb-1 rounded-xl bg-blue-50 px-3 py-2.5 text-[11px] leading-relaxed text-blue-800"><ShieldCheck size={14} className="mr-1 inline"/> Produtos, linhas e preços reais do cadastro.</p></div>
+       <button type="button" onClick={()=>{setBusca('');setCategoria('todos');setLinha('');setPrecoFiltro('todos');setSelecionado(null);setVersao(v=>v+1)}} className="self-end rounded-xl border border-slate-200 px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-50"><RefreshCw size={14} className="mr-1 inline"/> Limpar filtros</button>
      </div>
    </section>
    <div className="flex flex-wrap items-center justify-between gap-3">
     <div><h2 className="text-lg font-black">Resultado da consulta</h2><p className="text-xs text-slate-500">{carregando?'Consultando o cadastro...':produtos.length+' produto(s) na seleção'} · clique em um produto para ver detalhes.</p></div>
-    <div className="flex items-center gap-2 text-xs text-slate-500"><SlidersHorizontal size={15}/> {categorias.find(c=>c.id===categoria)?.nome}{linha?' · '+(linhas.find(l=>l.id===linha)?.nome||'Linha'):''}</div>
+    <div className="flex items-center gap-2 text-xs text-slate-500"><SlidersHorizontal size={15}/> {categorias.find(c=>c.id===categoria)?.nome}{linha?' · '+(linhas.find(l=>l.id===linha)?.nome||'Linha'):''}{precoFiltro!=='todos'?' · '+(precoFiltro==='com'?'Com preço':'Sem preço'):''}</div>
    </div>
    {erro&&<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{erro}</p>}
    {carregando&&<div className="grid min-h-44 place-items-center rounded-2xl bg-white text-sm text-slate-500">Buscando itens no catálogo...</div>}
    {!carregando&&!erro&&produtos.length===0&&<div className="grid min-h-56 place-items-center rounded-2xl border border-dashed bg-white p-6 text-center"><div><PackageSearch size={34} className="mx-auto mb-3 text-slate-400"/><b className="text-sm">Nenhum produto cadastrado para esses filtros.</b><p className="mt-2 text-xs text-slate-500">Experimente outra descrição, linha ou categoria. Só aparecem na linha selecionada os produtos realmente vinculados a ela; cadastros sem vínculo precisam ser revisados.</p></div></div>}
    {!carregando&&produtos.length>0&&<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
     {produtos.map(p=><article key={p.id} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md">
-      <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} fotoCandidataUrl={p.fotoCandidataUrl} imagemLocal={fotosLocais[p.id]} candidataConfirmada={!!fotosConfirmadas[p.id]} onConfirmarCandidata={valor=>setFotosConfirmadas(v=>({...v,[p.id]:valor}))} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
+      <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} fotoCandidataUrl={p.fotoCandidataUrl} imagemLocal={fotosLocais[p.id]} oculta={!!fotosOcultas[p.id]} onOcultarFoto={valor=>setFotosOcultas(v=>({...v,[p.id]:valor}))} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
       <button type="button" onClick={()=>setSelecionado(p)} className="flex min-w-0 flex-1 flex-col text-left">
         <div className="flex items-start justify-between gap-2"><span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{categoriaNome(p.categoria)}</span><ChevronRight size={16} className="shrink-0 text-slate-400"/></div>
         <b className="mt-2 line-clamp-2 text-sm leading-tight">{p.nome}</b><span className="mt-1 text-[11px] text-slate-500">{p.codigo||'Sem código'}{p.linha?' · '+p.linha:''}</span>
@@ -117,7 +123,7 @@ export default function PreviaConsultaPreco(){
    {selecionado&&<div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 p-2 sm:p-5" role="dialog" aria-modal="true" aria-label="Detalhes do produto" onClick={()=>setSelecionado(null)}>
     <aside className="h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl" onClick={e=>e.stopPropagation()}>
       <div className="mb-4 flex items-center justify-between"><b className="text-base">Ficha de consulta</b><button type="button" aria-label="Fechar" onClick={()=>setSelecionado(null)} className="rounded-lg p-2 hover:bg-slate-100"><X size={19}/></button></div>
-      <FotoProdutoPreview nome={selecionado.nome} fotoUrl={selecionado.fotoUrl} fotoCandidataUrl={selecionado.fotoCandidataUrl} tamanho="detalhe" imagemLocal={fotosLocais[selecionado.id]} candidataConfirmada={!!fotosConfirmadas[selecionado.id]} onConfirmarCandidata={valor=>setFotosConfirmadas(v=>({...v,[selecionado.id]:valor}))} onSelecionarImagem={arquivo=>selecionarFoto(selecionado.id,arquivo)}/>
+      <FotoProdutoPreview nome={selecionado.nome} fotoUrl={selecionado.fotoUrl} fotoCandidataUrl={selecionado.fotoCandidataUrl} tamanho="detalhe" imagemLocal={fotosLocais[selecionado.id]} oculta={!!fotosOcultas[selecionado.id]} onOcultarFoto={valor=>setFotosOcultas(v=>({...v,[selecionado.id]:valor}))} onSelecionarImagem={arquivo=>selecionarFoto(selecionado.id,arquivo)}/>
       <span className="mt-4 block text-[11px] font-semibold uppercase tracking-widest text-blue-700">{categoriaNome(selecionado.categoria)}</span>
       <h3 className="mt-2 text-xl font-black">{selecionado.nome}</h3>
       <p className="mt-1 text-xs text-slate-500">Código {selecionado.codigo||'não cadastrado'}</p>
@@ -126,7 +132,7 @@ export default function PreviaConsultaPreco(){
       <p className="mt-4 text-xs text-slate-500">A foto selecionada é só uma simulação local, não substitui o cadastro real. Esta prévia não edita produtos nem preços.</p>
     </aside>
    </div>}
-   <footer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><Tag size={16} className="shrink-0"/> Fotos importadas são exibidas somente após clicar em “Conferir foto cadastrada” e confirmar que correspondem ao produto. Você também pode escolher “Adicionar imagem correta”; nada altera o cadastro real. Os vínculos de linha são consultados no cadastro técnico real, sem alteração no banco.</footer>
+   <footer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><Tag size={16} className="shrink-0"/> Todas as fotos já cadastradas para os produtos aparecem automaticamente. Se alguma imagem estiver incorreta, use “Trocar imagem” ou “Remover imagem”; as alterações são apenas nesta prévia. Os filtros por linha e preço funcionam em conjunto.</footer>
   </div>
  </main>
 }
