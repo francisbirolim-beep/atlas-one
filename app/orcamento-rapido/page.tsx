@@ -340,7 +340,6 @@ export default function OrcamentoRapido() {
   // Estado visual, independente do salvamento e do envio dos itens.
   const [itensAbertos, setItensAbertos] = useState<Record<string, boolean>>({})
   const [resumo, setResumo] = useState(false)
-  const [detalhesAbertos, setDetalhesAbertos] = useState(false)
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
@@ -861,7 +860,6 @@ export default function OrcamentoRapido() {
       setConferenciaAberta(false)
       setErroEhValidacao(true)
       setErro(mensagem)
-      if (/temperatura|cor|acabamento|contramarco/i.test(mensagem)) setDetalhesAbertos(true)
       return false
     }
 
@@ -874,10 +872,6 @@ export default function OrcamentoRapido() {
     if (obraNumero.trim() && !obraRua.trim()) return falharValidacao('Informe a rua ou avenida da obra antes do número.')
     if (obraRua.trim() && !obraNumero.trim() && !gpsConfirmado) return falharValidacao('Informe o número da obra (ou S/N).')
     if (obraCep.trim() && !/^\d{5}-?\d{3}$/.test(obraCep.trim())) return falharValidacao('Confira o CEP da obra: são 8 dígitos.')
-    if (!temperatura) return falharValidacao('Selecione a temperatura do orçamento (quente, morno ou frio)')
-    if (!acabamento) return falharValidacao('Selecione a cor/acabamento')
-    if (acabamento === 'outro' && !acabamentoOutroTexto.trim()) return falharValidacao('Escreva qual é a cor')
-    if (!contramarco) return falharValidacao('Selecione com ou sem contramarco')
 
     for (let i = 0; i < itens.length; i++) {
       const it = itens[i]
@@ -1077,6 +1071,15 @@ export default function OrcamentoRapido() {
               <div><label className={rotulo}>Nome da obra / local</label><input className={campo} value={obraNome} onChange={e=>{limparErroValidacaoAoEditar();setObraNome(e.target.value)}} disabled={!!obraIdSelecionada} placeholder="Ex.: Residência / reforma"/></div>
               <div><label className={rotulo}>Cidade</label><input className={campo} value={cidade} onChange={e=>{limparErroValidacaoAoEditar();setCidade(e.target.value)}} placeholder="Cidade da obra"/></div>
             </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 sm:px-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <label className={rotulo + ' mb-0'}>Temperatura do cliente <span className="font-normal text-slate-400">(CRM · opcional)</span></label>
+                <span className="text-[11px] text-slate-500">A classificação aparece no CRM junto ao orçamento.</span>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {(['quente','morno','frio'] as const).map(t => <button key={t} type="button" aria-pressed={temperatura===t} onClick={()=>{limparErroValidacaoAoEditar();setTemperatura(atual=>atual===t?'':t)}} className={'rounded-lg border px-2 py-2.5 text-xs font-semibold transition '+(temperatura===t?'border-blue-700 bg-blue-700 text-white':'border-slate-200 bg-white text-slate-600 hover:border-blue-300')}>{t==='quente'?'🔥 Quente':t==='morno'?'🌤️ Morno':'❄️ Frio'}</button>)}
+              </div>
+            </div>
             {clienteIdOrigem && obrasDoCliente.length > 0 && (
               <label className="block text-xs font-medium text-slate-600">Obra existente (opcional)
                 <select value={obraIdSelecionada || ''} onChange={e=>escolherObraExistente(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm">
@@ -1138,7 +1141,7 @@ export default function OrcamentoRapido() {
               </div>}
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div><label className={rotulo}>Cor geral (opcional)</label><input className={campo} value={corGeral} onChange={e=>{limparErroValidacaoAoEditar();setAcabamento('outro');setAcabamentoOutroTexto(e.target.value)}} placeholder="Ex.: Preto fosco"/></div>
+              <div><label className={rotulo}>Cor geral (opcional)</label><input className={campo} value={corGeral} onChange={e=>{limparErroValidacaoAoEditar();setAcabamento(e.target.value.trim()?'outro':'');setAcabamentoOutroTexto(e.target.value)}} placeholder="Ex.: Preto fosco"/></div>
               <div className="sm:col-span-2">
                 <label className={rotulo}>Contramarco geral</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -1302,29 +1305,6 @@ export default function OrcamentoRapido() {
           </div>
           <button type="button" onClick={adicionar} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 px-3 py-3.5 text-sm font-extrabold text-blue-700 transition hover:bg-blue-100"><Plus size={18}/> Adicionar outra esquadria</button>
         </section>
-        <details open={detalhesAbertos} onToggle={e=>setDetalhesAbertos(e.currentTarget.open)} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-          <summary className="cursor-pointer text-sm font-bold text-blue-800">Dados complementares para envio · contato, temperatura e outros detalhes</summary>
-          <p className="mb-3 mt-2 text-xs text-slate-500">Campos do formulário original, mantidos para o envio. Você pode coletar as esquadrias primeiro.</p>
-          <div className="space-y-3">
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<div className="relative"><input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value); setClienteIdOrigem(null); setObraIdSelecionada(null); setObrasDoCliente([]) }} placeholder="Nome do cliente * — digite para localizar cadastro" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={selecionarClienteExistente} /></div><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
-
-        <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-1">Temperatura do orçamento *</label><p className="text-xs text-slate-400 mb-3">Como está esse cliente: quão perto de fechar ele está?</p><div className="grid grid-cols-3 gap-2">{(['quente','morno','frio'] as const).map(t => <button key={t} onClick={() => { limparErroValidacaoAoEditar(); setTemperatura(t) }} className={`p-3 rounded-xl text-sm border ${temperatura === t ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{t === 'quente' ? '🔥 Quente' : t === 'morno' ? '🌤️ Morno' : '❄️ Frio'}</button>)}</div></section>
-        <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{acabamentos.map(a => <button key={a.value} onClick={() => { limparErroValidacaoAoEditar(); setAcabamento(a.value) }} className={`p-3 rounded-xl text-sm border ${acabamento === a.value ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{a.label}</button>)}</div>{acabamento === 'outro' && <input data-preserve-case="true" value={acabamentoOutroTexto} onChange={e => { limparErroValidacaoAoEditar(); setAcabamentoOutroTexto(e.target.value) }} placeholder="Qual cor?" className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3" />}</section>
-        <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Contramarco *</label><div className="grid grid-cols-2 gap-2"><button onClick={() => { limparErroValidacaoAoEditar(); setContramarco('com') }} className={`p-3 rounded-xl text-sm border ${contramarco === 'com' ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200'}`}>Com contramarco</button><button onClick={() => { limparErroValidacaoAoEditar(); setContramarco('sem') }} className={`p-3 rounded-xl text-sm border ${contramarco === 'sem' ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200'}`}>Sem contramarco</button></div></section>
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Arquiteto / Engenheiro (opcional)</h3><input data-preserve-case="true" value={arquitetoNome} onChange={e => setArquitetoNome(e.target.value)} placeholder="Nome do arquiteto ou engenheiro" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={arquitetoContato} onChange={e => setArquitetoContato(e.target.value)} placeholder="Telefone / WhatsApp de contato" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /></section>
-        {arquivos.length > 0 && <details className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <summary className="cursor-pointer text-xs font-semibold text-amber-900">{arquivos.length} arquivo(s) geral(is) recuperado(s) de rascunho antigo</summary>
-          <div className="mt-2 space-y-2">{arquivos.map((arquivo,i) =>
-            <div key={i} className="flex items-center justify-between rounded-lg border bg-white p-2 text-xs">
-              <span className="truncate">{arquivo.name}</span>
-              <button type="button" aria-label="Excluir arquivo geral" onClick={() => setArquivos(prev => prev.filter((_,idx) => idx !== i))}><X size={14}/></button>
-            </div>)}
-          </div>
-        </details>}
-
-
-          </div>
-        </details>
         {erro && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{erro}</p>}
         <div className="flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:justify-between">
           <p>Sem bloco de arquivos gerais: as fotos permanecem dentro de cada esquadria.</p>
