@@ -9,7 +9,7 @@ import { tokenAtual } from '@/lib/auth'
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
 type Produto={
   id:string;codigo:string;nome:string;descricao:string;categoria:string;unidade:string;
-  linhaId:string|null;linha:string|null;fotoUrl:string|null;preco:number|null;precoPromocional:number|null
+  linhaId:string|null;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null
 }
 type Linha={id:string;nome:string;ativa:boolean}
 const categorias:{id:Categoria;nome:string;icone:string}[]=[
@@ -29,6 +29,7 @@ export default function PreviaConsultaPreco(){
  const [carregando,setCarregando]=useState(false),[erro,setErro]=useState(''),[selecionado,setSelecionado]=useState<Produto|null>(null)
  const [versao,setVersao]=useState(0)
  const [fotosLocais,setFotosLocais]=useState<Record<string,string>>({})
+ const [fotosConfirmadas,setFotosConfirmadas]=useState<Record<string,boolean>>({})
  const fotosRef=useRef<Record<string,string>>({})
  const requisicao=useRef(0)
  useEffect(()=>()=>{Object.values(fotosRef.current).forEach(url=>URL.revokeObjectURL(url))},[])
@@ -104,7 +105,7 @@ export default function PreviaConsultaPreco(){
    {!carregando&&!erro&&produtos.length===0&&<div className="grid min-h-56 place-items-center rounded-2xl border border-dashed bg-white p-6 text-center"><div><PackageSearch size={34} className="mx-auto mb-3 text-slate-400"/><b className="text-sm">Nenhum produto cadastrado para esses filtros.</b><p className="mt-2 text-xs text-slate-500">Experimente outra descrição, linha ou categoria. Só aparecem na linha selecionada os produtos realmente vinculados a ela; cadastros sem vínculo precisam ser revisados.</p></div></div>}
    {!carregando&&produtos.length>0&&<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
     {produtos.map(p=><article key={p.id} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md">
-      <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} imagemLocal={fotosLocais[p.id]} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
+      <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} fotoCandidataUrl={p.fotoCandidataUrl} imagemLocal={fotosLocais[p.id]} candidataConfirmada={!!fotosConfirmadas[p.id]} onConfirmarCandidata={valor=>setFotosConfirmadas(v=>({...v,[p.id]:valor}))} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
       <button type="button" onClick={()=>setSelecionado(p)} className="flex min-w-0 flex-1 flex-col text-left">
         <div className="flex items-start justify-between gap-2"><span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{categoriaNome(p.categoria)}</span><ChevronRight size={16} className="shrink-0 text-slate-400"/></div>
         <b className="mt-2 line-clamp-2 text-sm leading-tight">{p.nome}</b><span className="mt-1 text-[11px] text-slate-500">{p.codigo||'Sem código'}{p.linha?' · '+p.linha:''}</span>
@@ -116,7 +117,7 @@ export default function PreviaConsultaPreco(){
    {selecionado&&<div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 p-2 sm:p-5" role="dialog" aria-modal="true" aria-label="Detalhes do produto" onClick={()=>setSelecionado(null)}>
     <aside className="h-full w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl" onClick={e=>e.stopPropagation()}>
       <div className="mb-4 flex items-center justify-between"><b className="text-base">Ficha de consulta</b><button type="button" aria-label="Fechar" onClick={()=>setSelecionado(null)} className="rounded-lg p-2 hover:bg-slate-100"><X size={19}/></button></div>
-      <FotoProdutoPreview nome={selecionado.nome} fotoUrl={selecionado.fotoUrl} tamanho="detalhe" imagemLocal={fotosLocais[selecionado.id]} onSelecionarImagem={arquivo=>selecionarFoto(selecionado.id,arquivo)}/>
+      <FotoProdutoPreview nome={selecionado.nome} fotoUrl={selecionado.fotoUrl} fotoCandidataUrl={selecionado.fotoCandidataUrl} tamanho="detalhe" imagemLocal={fotosLocais[selecionado.id]} candidataConfirmada={!!fotosConfirmadas[selecionado.id]} onConfirmarCandidata={valor=>setFotosConfirmadas(v=>({...v,[selecionado.id]:valor}))} onSelecionarImagem={arquivo=>selecionarFoto(selecionado.id,arquivo)}/>
       <span className="mt-4 block text-[11px] font-semibold uppercase tracking-widest text-blue-700">{categoriaNome(selecionado.categoria)}</span>
       <h3 className="mt-2 text-xl font-black">{selecionado.nome}</h3>
       <p className="mt-1 text-xs text-slate-500">Código {selecionado.codigo||'não cadastrado'}</p>
@@ -125,7 +126,7 @@ export default function PreviaConsultaPreco(){
       <p className="mt-4 text-xs text-slate-500">A foto selecionada é só uma simulação local, não substitui o cadastro real. Esta prévia não edita produtos nem preços.</p>
     </aside>
    </div>}
-   <footer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><Tag size={16} className="shrink-0"/> Imagens importadas sem validação não são exibidas. Use “Adicionar imagem correta” para escolher uma foto apenas nesta prévia. Os vínculos de linha são consultados no cadastro técnico real, sem alteração no banco.</footer>
+   <footer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><Tag size={16} className="shrink-0"/> Fotos importadas são exibidas somente após clicar em “Conferir foto cadastrada” e confirmar que correspondem ao produto. Você também pode escolher “Adicionar imagem correta”; nada altera o cadastro real. Os vínculos de linha são consultados no cadastro técnico real, sem alteração no banco.</footer>
   </div>
  </main>
 }
