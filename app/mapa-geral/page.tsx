@@ -131,6 +131,7 @@ export default function MapaGeralPage(){
   const [etapa,setEtapa]=useState<Etapa|''>('')
   // Controle visual independente: permite combinar cores sem alterar os indicadores gerais.
   const [pinosAtivos,setPinosAtivos]=useState<Etapa[]>(()=>etapas.map(e=>e.id))
+  const [atalhoAtivo,setAtalhoAtivo]=useState<Etapa|'visita'|null>(null)
   const [periodo,setPeriodo]=useState<Periodo>('todos')
   const [mes,setMes]=useState(()=>new Date().toISOString().slice(0,7))
   const [inicio,setInicio]=useState(()=>avancar(new Date().toISOString().slice(0,10),-90))
@@ -139,6 +140,7 @@ export default function MapaGeralPage(){
   const [selecionado,setSelecionado]=useState<string|null>(null)
   const [painelFiltros,setPainelFiltros]=useState(false)
   const [mostrarLista,setMostrarLista]=useState(false)
+  const secaoMapaRef=useRef<HTMLElement>(null)
   const [painelAberto,setPainelAberto]=useState(true)
   const [ativoSomente,setAtivoSomente]=useState(false)
   const [desde,ate]=intervalo(periodo,mes,inicio,fim)
@@ -156,9 +158,12 @@ export default function MapaGeralPage(){
   }),[registros,cidade,bairro,vendedor,etapa,busca,ativoSomente])
   const pontos=useMemo(()=>conjunto.filter(o=>(!desde&&!ate)||temEventoNoPeriodo(o,desde,ate)),[conjunto,desde,ate])
   const pontosMapa=useMemo(()=>pontos.filter((o):o is Ponto=>o.lat!==null&&o.lng!==null),[pontos])
-  const pontosVisiveis=useMemo(()=>pontosMapa.filter(p=>pinosAtivos.includes(p.etapa)),[pontosMapa,pinosAtivos])
-  const registrosVisiveis=useMemo(()=>pontos.filter(p=>pinosAtivos.includes(p.etapa)),[pontos,pinosAtivos])
+  // O atalho de visitas localiza registros que tiveram visita no período; a cor continua sendo a etapa atual.
+  const correspondeAoAtalho=(p:Obra)=>atalhoAtivo!=='visita'||p.eventos.some(e=>e.tipo==='visita'&&(!desde||e.data>=desde)&&(!ate||e.data<=ate))
+  const pontosVisiveis=useMemo(()=>pontosMapa.filter(p=>pinosAtivos.includes(p.etapa)&&correspondeAoAtalho(p)),[pontosMapa,pinosAtivos,atalhoAtivo,desde,ate])
+  const registrosVisiveis=useMemo(()=>pontos.filter(p=>pinosAtivos.includes(p.etapa)&&correspondeAoAtalho(p)),[pontos,pinosAtivos,atalhoAtivo,desde,ate])
   const quantidadesPinos=useMemo(()=>Object.fromEntries(etapas.map(e=>[e.id,pontosMapa.filter(p=>p.etapa===e.id).length])) as Record<Etapa,number>,[pontosMapa])
+  const locaisComVisita=useMemo(()=>pontosMapa.filter(p=>p.eventos.some(e=>e.tipo==='visita'&&(!desde||e.data>=desde)&&(!ate||e.data<=ate))).length,[pontosMapa,desde,ate])
   const semGPS=registrosVisiveis.length-pontosVisiveis.length
   const ficha=registrosVisiveis.find(p=>p.id===selecionado) || registrosVisiveis[0] || null
   const kpis=useMemo(()=>{
@@ -179,18 +184,28 @@ export default function MapaGeralPage(){
     return {ym,visitas:base.filter(e=>e.tipo==='visita').length,orcamentos:base.filter(e=>e.tipo==='orcamento').length,vendas:base.filter(e=>e.tipo==='venda').length}
   }),[conjunto])
   function limpar(){
-    setCidade('');setBairro('');setVendedor('');setEtapa('');setPeriodo('todos');setBusca('');setAtivoSomente(false);setPainelFiltros(false);setPinosAtivos(etapas.map(e=>e.id))
+    setCidade('');setBairro('');setVendedor('');setEtapa('');setPeriodo('todos');setBusca('');setAtivoSomente(false);setPainelFiltros(false);setPinosAtivos(etapas.map(e=>e.id));setAtalhoAtivo(null)
+  }
+  function mostrarNoMapa(tipo:Etapa|'visita'){
+    // Atalho apenas visual: mantém cidade, responsável, busca e período já escolhidos.
+    setEtapa('')
+    setAtalhoAtivo(tipo)
+    setPinosAtivos(tipo==='visita'?etapas.map(e=>e.id):[tipo])
+    setMostrarLista(false)
+    setSelecionado(null)
+    setPainelAberto(false)
+    window.requestAnimationFrame(()=>secaoMapaRef.current?.scrollIntoView({behavior:'smooth',block:'start'}))
   }
   const selectClass='min-w-0 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-blue-500'
   const labelClass='mb-1.5 block text-[11px] font-semibold text-slate-500'
-  const cards=[
-    {nome:'Prospecções',valor:kpis.prospeccao,icone:'◎',cor:'#2563eb',fundo:'#eff6ff',borda:'#bfdbfe'},
-    {nome:'Visitas registradas',valor:kpis.visita,icone:'◉',cor:'#0f766e',fundo:'#f0fdfa',borda:'#99f6e4'},
-    {nome:'Orçamentos',valor:kpis.orcamento,icone:'▤',cor:'#b45309',fundo:'#fffbeb',borda:'#fde68a'},
-    {nome:'Vendas fechadas',valor:kpis.venda,icone:'✓',cor:'#15803d',fundo:'#f0fdf4',borda:'#bbf7d0'},
-    {nome:'Em produção',valor:kpis.producao,icone:'⚙',cor:'#7e22ce',fundo:'#faf5ff',borda:'#e9d5ff'},
-    {nome:'Concluídas',valor:kpis.concluida,icone:'⚑',cor:'#0891b2',fundo:'#ecfeff',borda:'#a5f3fc'},
-    {nome:'Perdidas',valor:kpis.perdida,icone:'×',cor:'#475569',fundo:'#f1f5f9',borda:'#cbd5e1'},
+  const cards:{id:Etapa|'visita';nome:string;valor:number;icone:string;cor:string;fundo:string;borda:string}[]=[
+    {id:'prospeccao',nome:'Prospecções',valor:kpis.prospeccao,icone:'◎',cor:'#2563eb',fundo:'#eff6ff',borda:'#bfdbfe'},
+    {id:'visita',nome:'Visitas registradas',valor:kpis.visita,icone:'◉',cor:'#0f766e',fundo:'#f0fdfa',borda:'#99f6e4'},
+    {id:'orcamento',nome:'Orçamentos',valor:kpis.orcamento,icone:'▤',cor:'#b45309',fundo:'#fffbeb',borda:'#fde68a'},
+    {id:'venda',nome:'Vendas fechadas',valor:kpis.venda,icone:'✓',cor:'#15803d',fundo:'#f0fdf4',borda:'#bbf7d0'},
+    {id:'producao',nome:'Em produção',valor:kpis.producao,icone:'⚙',cor:'#7e22ce',fundo:'#faf5ff',borda:'#e9d5ff'},
+    {id:'concluida',nome:'Concluídas',valor:kpis.concluida,icone:'⚑',cor:'#0891b2',fundo:'#ecfeff',borda:'#a5f3fc'},
+    {id:'perdida',nome:'Perdidas',valor:kpis.perdida,icone:'×',cor:'#475569',fundo:'#f1f5f9',borda:'#cbd5e1'},
   ]
   return <div className="min-h-screen bg-[#f4f7fb] text-slate-900">
     <main className="mx-auto max-w-[1700px] space-y-4 p-3 sm:p-5 lg:p-6">
@@ -240,13 +255,14 @@ export default function MapaGeralPage(){
       </section>
 
       <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
-        {cards.map(c=><div key={c.nome} className="rounded-xl border px-3 py-3 shadow-sm" style={{backgroundColor:c.fundo,borderColor:c.borda}}>
+        {cards.map(c=><button key={c.id} type="button" onClick={()=>mostrarNoMapa(c.id)} aria-pressed={atalhoAtivo===c.id} aria-label={'Localizar no mapa: '+c.nome} className="rounded-xl border px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" style={{backgroundColor:c.fundo,borderColor:atalhoAtivo===c.id?c.cor:c.borda,boxShadow:atalhoAtivo===c.id?'0 0 0 2px '+c.cor+'35':undefined}}>
           <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-slate-700">{c.nome}</span><span className="text-lg font-black" style={{color:c.cor}}>{c.icone}</span></div>
           <p className="mt-1 text-2xl font-black" style={{color:c.cor}}>{c.valor}</p>
-        </div>)}
+          <p className="mt-1 text-[10px] font-bold" style={{color:c.cor}}>Ver {c.id==='visita'?locaisComVisita:quantidadesPinos[c.id]} local(is) no mapa →</p>
+        </button>)}
       </section>
 
-      <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_330px]">
+      <section ref={secaoMapaRef} className="grid scroll-mt-4 gap-3 xl:grid-cols-[minmax(0,1fr)_330px]">
         <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div><h2 className="text-base font-extrabold">Mapa de oportunidades e obras</h2><p className="text-xs text-slate-500">{pontosVisiveis.length} de {pontosMapa.length} pino(s) visíveis · {semGPS} registro(s) sem GPS entre os tipos selecionados · clique no pino para abrir detalhes</p></div>
@@ -254,15 +270,15 @@ export default function MapaGeralPage(){
           </div>
           <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div><h3 className="text-xs font-extrabold text-slate-800">Escolha quais pinos aparecem no mapa</h3><p className="text-[11px] text-slate-500">Marque uma ou mais cores. {pontosVisiveis.length} pino(s) visível(is).</p></div>
+              <div><h3 className="text-xs font-extrabold text-slate-800">Escolha quais pinos aparecem no mapa</h3><p className="text-[11px] text-slate-500">Clique em um indicador acima para localizar uma categoria ou marque uma ou mais cores. {pontosVisiveis.length} pino(s) visível(is).</p>{atalhoAtivo==='visita'&&<p className="mt-1 text-[11px] font-semibold text-teal-700">Exibindo locais com visitas registradas no período. A cor indica a situação atual.</p>}</div>
               <div className="flex gap-2">
-                <button type="button" onClick={()=>setPinosAtivos(etapas.map(e=>e.id))} disabled={pinosAtivos.length===etapas.length} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40">Mostrar todos</button>
-                <button type="button" onClick={()=>setPinosAtivos([])} disabled={pinosAtivos.length===0} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40">Ocultar todos</button>
+                <button type="button" onClick={()=>{setPinosAtivos(etapas.map(e=>e.id));setAtalhoAtivo(null)}} disabled={pinosAtivos.length===etapas.length&&atalhoAtivo===null} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40">Mostrar todos</button>
+                <button type="button" onClick={()=>{setPinosAtivos([]);setAtalhoAtivo(null)}} disabled={pinosAtivos.length===0} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40">Ocultar todos</button>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 2xl:grid-cols-6">
               {etapas.map(e=><label key={e.id} className="flex cursor-pointer items-center gap-2 rounded-xl border bg-white px-2 py-2 text-[11px] font-bold transition sm:px-3" style={pinosAtivos.includes(e.id)?{borderColor:e.cor,backgroundColor:e.fundo}:{borderColor:'#e2e8f0',opacity:0.65}}>
-                <input type="checkbox" aria-label={'Exibir pinos: '+e.nome} className="h-4 w-4 shrink-0 cursor-pointer" style={{accentColor:e.cor}} checked={pinosAtivos.includes(e.id)} onChange={ev=>setPinosAtivos(atuais=>ev.target.checked?[...atuais,e.id]:atuais.filter(id=>id!==e.id))}/>
+                <input type="checkbox" aria-label={'Exibir pinos: '+e.nome} className="h-4 w-4 shrink-0 cursor-pointer" style={{accentColor:e.cor}} checked={pinosAtivos.includes(e.id)} onChange={ev=>{setAtalhoAtivo(null);setPinosAtivos(atuais=>ev.target.checked?[...atuais,e.id]:atuais.filter(id=>id!==e.id))}}/>
                 <span aria-hidden="true" className="grid h-6 w-6 shrink-0 place-items-center border-2 border-white text-sm font-black text-white shadow-sm" style={{backgroundColor:e.cor,borderRadius:'50% 50% 50% 3px',transform:'rotate(-45deg)'}}><span style={{transform:'rotate(45deg)'}}>{e.icone}</span></span>
                 <span className="min-w-0 flex-1 leading-tight">{e.nome}</span>
                 <span className="rounded bg-white/80 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-600">{quantidadesPinos[e.id]}</span>
@@ -272,7 +288,7 @@ export default function MapaGeralPage(){
           {mostrarLista?<div className="h-[450px] space-y-2 overflow-y-auto md:h-[570px]">{registrosVisiveis.length?registrosVisiveis.map(p=><button key={p.id} type="button" onClick={()=>{setSelecionado(p.id);setPainelAberto(true)}} className="flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left hover:border-blue-400"><span className="grid h-9 w-9 place-items-center rounded-full text-lg font-black text-white" style={{backgroundColor:corEtapa(p.etapa).cor}}>{corEtapa(p.etapa).icone}</span><span className="min-w-0 flex-1"><b className="block truncate text-sm">{p.nome}</b><span className="text-xs text-slate-500">{p.bairro} · {p.cidade}{p.lat===null?" · Sem GPS":""}</span></span><span className="text-[11px] font-semibold text-slate-500">{corEtapa(p.etapa).nome}</span></button>):<p className="p-6 text-center text-sm text-slate-500">Nenhum registro corresponde às cores selecionadas. Marque um tipo de pino acima.</p>}</div>:
             <MapaDemo pontos={pontosVisiveis} selecionado={ficha?.id||null} escolher={id=>{setSelecionado(id);setPainelAberto(true)}}/>
           }
-          <p className="mt-3 border-t pt-3 text-[11px] text-slate-500">A cor identifica a situação atual da obra. Este controle altera somente os pinos e a lista; os indicadores continuam considerando todos os registros dos filtros gerais.</p>
+          <p className="mt-3 border-t pt-3 text-[11px] text-slate-500">A cor identifica a situação atual da obra. Os atalhos e as cores alteram somente os pinos e a lista; os indicadores permanecem calculados pelos filtros gerais. Prospecções e orçamentos nos indicadores contam eventos históricos, enquanto os pinos das cores correspondem à etapa atual.</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           {ficha&&painelAberto?<div>
