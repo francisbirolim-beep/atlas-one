@@ -409,20 +409,58 @@ export default function PreviaVenda(){
 
     {etapa===3&&<section className="mx-auto max-w-3xl rounded-2xl border bg-white p-5 shadow-sm sm:p-8">
       <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-blue-700"><ClipboardCheck size={28}/></div>
-      <h2 className="mt-3 text-center text-xl font-black">Revisão da venda</h2>
-      <p className="mt-1 text-center text-xs text-slate-500">Confira a simulação antes de desenvolver a finalização real.</p>
+      <h2 className="mt-3 text-center text-xl font-black">Revisão e finalização da venda</h2>
+      <p className="mt-1 text-center text-xs text-slate-500">Veja os produtos, o desconto, cada recebimento e onde ficará marcado o saldo.</p>
       <div className="mt-6 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
         <p><span className="block text-xs text-slate-500">Cliente</span><b>{nomeCliente}</b></p>
-        <p><span className="block text-xs text-slate-500">Vínculo</span><b>{modo==='consumidor'?'Venda avulsa':obra?'Obra: '+obra.nome:'Cadastro do cliente sem obra'}</b></p>
-        <p><span className="block text-xs text-slate-500">Pagamento</span><b>{({pix:'PIX',dinheiro:'Dinheiro',debito:'Cartão de débito',credito:'Cartão de crédito',boleto:'Boleto',prazo:'A prazo'} as Record<string,string>)[pagamento]}</b></p>
-        <p><span className="block text-xs text-slate-500">Produtos</span><b>{itens.length} item(ns) · {unidades} unidade(s)</b></p>
+        <p><span className="block text-xs text-slate-500">Vínculo da venda</span><b>{modo==='consumidor'?'Consumidor final · sem obra':obra?'Obra: '+obra.nome:'Cadastro do cliente · sem obra'}</b></p>
+        <p><span className="block text-xs text-slate-500">Situação prevista</span><b>{statusFinanceiro==='quitada'?'Recebida integralmente':statusFinanceiro==='parcial'?'Recebimento parcial':'Marcada para receber depois'}</b></p>
+        <p><span className="block text-xs text-slate-500">Itens / unidades</span><b>{itens.length} produto(s) · {unidades} unidade(s)</b></p>
       </div>
-      <div className="mt-5 space-y-3">{itens.map(i=><div key={i.produto.id} className="flex justify-between gap-3 border-b pb-3 text-sm"><span><b>{i.quantidade} × {i.produto.nome}</b><span className="block text-xs text-slate-500">{i.produto.codigo||'Sem código'}</span></span><b className="shrink-0">{preco(i.produto)!=null?moeda(preco(i.produto)!*i.quantidade):'A precificar'}</b></div>)}</div>
-      <div className="mt-5 flex justify-between rounded-xl bg-blue-50 p-4"><b>Total conhecido</b><b className="text-2xl font-black text-blue-900">{moeda(total)}</b></div>
-      {pendentes>0&&<p className="mt-3 text-xs text-amber-800">Existem itens sem preço, portanto este total não é definitivo.</p>}
-      <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900"><b>Esta é uma prévia:</b> nenhum cadastro, venda, pagamento, obra, estoque ou foto será gravado. O fluxo definitivo será implementado somente depois da sua aprovação.</div>
-      <div className="mt-5 flex flex-wrap justify-between gap-3"><button type="button" onClick={()=>{setAviso('');setEtapa(2)}} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar aos itens</button><button type="button" onClick={resetar} className="rounded-xl bg-blue-700 px-5 py-3 text-xs font-bold text-white">Nova simulação</button></div>
+      <h3 className="mb-3 mt-6 text-sm font-black">Descrição dos itens</h3>
+      <div className="space-y-3">{itens.map(i=><div key={i.produto.id} className="flex justify-between gap-3 border-b pb-3 text-sm">
+        <span><b>{i.quantidade} × {i.produto.nome}</b><span className="block text-xs text-slate-500">{i.produto.codigo||'Sem código'} · {i.produto.unidade}</span>{i.produto.descricao&&<span className="mt-1 block text-xs text-slate-500">{i.produto.descricao}</span>}</span>
+        <b className="shrink-0">{moeda((preco(i.produto)||0)*i.quantidade)}</b>
+      </div>)}</div>
+      <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm">
+        <div className="flex justify-between"><span>Subtotal</span><b>{moeda(total)}</b></div>
+        <div className="mt-2 flex justify-between"><span>Desconto {tipoDesconto==='percentual'?'('+valorEntrada(descontoEntrada)+'%)':tipoDesconto==='valor'?'(R$)':''}</span><b>- {moeda(descontoCent/100)}</b></div>
+        <div className="mt-3 flex justify-between border-t border-blue-200 pt-3 text-lg font-black text-blue-900"><span>Total da venda</span><span>{moeda(totalLiquido)}</span></div>
+      </div>
+      <div className="mt-5 rounded-xl border border-slate-200 p-4 text-sm">
+        <h3 className="font-black">Pagamento e saldo</h3>
+        {formasRecibo.length?formasRecibo.map((f,i)=><div key={i} className="mt-2 flex justify-between text-xs"><span>{rotuloPagamento[f.forma]}</span><b>{moeda(f.valor)}</b></div>):<p className="mt-2 text-xs text-slate-500">Sem recebimento: venda marcada para o cliente/obra.</p>}
+        <div className="mt-3 flex justify-between border-t pt-3"><span>Valor recebido (simulação)</span><b>{moeda(recebido)}</b></div>
+        <div className="mt-2 flex justify-between"><span>Saldo a receber</span><b className={saldo>0?'text-amber-700':'text-emerald-700'}>{moeda(saldo)}</b></div>
+        {saldo>0&&<p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Este saldo ficará marcado {obra?'na obra '+obra.nome:'no cadastro do cliente '+nomeCliente}. Nenhum título financeiro será criado na prévia.</p>}
+      </div>
+      <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900">
+        <b>Simulação apenas:</b> “Finalizar venda” abrirá um recibo para conferência, impressão ou PDF, com os itens, os pagamentos e o espaço de assinatura. Não cria venda, baixa financeira, cadastro, débito, recibo fiscal ou movimentação de estoque.
+      </div>
+      <div className="mt-5 flex flex-wrap justify-between gap-3">
+        <button type="button" onClick={()=>{setAviso('');setEtapa(2)}} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar e ajustar pagamento</button>
+        <button type="button" onClick={simularFinalizacao} className="rounded-xl bg-blue-700 px-5 py-3 text-xs font-extrabold text-white">Finalizar venda (simulação) · Ver recibo</button>
+      </div>
     </section>}
    </div>
+   <ReciboVendaPreview
+     aberto={reciboAberto}
+     fechar={()=>setReciboAberto(false)}
+     nomeCliente={nomeCliente}
+     nomeAssinatura={modo==='consumidor'?(nomeAssinatura.trim()||'Consumidor final — preencher na assinatura'):nomeCliente}
+     documento={cliente?.cpf_cnpj||null}
+     cidade={cliente?.cidade||null}
+     obra={obra?.nome||null}
+     tipoDestino={modo==='consumidor'?'consumidor':obra?'obra':'cliente'}
+     dataHora={dataRecibo}
+     itens={itens}
+     subtotal={total}
+     desconto={descontoCent/100}
+     total={totalLiquido}
+     recebido={recebido}
+     saldo={saldo}
+     status={statusFinanceiro}
+     formas={formasRecibo}
+   />
   </main>
 }
