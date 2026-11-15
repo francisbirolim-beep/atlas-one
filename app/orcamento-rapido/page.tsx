@@ -309,6 +309,18 @@ type ItemTela = {
   observacaoProducao: string
   fotos: { nome: string; url: string }[]
   aberto: boolean
+  larguraBaixo: string
+  larguraMeio: string
+  larguraCima: string
+  alturaDireita: string
+  alturaMeio: string
+  alturaEsquerda: string
+  modoLargura: 'digitar' | 'foto'
+  modoAltura: 'digitar' | 'foto'
+  fotoLarguraPreview?: string
+  fotoAlturaPreview?: string
+  larguraBatenteMm: string
+  larguraGuarnicaoMm: string
 }
 
 const tipos: {id: TipoColeta; nome: string; descricao: string}[] = [
@@ -958,6 +970,18 @@ export default function OrcamentoRapido() {
     observacaoProducao: it.observacaoProducao || '',
     fotos: it.fotosPreviews.map((url, i) => ({ nome: it.fotos[i]?.name || 'Foto da esquadria', url })),
     aberto: itensAbertos[it.id] ?? (idx === itens.length - 1),
+    larguraBaixo: it.larguraBaixo,
+    larguraMeio: it.larguraMeio,
+    larguraCima: it.larguraCima,
+    alturaDireita: it.alturaDireita,
+    alturaMeio: it.alturaMeio,
+    alturaEsquerda: it.alturaEsquerda,
+    modoLargura: it.modoLargura,
+    modoAltura: it.modoAltura,
+    fotoLarguraPreview: it.fotoLarguraPreview,
+    fotoAlturaPreview: it.fotoAlturaPreview,
+    larguraBatenteMm: it.larguraBatenteMm || '',
+    larguraGuarnicaoMm: it.larguraGuarnicaoMm || '',
   }))
   function alterar(id: string, patch: Partial<ItemTela>) {
     const original = itens.find(it => it.id === id)
@@ -1107,7 +1131,7 @@ export default function OrcamentoRapido() {
                           <label className={rotulo}>Tipo de medida</label>
                           <div className="grid grid-cols-2 gap-2">
                             {([['comum','Medida comum'],['final','Medida final']] as const).map(([v,label])=>
-                              <button type="button" key={v} onClick={()=>alterar(item.id,{medida:v})} className={'rounded-xl border px-3 py-2.5 text-xs font-bold ' + (item.medida===v?'border-emerald-700 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600')}>{label}</button>)}
+                              <button type="button" key={v} disabled={item.tipo!=='sob_medida' && v==='final'} title={item.tipo!=='sob_medida' && v==='final'?'Medida final disponível em Sob medida':undefined} onClick={()=>alterar(item.id,{medida:v})} className={'rounded-xl border px-3 py-2.5 text-xs font-bold ' + (item.medida===v?'border-emerald-700 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600')}>{label}</button>)}
                           </div>
                         </div>
                       </div>
@@ -1117,12 +1141,58 @@ export default function OrcamentoRapido() {
                         <div><label className={rotulo}>Altura (mm)</label><input type="number" inputMode="decimal" min="0" className={campo} value={item.altura} onChange={e=>alterar(item.id,{altura:e.target.value})} placeholder="2100"/></div>
                         <div><label className={rotulo}>Qtd.</label><input type="number" inputMode="numeric" min="1" className={campo} value={item.quantidade} onChange={e=>alterar(item.id,{quantidade:e.target.value})} placeholder="1"/></div>
                       </div>
-                      {item.medida==='final' && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900">Medida final selecionada. Na versão oficial, manteremos a coleta já existente de três larguras, três alturas e fotos da trena. Nenhum cálculo será removido.</div>}
+                      {item.tipo==='sob_medida' && item.medida==='final' && <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                        <p className="text-xs font-bold text-emerald-900">Medida final — registre as três larguras e as três alturas, ou fotografe a trena.</p>
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <label className={rotulo}>Larguras — baixo, meio, cima</label>
+                            <div className="flex overflow-hidden rounded-lg border border-emerald-300">
+                              <button type="button" onClick={()=>atualizarItem(item.id,'modoLargura','digitar')} className={'flex items-center gap-1 px-2 py-1 text-xs '+(item.modoLargura==='digitar'?'bg-emerald-700 text-white':'bg-white')}><Keyboard size={12}/> Digitar</button>
+                              <button type="button" onClick={()=>atualizarItem(item.id,'modoLargura','foto')} className={'flex items-center gap-1 px-2 py-1 text-xs '+(item.modoLargura==='foto'?'bg-emerald-700 text-white':'bg-white')}><Camera size={12}/> Foto</button>
+                            </div>
+                          </div>
+                          {item.modoLargura==='digitar'
+                            ? <div className="grid grid-cols-3 gap-2">
+                                <input type="number" inputMode="decimal" className={campo} placeholder="Baixo (mm)" value={item.larguraBaixo} onChange={e=>atualizarItem(item.id,'larguraBaixo',e.target.value)}/>
+                                <input type="number" inputMode="decimal" className={campo} placeholder="Meio (mm)" value={item.larguraMeio} onChange={e=>atualizarItem(item.id,'larguraMeio',e.target.value)}/>
+                                <input type="number" inputMode="decimal" className={campo} placeholder="Cima (mm)" value={item.larguraCima} onChange={e=>atualizarItem(item.id,'larguraCima',e.target.value)}/>
+                              </div>
+                            : item.fotoLarguraPreview ? <img src={item.fotoLarguraPreview} alt="Foto da trena com larguras" onClick={()=>setFotoAmpliada(item.fotoLarguraPreview!)} className="h-24 w-24 cursor-pointer rounded-lg object-cover"/> : <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-300 bg-white px-3 py-4 text-xs font-semibold"><Camera size={17}/> Fotografar trena com as larguras<input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>definirFotoLargura(item.id,e.target.files?.[0])}/></label>}
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <label className={rotulo}>Alturas — direita, meio, esquerda</label>
+                            <div className="flex overflow-hidden rounded-lg border border-emerald-300">
+                              <button type="button" onClick={()=>atualizarItem(item.id,'modoAltura','digitar')} className={'flex items-center gap-1 px-2 py-1 text-xs '+(item.modoAltura==='digitar'?'bg-emerald-700 text-white':'bg-white')}><Keyboard size={12}/> Digitar</button>
+                              <button type="button" onClick={()=>atualizarItem(item.id,'modoAltura','foto')} className={'flex items-center gap-1 px-2 py-1 text-xs '+(item.modoAltura==='foto'?'bg-emerald-700 text-white':'bg-white')}><Camera size={12}/> Foto</button>
+                            </div>
+                          </div>
+                          {item.modoAltura==='digitar'
+                            ? <div className="grid grid-cols-3 gap-2">
+                                <input type="number" inputMode="decimal" className={campo} placeholder="Direita (mm)" value={item.alturaDireita} onChange={e=>atualizarItem(item.id,'alturaDireita',e.target.value)}/>
+                                <input type="number" inputMode="decimal" className={campo} placeholder="Meio (mm)" value={item.alturaMeio} onChange={e=>atualizarItem(item.id,'alturaMeio',e.target.value)}/>
+                                <input type="number" inputMode="decimal" className={campo} placeholder="Esquerda (mm)" value={item.alturaEsquerda} onChange={e=>atualizarItem(item.id,'alturaEsquerda',e.target.value)}/>
+                              </div>
+                            : item.fotoAlturaPreview ? <img src={item.fotoAlturaPreview} alt="Foto da trena com alturas" onClick={()=>setFotoAmpliada(item.fotoAlturaPreview!)} className="h-24 w-24 cursor-pointer rounded-lg object-cover"/> : <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-300 bg-white px-3 py-4 text-xs font-semibold"><Camera size={17}/> Fotografar trena com as alturas<input type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>definirFotoAltura(item.id,e.target.files?.[0])}/></label>}
+                        </div>
+                      </div>}
                       <div>
                         <label className={rotulo}>O que você precisa? <span className="font-normal text-slate-400">(descrição livre)</span></label>
                         <textarea rows={3} className={campo + ' resize-y'} value={item.descricao} onChange={e=>alterar(item.id,{descricao:e.target.value})} placeholder="Ex.: Porta de correr, 3 folhas, com reforço e fechadura..."/>
                         {item.tipo==='sob_medida' && <p className="mt-1.5 text-[11px] text-blue-700">Sem escolher linha ou tipologia nesta visita. O escritório define depois.</p>}
                       </div>
+                      {item.tipo==='kit_porta_pronta' && <details className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+                        <summary className="cursor-pointer text-xs font-bold text-blue-900">Complementos do kit: batente e guarnição (opcional)</summary>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <label className={rotulo}>Largura do batente (mm)<input type="number" inputMode="decimal" className={campo} value={item.larguraBatenteMm} onChange={e=>atualizarItem(item.id,'larguraBatenteMm',e.target.value)}/></label>
+                          <label className={rotulo}>Largura da guarnição (mm)<input type="number" inputMode="decimal" className={campo} value={item.larguraGuarnicaoMm} onChange={e=>atualizarItem(item.id,'larguraGuarnicaoMm',e.target.value)}/></label>
+                        </div>
+                      </details>}
+                      {item.tipo==='material_avulso' && <CatalogoItemAtlas item={itens.find(it=>it.id===item.id)!} onChange={patch=>atualizarItemCampos(item.id,patch)}/>}
+                      {(item.tipo==='medida_padrao'||item.tipo==='kit_porta_pronta') && <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <summary className="cursor-pointer text-xs font-bold text-slate-700">Localizar produto cadastrado (opcional)</summary>
+                        <div className="mt-3"><CatalogoItemAtlas item={itens.find(it=>it.id===item.id)!} onChange={patch=>atualizarItemCampos(item.id,patch)}/></div>
+                      </details>}
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div>
                           <label className={rotulo}>Contramarco desta esquadria</label>
