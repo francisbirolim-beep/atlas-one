@@ -118,23 +118,34 @@ export async function GET(request:NextRequest){
       linhasPorProduto.set(a.produto_id,atuais)
     }
 
-    // Fotos Wvetro importadas estão pendentes de conferência e podem estar erradas.
-    // Somente fotos MANUAIS explicitamente validadas podem aparecer automaticamente.
+    // Fotos importadas da Wvetro estão vinculadas por produto_id, porém PENDENTES
+    // de validação e podem não corresponder ao item. NÃO exibimos automaticamente:
+    // o usuário pode conferir e aprovar apenas nesta sessão da prévia.
     const fotos=new Map<string,string>()
+    const candidatas=new Map<string,string>()
+    const urlSegura=(v:string)=>{try{const u=new URL(v);return u.protocol==='https:'&&['urtqbvjpwnrfaayolymt.supabase.co','api.wvetro.com.br'].includes(u.hostname)}catch{return false}}
     if(ids.length){
-      const {data:validadas,error:erroFotos}=await supabaseAdmin.from('produto_imagens')
-        .select('produto_id,url,principal').eq('empresa_id',usuario.empresa_id)
-        .eq('ativo',true).eq('origem','manual').eq('status_validacao','validada')
-        .in('produto_id',ids).order('principal',{ascending:false}).limit(200)
+      const {data:imagens,error:erroFotos}=await supabaseAdmin.from('produto_imagens')
+        .select('produto_id,url,principal,origem,status_validacao')
+        .eq('empresa_id',usuario.empresa_id).eq('ativo',true)
+        .in('produto_id',ids).order('principal',{ascending:false}).limit(250)
       if(erroFotos)throw erroFotos
-      for(const foto of validadas||[])if(!fotos.has(foto.produto_id))fotos.set(foto.produto_id,foto.url)
+      for(const foto of imagens||[]){
+        if(!foto.url||!urlSegura(foto.url))continue
+        if(foto.status_validacao==='validada'){
+          if(!fotos.has(foto.produto_id))fotos.set(foto.produto_id,foto.url)
+        }else if(foto.status_validacao==='pendente'&&foto.origem==='wvetro'){
+          if(!candidatas.has(foto.produto_id))candidatas.set(foto.produto_id,foto.url)
+        }
+      }
     }
     return NextResponse.json({
       produtos:encontrados.map((p:any)=>({
         id:p.id,codigo:p.codigo||'',nome:p.nome,descricao:p.descricao||'',
         categoria:p.categoria||'',unidade:p.unidade||'un.',linhaId:null,
         linha:(linhasPorProduto.get(p.id)||[]).join(' / ')||null,
-        fotoUrl:fotos.get(p.id)||null, // NUNCA usa imagem importada sem validação.
+        fotoUrl:fotos.get(p.id)||null,
+        fotoCandidataUrl:fotos.has(p.id)?null:candidatas.get(p.id)||null, // Exige conferência manual na prévia.
         preco:Number(p.preco||0)>0?Number(p.preco):null,
         precoPromocional:p.preco_promocional!=null&&Number(p.preco_promocional)>0?Number(p.preco_promocional):null,
       })),linhas,limitado:(data||[]).length===120
