@@ -1005,16 +1005,174 @@ export default function OrcamentoRapido() {
   const totalEsquadrias = itens.reduce((soma, item) => soma + Math.max(1, Number.parseInt(item.quantidade || '1', 10) || 1), 0)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
-      <header className="bg-white border-b border-slate-200"><div className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-6xl'} mx-auto px-4 py-4 flex items-center gap-4`}><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-800">{fluxoSobMedida ? 'Orçamento Sob Medida' : 'Orçamento'}</h1>{fluxoSobMedida && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">FLUXO W.VETRO</span>}</div><p className="text-sm text-slate-500">{fluxoSobMedida ? 'Configure a esquadria tecnicamente e siga até composição, custos e impressão' : 'Registre o pedido e mande pro painel'}</p></div></div></header>
-      {fluxoSobMedida && <div className="border-b border-slate-200 bg-white"><div className="mx-auto max-w-7xl overflow-x-auto px-4 py-3"><div className="flex min-w-[980px] items-center gap-2">{[['1','Cliente / Obra'],['2','Medidas'],['3','O que precisa'],['4','Linha / Tipologia'],['5','Variáveis'],['6','Acabamento'],['7','Composição'],['8','Custos'],['9','Impressão']].map(([n,label],i)=><div key={n} className="flex flex-1 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i<2?'bg-blue-600 text-white':'bg-slate-100 text-slate-500'}`}>{n}</span><span className={`whitespace-nowrap text-xs font-semibold ${i<2?'text-slate-800':'text-slate-500'}`}>{label}</span>{i<8&&<span className="h-px flex-1 bg-slate-200"/>}</div>)}</div></div></div>}
-      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-6xl'} mx-auto px-3 py-5 space-y-4 sm:px-6`}>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-600">{rascunhoSalvoEm ? 'Rascunho de ' + clienteNome + ' salvo neste aparelho às ' + new Date(rascunhoSalvoEm).toLocaleTimeString('pt-BR') : clienteNome.trim() ? 'O rascunho deste cliente será salvo automaticamente durante o preenchimento.' : 'Novo orçamento em branco. Informe o cliente para começar a salvar o rascunho.'}</div>
-          <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual || !clienteNome.trim() || !rascunhoUsuarioId} className="rounded-lg border border-brand-navy px-3 py-2 text-xs font-semibold text-brand-navy disabled:opacity-60">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="sticky top-0 z-20 border-b border-blue-900/30 bg-slate-950 text-white shadow-lg">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-600"><Ruler size={20}/></div>
+            <div>
+              <p className="text-sm font-extrabold tracking-wide">ATLAS ONE <span className="font-normal text-blue-300">/ Orçamento</span></p>
+              <p className="text-[11px] text-slate-300">Coleta rápida de orçamento na obra</p>
+            </div>
+          </div>
+          <div className="rounded-full border border-amber-300/40 bg-amber-400/15 px-3 py-1.5 text-[11px] font-extrabold text-amber-200">
+            COLETA DE ORÇAMENTO
+          </div>
+        </div>
+      </div>
+
+      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className="mx-auto max-w-6xl space-y-4 px-3 pb-28 pt-5 sm:px-6 sm:pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-blue-600">Etapa de levantamento</p>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 sm:text-3xl">Novo orçamento <span className="font-medium text-slate-400">/ Obra</span></h1>
+            <p className="mt-1 text-sm text-slate-500">Preencha só o essencial. Linha e tipologia serão definidas no escritório.</p>
+          </div>
+          <Link href="/orcamento/novo" className={secundario}><ArrowLeft size={15}/> Voltar ao Atlas</Link>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-900">
+          <div><span className="mr-1 inline-flex align-middle"><Info size={16}/></span>
+            {rascunhoSalvoEm ? 'Rascunho de ' + clienteNome + ' salvo neste aparelho às ' + new Date(rascunhoSalvoEm).toLocaleTimeString('pt-BR') : clienteNome.trim() ? 'O rascunho deste cliente será salvo automaticamente durante o preenchimento.' : 'Novo orçamento em branco. Informe o cliente para começar a salvar o rascunho.'}
+          </div>
+          <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual || !clienteNome.trim() || !rascunhoUsuarioId} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-900 disabled:opacity-50">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
           {erroSalvamentoLocal && <p role="alert" className="w-full text-xs font-semibold text-red-700">{erroSalvamentoLocal}</p>}
         </div>
-        {rascunhoSalvoEm && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">✓ Rascunho deste cliente salvo neste aparelho, incluindo levantamento, fotos e arquivos. Se o envio falhar, poderá ser recuperado no Cliente 360 deste mesmo aparelho.</div>}
+
+        <section className={painel + ' p-4 sm:p-5'}>
+          <div className="mb-4 flex items-center gap-2">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-700"><ClipboardList size={19}/></span>
+            <div>
+              <h2 className="text-base font-extrabold">Cliente e obra</h2>
+              <p className="text-xs text-slate-500">Identificação do atendimento</p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="relative"><label className={rotulo}>Cliente</label><input className={campo} data-preserve-case="true" value={clienteNome} onChange={e=>{ limparErroValidacaoAoEditar();setClienteNome(e.target.value);setClienteIdOrigem(null);setObraIdSelecionada(null);setObrasDoCliente([]) }} placeholder="Nome do cliente"/><BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={selecionarClienteExistente}/></div>
+            <div><label className={rotulo}>Nome da obra / local</label><input className={campo} value={obraNome} onChange={e=>{limparErroValidacaoAoEditar();setObraNome(e.target.value)}} disabled={!!obraIdSelecionada} placeholder="Ex.: Residência / reforma"/></div>
+            <div><label className={rotulo}>Cidade</label><input className={campo} value={cidade} onChange={e=>{limparErroValidacaoAoEditar();setCidade(e.target.value)}} placeholder="Cidade da obra"/></div>
+            <div><label className={rotulo}>Cor geral (opcional)</label><input className={campo} value={corGeral} onChange={e=>{limparErroValidacaoAoEditar();setAcabamento('outro');setAcabamentoOutroTexto(e.target.value)}} placeholder="Ex.: Preto fosco"/></div>
+            <div className="sm:col-span-2">
+              <label className={rotulo}>Contramarco geral</label>
+              <div className="grid grid-cols-3 gap-2">
+                {([['indefinido','A definir'],['com','Com'],['sem','Sem']] as const).map(([value,label])=>
+                  <button key={value} type="button" onClick={()=>{limparErroValidacaoAoEditar();setContramarco(value === 'indefinido' ? '' : value)}} className={'rounded-xl border px-2 py-2.5 text-xs font-semibold ' + (contramarcoGeral===value?'border-blue-700 bg-blue-700 text-white':'border-slate-200 bg-white text-slate-600')}>{label}</button>)}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-extrabold">Esquadrias do orçamento</h2>
+              <p className="text-xs text-slate-500">{itens.length} {itens.length === 1 ? 'item' : 'itens'} no levantamento</p>
+            </div>
+            <button type="button" onClick={adicionar} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-3 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-800"><Plus size={17}/> Adicionar esquadria</button>
+          </div>
+          <div className="space-y-3">
+            {itensTela.map((item, index) => (
+              <article key={item.id} className={painel + ' overflow-hidden'}>
+                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-white px-3 py-3 sm:px-5">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-900 text-xs font-extrabold text-white">{String(index + 1).padStart(2,'0')}</span>
+                  <button type="button" onClick={()=>alterar(item.id,{aberto:!item.aberto})} className="min-w-0 flex-1 text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-extrabold">{item.ambiente || 'Nova esquadria'}</span>
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{tipoNome(item.tipo)}</span>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">{item.descricao || 'Descreva o que será orçado'}{item.largura && item.altura ? ' · ' + item.largura + ' × ' + item.altura + ' mm' : ''}</p>
+                  </button>
+                  <button type="button" onClick={()=>duplicar(item)} title="Duplicar esquadria" aria-label={'Duplicar esquadria ' + (index+1)} className="rounded-lg p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-700"><Copy size={17}/></button>
+                  <button type="button" onClick={()=>tirar(item.id)} title="Remover esquadria" aria-label={'Remover esquadria ' + (index+1)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={17}/></button>
+                  <button type="button" onClick={()=>alterar(item.id,{aberto:!item.aberto})} aria-label={item.aberto?'Recolher cartão':'Expandir cartão'} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">{item.aberto ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}</button>
+                </div>
+                {item.aberto && (
+                  <div className="space-y-4 p-3 sm:p-5">
+                    <div>
+                      <p className={rotulo}>O que vai adicionar?</p>
+                      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                        {tipos.map(tipo=><button type="button" key={tipo.id} onClick={()=>alterar(item.id,{tipo:tipo.id})} className={'min-h-16 rounded-xl border px-3 py-2.5 text-left transition ' + (item.tipo===tipo.id?'border-blue-700 bg-blue-50 ring-1 ring-blue-700':'border-slate-200 bg-slate-50 hover:bg-blue-50')}>
+                          <span className={'block text-xs font-extrabold ' + (item.tipo===tipo.id?'text-blue-800':'text-slate-800')}>{tipo.nome}</span>
+                          <span className="mt-1 block text-[10px] leading-4 text-slate-500">{tipo.descricao}</span>
+                        </button>)}
+                      </div>
+                    </div>
+                    {item.tipo && <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className={rotulo}>Ambiente</label>
+                          <input className={campo} value={item.ambiente} onChange={e=>alterar(item.id,{ambiente:e.target.value})} placeholder="Ex.: Sala, cozinha, suíte 01"/>
+                        </div>
+                        <div>
+                          <label className={rotulo}>Tipo de medida</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {([['comum','Medida comum'],['final','Medida final']] as const).map(([v,label])=>
+                              <button type="button" key={v} onClick={()=>alterar(item.id,{medida:v})} className={'rounded-xl border px-3 py-2.5 text-xs font-bold ' + (item.medida===v?'border-emerald-700 bg-emerald-50 text-emerald-800':'border-slate-200 text-slate-600')}>{label}</button>)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                        <div><label className={rotulo}>Largura (mm)</label><input type="number" inputMode="decimal" min="0" className={campo} value={item.largura} onChange={e=>alterar(item.id,{largura:e.target.value})} placeholder="1800"/></div>
+                        <div><label className={rotulo}>Altura (mm)</label><input type="number" inputMode="decimal" min="0" className={campo} value={item.altura} onChange={e=>alterar(item.id,{altura:e.target.value})} placeholder="2100"/></div>
+                        <div><label className={rotulo}>Qtd.</label><input type="number" inputMode="numeric" min="1" className={campo} value={item.quantidade} onChange={e=>alterar(item.id,{quantidade:e.target.value})} placeholder="1"/></div>
+                      </div>
+                      {item.medida==='final' && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900">Medida final selecionada. Na versão oficial, manteremos a coleta já existente de três larguras, três alturas e fotos da trena. Nenhum cálculo será removido.</div>}
+                      <div>
+                        <label className={rotulo}>O que você precisa? <span className="font-normal text-slate-400">(descrição livre)</span></label>
+                        <textarea rows={3} className={campo + ' resize-y'} value={item.descricao} onChange={e=>alterar(item.id,{descricao:e.target.value})} placeholder="Ex.: Porta de correr, 3 folhas, com reforço e fechadura..."/>
+                        {item.tipo==='sob_medida' && <p className="mt-1.5 text-[11px] text-blue-700">Sem escolher linha ou tipologia nesta visita. O escritório define depois.</p>}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className={rotulo}>Contramarco desta esquadria</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {([['herdar','Usar geral'],['com','Com'],['sem','Sem']] as const).map(([v,label])=>
+                              <button type="button" key={v} onClick={()=>alterar(item.id,{contramarco:v})} className={'rounded-xl border px-1 py-2.5 text-[11px] font-bold ' + (item.contramarco===v?'border-blue-700 bg-blue-700 text-white':'border-slate-200 text-slate-600')}>{label}</button>)}
+                          </div>
+                        </div>
+                        <div><label className={rotulo}>Cor desta esquadria <span className="font-normal text-slate-400">(opcional)</span></label><input className={campo} value={item.cor} onChange={e=>alterar(item.id,{cor:e.target.value})} placeholder="Somente se diferente da cor geral"/></div>
+                      </div>
+                      <div>
+                        <label className={rotulo}>Fotos da esquadria</label>
+                        <div className="flex flex-wrap gap-2">
+                          {item.fotos.map((foto,i)=><div key={i} className="relative h-20 w-20 overflow-hidden rounded-xl border border-slate-200">
+                            <img src={foto.url} alt={foto.nome} className="h-full w-full object-cover"/>
+                            <button type="button" aria-label="Remover foto" onClick={()=>removerFotoItem(item.id,i)} className="absolute right-0 top-0 rounded-bl-md bg-red-600 p-1 text-white"><X size={13}/></button>
+                          </div>)}
+                          <label className="flex h-20 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-xs font-semibold text-slate-600 hover:border-blue-400">
+                            <Camera size={19}/>Adicionar foto
+                            <input type="file" accept="image/*" multiple className="hidden" onChange={e=>{adicionarFotoItem(item.id,e.target.files);e.target.value=''}}/>
+                          </label>
+                        </div>
+                      </div>
+                      <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div><label className={rotulo}>Observação geral da esquadria <span className="font-normal text-blue-700">(novo)</span></label>
+                          <textarea rows={2} className={campo + ' resize-y'} value={item.observacaoGeral} onChange={e=>alterar(item.id,{observacaoGeral:e.target.value})} placeholder="Detalhes da obra e orientações gerais para o orçamentista..."/></div>
+                        <details>
+                          <summary className="cursor-pointer py-1 text-xs font-bold text-slate-600">Observações específicas para cliente e produção (opcionais)</summary>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            <div><label className={rotulo}>Para o cliente</label><textarea rows={2} className={campo} value={item.observacaoCliente} onChange={e=>alterar(item.id,{observacaoCliente:e.target.value})}/></div>
+                            <div><label className={rotulo}>Para produção</label><textarea rows={2} className={campo} value={item.observacaoProducao} onChange={e=>alterar(item.id,{observacaoProducao:e.target.value})}/></div>
+                          </div>
+                        </details>
+                      </div>
+                      <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                        <button type="button" onClick={()=>duplicar(item)} className={secundario}><Copy size={15}/> Duplicar esquadria</button>
+                        <button type="button" onClick={()=>alterar(item.id,{aberto:false})} className={secundario}><Check size={15}/> Concluir este cartão</button>
+                      </div>
+                    </>}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+          <button type="button" onClick={adicionar} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 px-3 py-3.5 text-sm font-extrabold text-blue-700 transition hover:bg-blue-100"><Plus size={18}/> Adicionar outra esquadria</button>
+        </section>
+        <details open={detalhesAbertos} onToggle={e=>setDetalhesAbertos(e.currentTarget.open)} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+          <summary className="cursor-pointer text-sm font-bold text-blue-800">Dados complementares para envio · contato, endereço/GPS, temperatura e outros detalhes</summary>
+          <p className="mb-3 mt-2 text-xs text-slate-500">Campos do formulário original, mantidos para o envio. Você pode coletar as esquadrias primeiro.</p>
+          <div className="space-y-3">
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Dados do cliente</h3>{clienteIdOrigem && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Cliente carregado pelo cadastro. Este orçamento ficará vinculado automaticamente ao histórico dele.</p>}<div className="relative"><input data-preserve-case="true" value={clienteNome} onChange={e => { limparErroValidacaoAoEditar(); setClienteNome(e.target.value); setClienteIdOrigem(null); setObraIdSelecionada(null); setObrasDoCliente([]) }} placeholder="Nome do cliente * — digite para localizar cadastro" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={selecionarClienteExistente} /></div><input data-preserve-case="true" value={clienteWhatsapp} onChange={e => setClienteWhatsapp(e.target.value)} placeholder="WhatsApp (opcional)" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><div className="grid grid-cols-2 gap-3"><input data-preserve-case="true" value={cidade} onChange={e => { limparErroValidacaoAoEditar(); setCidade(e.target.value) }} placeholder="Cidade da obra *" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><select value={origem} onChange={e => setOrigem(e.target.value as OrigemCliente)} className="w-full border border-slate-300 rounded-xl p-3 text-sm"><option value="indicacao">Indicação</option><option value="arquiteto">Arquiteto</option><option value="engenheiro">Engenheiro</option><option value="construtora">Construtora</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="google">Google</option><option value="whatsapp">WhatsApp</option><option value="cliente_antigo">Cliente antigo</option><option value="passou_na_frente">Passou em frente</option><option value="outros">Outros</option></select></div></section>
 
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
@@ -1119,103 +1277,41 @@ export default function OrcamentoRapido() {
           </div>
         </details>}
 
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div><h3 className="text-lg font-extrabold text-slate-900">Esquadrias do orçamento</h3>
-              <p className="text-xs text-slate-500">{itens.length} item(ns) no levantamento · toque no cartão para expandir</p>
-            </div>
-            <button type="button" onClick={adicionarEsquadriaColeta} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-3 py-2.5 text-xs font-bold text-white hover:bg-blue-800"><Plus size={16}/> Adicionar esquadria</button>
+
           </div>
-          {itens.map((item,idx) => <div key={item.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-3 sm:px-5">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-900 text-xs font-extrabold text-white">{String(idx+1).padStart(2,'0')}</span>
-              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setItensAbertos(prev => ({ ...prev, [item.id]: !(prev[item.id] ?? (idx===itens.length-1)) }))}>
-                <span className="block truncate text-sm font-extrabold text-slate-900">{item.ambiente || 'Nova esquadria'} <span className="ml-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{item.itemTipo === 'sob_medida' ? 'Sob medida' : item.itemTipo === 'medida_padrao' ? 'Medida padrão' : item.itemTipo === 'kit_porta_pronta' ? 'Kit porta pronta' : item.itemTipo === 'material_avulso' ? 'Material avulso' : 'Escolher tipo'}</span></span>
-                <span className="mt-0.5 block truncate text-xs text-slate-500">{item.tipoOutroTexto || item.produtoNome || item.descricao || 'Descreva o que precisa'}{item.largura && item.altura ? ` · ${item.largura} × ${item.altura} mm` : ''}</span>
-              </button>
-              <button type="button" aria-label="Duplicar esquadria com os dados preenchidos" title="Duplicar esquadria" onClick={() => duplicarItemCompleto(item)} className="rounded-lg p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-700"><Copy size={17}/></button>
-              {itens.length > 1 && <button type="button" aria-label="Remover esquadria" onClick={() => removerItem(item.id)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={17}/></button>}
-              <button type="button" aria-label="Expandir ou recolher cartão" onClick={() => setItensAbertos(prev => ({...prev,[item.id]: !(prev[item.id] ?? (idx===itens.length-1))}))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
-                {(itensAbertos[item.id] ?? (idx === itens.length-1)) ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
-              </button>
-            </div>
-            {(itensAbertos[item.id] ?? (idx === itens.length-1)) && <div className="space-y-4 p-3 sm:p-5">
-          {!item.itemTipo ? <div className="space-y-3"><div><p className="text-sm font-semibold text-slate-800">O que você vai adicionar?</p><p className="text-xs text-slate-500">Escolha primeiro o tipo do item.</p></div><div className="grid grid-cols-2 gap-2">{([['sob_medida','Sob medida'],['medida_padrao','Medida padrão'],['kit_porta_pronta','Kit porta pronta'],['material_avulso','Material avulso']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>atualizarItemCampos(item.id,{itemTipo:v,materialCategoria:v==='material_avulso'?'perfil':null,tipo:'outro',tipoOutroTexto:''})} className="min-h-20 rounded-xl border-2 border-slate-200 bg-white p-3 text-left text-sm font-semibold text-slate-800 hover:border-brand-navy"><span className="block">{l}</span><span className="mt-1 block text-[11px] font-normal text-slate-500">{v==='sob_medida'?'Medidas e descrição livre':v==='medida_padrao'?'Produto com medidas cadastradas':v==='kit_porta_pronta'?'Kit previamente cadastrado':'Perfil, acessório, vidro ou outros'}</span></button>)}</div></div> : <><button type="button" onClick={()=>atualizarItemCampos(item.id,{itemTipo:'',produtoId:null,produtoNome:null,materialCategoria:null,contramarcoOverride:null})} className="text-xs font-semibold text-brand-navy">← Trocar tipo de item</button>
-          <div><label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label><input data-preserve-case="true" value={item.ambiente} onChange={e => atualizarItem(item.id,'ambiente',e.target.value)} placeholder="Ex: Sala, Quarto 1, Cozinha..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
-          {item.itemTipo==='sob_medida' && <>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><div className="flex items-center justify-between gap-3 mb-2"><div><p className="text-xs font-semibold text-slate-700">Tipo de medida desta esquadria</p><p className="text-[11px] text-slate-500">Padrão: medida comum. Use medida final somente se o vão já estiver pronto.</p></div></div><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => atualizarItem(item.id,'tipoMedida','comum')} className={`rounded-lg border px-3 py-2 text-sm ${item.tipoMedida === 'comum' ? 'border-brand-navy bg-brand-navy text-white font-medium' : 'border-slate-300 bg-white text-slate-600'}`}>Medida comum</button><button type="button" onClick={() => atualizarItem(item.id,'tipoMedida','final')} className={`rounded-lg border px-3 py-2 text-sm ${item.tipoMedida === 'final' ? 'border-emerald-600 bg-emerald-600 text-white font-medium' : 'border-slate-300 bg-white text-slate-600'}`}>Medida final</button></div></div>
-
-          {item.tipoMedida === 'final' ? <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
-            <p className="text-xs font-medium text-emerald-800">Medição final — registre 3 larguras e 3 alturas ou fotografe a trena.</p>
-            <div className="space-y-2"><div className="flex items-center justify-between gap-2"><label className="text-xs text-slate-500">Larguras — baixo, meio, cima</label><div className="flex rounded-lg border overflow-hidden"><button type="button" onClick={() => atualizarItem(item.id,'modoLargura','digitar')} className={`px-2 py-1 text-xs flex gap-1 items-center ${item.modoLargura === 'digitar' ? 'bg-brand-navy text-white' : 'bg-white'}`}><Keyboard size={12}/>Digitar</button><button type="button" onClick={() => atualizarItem(item.id,'modoLargura','foto')} className={`px-2 py-1 text-xs flex gap-1 items-center ${item.modoLargura === 'foto' ? 'bg-brand-navy text-white' : 'bg-white'}`}><Camera size={12}/>Foto</button></div></div>{item.modoLargura === 'digitar' ? <div className="grid grid-cols-3 gap-2"><input type="number" value={item.larguraBaixo} onChange={e => atualizarItem(item.id,'larguraBaixo',e.target.value)} placeholder="Baixo" className="border rounded-lg p-2.5 text-sm"/><input type="number" value={item.larguraMeio} onChange={e => atualizarItem(item.id,'larguraMeio',e.target.value)} placeholder="Meio" className="border rounded-lg p-2.5 text-sm"/><input type="number" value={item.larguraCima} onChange={e => atualizarItem(item.id,'larguraCima',e.target.value)} placeholder="Cima" className="border rounded-lg p-2.5 text-sm"/></div> : item.fotoLarguraPreview ? <img src={item.fotoLarguraPreview} alt="Larguras" onClick={() => setFotoAmpliada(item.fotoLarguraPreview!)} className="w-24 h-24 object-cover rounded-lg cursor-pointer"/> : <label className="flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer"><Camera size={16}/> Foto da trena com as 3 larguras<input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => definirFotoLargura(item.id,e.target.files?.[0])}/></label>}</div>
-            <div className="space-y-2"><div className="flex items-center justify-between gap-2"><label className="text-xs text-slate-500">Alturas — direita, meio, esquerda</label><div className="flex rounded-lg border overflow-hidden"><button type="button" onClick={() => atualizarItem(item.id,'modoAltura','digitar')} className={`px-2 py-1 text-xs flex gap-1 items-center ${item.modoAltura === 'digitar' ? 'bg-brand-navy text-white' : 'bg-white'}`}><Keyboard size={12}/>Digitar</button><button type="button" onClick={() => atualizarItem(item.id,'modoAltura','foto')} className={`px-2 py-1 text-xs flex gap-1 items-center ${item.modoAltura === 'foto' ? 'bg-brand-navy text-white' : 'bg-white'}`}><Camera size={12}/>Foto</button></div></div>{item.modoAltura === 'digitar' ? <div className="grid grid-cols-3 gap-2"><input type="number" value={item.alturaDireita} onChange={e => atualizarItem(item.id,'alturaDireita',e.target.value)} placeholder="Direita" className="border rounded-lg p-2.5 text-sm"/><input type="number" value={item.alturaMeio} onChange={e => atualizarItem(item.id,'alturaMeio',e.target.value)} placeholder="Meio" className="border rounded-lg p-2.5 text-sm"/><input type="number" value={item.alturaEsquerda} onChange={e => atualizarItem(item.id,'alturaEsquerda',e.target.value)} placeholder="Esquerda" className="border rounded-lg p-2.5 text-sm"/></div> : item.fotoAlturaPreview ? <img src={item.fotoAlturaPreview} alt="Alturas" onClick={() => setFotoAmpliada(item.fotoAlturaPreview!)} className="w-24 h-24 object-cover rounded-lg cursor-pointer"/> : <label className="flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm cursor-pointer"><Camera size={16}/> Foto da trena com as 3 alturas<input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => definirFotoAltura(item.id,e.target.files?.[0])}/></label>}</div>
-            <div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div>
-          </div> : <div className="grid grid-cols-3 gap-3"><div><label className="block text-xs text-slate-500 mb-1">Largura (mm)</label><input type="number" value={item.largura} onChange={e => atualizarItem(item.id,'largura',e.target.value)} placeholder="1800" className="w-full border rounded-lg p-2.5 text-sm"/></div><div><label className="block text-xs text-slate-500 mb-1">Altura (mm)</label><input type="number" value={item.altura} onChange={e => atualizarItem(item.id,'altura',e.target.value)} placeholder="2100" className="w-full border rounded-lg p-2.5 text-sm"/></div><div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div></div>}
-          </>}
-          {item.itemTipo==='kit_porta_pronta' && <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-3">
-            <p className="text-xs font-semibold text-blue-900">Medidas do kit porta pronta</p>
-            <p className="text-[11px] text-blue-700">Todas as medidas são em milímetros (mm). Medições antigas registradas em Observação também podem ser enviadas.</p>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block text-xs text-slate-600">Largura (mm)<input type="number" inputMode="decimal" min="1" value={item.largura} onChange={e=>atualizarItem(item.id,'largura',e.target.value)} placeholder="800" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
-              <label className="block text-xs text-slate-600">Altura (mm)<input type="number" inputMode="decimal" min="1" value={item.altura} onChange={e=>atualizarItem(item.id,'altura',e.target.value)} placeholder="2170" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
-              <label className="block text-xs text-slate-600">Largura do batente (mm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraBatenteMm || ''} onChange={e=>atualizarItem(item.id,'larguraBatenteMm',e.target.value)} placeholder="200" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
-              <label className="block text-xs text-slate-600">Largura da guarnição (mm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraGuarnicaoMm || ''} onChange={e=>atualizarItem(item.id,'larguraGuarnicaoMm',e.target.value)} placeholder="60" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
-            </div>
-          </div>}
-          {item.itemTipo==='sob_medida' ?
-            <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
-              <label className="mb-1.5 block text-xs font-semibold text-slate-700">O que você precisa? <span className="font-normal text-slate-500">(descrição livre da esquadria)</span></label>
-              <textarea data-preserve-case="true" rows={3} value={item.tipoOutroTexto} onChange={e=>atualizarItemCampos(item.id,{tipo:'outro',tipoOutroTexto:e.target.value,modoOrigem:'manual',produtoId:null,precoUnit:null,tipologiaId:null,linhaId:null,linhaNome:null,configuracaoPresetId:null,configuracaoNome:null,configuracaoValidada:false,configuracaoStatus:'pendente'})} placeholder="Ex.: Porta de correr, 3 folhas, com reforço e fechadura..." className="w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/>
-              <p className="mt-1 text-[11px] font-medium text-blue-700">Linha e tipologia serão selecionadas no escritório. Nada será sugerido nesta coleta.</p>
-            </div>
-            : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
-          {item.itemTipo==='sob_medida' && item.tipo && !item.tipologiaId && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input data-preserve-case="true" value={item.folhas} onChange={e => atualizarItem(item.id,'folhas',e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
-
-          {item.itemTipo==='sob_medida' ? <>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="mb-2 text-xs font-semibold text-slate-700">Contramarco na obra</p>
-            <p className="mb-2 text-[11px] text-slate-500">{contramarco==='com'?'A obra está com contramarco. Se esta tipologia não tiver contramarco, selecione abaixo.':'A obra está sem contramarco. Se esta tipologia tiver contramarco, selecione abaixo.'}</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride',null)} className={`rounded-lg border px-2 py-2 text-xs ${item.contramarcoOverride===null?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Usar geral</button>
-              <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button>
-              <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button>
-            </div>
-          </div>
-
-
-          </> : <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div>
-            {item.itemTipo!=='material_avulso' && <div><p className="mb-2 text-xs font-semibold text-slate-700">Contramarco na obra</p><p className="mb-2 text-[11px] text-slate-500">{contramarco==='com'?'A obra está com contramarco. Se este item não tiver contramarco, selecione abaixo.':'A obra está sem contramarco. Se este item tiver contramarco, selecione abaixo.'}</p><div className="grid grid-cols-3 gap-2"><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride',null)} className={`rounded-lg border px-2 py-2 text-xs ${item.contramarcoOverride===null?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Usar geral</button><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button></div></div>}
-          </div>}
-
-          <div><label className="block text-xs text-slate-500 mb-2">Fotos (opcional)</label><div className="flex flex-wrap gap-2">{item.fotosPreviews.map((src,i) => <div key={i} className="relative w-24 h-24"><img src={src} alt="Foto" onClick={() => setFotoAmpliada(src)} className="w-24 h-24 object-cover rounded-lg cursor-pointer"/><button onClick={() => removerFotoItem(item.id,i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button></div>)}<label className="flex flex-col items-center justify-center gap-1 w-24 h-24 border border-dashed rounded-lg text-xs cursor-pointer"><Camera size={16}/>Adicionar<input type="file" accept="image/*" multiple className="hidden" onChange={e => { adicionarFotoItem(item.id,e.target.files); e.target.value='' }}/></label></div></div>
-          <div><label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label><input data-preserve-case="true" value={item.cor} onChange={e => atualizarItem(item.id,'cor',e.target.value)} placeholder="Só preencha se for diferente da cor geral" className="w-full border rounded-lg p-2.5 text-sm"/></div>
-          {item.itemTipo==='sob_medida' ? <>
-            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div>
-                <label className="mb-1 block text-xs font-bold text-slate-700">Observação geral da esquadria <span className="font-normal text-blue-700">(novo)</span></label>
-                <textarea data-preserve-case="true" rows={2} value={item.observacaoGeral} onChange={e=>atualizarItem(item.id,'observacaoGeral',e.target.value)} placeholder="Anotações da visita e orientações gerais para o orçamentista..." className="w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm"/>
-              </div>
-              <details className="rounded-lg border border-slate-200 bg-white p-3">
-                <summary className="cursor-pointer text-xs font-bold text-slate-700">Observações específicas para cliente e produção (opcionais)</summary>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div><label className="mb-1 block text-xs text-slate-500">Obs. do projeto para o cliente</label>
-                    <textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Texto que poderá aparecer no orçamento..." className="w-full h-20 rounded-lg border p-2.5 text-sm"/>
-                  </div>
-                  <div><label className="mb-1 block text-xs text-slate-500">Observações para produção</label>
-                    <textarea data-preserve-case="true" value={item.observacaoProducao} onChange={e => atualizarItem(item.id,'observacaoProducao',e.target.value)} placeholder="Informações que devem acompanhar a medida final e a produção..." className="w-full h-20 rounded-lg border p-2.5 text-sm"/>
-                  </div>
-                </div>
-              </details>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button type="button" onClick={()=>duplicarItemNovaMedida(item)} className="rounded-xl border border-brand-navy px-3 py-2.5 text-xs font-bold text-brand-navy hover:bg-brand-navyLight">Duplicar item e informar nova medida</button>
-              <button type="button" onClick={adicionarOutroProjeto} className="rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Adicionar outro projeto</button>
-            </div>
-          </> : <div><label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label><textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Alguma observação da obra pro orçamentista saber..." className="w-full h-16 border rounded-lg p-2.5 text-sm resize-none"/></div>}</>}
-        </div>}</div>)}<button type="button" onClick={adicionarEsquadriaColeta} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 px-3 py-3.5 text-sm font-extrabold text-blue-700 hover:bg-blue-100"><Plus size={17}/> Adicionar outra esquadria</button></section>
-        {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}<button type="button" onClick={() => void salvar()} disabled={salvando && !erroEhValidacao} className="w-full py-3.5 bg-brand-navy text-white rounded-xl font-medium flex items-center justify-center gap-2"><Send size={18}/>{salvando ? 'Salvando...' : fluxoSobMedida ? 'Salvar orçamento e continuar' : 'Enviar pedido'}</button>
+        </details>
+        {erro && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{erro}</p>}
+        <div className="flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:justify-between">
+          <p>Sem bloco de arquivos gerais: as fotos permanecem dentro de cada esquadria.</p>
+          <p>Levantamento com rascunho protegido no aparelho</p>
+        </div>
       </main>
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+          <p className="hidden text-xs font-semibold text-slate-600 sm:block">{itens.length} itens no levantamento · Rascunho individual por cliente</p>
+          <button type="button" onClick={adicionar} className={secundario}><Plus size={16}/> Adicionar</button>
+          <button type="button" onClick={()=>setResumo(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-800"><FileText size={17}/> Visualizar resumo</button>
+        </div>
+      </div>
+      {resumo && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true" aria-label="Resumo da coleta">
+        <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+          <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Resumo da coleta</h2><p className="text-xs text-amber-700">Confira o pedido antes de enviar</p></div><button aria-label="Fechar resumo" type="button" onClick={()=>setResumo(false)} className="rounded-lg p-2 hover:bg-slate-100"><X size={20}/></button></div>
+          <div className="rounded-xl bg-blue-50 p-3 text-sm"><b>Cliente:</b> {cliente||'Não informado'}<br/><b>Obra:</b> {obra||'Não informada'}<br/><b>Cidade:</b> {cidade||'Não informada'}</div>
+          <div className="mt-3 space-y-2">
+            {itensTela.map((item,index)=><div key={item.id} className="rounded-xl border border-slate-200 p-3">
+              <p className="text-sm font-extrabold">{String(index+1).padStart(2,'0')} · {item.ambiente||'Sem ambiente'} · {tipoNome(item.tipo)}</p>
+              <p className="mt-1 text-xs text-slate-600">{item.medida==='comum'?'Medida comum':'Medida final'} · {item.largura||'—'} × {item.altura||'—'} mm · {item.quantidade||'—'} un.</p>
+              <p className="mt-1 whitespace-pre-wrap text-xs text-slate-600">{item.descricao||'Descrição não informada'}</p>
+              {item.observacaoGeral && <p className="mt-2 rounded-lg bg-slate-50 px-2 py-1.5 text-xs"><b>Observação geral:</b> {item.observacaoGeral}</p>}
+              {item.fotos.length>0 && <p className="mt-2 text-xs text-blue-700">{item.fotos.length} foto(s) adicionada(s)</p>}
+            </div>)}
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <button type="button" onClick={()=>setResumo(false)} className="rounded-xl border border-slate-300 bg-white py-3 text-sm font-bold text-slate-900">Voltar à edição</button>
+            <button type="button" onClick={()=>{setResumo(false);void salvar()}} className="rounded-xl bg-blue-700 py-3 text-sm font-bold text-white">Conferir e enviar</button>
+          </div>
+        </div>
+      </div>}
 
       {conferenciaAberta && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/55 p-3 sm:p-4">
