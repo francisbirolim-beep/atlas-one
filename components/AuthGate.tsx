@@ -18,7 +18,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [autenticado, setAutenticado] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const rotaPublica = pathname === '/login'
+  // Prévia pública e isolada, com pontos fictícios; não consulta nem altera dados do Atlas.
+  const rotaPublica = pathname === '/previa/mapa-geral'
+    || pathname === '/login'
     || pathname === '/redefinir-senha'
     || pathname.startsWith('/medicao-final/acesso/')
     || pathname.startsWith('/assistencia/acesso/')
