@@ -1366,7 +1366,7 @@ export default function OrcamentoRapido() {
       {resumo && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true" aria-label="Resumo da coleta">
         <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
           <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Resumo da coleta</h2><p className="text-xs text-amber-700">Confira o pedido antes de enviar</p></div><button aria-label="Fechar resumo" type="button" onClick={()=>setResumo(false)} className="rounded-lg p-2 hover:bg-slate-100"><X size={20}/></button></div>
-          <div className="rounded-xl bg-blue-50 p-3 text-sm"><b>Cliente:</b> {cliente||'Não informado'}<br/><b>Obra:</b> {obra||'Não informada'}<br/><b>Cidade:</b> {cidade||'Não informada'}</div>
+          <div className="rounded-xl bg-blue-50 p-3 text-sm"><b>Cliente:</b> {clienteNome||'Não informado'}<br/><b>Obra:</b> {obraNome||'Não informada'}<br/><b>Cidade:</b> {cidade||'Não informada'}</div>
           <div className="mt-3 space-y-2">
             {itensTela.map((item,index)=><div key={item.id} className="rounded-xl border border-slate-200 p-3">
               <p className="text-sm font-extrabold">{String(index+1).padStart(2,'0')} · {item.ambiente||'Sem ambiente'} · {tipoNome(item.tipo)}</p>
