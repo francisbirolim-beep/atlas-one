@@ -3,9 +3,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Camera, Eye, X } from 'lucide-react'
 
-// Prévia: nunca associa uma foto não verificada automaticamente.
-// Imagens migradas por produto_id podem ser conferidas e usadas apenas na sessão.
-// Não há upload ao banco. Imagens criadas/inventadas ou de outros produtos são proibidas.
+// Exibe imediatamente somente fotos vinculadas ao MESMO produto_id no cadastro.
+// Fotos importadas não validadas recebem alerta, não são inventadas nem aprovadas no banco.
+// Qualquer escolha ou confirmação nesta prévia é local, sem upload.
 export default function FotoProdutoPreview({
   nome,fotoUrl,fotoCandidataUrl,tamanho='card',imagemLocal,onSelecionarImagem,
   candidataConfirmada=false,onConfirmarCandidata
@@ -27,7 +27,9 @@ export default function FotoProdutoPreview({
   const urlValida=(v?:string|null)=>!!v&&/^https:\/\//i.test(v)
   const confirmou=onConfirmarCandidata?candidataConfirmada:confirmadaLocal
   const candidata=urlValida(fotoCandidataUrl)&&!candidataFalhou?fotoCandidataUrl:null
-  const url=imagemLocal||temporaria||(!falhou&&urlValida(fotoUrl)?fotoUrl:null)||(!falhou&&confirmou?candidata:null)
+  const fotoValidada=!falhou&&urlValida(fotoUrl)?fotoUrl:null
+  const url=imagemLocal||temporaria||fotoValidada||candidata
+  const imagemPendente=!!candidata&&!confirmou&&!imagemLocal&&!temporaria&&!fotoValidada
   const tamanhoClasse=tamanho==='detalhe'?'h-56 w-full':tamanho==='pequeno'?'h-16 w-16':'h-24 w-24 sm:h-28 sm:w-28'
   function escolher(arquivo?:File){
     if(!arquivo)return
@@ -46,11 +48,14 @@ export default function FotoProdutoPreview({
   return <div className={'flex shrink-0 flex-col items-center justify-center gap-1.5 '+(tamanho==='detalhe'?'w-full':'')}>
     {url&&<div className={'grid shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-white '+tamanhoClasse}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt={'Foto conferida ou escolhida para '+nome} className="h-full w-full object-contain p-1" loading="lazy" onError={()=>setFalhou(true)}/>
+      <img src={url} alt={'Imagem cadastrada para '+nome} className="h-full w-full object-contain p-1" loading="lazy" onError={()=>{if(url===candidata)setCandidataFalhou(true);else setFalhou(true)}}/>
     </div>}
-    {!url&&candidata&&<button type="button" onClick={()=>setConferindo(true)} className="inline-flex max-w-full items-center justify-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-center text-[10px] font-bold text-amber-800 hover:bg-amber-100">
-      <Eye size={13} className="shrink-0"/> Conferir foto cadastrada
-    </button>}
+    {imagemPendente&&<div className="flex max-w-full flex-col items-center gap-1">
+      <span className="text-center text-[10px] font-semibold text-amber-800">Foto cadastrada · não validada</span>
+      <button type="button" onClick={()=>setConferindo(true)} className="inline-flex max-w-full items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-center text-[10px] font-bold text-amber-800 hover:bg-amber-100">
+        <Eye size={13}/> Verificar correspondência
+      </button>
+    </div>}
     <label htmlFor={id} className="inline-flex max-w-full cursor-pointer items-center justify-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-center text-[10px] font-bold text-blue-700 hover:bg-blue-100">
       <Camera size={13} className="shrink-0"/>{url?'Trocar foto':'Adicionar imagem correta'}
     </label>
