@@ -92,8 +92,9 @@ function MapaDemo({ pontos, selecionado, escolher }:{pontos:Obra[];selecionado:s
       if(!alive || !divRef.current)return
       mapa=L.map(divRef.current,{zoomControl:false,scrollWheelZoom:true,minZoom:6,maxZoom:19})
       L.control.zoom({position:'topleft'}).addTo(mapa)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-        attribution:'&copy; OpenStreetMap contributors &copy; CARTO',subdomains:'abcd',maxZoom:19,
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+        attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>',
+        maxZoom:19,
       }).addTo(mapa)
       pontos.forEach(p=>{
         const etapa=corEtapa(p.etapa)
