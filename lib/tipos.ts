@@ -137,6 +137,7 @@ ambiente?: string | null
 // ainda mostram so uma foto por item; foto_urls tem a lista completa.
 foto_urls?: string[] | null
       descricao?: string
+      observacao_geral?: string | null
       observacao_tempera?: string | null
       observacao_producao?: string | null
       cor?: string | null

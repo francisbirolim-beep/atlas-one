@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Calculator, Camera, CheckCircle, Keyboard, Paperclip, Pencil, Plus, Send, Trash2, WifiOff, X, MapPin, Loader2 } from 'lucide-react'
+import { ArrowLeft, Calculator, Camera, CheckCircle, Keyboard, Copy, ChevronDown, ChevronUp, Pencil, Plus, Send, Trash2, WifiOff, X, MapPin, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { v4 as uuidv4 } from 'uuid'
 import { Acabamento, Cliente, Contramarco, OrigemCliente, TemperaturaLead, TipoEsquadria } from '@/lib/tipos'
@@ -13,7 +13,6 @@ import { supabase } from '@/lib/supabase'
 import { usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
 import { chaveRascunhoOrcamentoValida, PREFIXO_RASCUNHO_ORCAMENTO } from '@/lib/rascunhosOrcamento'
 import { formatarEnderecoObra, coordenadasDaObra, coordenadasEmTexto, decomporEnderecoObra, linkRotaObra, localizacaoRegistradaNaObra } from '@/lib/enderecoObra'
-import SeletorEsquadriaInteligente from '@/components/orcamento/SeletorEsquadriaInteligente'
 
 
 const acabamentos: { value: Acabamento; label: string }[] = [
@@ -46,6 +45,7 @@ interface ItemForm {
   larguraBatenteCm?: string
   larguraGuarnicaoCm?: string
   descricao: string
+  observacaoGeral: string
   observacaoTempera: string
   observacaoProducao: string
   cor: string
@@ -80,7 +80,7 @@ interface ItemForm {
 
 function novoItem(): ItemForm {
   return {
-    id: uuidv4(), itemTipo: '', materialCategoria: null, materialUnidade: null, produtoNome: null, contramarcoOverride: null, ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '', larguraBatenteMm: '', larguraGuarnicaoMm: '', descricao: '', observacaoTempera: '', observacaoProducao: '', cor: '',
+    id: uuidv4(), itemTipo: '', materialCategoria: null, materialUnidade: null, produtoNome: null, contramarcoOverride: null, ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '', larguraBatenteMm: '', larguraGuarnicaoMm: '', descricao: '', observacaoGeral: '', observacaoTempera: '', observacaoProducao: '', cor: '',
     fotos: [], fotosPreviews: [], tipoMedida: 'comum',
     larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
     modoLargura: 'digitar', modoAltura: 'digitar',
@@ -121,7 +121,7 @@ function resumoMedidas(item: ItemForm) {
   return `${larguras} • ${alturas}`
 }
 
-type ProdutoAtlasBusca = { id:string; codigo?:string|null; nome:string; categoria?:string|null; unidade?:string|null; preco?:number|null; custo?:number|null; descricao?:string|null }
+type ProdutoAtlasBusca = { id:string; codigo?:string|null; nome:string; categoria?:string|null; unidade?:string|null; preco?:number|null; custo?:number|null; descricao?:string|null; foto_url?:string|null }
 
 function nomeNormalizado(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
@@ -152,7 +152,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
     const timer=window.setTimeout(async()=>{
       setCarregando(true)
       const termo=busca.trim().replace(/[,%()]/g,' ')
-      let q=supabase.from('produtos').select('id,codigo,nome,categoria,unidade,preco,custo,descricao').eq('ativo',true).or(`codigo.ilike.%${termo}%,nome.ilike.%${termo}%,descricao.ilike.%${termo}%`)
+      let q=supabase.from('produtos').select('id,codigo,nome,categoria,unidade,preco,custo,descricao,foto_url').eq('ativo',true).or(`codigo.ilike.%${termo}%,nome.ilike.%${termo}%,descricao.ilike.%${termo}%`)
       if(item.itemTipo==='medida_padrao') q=q.eq('categoria','porta_janela_padrao')
       else if(item.itemTipo==='kit_porta_pronta') q=q.eq('categoria','kit')
       else if(item.itemTipo==='material_avulso'&&item.materialCategoria){
@@ -183,7 +183,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
 
       const {data:existente}=await supabase
         .from('produtos')
-        .select('id,codigo,nome,categoria,unidade,preco,custo,descricao')
+        .select('id,codigo,nome,categoria,unidade,preco,custo,descricao,foto_url')
         .eq('ativo',true)
         .eq('categoria','porta_janela_padrao')
         .ilike('nome',nome)
@@ -205,7 +205,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
             criado_por_nome:me?.nome||null,
             ativo:true,
           })
-          .select('id,codigo,nome,categoria,unidade,preco,custo,descricao')
+          .select('id,codigo,nome,categoria,unidade,preco,custo,descricao,foto_url')
           .single()
         if(error||!data)throw new Error(error?.message||'Não foi possível cadastrar o produto.')
         produto=data as ProdutoAtlasBusca
@@ -243,7 +243,15 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
     {item.itemTipo==='kit_porta_pronta'&&<p className="text-xs text-blue-800">O catálogo é opcional. Você pode digitar o tipo de porta aqui ou descrevê-lo nas observações para liberar o envio.</p>}
     {item.itemTipo==='medida_padrao'&&<p className="text-xs text-blue-800">Produto não cadastrado? Escreva o nome normalmente e envie o orçamento. O cadastro e a conferência de custo/preço podem ser feitos depois.</p>}
     <div><label className="mb-1 block text-xs text-slate-500">{item.itemTipo==='kit_porta_pronta'?'Tipo de porta / buscar kit cadastrado':rotulo}</label><input value={busca} onChange={e=>{const texto=e.target.value;setBusca(texto);if(item.itemTipo==='kit_porta_pronta')onChange({tipoOutroTexto:texto,produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'});else if(item.itemTipo==='medida_padrao')onChange({tipo:'outro',tipoOutroTexto:texto,produtoNome:texto,produtoId:null,precoUnit:null,modoOrigem:'manual'});else if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
-    {!!resultados.length&&<div className="max-h-56 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="block w-full border-b px-3 py-2 text-left last:border-0"><b className="text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b><p className="text-xs text-slate-500">{p.categoria==='porta_janela_padrao'?'Produto pronto':p.categoria==='kit'?'Kit':p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</p></button>)}</div>}
+    {!!resultados.length&&<div className="max-h-64 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="flex w-full items-center gap-3 border-b px-3 py-2 text-left last:border-0 hover:bg-blue-50">
+          <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
+            {p.foto_url && /^https?:\/\//i.test(p.foto_url) ? <img src={p.foto_url} alt={`Foto do produto ${p.nome}`} className="h-full w-full object-contain"/> : <><Camera size={17}/><span className="mt-0.5 text-[9px]">Sem foto</span></>}
+          </span>
+          <span className="min-w-0 flex-1">
+            <b className="block text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b>
+            <span className="block text-xs text-slate-500">{p.categoria==='porta_janela_padrao'?'Produto pronto':p.categoria==='kit'?'Kit':p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</span>
+          </span>
+        </button>)}</div>}
     {podeOferecerCadastro&&(podeCadastrarProdutoPronto?<div className="rounded-xl border border-blue-200 bg-blue-50 p-3"><p className="text-xs font-semibold text-blue-900">Produto pronto “{busca.trim()}” não encontrado.</p><p className="mt-1 text-[11px] text-blue-700">Pode enviar com este nome, sem cadastrar agora. Cadastro e preço/custo podem ser completados depois.</p><button type="button" onClick={()=>void cadastrarProdutoPronto()} disabled={cadastrandoProdutoPronto} className="mt-2 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{cadastrandoProdutoPronto?'Cadastrando...':'Cadastrar este produto'}</button></div>:<p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Produto não encontrado no catálogo. O texto será salvo como descrição livre; o cadastro poderá ser feito depois pelo responsável.</p>)}
     {erroCadastro&&<p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{erroCadastro}</p>}
     {item.produtoId&&<div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Selecionado: {item.produtoNome}</div>}
@@ -284,6 +292,8 @@ interface RascunhoOrcamentoRapido {
 
 export default function OrcamentoRapido() {
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
+  // Estado visual, independente do salvamento e do envio dos itens.
+  const [itensAbertos, setItensAbertos] = useState<Record<string, boolean>>({})
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
@@ -403,7 +413,7 @@ export default function OrcamentoRapido() {
           const fotos = (item.fotos || []).map((foto: any) => foto instanceof File ? foto : arquivoDoRascunho(foto))
           const fotoLargura = item.fotoLargura ? (item.fotoLargura instanceof File ? item.fotoLargura : arquivoDoRascunho(item.fotoLargura as any)) : undefined
           const fotoAltura = item.fotoAltura ? (item.fotoAltura instanceof File ? item.fotoAltura : arquivoDoRascunho(item.fotoAltura as any)) : undefined
-          return recuperarMedidasKitAnotadas({ ...item, larguraBatenteMm: item.larguraBatenteMm || item.larguraBatenteCm || '', larguraGuarnicaoMm: item.larguraGuarnicaoMm || item.larguraGuarnicaoCm || '', observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined })
+          return recuperarMedidasKitAnotadas({ ...item, larguraBatenteMm: item.larguraBatenteMm || item.larguraBatenteCm || '', larguraGuarnicaoMm: item.larguraGuarnicaoMm || item.larguraGuarnicaoCm || '', observacaoGeral: item.observacaoGeral || '', observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined })
         }))
         setRascunhoChave(chaveSolicitada)
         setClienteIdOrigem(d.clienteIdOrigem || null)
@@ -450,7 +460,7 @@ export default function OrcamentoRapido() {
     if (!sobMedida) return
     setItens(prev => {
       if (prev.length !== 1 || prev[0].itemTipo) return prev
-      return [{ ...prev[0], itemTipo: 'sob_medida' }]
+      return [{ ...prev[0], itemTipo: 'sob_medida', tipo: prev[0].tipo || 'outro' }]
     })
   }, [rascunhoCarregado, rascunhoRestaurado])
 
@@ -706,7 +716,19 @@ export default function OrcamentoRapido() {
   }
 
   function adicionarOutroProjeto() {
-    setItens(prev => [...prev, { ...novoItem(), itemTipo: 'sob_medida' }])
+    setItens(prev => [...prev, { ...novoItem(), itemTipo: 'sob_medida', tipo: 'outro' }])
+  }
+
+  function duplicarItemCompleto(item: ItemForm) {
+    const duplicado: ItemForm = { ...item, id: uuidv4(), fotos: [...item.fotos], fotosPreviews: [...item.fotosPreviews] }
+    setItens(prev => [...prev, duplicado])
+    setItensAbertos(prev => ({ ...prev, [item.id]: false, [duplicado.id]: true }))
+  }
+
+  function adicionarEsquadriaColeta() {
+    const novo = { ...novoItem(), ...(fluxoSobMedida ? { itemTipo: 'sob_medida' as const, tipo: 'outro' as const } : {}) }
+    setItens(prev => [...prev, novo])
+    setItensAbertos(prev => ({ ...prev, [novo.id]: true }))
   }
 
   function adicionarArquivos(files: FileList | null) {
@@ -868,7 +890,7 @@ export default function OrcamentoRapido() {
     setRascunhoRestaurado(false)
     setRascunhoIniciado(false)
     setSalvo(false); setSalvoComPendenciasTecnicas(false); setPedidoEnviadoId(null); setSalvoOffline(false); setMotivoPendente(''); setErro(''); setErroEhValidacao(false); setConferenciaAberta(false)
-    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '' }]); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
+    setItens([{ ...novoItem(), itemTipo: fluxoSobMedida ? 'sob_medida' : '', tipo: fluxoSobMedida ? 'outro' : '' }]); setItensAbertos({}); setClienteIdOrigem(null); setClienteNome(''); setClienteWhatsapp(''); setCidade(''); setObraNome(''); setObraRua(''); setObraNumero(''); setObraBairro(''); setObraCep(''); setObraLocalizacao(''); setObraLocalizacaoConfirmada(''); setObraPrecisaoMetros(null); setObraIdSelecionada(null); setObrasDoCliente([]); setAvisoLocalizacao(''); setTemperatura('')
     setAcabamento(''); setAcabamentoOutroTexto(''); setContramarco(''); setArquitetoNome(''); setArquitetoContato(''); setArquivos([])
   }
 
@@ -885,9 +907,9 @@ export default function OrcamentoRapido() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight">
-      <header className="bg-white border-b border-slate-200"><div className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-4 flex items-center gap-4`}><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-800">{fluxoSobMedida ? 'Orçamento Sob Medida' : 'Orçamento'}</h1>{fluxoSobMedida && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">FLUXO W.VETRO</span>}</div><p className="text-sm text-slate-500">{fluxoSobMedida ? 'Configure a esquadria tecnicamente e siga até composição, custos e impressão' : 'Registre o pedido e mande pro painel'}</p></div></div></header>
+      <header className="bg-white border-b border-slate-200"><div className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-6xl'} mx-auto px-4 py-4 flex items-center gap-4`}><Link href="/orcamento/novo" className="p-2 hover:bg-slate-100 rounded-lg"><ArrowLeft size={20} /></Link><img src="/icons/icon-mark.png" alt="" className="w-8 h-8" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-800">{fluxoSobMedida ? 'Orçamento Sob Medida' : 'Orçamento'}</h1>{fluxoSobMedida && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700">FLUXO W.VETRO</span>}</div><p className="text-sm text-slate-500">{fluxoSobMedida ? 'Configure a esquadria tecnicamente e siga até composição, custos e impressão' : 'Registre o pedido e mande pro painel'}</p></div></div></header>
       {fluxoSobMedida && <div className="border-b border-slate-200 bg-white"><div className="mx-auto max-w-7xl overflow-x-auto px-4 py-3"><div className="flex min-w-[980px] items-center gap-2">{[['1','Cliente / Obra'],['2','Medidas'],['3','O que precisa'],['4','Linha / Tipologia'],['5','Variáveis'],['6','Acabamento'],['7','Composição'],['8','Custos'],['9','Impressão']].map(([n,label],i)=><div key={n} className="flex flex-1 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i<2?'bg-blue-600 text-white':'bg-slate-100 text-slate-500'}`}>{n}</span><span className={`whitespace-nowrap text-xs font-semibold ${i<2?'text-slate-800':'text-slate-500'}`}>{label}</span>{i<8&&<span className="h-px flex-1 bg-slate-200"/>}</div>)}</div></div></div>}
-      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-3xl'} mx-auto px-4 py-8 space-y-6`}>
+      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className={`${fluxoSobMedida ? 'max-w-7xl' : 'max-w-6xl'} mx-auto px-3 py-5 space-y-4 sm:px-6`}>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
           <div className="text-xs text-slate-600">{rascunhoSalvoEm ? 'Rascunho de ' + clienteNome + ' salvo neste aparelho às ' + new Date(rascunhoSalvoEm).toLocaleTimeString('pt-BR') : clienteNome.trim() ? 'O rascunho deste cliente será salvo automaticamente durante o preenchimento.' : 'Novo orçamento em branco. Informe o cliente para começar a salvar o rascunho.'}</div>
           <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual || !clienteNome.trim() || !rascunhoUsuarioId} className="rounded-lg border border-brand-navy px-3 py-2 text-xs font-semibold text-brand-navy disabled:opacity-60">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
@@ -988,11 +1010,38 @@ export default function OrcamentoRapido() {
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Cor / Acabamento *</label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{acabamentos.map(a => <button key={a.value} onClick={() => { limparErroValidacaoAoEditar(); setAcabamento(a.value) }} className={`p-3 rounded-xl text-sm border ${acabamento === a.value ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200 text-slate-600'}`}>{a.label}</button>)}</div>{acabamento === 'outro' && <input data-preserve-case="true" value={acabamentoOutroTexto} onChange={e => { limparErroValidacaoAoEditar(); setAcabamentoOutroTexto(e.target.value) }} placeholder="Qual cor?" className="w-full border border-slate-300 rounded-xl p-3 text-sm mt-3" />}</section>
         <section className="bg-white rounded-2xl border border-slate-200 p-6"><label className="block text-sm font-medium text-slate-700 mb-3">Contramarco *</label><div className="grid grid-cols-2 gap-2"><button onClick={() => { limparErroValidacaoAoEditar(); setContramarco('com') }} className={`p-3 rounded-xl text-sm border ${contramarco === 'com' ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200'}`}>Com contramarco</button><button onClick={() => { limparErroValidacaoAoEditar(); setContramarco('sem') }} className={`p-3 rounded-xl text-sm border ${contramarco === 'sem' ? 'border-brand-navy bg-brand-navyLight font-medium' : 'border-slate-200'}`}>Sem contramarco</button></div></section>
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Arquiteto / Engenheiro (opcional)</h3><input data-preserve-case="true" value={arquitetoNome} onChange={e => setArquitetoNome(e.target.value)} placeholder="Nome do arquiteto ou engenheiro" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /><input data-preserve-case="true" value={arquitetoContato} onChange={e => setArquitetoContato(e.target.value)} placeholder="Telefone / WhatsApp de contato" className="w-full border border-slate-300 rounded-xl p-3 text-sm" /></section>
-        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3"><h3 className="text-sm font-medium text-slate-700">Arquivos (opcional)</h3>{arquivos.map((arquivo,i) => <div key={i} className="flex items-center justify-between border rounded-lg px-3 py-2"><span className="truncate text-sm">{arquivo.name}</span><button onClick={() => setArquivos(prev => prev.filter((_,idx) => idx !== i))}><X size={14} /></button></div>)}<label className="flex items-center gap-2 w-fit px-3 py-2 border border-dashed rounded-lg text-xs cursor-pointer"><Paperclip size={14} /> Adicionar arquivo<input type="file" multiple className="hidden" onChange={e => adicionarArquivos(e.target.files)} /></label></section>
+        {arquivos.length > 0 && <details className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-amber-900">{arquivos.length} arquivo(s) geral(is) recuperado(s) de rascunho antigo</summary>
+          <div className="mt-2 space-y-2">{arquivos.map((arquivo,i) =>
+            <div key={i} className="flex items-center justify-between rounded-lg border bg-white p-2 text-xs">
+              <span className="truncate">{arquivo.name}</span>
+              <button type="button" aria-label="Excluir arquivo geral" onClick={() => setArquivos(prev => prev.filter((_,idx) => idx !== i))}><X size={14}/></button>
+            </div>)}
+          </div>
+        </details>}
 
-        <div className="space-y-4"><h3 className="text-sm font-medium text-slate-700">Esquadrias do orçamento</h3>{itens.map((item,idx) => <div key={item.id} className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-          <div className="flex items-center justify-between"><span className="text-xs font-medium text-slate-400">Esquadria {idx + 1}</span>{itens.length > 1 && <button onClick={() => removerItem(item.id)} className="text-red-400"><Trash2 size={16} /></button>}</div>
-          {!item.itemTipo ? <div className="space-y-3"><div><p className="text-sm font-semibold text-slate-800">O que você vai adicionar?</p><p className="text-xs text-slate-500">Escolha primeiro o tipo do item.</p></div><div className="grid grid-cols-2 gap-2">{([['sob_medida','Sob medida'],['medida_padrao','Medida padrão'],['kit_porta_pronta','Kit porta pronta'],['material_avulso','Material avulso']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>atualizarItemCampos(item.id,{itemTipo:v,materialCategoria:v==='material_avulso'?'perfil':null,tipo:v==='sob_medida'?'':'outro',tipoOutroTexto:''})} className="min-h-20 rounded-xl border-2 border-slate-200 bg-white p-3 text-left text-sm font-semibold text-slate-800 hover:border-brand-navy"><span className="block">{l}</span><span className="mt-1 block text-[11px] font-normal text-slate-500">{v==='sob_medida'?'Tipologia e variáveis técnicas':v==='medida_padrao'?'Produto com medidas cadastradas':v==='kit_porta_pronta'?'Kit previamente cadastrado':'Perfil, acessório, vidro ou outros'}</span></button>)}</div></div> : <><button type="button" onClick={()=>atualizarItemCampos(item.id,{itemTipo:'',produtoId:null,produtoNome:null,materialCategoria:null,contramarcoOverride:null})} className="text-xs font-semibold text-brand-navy">← Trocar tipo de item</button>
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><h3 className="text-lg font-extrabold text-slate-900">Esquadrias do orçamento</h3>
+              <p className="text-xs text-slate-500">{itens.length} item(ns) no levantamento · toque no cartão para expandir</p>
+            </div>
+            <button type="button" onClick={adicionarEsquadriaColeta} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-3 py-2.5 text-xs font-bold text-white hover:bg-blue-800"><Plus size={16}/> Adicionar esquadria</button>
+          </div>
+          {itens.map((item,idx) => <div key={item.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-3 sm:px-5">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-900 text-xs font-extrabold text-white">{String(idx+1).padStart(2,'0')}</span>
+              <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setItensAbertos(prev => ({ ...prev, [item.id]: !(prev[item.id] ?? (idx===itens.length-1)) }))}>
+                <span className="block truncate text-sm font-extrabold text-slate-900">{item.ambiente || 'Nova esquadria'} <span className="ml-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{item.itemTipo === 'sob_medida' ? 'Sob medida' : item.itemTipo === 'medida_padrao' ? 'Medida padrão' : item.itemTipo === 'kit_porta_pronta' ? 'Kit porta pronta' : item.itemTipo === 'material_avulso' ? 'Material avulso' : 'Escolher tipo'}</span></span>
+                <span className="mt-0.5 block truncate text-xs text-slate-500">{item.tipoOutroTexto || item.produtoNome || item.descricao || 'Descreva o que precisa'}{item.largura && item.altura ? ` · ${item.largura} × ${item.altura} mm` : ''}</span>
+              </button>
+              <button type="button" aria-label="Duplicar esquadria com os dados preenchidos" title="Duplicar esquadria" onClick={() => duplicarItemCompleto(item)} className="rounded-lg p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-700"><Copy size={17}/></button>
+              {itens.length > 1 && <button type="button" aria-label="Remover esquadria" onClick={() => removerItem(item.id)} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={17}/></button>}
+              <button type="button" aria-label="Expandir ou recolher cartão" onClick={() => setItensAbertos(prev => ({...prev,[item.id]: !(prev[item.id] ?? (idx===itens.length-1))}))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+                {(itensAbertos[item.id] ?? (idx === itens.length-1)) ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
+              </button>
+            </div>
+            {(itensAbertos[item.id] ?? (idx === itens.length-1)) && <div className="space-y-4 p-3 sm:p-5">
+          {!item.itemTipo ? <div className="space-y-3"><div><p className="text-sm font-semibold text-slate-800">O que você vai adicionar?</p><p className="text-xs text-slate-500">Escolha primeiro o tipo do item.</p></div><div className="grid grid-cols-2 gap-2">{([['sob_medida','Sob medida'],['medida_padrao','Medida padrão'],['kit_porta_pronta','Kit porta pronta'],['material_avulso','Material avulso']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>atualizarItemCampos(item.id,{itemTipo:v,materialCategoria:v==='material_avulso'?'perfil':null,tipo:'outro',tipoOutroTexto:''})} className="min-h-20 rounded-xl border-2 border-slate-200 bg-white p-3 text-left text-sm font-semibold text-slate-800 hover:border-brand-navy"><span className="block">{l}</span><span className="mt-1 block text-[11px] font-normal text-slate-500">{v==='sob_medida'?'Medidas e descrição livre':v==='medida_padrao'?'Produto com medidas cadastradas':v==='kit_porta_pronta'?'Kit previamente cadastrado':'Perfil, acessório, vidro ou outros'}</span></button>)}</div></div> : <><button type="button" onClick={()=>atualizarItemCampos(item.id,{itemTipo:'',produtoId:null,produtoNome:null,materialCategoria:null,contramarcoOverride:null})} className="text-xs font-semibold text-brand-navy">← Trocar tipo de item</button>
           <div><label className="block text-xs text-slate-500 mb-1">Ambiente (opcional)</label><input data-preserve-case="true" value={item.ambiente} onChange={e => atualizarItem(item.id,'ambiente',e.target.value)} placeholder="Ex: Sala, Quarto 1, Cozinha..." className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>
           {item.itemTipo==='sob_medida' && <>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><div className="flex items-center justify-between gap-3 mb-2"><div><p className="text-xs font-semibold text-slate-700">Tipo de medida desta esquadria</p><p className="text-[11px] text-slate-500">Padrão: medida comum. Use medida final somente se o vão já estiver pronto.</p></div></div><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => atualizarItem(item.id,'tipoMedida','comum')} className={`rounded-lg border px-3 py-2 text-sm ${item.tipoMedida === 'comum' ? 'border-brand-navy bg-brand-navy text-white font-medium' : 'border-slate-300 bg-white text-slate-600'}`}>Medida comum</button><button type="button" onClick={() => atualizarItem(item.id,'tipoMedida','final')} className={`rounded-lg border px-3 py-2 text-sm ${item.tipoMedida === 'final' ? 'border-emerald-600 bg-emerald-600 text-white font-medium' : 'border-slate-300 bg-white text-slate-600'}`}>Medida final</button></div></div>
@@ -1014,14 +1063,21 @@ export default function OrcamentoRapido() {
               <label className="block text-xs text-slate-600">Largura da guarnição (mm)<input type="number" inputMode="decimal" min="0" step="any" value={item.larguraGuarnicaoMm || ''} onChange={e=>atualizarItem(item.id,'larguraGuarnicaoMm',e.target.value)} placeholder="60" className="mt-1 w-full rounded-lg border bg-white p-2.5 text-sm"/></label>
             </div>
           </div>}
-          {item.itemTipo==='sob_medida' ? <SeletorEsquadriaInteligente value={{ modoOrigem:item.modoOrigem, produtoId:item.produtoId, precoUnit:item.precoUnit, tipo:item.tipo, tipoOutroTexto:item.tipoOutroTexto, folhas:item.folhas, largura:item.largura, altura:item.altura, linhaId:item.linhaId, linhaNome:item.linhaNome, tipologiaId:item.tipologiaId, configuracaoPresetId:item.configuracaoPresetId, configuracaoNome:item.configuracaoNome, configuracaoValidada:item.configuracaoValidada, modoConfiguracao:item.modoConfiguracao, configuracaoStatus:item.configuracaoStatus, variaveis:item.variaveis }} onChange={patch => atualizarItemCampos(item.id, patch)} /> : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
+          {item.itemTipo==='sob_medida' ?
+            <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+              <label className="mb-1.5 block text-xs font-semibold text-slate-700">O que você precisa? <span className="font-normal text-slate-500">(descrição livre da esquadria)</span></label>
+              <textarea data-preserve-case="true" rows={3} value={item.tipoOutroTexto} onChange={e=>atualizarItemCampos(item.id,{tipo:'outro',tipoOutroTexto:e.target.value,modoOrigem:'manual',produtoId:null,precoUnit:null,tipologiaId:null,linhaId:null,linhaNome:null,configuracaoPresetId:null,configuracaoNome:null,configuracaoValidada:false,configuracaoStatus:'pendente'})} placeholder="Ex.: Porta de correr, 3 folhas, com reforço e fechadura..." className="w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"/>
+              <p className="mt-1 text-[11px] font-medium text-blue-700">Linha e tipologia serão selecionadas no escritório. Nada será sugerido nesta coleta.</p>
+            </div>
+            : <CatalogoItemAtlas item={item} onChange={patch=>atualizarItemCampos(item.id,patch)} />}
           {item.itemTipo==='sob_medida' && item.tipo && !item.tipologiaId && <div><label className="block text-xs text-slate-500 mb-1">Quantidade de folhas (opcional / ajuste)</label><input data-preserve-case="true" value={item.folhas} onChange={e => atualizarItem(item.id,'folhas',e.target.value)} placeholder="Ex: 2 ou 2 fixas + 1 móvel" className="w-full border border-slate-300 rounded-lg p-2.5 text-sm" /></div>}
 
           {item.itemTipo==='sob_medida' ? <>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <p className="mb-2 text-xs font-semibold text-slate-700">Contramarco na obra</p>
             <p className="mb-2 text-[11px] text-slate-500">{contramarco==='com'?'A obra está com contramarco. Se esta tipologia não tiver contramarco, selecione abaixo.':'A obra está sem contramarco. Se esta tipologia tiver contramarco, selecione abaixo.'}</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride',null)} className={`rounded-lg border px-2 py-2 text-xs ${item.contramarcoOverride===null?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Usar geral</button>
               <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button>
               <button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button>
             </div>
@@ -1030,13 +1086,35 @@ export default function OrcamentoRapido() {
 
           </> : <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div><label className="block text-xs text-slate-500 mb-1">Quantidade</label><input type="number" value={item.quantidade} onChange={e => atualizarItem(item.id,'quantidade',e.target.value)} min="1" className="w-full border rounded-lg p-2.5 text-sm"/></div>
-            {item.itemTipo!=='material_avulso' && <div><p className="mb-2 text-xs font-semibold text-slate-700">Contramarco na obra</p><p className="mb-2 text-[11px] text-slate-500">{contramarco==='com'?'A obra está com contramarco. Se este item não tiver contramarco, selecione abaixo.':'A obra está sem contramarco. Se este item tiver contramarco, selecione abaixo.'}</p><div className="grid grid-cols-2 gap-2"><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button></div></div>}
+            {item.itemTipo!=='material_avulso' && <div><p className="mb-2 text-xs font-semibold text-slate-700">Contramarco na obra</p><p className="mb-2 text-[11px] text-slate-500">{contramarco==='com'?'A obra está com contramarco. Se este item não tiver contramarco, selecione abaixo.':'A obra está sem contramarco. Se este item tiver contramarco, selecione abaixo.'}</p><div className="grid grid-cols-3 gap-2"><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride',null)} className={`rounded-lg border px-2 py-2 text-xs ${item.contramarcoOverride===null?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Usar geral</button><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','com')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='com'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Com contramarco</button><button type="button" onClick={()=>atualizarItem(item.id,'contramarcoOverride','sem')} className={`rounded-lg border px-2 py-2 text-xs ${(item.contramarcoOverride ?? contramarco)==='sem'?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>Sem contramarco</button></div></div>}
           </div>}
 
           <div><label className="block text-xs text-slate-500 mb-2">Fotos (opcional)</label><div className="flex flex-wrap gap-2">{item.fotosPreviews.map((src,i) => <div key={i} className="relative w-24 h-24"><img src={src} alt="Foto" onClick={() => setFotoAmpliada(src)} className="w-24 h-24 object-cover rounded-lg cursor-pointer"/><button onClick={() => removerFotoItem(item.id,i)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button></div>)}<label className="flex flex-col items-center justify-center gap-1 w-24 h-24 border border-dashed rounded-lg text-xs cursor-pointer"><Camera size={16}/>Adicionar<input type="file" accept="image/*" multiple className="hidden" onChange={e => { adicionarFotoItem(item.id,e.target.files); e.target.value='' }}/></label></div></div>
           <div><label className="block text-xs text-slate-500 mb-1">Cor desta esquadria (opcional)</label><input data-preserve-case="true" value={item.cor} onChange={e => atualizarItem(item.id,'cor',e.target.value)} placeholder="Só preencha se for diferente da cor geral" className="w-full border rounded-lg p-2.5 text-sm"/></div>
-          {item.itemTipo==='sob_medida' ? <><div className="grid gap-3 sm:grid-cols-2"><div><label className="block text-xs text-slate-500 mb-1">Obs. do projeto para o cliente</label><textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Texto que poderá aparecer no orçamento..." className="w-full h-20 border rounded-lg p-2.5 text-sm resize-none"/></div><div><label className="block text-xs text-slate-500 mb-1">Observações para produção</label><textarea data-preserve-case="true" value={item.observacaoProducao} onChange={e => atualizarItem(item.id,'observacaoProducao',e.target.value)} placeholder="Informações que devem acompanhar a medida final e a produção..." className="w-full h-20 border rounded-lg p-2.5 text-sm resize-none"/></div></div><div className="grid gap-2 sm:grid-cols-2"><button type="button" onClick={()=>duplicarItemNovaMedida(item)} className="rounded-xl border border-brand-navy px-3 py-2.5 text-xs font-bold text-brand-navy hover:bg-brand-navyLight">Incluir mesmo item e informar nova medida</button><button type="button" onClick={adicionarOutroProjeto} className="rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Escolher outro projeto</button></div></> : <div><label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label><textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Alguma observação da obra pro orçamentista saber..." className="w-full h-16 border rounded-lg p-2.5 text-sm resize-none"/></div>}</>}
-        </div>)}<button onClick={() => setItens(prev => [...prev, fluxoSobMedida ? { ...novoItem(), itemTipo: 'sob_medida' } : novoItem()])} className="w-full py-3 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 text-slate-500"><Plus size={16}/>{fluxoSobMedida ? 'Escolher outro projeto' : 'Adicionar outra esquadria'}</button></div>
+          {item.itemTipo==='sob_medida' ? <>
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700">Observação geral da esquadria <span className="font-normal text-blue-700">(novo)</span></label>
+                <textarea data-preserve-case="true" rows={2} value={item.observacaoGeral} onChange={e=>atualizarItem(item.id,'observacaoGeral',e.target.value)} placeholder="Anotações da visita e orientações gerais para o orçamentista..." className="w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm"/>
+              </div>
+              <details className="rounded-lg border border-slate-200 bg-white p-3">
+                <summary className="cursor-pointer text-xs font-bold text-slate-700">Observações específicas para cliente e produção (opcionais)</summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div><label className="mb-1 block text-xs text-slate-500">Obs. do projeto para o cliente</label>
+                    <textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Texto que poderá aparecer no orçamento..." className="w-full h-20 rounded-lg border p-2.5 text-sm"/>
+                  </div>
+                  <div><label className="mb-1 block text-xs text-slate-500">Observações para produção</label>
+                    <textarea data-preserve-case="true" value={item.observacaoProducao} onChange={e => atualizarItem(item.id,'observacaoProducao',e.target.value)} placeholder="Informações que devem acompanhar a medida final e a produção..." className="w-full h-20 rounded-lg border p-2.5 text-sm"/>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button type="button" onClick={()=>duplicarItemNovaMedida(item)} className="rounded-xl border border-brand-navy px-3 py-2.5 text-xs font-bold text-brand-navy hover:bg-brand-navyLight">Duplicar item e informar nova medida</button>
+              <button type="button" onClick={adicionarOutroProjeto} className="rounded-xl border border-slate-300 px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Adicionar outro projeto</button>
+            </div>
+          </> : <div><label className="block text-xs text-slate-500 mb-1">Observação (opcional)</label><textarea data-preserve-case="true" value={item.descricao} onChange={e => atualizarItem(item.id,'descricao',e.target.value)} placeholder="Alguma observação da obra pro orçamentista saber..." className="w-full h-16 border rounded-lg p-2.5 text-sm resize-none"/></div>}</>}
+        </div>}</div>)}<button type="button" onClick={adicionarEsquadriaColeta} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 px-3 py-3.5 text-sm font-extrabold text-blue-700 hover:bg-blue-100"><Plus size={17}/> Adicionar outra esquadria</button></section>
         {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}<button type="button" onClick={() => void salvar()} disabled={salvando && !erroEhValidacao} className="w-full py-3.5 bg-brand-navy text-white rounded-xl font-medium flex items-center justify-center gap-2"><Send size={18}/>{salvando ? 'Salvando...' : fluxoSobMedida ? 'Salvar orçamento e continuar' : 'Enviar pedido'}</button>
       </main>
 
@@ -1078,7 +1156,8 @@ export default function OrcamentoRapido() {
                     <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2"><p><b>Medidas:</b> {resumoMedidas(item)}</p><p><b>Linha:</b> {item.linhaNome || 'Não informada'}</p><p><b>Folhas:</b> {item.folhas || 'Não informado'}</p><p><b>Cor:</b> {item.cor || (acabamento === 'outro' ? acabamentoOutroTexto : acabamento) || 'Não informada'}</p></div>
                     {item.itemTipo === 'kit_porta_pronta' && <p className="mt-2 text-xs"><b>Kit:</b> {item.tipoOutroTexto || item.produtoNome || 'Descrição nas observações'} · {resumoMedidas(item)}</p>}
                     {item.ambiente && <p className="mt-2 text-xs"><b>Ambiente:</b> {item.ambiente}</p>}
-                    {item.descricao && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs"><b>Observação:</b> {item.descricao}</p>}
+                    {item.observacaoGeral && <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs"><b>Observação geral:</b> {item.observacaoGeral}</p>}
+                    {item.descricao && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs"><b>Obs. para cliente:</b> {item.descricao}</p>}
                   </div>
                 ))}
               </div>

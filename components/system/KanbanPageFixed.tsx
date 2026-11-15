@@ -1771,6 +1771,7 @@ itemCampo('quantidade', a.quantidade, b.quantidade)
 itemCampo('cor', a.cor, b.cor)
 itemCampo('contramarco', a.contramarco, b.contramarco)
 itemCampo('descrição', a.descricao, b.descricao)
+itemCampo('observação geral', a.observacao_geral, b.observacao_geral)
 itemCampo('observação produção', a.observacao_producao, b.observacao_producao)
 if (mudancasItem.length) partes.push(`Item ${i + 1}: ${mudancasItem.join(', ')}`)
 }
@@ -3031,6 +3032,13 @@ value={item.cor || ''}
 onChange={e => atualizarItemEdit(item.id, 'cor', e.target.value)}
 placeholder="Cor desta esquadria (opcional, se diferente da geral)"
 className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+/>
+<label className="block text-xs font-semibold text-blue-700">Observação geral da esquadria — coletada na obra</label>
+<textarea
+value={item.observacao_geral || ''}
+onChange={e => atualizarItemEdit(item.id, 'observacao_geral', e.target.value || null)}
+placeholder="Detalhes gerais da obra para o orçamentista"
+className="w-full border border-blue-200 bg-blue-50 rounded-lg p-2 text-xs resize-none h-16"
 />
 <textarea
 value={item.descricao || ''}
