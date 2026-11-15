@@ -41,6 +41,8 @@ export const GUIAS: Guia[] = [
   { href: '/obras', label: 'Obras', icon: Building2, grupo: 'Comercial' },
   { href: '/crm/comercial', label: 'CRM Comercial', icon: BarChart3, grupo: 'Comercial' },
   { href: '/prospeccao', label: 'Prospecção', icon: MapPinned, grupo: 'Comercial' },
+  // Visão integrada por área: inicialmente visível só para o Master.
+  { href: '/mapa-geral', label: 'Mapa Geral', icon: MapPinned, grupo: 'Comercial', masterOnly: true },
   { href: '/orcamento/pesquisar', label: 'Orçamentos', icon: FileText, grupo: 'Comercial' },
   { href: '/kanban', label: 'Kanban', icon: Columns3, grupo: 'Comercial' },
   { href: '/whatsapp/configuracao', label: 'Configuração WhatsApp', icon: Settings, grupo: 'Comercial', masterOnly: true },
