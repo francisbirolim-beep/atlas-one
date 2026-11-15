@@ -47,6 +47,15 @@ function nomeMes(ym: string) {
 function temEventoNoPeriodo(o:Obra, desde: string, ate: string) {
   return o.eventos.some(e => (!desde || e.data >= desde) && (!ate || e.data <= ate))
 }
+// Prospecções, visitas, orçamentos e vendas são eventos históricos, mesmo que a obra tenha avançado.
+function ehEventoHistorico(tipo:TipoEvento) {
+  return tipo==='prospeccao'||tipo==='visita'||tipo==='orcamento'||tipo==='venda'
+}
+function correspondeAoAtalho(p:Obra, tipo:TipoEvento|null, desde:string, ate:string) {
+  if(!tipo)return true
+  if(!ehEventoHistorico(tipo))return p.etapa===tipo
+  return p.eventos.some(e=>e.tipo===tipo&&(!desde||e.data>=desde)&&(!ate||e.data<=ate))
+}
 function formatarData(d:string) {
   const [y,m,dia] = d.split('-')
   return dia+'/'+m+'/'+y
@@ -84,7 +93,7 @@ function MapaDemo({ pontos, selecionado, escolher }:{pontos:Ponto[];selecionado:
     void iniciar().catch(()=>{if(alive)setErro(true)})
     return()=>{alive=false;if(mapa)mapa.remove()}
   },[pontos,selecionado,escolher])
-  if(!pontos.length)return <div className="grid h-[450px] place-items-center bg-slate-100 p-8 text-center text-sm text-slate-500">Nenhum pino visível. Selecione ao menos uma cor acima ou confira os demais filtros.</div>
+  if(!pontos.length)return <div className="grid h-[450px] place-items-center bg-slate-100 p-8 text-center text-sm text-slate-500">Nenhum pino com GPS corresponde à seleção. Confira o período e os filtros ou abra a lista de registros sem GPS.</div>
   return <div className="relative h-[450px] overflow-hidden rounded-xl bg-slate-100 md:h-[570px]">
     <div ref={divRef} className="absolute inset-0"/>
     {erro && <p className="absolute left-4 top-4 z-10 rounded-lg bg-white px-3 py-2 text-sm text-red-700">O mapa não carregou. Verifique a conexão.</p>}
@@ -158,12 +167,14 @@ export default function MapaGeralPage(){
   }),[registros,cidade,bairro,vendedor,etapa,busca,ativoSomente])
   const pontos=useMemo(()=>conjunto.filter(o=>(!desde&&!ate)||temEventoNoPeriodo(o,desde,ate)),[conjunto,desde,ate])
   const pontosMapa=useMemo(()=>pontos.filter((o):o is Ponto=>o.lat!==null&&o.lng!==null),[pontos])
-  // O atalho de visitas localiza registros que tiveram visita no período; a cor continua sendo a etapa atual.
-  const correspondeAoAtalho=(p:Obra)=>atalhoAtivo!=='visita'||p.eventos.some(e=>e.tipo==='visita'&&(!desde||e.data>=desde)&&(!ate||e.data<=ate))
-  const pontosVisiveis=useMemo(()=>pontosMapa.filter(p=>pinosAtivos.includes(p.etapa)&&correspondeAoAtalho(p)),[pontosMapa,pinosAtivos,atalhoAtivo,desde,ate])
-  const registrosVisiveis=useMemo(()=>pontos.filter(p=>pinosAtivos.includes(p.etapa)&&correspondeAoAtalho(p)),[pontos,pinosAtivos,atalhoAtivo,desde,ate])
+  // Filtra locais por evento histórico ou etapa atual, mantendo filtros gerais e seleção por cores.
+  const pontosVisiveis=useMemo(()=>pontosMapa.filter(p=>pinosAtivos.includes(p.etapa)&&correspondeAoAtalho(p,atalhoAtivo,desde,ate)),[pontosMapa,pinosAtivos,atalhoAtivo,desde,ate])
+  const registrosVisiveis=useMemo(()=>pontos.filter(p=>pinosAtivos.includes(p.etapa)&&correspondeAoAtalho(p,atalhoAtivo,desde,ate)),[pontos,pinosAtivos,atalhoAtivo,desde,ate])
   const quantidadesPinos=useMemo(()=>Object.fromEntries(etapas.map(e=>[e.id,pontosMapa.filter(p=>p.etapa===e.id).length])) as Record<Etapa,number>,[pontosMapa])
-  const locaisComVisita=useMemo(()=>pontosMapa.filter(p=>p.eventos.some(e=>e.tipo==='visita'&&(!desde||e.data>=desde)&&(!ate||e.data<=ate))).length,[pontosMapa,desde,ate])
+  const locaisPorAtalho=useMemo(()=>{
+    const tipos:TipoEvento[]=['prospeccao','visita','orcamento','venda','producao','concluida','perdida']
+    return Object.fromEntries(tipos.map(tipo=>[tipo,pontosMapa.filter(p=>correspondeAoAtalho(p,tipo,desde,ate)).length])) as Record<TipoEvento,number>
+  },[pontosMapa,desde,ate])
   const semGPS=registrosVisiveis.length-pontosVisiveis.length
   const ficha=registrosVisiveis.find(p=>p.id===selecionado) || registrosVisiveis[0] || null
   const kpis=useMemo(()=>{
@@ -190,7 +201,7 @@ export default function MapaGeralPage(){
     // Atalho apenas visual: mantém cidade, responsável, busca e período já escolhidos.
     setEtapa('')
     setAtalhoAtivo(tipo)
-    setPinosAtivos(tipo==='visita'?etapas.map(e=>e.id):[tipo])
+    setPinosAtivos(ehEventoHistorico(tipo)?etapas.map(e=>e.id):[tipo])
     setMostrarLista(false)
     setSelecionado(null)
     setPainelAberto(false)
@@ -258,7 +269,7 @@ export default function MapaGeralPage(){
         {cards.map(c=><button key={c.id} type="button" onClick={()=>mostrarNoMapa(c.id)} aria-pressed={atalhoAtivo===c.id} aria-label={'Localizar no mapa: '+c.nome} className="rounded-xl border px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600" style={{backgroundColor:c.fundo,borderColor:atalhoAtivo===c.id?c.cor:c.borda,boxShadow:atalhoAtivo===c.id?'0 0 0 2px '+c.cor+'35':undefined}}>
           <div className="flex items-center justify-between"><span className="text-[11px] font-semibold text-slate-700">{c.nome}</span><span className="text-lg font-black" style={{color:c.cor}}>{c.icone}</span></div>
           <p className="mt-1 text-2xl font-black" style={{color:c.cor}}>{c.valor}</p>
-          <p className="mt-1 text-[10px] font-bold" style={{color:c.cor}}>Ver {c.id==='visita'?locaisComVisita:quantidadesPinos[c.id]} local(is) no mapa →</p>
+          <p className="mt-1 text-[10px] font-bold" style={{color:c.cor}}>Ver {locaisPorAtalho[c.id]} local(is) no mapa →</p>
         </button>)}
       </section>
 
@@ -268,6 +279,10 @@ export default function MapaGeralPage(){
             <div><h2 className="text-base font-extrabold">Mapa de oportunidades e obras</h2><p className="text-xs text-slate-500">{pontosVisiveis.length} de {pontosMapa.length} pino(s) visíveis · {semGPS} registro(s) sem GPS entre os tipos selecionados · clique no pino para abrir detalhes</p></div>
             <button type="button" onClick={()=>setMostrarLista(!mostrarLista)} className="rounded-lg border px-3 py-2 text-xs font-bold"><Filter size={13} className="mr-1 inline"/>{mostrarLista?'Ver mapa':'Ver lista'}</button>
           </div>
+          {atalhoAtivo&&<div role="status" className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+            <p className="text-xs text-blue-900"><b>Mostrando locais: {cards.find(c=>c.id===atalhoAtivo)?.nome}.</b> {ehEventoHistorico(atalhoAtivo)?'Inclui registros que já mudaram de etapa.':'Situação atual dos registros.'} {pontosVisiveis.length} ponto(s) com GPS; {semGPS} sem GPS. As cores indicam a situação atual.</p>
+            <button type="button" onClick={()=>{setAtalhoAtivo(null);setPinosAtivos(etapas.map(e=>e.id));setSelecionado(null)}} className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-800">Voltar ao mapa completo</button>
+          </div>}
           <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div><h3 className="text-xs font-extrabold text-slate-800">Escolha quais pinos aparecem no mapa</h3><p className="text-[11px] text-slate-500">Clique em um indicador acima para localizar uma categoria ou marque uma ou mais cores. {pontosVisiveis.length} pino(s) visível(is).</p>{atalhoAtivo==='visita'&&<p className="mt-1 text-[11px] font-semibold text-teal-700">Exibindo locais com visitas registradas no período. A cor indica a situação atual.</p>}</div>
@@ -288,7 +303,7 @@ export default function MapaGeralPage(){
           {mostrarLista?<div className="h-[450px] space-y-2 overflow-y-auto md:h-[570px]">{registrosVisiveis.length?registrosVisiveis.map(p=><button key={p.id} type="button" onClick={()=>{setSelecionado(p.id);setPainelAberto(true)}} className="flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left hover:border-blue-400"><span className="grid h-9 w-9 place-items-center rounded-full text-lg font-black text-white" style={{backgroundColor:corEtapa(p.etapa).cor}}>{corEtapa(p.etapa).icone}</span><span className="min-w-0 flex-1"><b className="block truncate text-sm">{p.nome}</b><span className="text-xs text-slate-500">{p.bairro} · {p.cidade}{p.lat===null?" · Sem GPS":""}</span></span><span className="text-[11px] font-semibold text-slate-500">{corEtapa(p.etapa).nome}</span></button>):<p className="p-6 text-center text-sm text-slate-500">Nenhum registro corresponde às cores selecionadas. Marque um tipo de pino acima.</p>}</div>:
             <MapaDemo pontos={pontosVisiveis} selecionado={ficha?.id||null} escolher={id=>{setSelecionado(id);setPainelAberto(true)}}/>
           }
-          <p className="mt-3 border-t pt-3 text-[11px] text-slate-500">A cor identifica a situação atual da obra. Os atalhos e as cores alteram somente os pinos e a lista; os indicadores permanecem calculados pelos filtros gerais. Prospecções e orçamentos nos indicadores contam eventos históricos, enquanto os pinos das cores correspondem à etapa atual.</p>
+          <p className="mt-3 border-t pt-3 text-[11px] text-slate-500">Clique nos indicadores de Prospecções, Visitas ou Orçamentos para localizar todos os registros com esse evento no período, inclusive obras que mudaram de etapa. Os totais contam eventos; cada localização com GPS gera um pino, cuja cor indica a etapa atual. Os indicadores gerais não mudam com o atalho.</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           {ficha&&painelAberto?<div>
