@@ -12,7 +12,7 @@ type Categoria=typeof categorias[number]
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const pronto=['produto','porta_janela_padrao','kit','pu']
 const normalizar=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
-const campos='id,codigo,nome,descricao,categoria,unidade,preco,preco_promocional,linha_id,foto_url'
+const campos='id,codigo,nome,descricao,categoria,unidade,preco,preco_promocional,linha_id,foto_url,custo,custo_wvetro_ultimo,custo_wvetro_min,custo_wvetro_max,peso_kg_m,peso_kg,margem_percentual'
 const categoriasConhecidas=['perfil','acessorio','vidro',...pronto]
 
 // Isola a tipagem genérica profunda do builder PostgREST de relações cruzadas.
@@ -114,12 +114,16 @@ export async function GET(request:NextRequest){
     if(erroAssociacoes)throw erroAssociacoes
     const nomePorId=new Map(linhas.map(l=>[l.id,l.nome]))
     const linhasPorProduto=new Map<string,string[]>()
+    const vinculosPorProduto=new Map<string,{id:string;nome:string}[]>()
     for(const a of associacoes||[]){
       const nome=nomePorId.get(a.linha_id)
       if(!nome)continue
       const atuais=linhasPorProduto.get(a.produto_id)||[]
       if(!atuais.includes(nome))atuais.push(nome)
       linhasPorProduto.set(a.produto_id,atuais)
+      const vinculos=vinculosPorProduto.get(a.produto_id)||[]
+      if(!vinculos.some(x=>x.id===a.linha_id))vinculos.push({id:a.linha_id,nome})
+      vinculosPorProduto.set(a.produto_id,vinculos)
     }
 
     // Fotos já cadastradas são exibidas automaticamente, por vínculo exato de produto_id.
@@ -148,10 +152,18 @@ export async function GET(request:NextRequest){
         id:p.id,codigo:p.codigo||'',nome:p.nome,descricao:p.descricao||'',
         categoria:p.categoria||'',unidade:p.unidade||'un.',linhaId:null,
         linha:(linhasPorProduto.get(p.id)||[]).join(' / ')||null,
+        linhasVinculadas:vinculosPorProduto.get(p.id)||[],
         fotoUrl:fotos.get(p.id)||(!candidatas.has(p.id)&&p.foto_url&&urlSegura(p.foto_url)?p.foto_url:null),
         fotoCandidataUrl:fotos.has(p.id)?null:candidatas.get(p.id)||null, // Aparece automaticamente com aviso de validação pendente.
         preco:Number(p.preco||0)>0?Number(p.preco):null,
         precoPromocional:p.preco_promocional!=null&&Number(p.preco_promocional)>0?Number(p.preco_promocional):null,
+        custo:p.custo!=null?Number(p.custo):null,
+        custoWvetroUltimo:p.custo_wvetro_ultimo!=null?Number(p.custo_wvetro_ultimo):null,
+        custoWvetroMin:p.custo_wvetro_min!=null?Number(p.custo_wvetro_min):null,
+        custoWvetroMax:p.custo_wvetro_max!=null?Number(p.custo_wvetro_max):null,
+        margemPercentual:p.margem_percentual!=null?Number(p.margem_percentual):null,
+        pesoKgM:p.peso_kg_m!=null?Number(p.peso_kg_m):null,
+        pesoKg:p.peso_kg!=null?Number(p.peso_kg):null,
       })),linhas,limitado:(data||[]).length===120
     })
   }catch(e){
