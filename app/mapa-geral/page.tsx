@@ -23,6 +23,11 @@ const etapas: { id: Etapa; nome: string; icone: string; cor: string; fundo: stri
 ]
 const corEtapa = (id: Etapa) => etapas.find(e => e.id === id) || etapas[0]
 const meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
+function avancar(data: string, dias: number) {
+  const v = new Date(data + 'T12:00:00Z')
+  v.setUTCDate(v.getUTCDate() + dias)
+  return v.toISOString().slice(0, 10)
+}
 type Periodo = 'todos' | '30d' | '90d' | 'mes' | 'intervalo'
 function intervalo(periodo: Periodo, mes: string, inicio: string, fim: string) {
   if (periodo==='todos') return ['', '']
