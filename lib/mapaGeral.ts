@@ -117,7 +117,7 @@ function adicionarEvento(registro: RegistroMapaGeral, tipo: TipoEventoMapaGeral,
 export async function carregarMapaGeral(): Promise<RetornoMapaGeral> {
   const avisos: string[]=[]
   const [obrasR,prosR,orcR,interR]=await Promise.allSettled([
-    lerTabela<ObraDB>('obras','id,cliente_id,nome,status,bairro,cidade,endereco,numero_endereco,observacoes,criado_por_nome,created_at,clientes(id,nome)'),
+    lerTabela<ObraDB>('obras','id,cliente_id,nome,status,bairro,cidade,endereco,numero_endereco,observacoes,criado_por_nome,clientes(id,nome)'),
     lerTabela<ProspeccaoDB>('prospeccoes','id,obra_id,cliente_id,nome_cliente,nome_obra,cidade,bairro,endereco,latitude,longitude,responsavel_nome,status,created_at'),
     lerTabela<OrcamentoDB>('orcamentos','id,obra_id,cliente_id,cliente_nome,cidade,status,data_venda,numero,criado_por_nome,created_at'),
     lerTabela<InteracaoDB>('prospeccao_interacoes','id,prospeccao_id,tipo,created_at'),
