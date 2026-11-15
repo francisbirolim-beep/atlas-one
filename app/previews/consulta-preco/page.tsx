@@ -4,13 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Search, SlidersHorizontal, ChevronRight, RefreshCw, Tag, ShieldCheck, X, PackageSearch, Layers3 } from 'lucide-react'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
-import { tokenAtual } from '@/lib/auth'
+import EditorProdutoUnitarioPreview, { type ProdutoEditavel } from '@/components/previews/EditorProdutoUnitarioPreview'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
-type Produto={
-  id:string;codigo:string;nome:string;descricao:string;categoria:string;unidade:string;
-  linhaId:string|null;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null
-}
+type Produto=ProdutoEditavel
 type Linha={id:string;nome:string;ativa:boolean}
 const categorias:{id:Categoria;nome:string;icone:string}[]=[
   {id:'todos',nome:'Todos',icone:'▦'},
@@ -28,12 +26,16 @@ export default function PreviaConsultaPreco(){
  const [precoFiltro,setPrecoFiltro]=useState<'todos'|'com'|'sem'>('todos')
  const [produtos,setProdutos]=useState<Produto[]>([]),[linhas,setLinhas]=useState<Linha[]>([])
  const [carregando,setCarregando]=useState(false),[erro,setErro]=useState(''),[selecionado,setSelecionado]=useState<Produto|null>(null)
+ const [editarProduto,setEditarProduto]=useState<Produto|null>(null)
+ const [podeEditar,setPodeEditar]=useState(false)
+ const alteracoesRef=useRef<Record<string,Produto>>({})
  const [versao,setVersao]=useState(0)
  const [fotosLocais,setFotosLocais]=useState<Record<string,string>>({})
  const [fotosOcultas,setFotosOcultas]=useState<Record<string,boolean>>({})
  const fotosRef=useRef<Record<string,string>>({})
  const requisicao=useRef(0)
  useEffect(()=>()=>{Object.values(fotosRef.current).forEach(url=>URL.revokeObjectURL(url))},[])
+ useEffect(()=>{let ativo=true;void usuarioAtual().then(u=>{if(ativo)setPodeEditar(u?.role==='master')});return()=>{ativo=false}},[])
  function selecionarFoto(id:string,arquivo:File|null){
    const prox={...fotosRef.current}
    if(prox[id])URL.revokeObjectURL(prox[id])
@@ -57,7 +59,7 @@ export default function PreviaConsultaPreco(){
          const json=await response.json()
          if(!response.ok)throw new Error(json.error||'Falha na consulta.')
          if(seq!==requisicao.current)return
-         setProdutos(json.produtos||[]);setLinhas(json.linhas||[])
+         setProdutos((json.produtos||[]).map((p:Produto)=>alteracoesRef.current[p.id]||p));setLinhas(json.linhas||[])
        }catch(e){
          if((e as {name?:string})?.name==='AbortError'||seq!==requisicao.current)return
          setErro(e instanceof Error?e.message:'Erro ao pesquisar.')
@@ -68,13 +70,19 @@ export default function PreviaConsultaPreco(){
    return()=>{ctrl.abort();clearTimeout(timer)}
  },[busca,categoria,linha,precoFiltro,versao])
 
+ function aplicarEdicao(p:Produto){
+   alteracoesRef.current={...alteracoesRef.current,[p.id]:p}
+   setProdutos(atual=>atual.map(x=>x.id===p.id?p:x))
+   setSelecionado(p)
+   setEditarProduto(null)
+ }
  const input='w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
  return <main className="min-h-screen bg-[#f3f6fb] px-3 pb-16 pt-5 text-slate-900 sm:px-6 lg:px-8">
   <div className="mx-auto max-w-[1430px] space-y-5">
    <header className="flex flex-wrap items-center justify-between gap-3">
      <div className="flex items-center gap-3"><Link href="/" aria-label="Voltar ao início" className="rounded-xl border bg-white p-2.5 text-slate-600 hover:bg-blue-50"><ArrowLeft size={19}/></Link>
        <div><p className="text-[11px] font-extrabold uppercase tracking-widest text-blue-700">Atlas One / Comercial / Prévia</p><h1 className="text-2xl font-black tracking-tight sm:text-3xl">Consulta de Preço</h1><p className="text-xs text-slate-500 sm:text-sm">Uma tela própria para pesquisar o catálogo, sem entrar na Venda Balcão.</p></div></div>
-     <div className="flex items-center gap-2"><span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">PRÉVIA · SOMENTE LEITURA</span><Link href="/previews/venda" className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-800">Ver tela de Venda</Link></div>
+     <div className="flex items-center gap-2"><span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">PRÉVIA · EDIÇÃO SIMULADA (MASTER)</span><Link href="/previews/venda" className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-bold text-white hover:bg-blue-800">Ver tela de Venda</Link></div>
    </header>
    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
      <div className="mb-3 flex items-center gap-2"><Search size={18} className="text-blue-700"/><h2 className="text-sm font-black">O que você quer consultar?</h2></div>
@@ -112,12 +120,15 @@ export default function PreviaConsultaPreco(){
    {!carregando&&produtos.length>0&&<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
     {produtos.map(p=><article key={p.id} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md">
       <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} fotoCandidataUrl={p.fotoCandidataUrl} imagemLocal={fotosLocais[p.id]} oculta={!!fotosOcultas[p.id]} onOcultarFoto={valor=>setFotosOcultas(v=>({...v,[p.id]:valor}))} onSelecionarImagem={arquivo=>selecionarFoto(p.id,arquivo)}/>
+      <div className="flex min-w-0 flex-1 flex-col">
       <button type="button" onClick={()=>setSelecionado(p)} className="flex min-w-0 flex-1 flex-col text-left">
         <div className="flex items-start justify-between gap-2"><span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{categoriaNome(p.categoria)}</span><ChevronRight size={16} className="shrink-0 text-slate-400"/></div>
         <b className="mt-2 line-clamp-2 text-sm leading-tight">{p.nome}</b><span className="mt-1 text-[11px] text-slate-500">{p.codigo||'Sem código'}{p.linha?' · '+p.linha:''}</span>
         <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{p.descricao||'Sem descrição complementar cadastrada'}</p>
         <div className="mt-auto border-t border-slate-100 pt-2"><span className={precoProduto(p)!=null?'text-base font-black text-blue-700':'text-xs font-extrabold text-amber-700'}>{precoProduto(p)!=null?moeda(precoProduto(p)!):'Preço a cadastrar'}</span><span className="ml-1 text-[10px] text-slate-500">/{p.unidade}</span></div>
       </button>
+      {podeEditar&&<button type="button" onClick={()=>setEditarProduto(p)} className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100">Editar cadastro · Prévia</button>}
+      </div>
     </article>)}
    </div>}
    {selecionado&&<div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 p-2 sm:p-5" role="dialog" aria-modal="true" aria-label="Detalhes do produto" onClick={()=>setSelecionado(null)}>
@@ -129,10 +140,22 @@ export default function PreviaConsultaPreco(){
       <p className="mt-1 text-xs text-slate-500">Código {selecionado.codigo||'não cadastrado'}</p>
       <div className="mt-4 space-y-3 border-t pt-4 text-sm"><p><b>Descrição:</b> {selecionado.descricao||'Sem descrição cadastrada'}</p><p><b>Linha:</b> {selecionado.linha||'Não vinculada'}</p><p><b>Unidade:</b> {selecionado.unidade}</p></div>
       <div className="mt-5 rounded-xl bg-blue-50 p-4"><p className="text-xs font-bold text-blue-700">Preço de venda cadastrado</p><p className="mt-1 text-2xl font-black text-blue-900">{precoProduto(selecionado)!=null?moeda(precoProduto(selecionado)!):'Preço a cadastrar'}</p></div>
-      <p className="mt-4 text-xs text-slate-500">A foto selecionada é só uma simulação local, não substitui o cadastro real. Esta prévia não edita produtos nem preços.</p>
+      <p className="mt-4 text-xs text-slate-500">Esta ficha mostra o cadastro atual e as alterações simuladas nesta sessão. Nenhuma foto, linha, custo, margem ou preço é gravado no banco.</p>
+      {podeEditar&&<button type="button" onClick={()=>{setEditarProduto(selecionado);setSelecionado(null)}} className="mt-4 w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-bold text-white">Editar produto (prévia Master)</button>}
     </aside>
    </div>}
-   <footer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><Tag size={16} className="shrink-0"/> Todas as fotos já cadastradas para os produtos aparecem automaticamente. Se alguma imagem estiver incorreta, use “Trocar imagem” ou “Remover imagem”; as alterações são apenas nesta prévia. Os filtros por linha e preço funcionam em conjunto.</footer>
+   {editarProduto&&podeEditar&&<EditorProdutoUnitarioPreview
+     key={editarProduto.id}
+     produto={alteracoesRef.current[editarProduto.id]||editarProduto}
+     linhas={linhas}
+     fechar={()=>setEditarProduto(null)}
+     salvar={aplicarEdicao}
+     imagemLocal={fotosLocais[editarProduto.id]}
+     selecionarImagem={arquivo=>selecionarFoto(editarProduto.id,arquivo)}
+     ocultaFoto={!!fotosOcultas[editarProduto.id]}
+     ocultarFoto={valor=>setFotosOcultas(v=>({...v,[editarProduto.id]:valor}))}
+   />}
+   <footer className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"><Tag size={16} className="shrink-0"/> Todas as fotos já cadastradas para os produtos aparecem automaticamente. Se alguma imagem estiver incorreta, use “Trocar imagem” ou “Remover imagem”; as alterações são apenas nesta prévia. Os filtros por linha e preço funcionam em conjunto. A edição de descrição, custo, margem unitária, peso e linhas é simulada apenas para o Master; tipologias mantêm cálculo independente.</footer>
   </div>
  </main>
 }
