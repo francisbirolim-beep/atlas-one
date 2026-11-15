@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, ChevronRight, ClipboardCheck, MapPin, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, UserPlus, UsersRound } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import { lerDadosEmpresa } from '@/lib/configGeral'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
-import ReciboVendaPreview, { cents, valorEntrada, rotuloPagamento, type LinhaPagamento, type FormaPagamento, type StatusPagamento } from '@/components/previews/ReciboVendaPreview'
+import ReciboVendaPreview, { cents, valorEntrada, rotuloPagamento, type LinhaPagamento, type FormaPagamento, type StatusPagamento, type EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 
 type Cliente={id:string;nome:string;apelido?:string|null;cpf_cnpj?:string|null;telefone?:string|null;whatsapp?:string|null;cidade?:string|null}
 type Obra={id:string;nome:string;cidade?:string|null;bairro?:string|null;endereco?:string|null}
@@ -31,6 +32,7 @@ const nomeInteiro=(s:string)=>s.trim().split(/\s+/).filter(Boolean).length>=2
 
 export default function PreviaVenda(){
   const [etapa,setEtapa]=useState<Etapa>(1)
+  const [empresa,setEmpresa]=useState<EmpresaRecibo|null>(null)
   const [modo,setModo]=useState<Modo>('busca')
   const [tipoCadastro,setTipoCadastro]=useState<CadastroTipo>('simples')
   const [cadastro,setCadastro]=useState<Cadastro>(vazio)
@@ -67,6 +69,7 @@ export default function PreviaVenda(){
   const consultaProdutosSeq=useRef(0)
 
   useEffect(()=>()=>{Object.values(fotosRef.current).forEach(url=>URL.revokeObjectURL(url))},[])
+  useEffect(()=>{let vivo=true;void lerDadosEmpresa().then(d=>{if(vivo)setEmpresa(d||null)}).catch(()=>{});return()=>{vivo=false}},[])
   function selecionarFoto(id:string,arquivo:File|null){
     const novas={...fotosRef.current}
     if(novas[id])URL.revokeObjectURL(novas[id])
@@ -468,6 +471,7 @@ export default function PreviaVenda(){
    </div>
    <ReciboVendaPreview
      aberto={reciboAberto}
+     empresa={empresa}
      fechar={()=>setReciboAberto(false)}
      nomeCliente={nomeCliente}
      nomeAssinatura={modo==='consumidor'?(nomeAssinatura.trim()||'Consumidor final — preencher na assinatura'):nomeCliente}
