@@ -138,6 +138,7 @@ ambiente?: string | null
 foto_urls?: string[] | null
       descricao?: string
       observacao_geral?: string | null
+      observacao_cliente?: string | null
       observacao_tempera?: string | null
       observacao_producao?: string | null
       cor?: string | null

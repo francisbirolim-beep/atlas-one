@@ -34,6 +34,7 @@ export interface ItemOrcamentoForm {
   descricao: string
   observacaoTempera?: string
   observacaoGeral?: string
+  observacaoCliente?: string
   observacaoProducao?: string
   cor: string
   fotos: File[]
@@ -337,7 +338,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
         foto_larguras_url, foto_alturas_url, quantidade: quantidadeNum,
         foto_url: itemFotoUrls[0] || foto_larguras_url || foto_alturas_url || null,
         foto_urls: todasFotosItem.length ? todasFotosItem : null,
-        descricao: descricaoItem, observacao_geral: it.observacaoGeral?.trim() || null, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
+        descricao: descricaoItem, observacao_geral: it.observacaoGeral?.trim() || null, observacao_cliente: it.observacaoCliente?.trim() || null, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
         ...snapshotConfiguracao, ...camposKit,
       })
     } else {
@@ -347,7 +348,7 @@ export async function criarOrcamentoNoServidor(dados: DadosOrcamentoForm): Promi
         tipo_medida: tipoMedidaItem,
         largura_mm: numeroOpcional(it.largura) || 0, altura_mm: numeroOpcional(it.altura) || 0, quantidade: quantidadeNum,
         foto_url: itemFotoUrls[0] || null, foto_urls: itemFotoUrls.length ? itemFotoUrls : null,
-        descricao: descricaoItem, observacao_geral: it.observacaoGeral?.trim() || null, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
+        descricao: descricaoItem, observacao_geral: it.observacaoGeral?.trim() || null, observacao_cliente: it.observacaoCliente?.trim() || null, observacao_tempera: it.observacaoTempera || null, observacao_producao: it.observacaoProducao || null, cor: it.cor || null, produto_id, preco_unit, preco_total,
         ...snapshotConfiguracao, ...camposKit,
       })
     }
