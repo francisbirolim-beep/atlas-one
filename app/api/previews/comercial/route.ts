@@ -36,7 +36,7 @@ export async function GET(request:NextRequest){
         .select('id,nome,apelido,cpf_cnpj,telefone,whatsapp,cidade')
         .eq('empresa_id',usuario.empresa_id).eq('ativo',true)
       for(const raw of tokens){
-        const t=raw.replace(/[^\p{L}\p{N}-]/gu,'')
+        const t=raw.replace(/[^A-Za-zÀ-ÿ0-9-]/g,'')
         if(t)query=query.or('nome.ilike.%'+t+'%,apelido.ilike.%'+t+'%,cpf_cnpj.ilike.%'+t+'%,telefone.ilike.%'+t+'%,whatsapp.ilike.%'+t+'%')
       }
       const {data,error}=await query.order('nome').limit(250)
@@ -89,9 +89,9 @@ export async function GET(request:NextRequest){
       .eq('empresa_id',usuario.empresa_id).eq('ativo',true)
     query=aplicarCategoria(query,tipoCategoria)
     if(linhaId)query=query.eq('linha_produtos.linha_id',linhaId).eq('linha_produtos.empresa_id',usuario.empresa_id)
-    const termos=(q.match(/[\p{L}\p{N}-]{2,}/gu)||[]).slice(0,7)
+    const termos=(q.match(/[A-Za-zÀ-ÿ0-9-]{2,}/g)||[]).slice(0,7)
     for(const bruto of termos){
-      const termo=bruto.replace(/[^\p{L}\p{N}-]/gu,'')
+      const termo=bruto.replace(/[^A-Za-zÀ-ÿ0-9-]/g,'')
       if(termo)query=query.or('codigo.ilike.%'+termo+'%,nome.ilike.%'+termo+'%,descricao.ilike.%'+termo+'%')
     }
     const {data,error}=await query.order('nome').limit(120)
