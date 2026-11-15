@@ -121,7 +121,7 @@ function resumoMedidas(item: ItemForm) {
   return `${larguras} • ${alturas}`
 }
 
-type ProdutoAtlasBusca = { id:string; codigo?:string|null; nome:string; categoria?:string|null; unidade?:string|null; preco?:number|null; custo?:number|null; descricao?:string|null }
+type ProdutoAtlasBusca = { id:string; codigo?:string|null; nome:string; categoria?:string|null; unidade?:string|null; preco?:number|null; custo?:number|null; descricao?:string|null; foto_url?:string|null }
 
 function nomeNormalizado(valor: string) {
   return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
@@ -152,7 +152,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
     const timer=window.setTimeout(async()=>{
       setCarregando(true)
       const termo=busca.trim().replace(/[,%()]/g,' ')
-      let q=supabase.from('produtos').select('id,codigo,nome,categoria,unidade,preco,custo,descricao').eq('ativo',true).or(`codigo.ilike.%${termo}%,nome.ilike.%${termo}%,descricao.ilike.%${termo}%`)
+      let q=supabase.from('produtos').select('id,codigo,nome,categoria,unidade,preco,custo,descricao,foto_url').eq('ativo',true).or(`codigo.ilike.%${termo}%,nome.ilike.%${termo}%,descricao.ilike.%${termo}%`)
       if(item.itemTipo==='medida_padrao') q=q.eq('categoria','porta_janela_padrao')
       else if(item.itemTipo==='kit_porta_pronta') q=q.eq('categoria','kit')
       else if(item.itemTipo==='material_avulso'&&item.materialCategoria){
@@ -183,7 +183,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
 
       const {data:existente}=await supabase
         .from('produtos')
-        .select('id,codigo,nome,categoria,unidade,preco,custo,descricao')
+        .select('id,codigo,nome,categoria,unidade,preco,custo,descricao,foto_url')
         .eq('ativo',true)
         .eq('categoria','porta_janela_padrao')
         .ilike('nome',nome)
@@ -205,7 +205,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
             criado_por_nome:me?.nome||null,
             ativo:true,
           })
-          .select('id,codigo,nome,categoria,unidade,preco,custo,descricao')
+          .select('id,codigo,nome,categoria,unidade,preco,custo,descricao,foto_url')
           .single()
         if(error||!data)throw new Error(error?.message||'Não foi possível cadastrar o produto.')
         produto=data as ProdutoAtlasBusca
@@ -243,7 +243,15 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
     {item.itemTipo==='kit_porta_pronta'&&<p className="text-xs text-blue-800">O catálogo é opcional. Você pode digitar o tipo de porta aqui ou descrevê-lo nas observações para liberar o envio.</p>}
     {item.itemTipo==='medida_padrao'&&<p className="text-xs text-blue-800">Produto não cadastrado? Escreva o nome normalmente e envie o orçamento. O cadastro e a conferência de custo/preço podem ser feitos depois.</p>}
     <div><label className="mb-1 block text-xs text-slate-500">{item.itemTipo==='kit_porta_pronta'?'Tipo de porta / buscar kit cadastrado':rotulo}</label><input value={busca} onChange={e=>{const texto=e.target.value;setBusca(texto);if(item.itemTipo==='kit_porta_pronta')onChange({tipoOutroTexto:texto,produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'});else if(item.itemTipo==='medida_padrao')onChange({tipo:'outro',tipoOutroTexto:texto,produtoNome:texto,produtoId:null,precoUnit:null,modoOrigem:'manual'});else if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
-    {!!resultados.length&&<div className="max-h-56 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="block w-full border-b px-3 py-2 text-left last:border-0"><b className="text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b><p className="text-xs text-slate-500">{p.categoria==='porta_janela_padrao'?'Produto pronto':p.categoria==='kit'?'Kit':p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</p></button>)}</div>}
+    {!!resultados.length&&<div className="max-h-64 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="flex w-full items-center gap-3 border-b px-3 py-2 text-left last:border-0 hover:bg-blue-50">
+          <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
+            {p.foto_url && /^https?:\/\//i.test(p.foto_url) ? <img src={p.foto_url} alt={`Foto do produto ${p.nome}`} className="h-full w-full object-contain"/> : <><Camera size={17}/><span className="mt-0.5 text-[9px]">Sem foto</span></>}
+          </span>
+          <span className="min-w-0 flex-1">
+            <b className="block text-sm">{p.codigo?`${p.codigo} · `:''}{p.nome}</b>
+            <span className="block text-xs text-slate-500">{p.categoria==='porta_janela_padrao'?'Produto pronto':p.categoria==='kit'?'Kit':p.categoria||'Sem categoria'} · {p.unidade||'un.'}{p.preco!=null?` · R$ ${Number(p.preco).toFixed(2)}`:''}</span>
+          </span>
+        </button>)}</div>}
     {podeOferecerCadastro&&(podeCadastrarProdutoPronto?<div className="rounded-xl border border-blue-200 bg-blue-50 p-3"><p className="text-xs font-semibold text-blue-900">Produto pronto “{busca.trim()}” não encontrado.</p><p className="mt-1 text-[11px] text-blue-700">Pode enviar com este nome, sem cadastrar agora. Cadastro e preço/custo podem ser completados depois.</p><button type="button" onClick={()=>void cadastrarProdutoPronto()} disabled={cadastrandoProdutoPronto} className="mt-2 rounded-lg bg-brand-navy px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{cadastrandoProdutoPronto?'Cadastrando...':'Cadastrar este produto'}</button></div>:<p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">Produto não encontrado no catálogo. O texto será salvo como descrição livre; o cadastro poderá ser feito depois pelo responsável.</p>)}
     {erroCadastro&&<p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{erroCadastro}</p>}
     {item.produtoId&&<div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Selecionado: {item.produtoNome}</div>}
