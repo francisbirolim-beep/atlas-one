@@ -15,7 +15,9 @@ const normalizar=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u
 const campos='id,codigo,nome,descricao,categoria,unidade,preco,preco_promocional,linha_id'
 const categoriasConhecidas=['perfil','acessorio','vidro',...pronto]
 
-function aplicarCategoria<T extends {eq:(...args:any[])=>T;in:(...args:any[])=>T;not:(...args:any[])=>T}>(consulta:T,categoria:Categoria,prefixo=''):T{
+// Isola a tipagem genérica profunda do builder PostgREST de relações cruzadas.
+// O runtime continua usando apenas as operações de leitura e os filtros whitelisted.
+function aplicarCategoria(consulta:any,categoria:Categoria,prefixo=''):any{
   const campo=prefixo+'categoria'
   if(categoria==='pronto')return consulta.in(campo,pronto)
   if(categoria==='outros')return consulta.not(campo,'in','('+categoriasConhecidas.map(c=>'"'+c+'"').join(',')+')')
@@ -65,7 +67,7 @@ export async function GET(request:NextRequest){
     // Consultar vínculos reais por categoria, inclusive linhas históricas inativas.
     const linhaIds=new Set<string>()
     for(let offset=0;offset<3500;offset+=900){
-      let vinculos=supabaseAdmin.from('linha_produtos')
+      let vinculos:any=supabaseAdmin.from('linha_produtos')
         .select('linha_id,produtos!inner(categoria,ativo)')
         .eq('empresa_id',usuario.empresa_id).eq('produtos.ativo',true)
       vinculos=aplicarCategoria(vinculos,tipoCategoria,'produtos.')
@@ -84,7 +86,7 @@ export async function GET(request:NextRequest){
 
     // O !inner aplica o vínculo real no servidor, antes de limitar e paginar.
     // Assim "Perfil + SUPREMA" não devolve perfis de outra linha.
-    let query=supabaseAdmin.from('produtos')
+    let query:any=supabaseAdmin.from('produtos')
       .select(campos+(linhaId?',linha_produtos!inner(linha_id,empresa_id)':''))
       .eq('empresa_id',usuario.empresa_id).eq('ativo',true)
     query=aplicarCategoria(query,tipoCategoria)
