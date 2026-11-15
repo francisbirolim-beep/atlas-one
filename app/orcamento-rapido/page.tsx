@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Calculator, Camera, CheckCircle, Keyboard, Copy, ChevronDown, ChevronUp, Pencil, Plus, Send, Trash2, WifiOff, X, MapPin, Loader2 } from 'lucide-react'
+import { ArrowLeft, Calculator, Camera, CheckCircle, Keyboard, Check, ClipboardList, FileText, Info, Ruler, Copy, ChevronDown, ChevronUp, Pencil, Plus, Send, Trash2, WifiOff, X, MapPin, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { v4 as uuidv4 } from 'uuid'
 import { Acabamento, Cliente, Contramarco, OrigemCliente, TemperaturaLead, TipoEsquadria } from '@/lib/tipos'
@@ -46,6 +46,7 @@ interface ItemForm {
   larguraGuarnicaoCm?: string
   descricao: string
   observacaoGeral: string
+  observacaoCliente: string
   observacaoTempera: string
   observacaoProducao: string
   cor: string
@@ -80,7 +81,7 @@ interface ItemForm {
 
 function novoItem(): ItemForm {
   return {
-    id: uuidv4(), itemTipo: '', materialCategoria: null, materialUnidade: null, produtoNome: null, contramarcoOverride: null, ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '', larguraBatenteMm: '', larguraGuarnicaoMm: '', descricao: '', observacaoGeral: '', observacaoTempera: '', observacaoProducao: '', cor: '',
+    id: uuidv4(), itemTipo: '', materialCategoria: null, materialUnidade: null, produtoNome: null, contramarcoOverride: null, ambiente: '', tipo: '', tipoOutroTexto: '', folhas: '', largura: '', altura: '', quantidade: '', larguraBatenteMm: '', larguraGuarnicaoMm: '', descricao: '', observacaoGeral: '', observacaoCliente: '', observacaoTempera: '', observacaoProducao: '', cor: '',
     fotos: [], fotosPreviews: [], tipoMedida: 'comum',
     larguraBaixo: '', larguraMeio: '', larguraCima: '', alturaDireita: '', alturaMeio: '', alturaEsquerda: '',
     modoLargura: 'digitar', modoAltura: 'digitar',
@@ -290,10 +291,44 @@ interface RascunhoOrcamentoRapido {
   arquivos?: ArquivoRascunho[]
 }
 
+type TipoColeta = 'sob_medida' | 'medida_padrao' | 'kit_porta_pronta' | 'material_avulso'
+type MedidaColeta = 'comum' | 'final'
+type ItemTela = {
+  id: string
+  tipo: TipoColeta | null
+  ambiente: string
+  medida: MedidaColeta
+  largura: string
+  altura: string
+  quantidade: string
+  descricao: string
+  contramarco: 'herdar' | 'com' | 'sem'
+  cor: string
+  observacaoGeral: string
+  observacaoCliente: string
+  observacaoProducao: string
+  fotos: { nome: string; url: string }[]
+  aberto: boolean
+}
+
+const tipos: {id: TipoColeta; nome: string; descricao: string}[] = [
+  {id: 'sob_medida', nome: 'Sob medida', descricao: 'Esquadrias feitas para a obra'},
+  {id: 'medida_padrao', nome: 'Medida padrão', descricao: 'Produto pronto ou padrão'},
+  {id: 'kit_porta_pronta', nome: 'Kit porta pronta', descricao: 'Kit com medidas próprias'},
+  {id: 'material_avulso', nome: 'Material avulso', descricao: 'Perfis e acessórios'},
+]
+const tipoNome = (tipo: TipoColeta | null) => tipos.find(t => t.id === tipo)?.nome || 'Escolher tipo'
+const campo = 'w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+const rotulo = 'mb-1.5 block text-xs font-semibold text-slate-600'
+const painel = 'rounded-2xl border border-slate-200 bg-white shadow-sm'
+const secundario = 'inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:border-blue-300 hover:text-blue-700'
+
 export default function OrcamentoRapido() {
   const [itens, setItens] = useState<ItemForm[]>([novoItem()])
   // Estado visual, independente do salvamento e do envio dos itens.
   const [itensAbertos, setItensAbertos] = useState<Record<string, boolean>>({})
+  const [resumo, setResumo] = useState(false)
+  const [detalhesAbertos, setDetalhesAbertos] = useState(false)
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
   const [clienteNome, setClienteNome] = useState('')
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
@@ -413,7 +448,7 @@ export default function OrcamentoRapido() {
           const fotos = (item.fotos || []).map((foto: any) => foto instanceof File ? foto : arquivoDoRascunho(foto))
           const fotoLargura = item.fotoLargura ? (item.fotoLargura instanceof File ? item.fotoLargura : arquivoDoRascunho(item.fotoLargura as any)) : undefined
           const fotoAltura = item.fotoAltura ? (item.fotoAltura instanceof File ? item.fotoAltura : arquivoDoRascunho(item.fotoAltura as any)) : undefined
-          return recuperarMedidasKitAnotadas({ ...item, larguraBatenteMm: item.larguraBatenteMm || item.larguraBatenteCm || '', larguraGuarnicaoMm: item.larguraGuarnicaoMm || item.larguraGuarnicaoCm || '', observacaoGeral: item.observacaoGeral || '', observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined })
+          return recuperarMedidasKitAnotadas({ ...item, larguraBatenteMm: item.larguraBatenteMm || item.larguraBatenteCm || '', larguraGuarnicaoMm: item.larguraGuarnicaoMm || item.larguraGuarnicaoCm || '', observacaoGeral: item.observacaoGeral || '', observacaoCliente: item.observacaoCliente || '', observacaoTempera: item.observacaoTempera || '', observacaoProducao: item.observacaoProducao || '', fotos, fotosPreviews: fotos.map((foto: File) => URL.createObjectURL(foto)), fotoLargura, fotoLarguraPreview: fotoLargura ? URL.createObjectURL(fotoLargura) : undefined, fotoAltura, fotoAlturaPreview: fotoAltura ? URL.createObjectURL(fotoAltura) : undefined })
         }))
         setRascunhoChave(chaveSolicitada)
         setClienteIdOrigem(d.clienteIdOrigem || null)
@@ -814,6 +849,7 @@ export default function OrcamentoRapido() {
       setConferenciaAberta(false)
       setErroEhValidacao(true)
       setErro(mensagem)
+      if (/cliente|cidade|obra|rua|número|localização|cep|temperatura|cor|acabamento|contramarco/i.test(mensagem)) setDetalhesAbertos(true)
       return false
     }
 
@@ -902,6 +938,69 @@ export default function OrcamentoRapido() {
   if (salvoOffline) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-md text-center"><WifiOff size={48} className="text-amber-500 mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">Orçamento protegido!</h2><p className="text-slate-500">O envio de {clienteNome} não foi concluído agora, mas o orçamento foi guardado neste aparelho e entrou na fila de sincronização automática.</p>{motivoPendente && <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Motivo: {motivoPendente}</p>}<p className="mt-3 text-xs font-medium text-emerald-700">Você não precisa refazer o orçamento.</p><button onClick={resetar} className="mt-6 px-4 py-2 bg-brand-navy text-white rounded-lg">Novo pedido</button></div></div>
 
   if (salvo) return <div className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-navyLight flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-lg p-8 max-w-lg w-full text-center"><CheckCircle size={48} className="text-brand-teal mx-auto mb-4" /><h2 className="text-xl font-bold text-slate-800 mb-2">{fluxoSobMedida ? 'Orçamento sob medida salvo!' : 'Pedido enviado!'}</h2><p className="text-slate-500 mb-6">{fluxoSobMedida ? (salvoComPendenciasTecnicas ? `O orçamento de ${clienteNome} foi salvo com segurança. Há tipologias ou variáveis técnicas pendentes, que podem ser completadas depois sem refazer o orçamento.` : `A configuração de ${clienteNome} foi salva. Agora você pode calcular materiais, custo, sobra, margem e preço.`) : `${clienteNome} entrou no painel de orçamentos.`}</p><div className="grid gap-3">{pedidoEnviadoId && fluxoSobMedida && !salvoComPendenciasTecnicas && <Link href={`/orcamento/${pedidoEnviadoId}/composicao`} className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl flex items-center justify-center gap-2 font-bold"><Calculator size={17} /> Calcular o orçamento</Link>}{pedidoEnviadoId && <Link href={`/kanban?orcamento=${pedidoEnviadoId}`} className="w-full px-4 py-3 border border-brand-teal text-brand-teal rounded-xl flex items-center justify-center gap-2 font-medium"><Pencil size={17} /> {salvoComPendenciasTecnicas ? 'Completar pendências técnicas' : 'Editar este orçamento'}</Link>}<div className="grid grid-cols-2 gap-3"><button onClick={resetar} className="px-4 py-2.5 bg-brand-navy text-white rounded-xl">Novo orçamento</button><Link href="/kanban" className="px-4 py-2.5 border border-slate-300 rounded-xl">Ver painel</Link></div></div></div></div>
+
+  // Estado real do orçamento adaptado aos mesmos campos e estilos da prévia aprovada.
+  const corGeral = acabamento === 'outro' ? acabamentoOutroTexto : acabamento || ''
+  const contramarcoGeral = contramarco || 'indefinido'
+  const itensTela: ItemTela[] = itens.map((it, idx) => ({
+    id: it.id,
+    tipo: it.itemTipo || null,
+    ambiente: it.ambiente,
+    medida: it.tipoMedida,
+    largura: it.largura,
+    altura: it.altura,
+    quantidade: it.quantidade,
+    descricao: it.itemTipo === 'sob_medida' ? it.tipoOutroTexto : it.descricao,
+    contramarco: it.contramarcoOverride || 'herdar',
+    cor: it.cor,
+    observacaoGeral: it.observacaoGeral || '',
+    observacaoCliente: it.itemTipo === 'sob_medida' ? it.descricao : it.observacaoCliente || '',
+    observacaoProducao: it.observacaoProducao || '',
+    fotos: it.fotosPreviews.map((url, i) => ({ nome: it.fotos[i]?.name || 'Foto da esquadria', url })),
+    aberto: itensAbertos[it.id] ?? (idx === itens.length - 1),
+  }))
+  function alterar(id: string, patch: Partial<ItemTela>) {
+    const original = itens.find(it => it.id === id)
+    if (!original) return
+    if (patch.aberto !== undefined) setItensAbertos(prev => ({...prev,[id]:patch.aberto!}))
+    const alteracoes: Partial<ItemForm> = {}
+    if (patch.tipo !== undefined && patch.tipo !== original.itemTipo) {
+      Object.assign(alteracoes, {
+        itemTipo: patch.tipo || '', materialCategoria: patch.tipo === 'material_avulso' ? 'perfil' : null,
+        tipo: 'outro', tipoOutroTexto: '', descricao: '', produtoId: null, produtoNome: null,
+        precoUnit: null, modoOrigem: 'manual', linhaId: null, linhaNome: null, tipologiaId: null,
+        configuracaoPresetId: null, configuracaoNome: null, configuracaoValidada: false,
+        configuracaoStatus: 'pendente', tipoMedida: 'comum',
+      })
+    }
+    for (const chave of ['ambiente','largura','altura','quantidade','cor','observacaoGeral','observacaoProducao'] as const) {
+      if (patch[chave] !== undefined) Object.assign(alteracoes, { [chave]: patch[chave] })
+    }
+    const tipoAtual = patch.tipo !== undefined ? patch.tipo : original.itemTipo
+    if (patch.medida !== undefined && tipoAtual === 'sob_medida') alteracoes.tipoMedida = patch.medida
+    if (patch.contramarco !== undefined) alteracoes.contramarcoOverride = patch.contramarco === 'herdar' ? null : patch.contramarco
+    if (patch.descricao !== undefined) {
+      if (tipoAtual === 'sob_medida') {
+        Object.assign(alteracoes, {
+          tipo: 'outro', tipoOutroTexto: patch.descricao, modoOrigem: 'manual',
+          produtoId: null, precoUnit: null, linhaId: null, linhaNome: null, tipologiaId: null,
+          configuracaoPresetId: null, configuracaoNome: null, configuracaoValidada: false,
+          configuracaoStatus: 'pendente',
+        })
+      } else alteracoes.descricao = patch.descricao
+    }
+    if (patch.observacaoCliente !== undefined) {
+      if (tipoAtual === 'sob_medida') alteracoes.descricao = patch.observacaoCliente
+      else alteracoes.observacaoCliente = patch.observacaoCliente
+    }
+    if (Object.keys(alteracoes).length) atualizarItemCampos(id,alteracoes)
+  }
+  function adicionar() { adicionarEsquadriaColeta() }
+  function duplicar(item: ItemTela) {
+    const original = itens.find(it => it.id === item.id)
+    if (original) duplicarItemCompleto(original)
+  }
+  function tirar(id: string) { removerItem(id) }
 
   const totalEsquadrias = itens.reduce((soma, item) => soma + Math.max(1, Number.parseInt(item.quantidade || '1', 10) || 1), 0)
 
