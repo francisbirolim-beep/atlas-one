@@ -98,12 +98,12 @@ export async function GET(request:NextRequest){
     }
     const {data,error}=await query.order('nome').limit(120)
     if(error)throw error
-    const encontrados=(data||[]).filter(p=>{
+    const encontrados=(data||[]).filter((p:any)=>{
       const texto=normalizar([p.codigo,p.nome,p.descricao].join(' '))
       return termos.every(t=>texto.includes(normalizar(t)))
     }).slice(0,90)
 
-    const ids=encontrados.map(p=>p.id)
+    const ids=encontrados.map((p:any)=>p.id)
     const {data:associacoes,error:erroAssociacoes}=ids.length
       ?await supabaseAdmin.from('linha_produtos').select('produto_id,linha_id').eq('empresa_id',usuario.empresa_id).in('produto_id',ids).limit(700)
       :{data:[],error:null}
@@ -130,7 +130,7 @@ export async function GET(request:NextRequest){
       for(const foto of validadas||[])if(!fotos.has(foto.produto_id))fotos.set(foto.produto_id,foto.url)
     }
     return NextResponse.json({
-      produtos:encontrados.map(p=>({
+      produtos:encontrados.map((p:any)=>({
         id:p.id,codigo:p.codigo||'',nome:p.nome,descricao:p.descricao||'',
         categoria:p.categoria||'',unidade:p.unidade||'un.',linhaId:null,
         linha:(linhasPorProduto.get(p.id)||[]).join(' / ')||null,
