@@ -1,45 +1,74 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
-import { Camera, X } from 'lucide-react'
+import { Camera, Eye, X } from 'lucide-react'
 
-// Mostra apenas a imagem explicitamente vinculada/validada ao produto ou a foto
-// que o usuário selecionou neste navegador. Nunca gera nem associa imagens sozinho.
-// Prévia: nenhum arquivo é enviado para o servidor.
+// Prévia: nunca associa uma foto não verificada automaticamente.
+// Imagens migradas por produto_id podem ser conferidas e usadas apenas na sessão.
+// Não há upload ao banco. Imagens criadas/inventadas ou de outros produtos são proibidas.
 export default function FotoProdutoPreview({
-  nome, fotoUrl, tamanho='card', imagemLocal, onSelecionarImagem
+  nome,fotoUrl,fotoCandidataUrl,tamanho='card',imagemLocal,onSelecionarImagem,
+  candidataConfirmada=false,onConfirmarCandidata
 }:{
-  nome:string; fotoUrl?:string|null; tamanho?:'card'|'pequeno'|'detalhe';
-  imagemLocal?:string|null; onSelecionarImagem?:(file:File|null)=>void
+  nome:string;fotoUrl?:string|null;fotoCandidataUrl?:string|null;
+  tamanho?:'card'|'pequeno'|'detalhe';imagemLocal?:string|null;
+  onSelecionarImagem?:(file:File|null)=>void;
+  candidataConfirmada?:boolean;onConfirmarCandidata?:(confirmado:boolean)=>void
 }){
-  const inputId=useId()
+  const id=useId()
   const [temporaria,setTemporaria]=useState<string|null>(null)
   const [falhou,setFalhou]=useState(false)
   const [erro,setErro]=useState('')
+  const [conferindo,setConferindo]=useState(false)
+  const [confirmadaLocal,setConfirmadaLocal]=useState(false)
+  const [candidataFalhou,setCandidataFalhou]=useState(false)
   const localRef=useRef<string|null>(null)
   useEffect(()=>()=>{if(localRef.current)URL.revokeObjectURL(localRef.current)},[])
-  const url=imagemLocal||temporaria||(!falhou&&fotoUrl&&/^https?:\/\//i.test(fotoUrl)?fotoUrl:null)
-  const formato=tamanho==='detalhe'?'h-56 w-full':tamanho==='pequeno'?'h-16 w-16':'h-24 w-24 sm:h-28 sm:w-28'
+  const urlValida=(v?:string|null)=>!!v&&/^https:\/\//i.test(v)
+  const confirmou=onConfirmarCandidata?candidataConfirmada:confirmadaLocal
+  const candidata=urlValida(fotoCandidataUrl)&&!candidataFalhou?fotoCandidataUrl:null
+  const url=imagemLocal||temporaria||(!falhou&&urlValida(fotoUrl)?fotoUrl:null)||(!falhou&&confirmou?candidata:null)
+  const tamanhoClasse=tamanho==='detalhe'?'h-56 w-full':tamanho==='pequeno'?'h-16 w-16':'h-24 w-24 sm:h-28 sm:w-28'
   function escolher(arquivo?:File){
     if(!arquivo)return
-    if(!['image/jpeg','image/png','image/webp'].includes(arquivo.type)){setErro('Selecione JPG, PNG ou WebP.');return}
-    if(arquivo.size>8*1024*1024){setErro('Imagem de até 8 MB.');return}
+    if(!['image/jpeg','image/png','image/webp'].includes(arquivo.type)){setErro('Escolha uma imagem JPG, PNG ou WebP.');return}
+    if(arquivo.size>8*1024*1024){setErro('A imagem pode ter até 8 MB.');return}
     if(onSelecionarImagem){onSelecionarImagem(arquivo);setFalhou(false);setErro('');return}
     if(localRef.current)URL.revokeObjectURL(localRef.current)
-    const proxima=URL.createObjectURL(arquivo)
-    localRef.current=proxima
-    setTemporaria(proxima);setFalhou(false);setErro('')
+    const url=URL.createObjectURL(arquivo);localRef.current=url
+    setTemporaria(url);setFalhou(false);setErro('')
+  }
+  function confirmar(){
+    if(onConfirmarCandidata)onConfirmarCandidata(true)
+    else setConfirmadaLocal(true)
+    setConferindo(false);setFalhou(false)
   }
   return <div className={'flex shrink-0 flex-col items-center justify-center gap-1.5 '+(tamanho==='detalhe'?'w-full':'')}>
-    {url&&<div className={'grid shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-white '+formato}>
-      <img src={url} alt={'Imagem vinculada a '+nome} className="h-full w-full object-contain p-1" loading="lazy" onError={()=>{if(temporaria)setTemporaria(null);else setFalhou(true)}}/>
+    {url&&<div className={'grid shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-white '+tamanhoClasse}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={'Foto conferida ou escolhida para '+nome} className="h-full w-full object-contain p-1" loading="lazy" onError={()=>setFalhou(true)}/>
     </div>}
-    <label htmlFor={inputId} className="flex max-w-full cursor-pointer items-center justify-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-center text-[10px] font-bold leading-tight text-blue-700 hover:bg-blue-100">
+    {!url&&candidata&&<button type="button" onClick={()=>setConferindo(true)} className="inline-flex max-w-full items-center justify-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-center text-[10px] font-bold text-amber-800 hover:bg-amber-100">
+      <Eye size={13} className="shrink-0"/> Conferir foto cadastrada
+    </button>}
+    <label htmlFor={id} className="inline-flex max-w-full cursor-pointer items-center justify-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 text-center text-[10px] font-bold text-blue-700 hover:bg-blue-100">
       <Camera size={13} className="shrink-0"/>{url?'Trocar foto':'Adicionar imagem correta'}
     </label>
-    <input id={inputId} type="file" className="sr-only" accept="image/jpeg,image/png,image/webp" onChange={e=>{escolher(e.target.files?.[0]);e.currentTarget.value=''}} aria-label={'Selecionar imagem correta de '+nome}/>
-    {(imagemLocal||temporaria)&&<button type="button" onClick={()=>{if(onSelecionarImagem)onSelecionarImagem(null);if(localRef.current)URL.revokeObjectURL(localRef.current);localRef.current=null;setTemporaria(null)}} className="inline-flex items-center gap-1 text-[10px] text-slate-500"><X size={11}/> Desfazer escolha</button>}
-    {(imagemLocal||temporaria)&&<span className="text-center text-[10px] font-semibold text-amber-700">Foto apenas nesta prévia</span>}
+    <input id={id} type="file" className="sr-only" accept="image/jpeg,image/png,image/webp"
+      aria-label={'Escolher foto correta de '+nome}
+      onChange={e=>{escolher(e.target.files?.[0]);e.currentTarget.value=''}}/>
+    {(imagemLocal||temporaria)&&<button type="button" className="text-[10px] text-slate-500" onClick={()=>{if(onSelecionarImagem)onSelecionarImagem(null);if(localRef.current)URL.revokeObjectURL(localRef.current);localRef.current=null;setTemporaria(null)}}>Desfazer escolha</button>}
+    {(imagemLocal||temporaria||confirmou)&&<span className="text-center text-[10px] font-semibold text-amber-700">Confirmada só na prévia</span>}
     {erro&&<span role="alert" className="text-center text-[10px] text-red-600">{erro}</span>}
+    {conferindo&&candidata&&<div role="dialog" aria-modal="true" aria-label={'Conferir a foto de '+nome} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-4" onClick={()=>setConferindo(false)}>
+      <div className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-5 shadow-2xl" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4"><div><h3 className="text-base font-black text-slate-900">Foto associada ao cadastro</h3><p className="mt-1 text-xs text-slate-600">{nome}</p></div><button type="button" className="rounded-lg p-2 hover:bg-slate-100" aria-label="Fechar" onClick={()=>setConferindo(false)}><X size={18}/></button></div>
+        <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">Esta foto foi importada e ainda não foi validada. Confira visualmente se corresponde a este produto. Se estiver errada, não confirme.</p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={candidata} alt={'Imagem importada a conferir: '+nome} className="mx-auto h-64 max-w-full object-contain" onError={()=>{setCandidataFalhou(true);setConferindo(false)}}/>
+        <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={()=>setConferindo(false)} className="rounded-xl border px-4 py-2.5 text-xs font-bold">Não corresponde / Voltar</button><button type="button" onClick={confirmar} className="rounded-xl bg-blue-700 px-4 py-2.5 text-xs font-bold text-white">Esta é a foto correta</button></div>
+        <p className="text-[11px] text-slate-500">Confirmação válida apenas nesta prévia; nenhuma foto será alterada no cadastro real.</p>
+      </div>
+    </div>}
   </div>
 }
