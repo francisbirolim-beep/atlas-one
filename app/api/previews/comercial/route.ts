@@ -12,7 +12,7 @@ type Categoria=typeof categorias[number]
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const pronto=['produto','porta_janela_padrao','kit','pu']
 const normalizar=(v:unknown)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
-const campos='id,codigo,nome,descricao,categoria,unidade,preco,preco_promocional,linha_id'
+const campos='id,codigo,nome,descricao,categoria,unidade,preco,preco_promocional,linha_id,foto_url'
 const categoriasConhecidas=['perfil','acessorio','vidro',...pronto]
 
 // Isola a tipagem genérica profunda do builder PostgREST de relações cruzadas.
@@ -59,6 +59,8 @@ export async function GET(request:NextRequest){
     const categoria=request.nextUrl.searchParams.get('categoria')||'todos'
     if(!categorias.includes(categoria as Categoria))return NextResponse.json({error:'Categoria inválida.'},{status:400})
     const tipoCategoria=categoria as Categoria
+    const precoFiltro=request.nextUrl.searchParams.get('precoFiltro')||'todos'
+    if(!['todos','com','sem'].includes(precoFiltro))return NextResponse.json({error:'Filtro de preço inválido.'},{status:400})
     const linhaId=request.nextUrl.searchParams.get('linhaId')||''
     if(linhaId&&!uuid.test(linhaId))return NextResponse.json({error:'Linha inválida.'},{status:400})
 
@@ -91,6 +93,8 @@ export async function GET(request:NextRequest){
       .eq('empresa_id',usuario.empresa_id).eq('ativo',true)
     query=aplicarCategoria(query,tipoCategoria)
     if(linhaId)query=query.eq('linha_produtos.linha_id',linhaId).eq('linha_produtos.empresa_id',usuario.empresa_id)
+    if(precoFiltro==='com')query=query.or('preco.gt.0,preco_promocional.gt.0')
+    if(precoFiltro==='sem')query=query.or('and(preco.is.null,preco_promocional.is.null),and(preco.is.null,preco_promocional.lte.0),and(preco.lte.0,preco_promocional.is.null),and(preco.lte.0,preco_promocional.lte.0)')
     const termos=(q.match(/[A-Za-zÀ-ÿ0-9-]{2,}/g)||[]).slice(0,7)
     for(const bruto of termos){
       const termo=bruto.replace(/[^A-Za-zÀ-ÿ0-9-]/g,'')
@@ -118,9 +122,9 @@ export async function GET(request:NextRequest){
       linhasPorProduto.set(a.produto_id,atuais)
     }
 
-    // Fotos importadas da Wvetro estão vinculadas por produto_id, porém PENDENTES
-    // de validação e podem não corresponder ao item. NÃO exibimos automaticamente:
-    // o usuário pode conferir e aprovar apenas nesta sessão da prévia.
+    // Fotos já cadastradas são exibidas automaticamente, por vínculo exato de produto_id.
+    // Fotos importadas pendentes recebem sinalização de origem, sem bloquear visualização.
+    // Não é criada, buscada ou substituída nenhuma imagem fictícia.
     const fotos=new Map<string,string>()
     const candidatas=new Map<string,string>()
     const urlSegura=(v:string)=>{try{const u=new URL(v);return u.protocol==='https:'&&['urtqbvjpwnrfaayolymt.supabase.co','api.wvetro.com.br'].includes(u.hostname)}catch{return false}}
@@ -144,8 +148,8 @@ export async function GET(request:NextRequest){
         id:p.id,codigo:p.codigo||'',nome:p.nome,descricao:p.descricao||'',
         categoria:p.categoria||'',unidade:p.unidade||'un.',linhaId:null,
         linha:(linhasPorProduto.get(p.id)||[]).join(' / ')||null,
-        fotoUrl:fotos.get(p.id)||null,
-        fotoCandidataUrl:fotos.has(p.id)?null:candidatas.get(p.id)||null, // Exige conferência manual na prévia.
+        fotoUrl:fotos.get(p.id)||(!candidatas.has(p.id)&&p.foto_url&&urlSegura(p.foto_url)?p.foto_url:null),
+        fotoCandidataUrl:fotos.has(p.id)?null:candidatas.get(p.id)||null, // Aparece automaticamente com aviso de validação pendente.
         preco:Number(p.preco||0)>0?Number(p.preco):null,
         precoPromocional:p.preco_promocional!=null&&Number(p.preco_promocional)>0?Number(p.preco_promocional):null,
       })),linhas,limitado:(data||[]).length===120
