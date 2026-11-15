@@ -18,7 +18,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [autenticado, setAutenticado] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const rotaPublica = pathname === '/login'
+  // Esta rota exibe somente um formulário de demonstração local, sem leitura/gravação de dados reais.
+  const rotaPublica = pathname === '/previa/coleta-obra'
+    || pathname === '/login'
     || pathname === '/redefinir-senha'
     || pathname.startsWith('/medicao-final/acesso/')
     || pathname.startsWith('/assistencia/acesso/')
