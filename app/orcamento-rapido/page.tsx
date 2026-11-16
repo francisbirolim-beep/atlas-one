@@ -131,6 +131,7 @@ function nomeNormalizado(valor: string) {
 function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partial<ItemForm>)=>void}) {
   // O texto digitado é parte do item/rascunho, não somente do campo de busca.
   const [busca,setBusca]=useState(item.produtoNome || item.tipoOutroTexto || '')
+  const [buscaAberta,setBuscaAberta]=useState(false)
   const [resultados,setResultados]=useState<ProdutoAtlasBusca[]>([])
   const [carregando,setCarregando]=useState(false)
   const [podeCadastrarProdutoPronto,setPodeCadastrarProdutoPronto]=useState(false)
@@ -149,7 +150,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
 
   useEffect(()=>{
     setErroCadastro('')
-    if(busca.trim().length<2){setResultados([]);setCarregando(false);return}
+    if(!buscaAberta||busca.trim().length<2){setResultados([]);setCarregando(false);return}
     const timer=window.setTimeout(async()=>{
       setCarregando(true)
       const termo=busca.trim().replace(/[,%()]/g,' ')
@@ -165,7 +166,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
       setCarregando(false)
     },250)
     return()=>window.clearTimeout(timer)
-  },[busca,item.itemTipo,item.materialCategoria])
+  },[busca,buscaAberta,item.itemTipo,item.materialCategoria])
 
   async function cadastrarProdutoPronto(){
     const nome=busca.trim()
@@ -223,6 +224,7 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
       })
       setBusca(produto.codigo?`${produto.codigo} · ${produto.nome}`:produto.nome)
       setResultados([])
+      setBuscaAberta(false)
     }catch(e){
       setErroCadastro(e instanceof Error?e.message:'Não foi possível cadastrar o produto.')
     }finally{
@@ -237,14 +239,14 @@ function CatalogoItemAtlas({item,onChange}:{item:ItemForm;onChange:(patch:Partia
       :item.itemTipo==='material_avulso'
         ?'Produto / material'
         :'Produto cadastrado'
-  const podeOferecerCadastro=item.itemTipo==='medida_padrao'&&busca.trim().length>=2&&!carregando&&!resultados.length&&!item.produtoId
+  const podeOferecerCadastro=buscaAberta&&item.itemTipo==='medida_padrao'&&busca.trim().length>=2&&!carregando&&!resultados.length&&!item.produtoId
 
-  return <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+  return <div onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))window.setTimeout(()=>setBuscaAberta(false),120)}} className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
     {item.itemTipo==='material_avulso'&&<div><label className="mb-1 block text-xs text-slate-500">Categoria</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{([['perfil','Perfil'],['acessorio','Acessório'],['vidro','Vidro'],['outros','Outros']] as const).map(([v,l])=><button type="button" key={v} onClick={()=>{setBusca('');setResultados([]);onChange({materialCategoria:v,produtoId:null,produtoNome:null})}} className={`rounded-lg border px-2 py-2 text-xs ${item.materialCategoria===v?'border-brand-navy bg-brand-navy text-white':'bg-white'}`}>{l}</button>)}</div></div>}
     {item.itemTipo==='kit_porta_pronta'&&<p className="text-xs text-blue-800">O catálogo é opcional. Você pode digitar o tipo de porta aqui ou descrevê-lo nas observações para liberar o envio.</p>}
     {item.itemTipo==='medida_padrao'&&<p className="text-xs text-blue-800">Produto não cadastrado? Escreva o nome normalmente e envie o orçamento. O cadastro e a conferência de custo/preço podem ser feitos depois.</p>}
-    <div><label className="mb-1 block text-xs text-slate-500">{item.itemTipo==='kit_porta_pronta'?'Tipo de porta / buscar kit cadastrado':rotulo}</label><input value={busca} onChange={e=>{const texto=e.target.value;setBusca(texto);if(item.itemTipo==='kit_porta_pronta')onChange({tipoOutroTexto:texto,produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'});else if(item.itemTipo==='medida_padrao')onChange({tipo:'outro',tipoOutroTexto:texto,produtoNome:texto,produtoId:null,precoUnit:null,modoOrigem:'manual'});else if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
-    {!!resultados.length&&<div className="max-h-64 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([])}} className="flex w-full items-center gap-3 border-b px-3 py-2 text-left last:border-0 hover:bg-blue-50">
+    <div><label className="mb-1 block text-xs text-slate-500">{item.itemTipo==='kit_porta_pronta'?'Tipo de porta / buscar kit cadastrado':rotulo}</label><input value={busca} onFocus={()=>setBuscaAberta(true)} onKeyDown={e=>{if(e.key==="Escape")setBuscaAberta(false)}} onChange={e=>{const texto=e.target.value;setBusca(texto);if(item.itemTipo==='kit_porta_pronta')onChange({tipoOutroTexto:texto,produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'});else if(item.itemTipo==='medida_padrao')onChange({tipo:'outro',tipoOutroTexto:texto,produtoNome:texto,produtoId:null,precoUnit:null,modoOrigem:'manual'});else if(item.produtoId)onChange({produtoId:null,produtoNome:null,precoUnit:null,modoOrigem:'manual'})}} placeholder={item.itemTipo==='medida_padrao'?'Digite o nome do produto pronto...':item.itemTipo==='kit_porta_pronta'?'Digite o nome do kit...':'Digite código ou nome...'} className="w-full rounded-lg border p-2.5 text-sm"/>{carregando&&<p className="mt-1 text-xs text-slate-400">Buscando...</p>}</div>
+    {buscaAberta&&!!resultados.length&&<div className="max-h-64 overflow-y-auto rounded-lg border bg-white">{resultados.map(p=><button type="button" key={p.id} onClick={()=>{onChange({produtoId:p.id,produtoNome:p.nome,materialUnidade:p.unidade||null,precoUnit:p.preco==null?null:Number(p.preco),tipo:'outro',tipoOutroTexto:p.nome,modoOrigem:'produto'});setBusca(p.codigo?`${p.codigo} · ${p.nome}`:p.nome);setResultados([]);setBuscaAberta(false)}} className="flex w-full items-center gap-3 border-b px-3 py-2 text-left last:border-0 hover:bg-blue-50">
           <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
             {p.foto_url && /^https?:\/\//i.test(p.foto_url) ? <img src={p.foto_url} alt={`Foto do produto ${p.nome}`} className="h-full w-full object-contain"/> : <><Camera size={17}/><span className="mt-0.5 text-[9px]">Sem foto</span></>}
           </span>
@@ -342,6 +344,7 @@ export default function OrcamentoRapido() {
   const [resumo, setResumo] = useState(false)
   const [clienteIdOrigem, setClienteIdOrigem] = useState<string | null>(null)
   const [clienteNome, setClienteNome] = useState('')
+  const [buscaClienteAberta, setBuscaClienteAberta] = useState(false)
   const [clienteWhatsapp, setClienteWhatsapp] = useState('')
   const [cidade, setCidade] = useState('')
   const [obraNome, setObraNome] = useState('')
@@ -1042,7 +1045,7 @@ export default function OrcamentoRapido() {
         </div>
       </div>
 
-      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className="mx-auto max-w-6xl space-y-4 px-3 pb-40 pt-5 sm:px-6 sm:pb-28 sm:pt-6">
+      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className="mx-auto max-w-6xl space-y-4 px-3 pb-56 pt-5 sm:px-6 sm:pt-6 md:pb-28">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="mb-1 text-xs font-bold uppercase tracking-widest text-blue-600">Etapa de levantamento</p>
@@ -1070,7 +1073,15 @@ export default function OrcamentoRapido() {
           </div>
           <div className="space-y-4 p-4 sm:p-5">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="relative"><label className={rotulo}>Cliente</label><input className={campo} data-preserve-case="true" value={clienteNome} onChange={e=>{ limparErroValidacaoAoEditar();setClienteNome(e.target.value);setClienteIdOrigem(null);setObraIdSelecionada(null);setObrasDoCliente([]) }} placeholder="Nome do cliente"/><BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={selecionarClienteExistente}/></div>
+              <div className="relative" onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget))window.setTimeout(()=>setBuscaClienteAberta(false),120)}}>
+                <label className={rotulo}>Cliente</label>
+                <input className={campo} data-preserve-case="true" value={clienteNome}
+                  onFocus={()=>setBuscaClienteAberta(true)}
+                  onKeyDown={e=>{if(e.key==='Escape')setBuscaClienteAberta(false)}}
+                  onChange={e=>{ limparErroValidacaoAoEditar();setBuscaClienteAberta(true);setClienteNome(e.target.value);setClienteIdOrigem(null);setObraIdSelecionada(null);setObrasDoCliente([]) }}
+                  placeholder="Nome do cliente"/>
+                {buscaClienteAberta&&<BuscaClientesComGestao busca={clienteNome} selecionadoId={clienteIdOrigem} onSelecionar={cliente=>{selecionarClienteExistente(cliente);setBuscaClienteAberta(false)}}/>}
+              </div>
               <div><label className={rotulo}>Nome da obra / local</label><input className={campo} value={obraNome} onChange={e=>{limparErroValidacaoAoEditar();setObraNome(e.target.value)}} disabled={!!obraIdSelecionada} placeholder="Ex.: Residência / reforma"/></div>
               <div><label className={rotulo}>Cidade</label><input className={campo} value={cidade} onChange={e=>{limparErroValidacaoAoEditar();setCidade(e.target.value)}} placeholder="Cidade da obra"/></div>
             </div>
@@ -1314,16 +1325,17 @@ export default function OrcamentoRapido() {
           <p>Levantamento com rascunho protegido no aparelho</p>
         </div>
       </main>
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
+      {/* No celular, a navegação geral ocupa a base: manter as ações acima dela. */}
+      <div className="fixed inset-x-0 bottom-[calc(3.6rem+env(safe-area-inset-bottom))] z-30 border-t border-slate-200 bg-white/95 px-3 py-2 shadow-xl backdrop-blur md:bottom-0 md:z-20 md:p-3">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 items-center gap-2 md:flex md:flex-wrap md:justify-between">
           <p className="hidden text-xs font-semibold text-slate-600 lg:block">{itens.length} itens no levantamento · Rascunho individual por cliente</p>
           <button type="button" onClick={adicionar} className={secundario}><Plus size={16}/> Adicionar</button>
-          <button type="button" onClick={()=>setResumo(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-3 py-3 text-sm font-extrabold text-white hover:bg-blue-800 sm:px-5"><FileText size={17}/> Visualizar resumo</button>
-          <button type="button" onClick={() => void salvar()} disabled={salvando} className="inline-flex min-w-[150px] flex-1 items-center justify-center gap-2 rounded-xl bg-brand-teal px-4 py-3 text-sm font-extrabold text-white hover:brightness-95 disabled:opacity-60 sm:flex-none"><Send size={17}/>{salvando ? 'Enviando...' : fluxoSobMedida ? 'Salvar orçamento e continuar' : 'Enviar orçamento'}</button>
+          <button type="button" aria-label="Visualizar resumo" onClick={()=>setResumo(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-2 py-2.5 text-xs font-extrabold text-white hover:bg-blue-800 sm:text-sm md:px-5 md:py-3"><FileText size={17}/><span className="sm:hidden">Resumo</span><span className="hidden sm:inline">Visualizar resumo</span></button>
+          <button type="button" onClick={() => void salvar()} disabled={salvando} className="col-span-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-teal px-4 py-3 text-sm font-extrabold text-white hover:brightness-95 disabled:opacity-60 md:col-span-1 md:w-auto md:flex-1 lg:flex-none"><Send size={17}/>{salvando ? 'Enviando...' : fluxoSobMedida ? 'Salvar orçamento e continuar' : 'Enviar orçamento'}</button>
         </div>
       </div>
-      {resumo && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true" aria-label="Resumo da coleta">
-        <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+      {resumo && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-2 sm:p-3" role="dialog" aria-modal="true" aria-label="Resumo da coleta">
+        <div className="max-h-[calc(100dvh-1rem)] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:max-h-[calc(100dvh-1.5rem)]">
           <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className="text-xl font-extrabold">Resumo da coleta</h2><p className="text-xs text-amber-700">Confira o pedido antes de enviar</p></div><button aria-label="Fechar resumo" type="button" onClick={()=>setResumo(false)} className="rounded-lg p-2 hover:bg-slate-100"><X size={20}/></button></div>
           <div className="rounded-xl bg-blue-50 p-3 text-sm"><b>Cliente:</b> {clienteNome||'Não informado'}<br/><b>Obra:</b> {obraNome||'Não informada'}<br/><b>Cidade:</b> {cidade||'Não informada'}</div>
           <div className="mt-3 space-y-2">
@@ -1335,7 +1347,7 @@ export default function OrcamentoRapido() {
               {item.fotos.length>0 && <p className="mt-2 text-xs text-blue-700">{item.fotos.length} foto(s) adicionada(s)</p>}
             </div>)}
           </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <div className="sticky bottom-0 z-10 -mx-5 -mb-5 mt-4 grid gap-2 border-t bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:grid-cols-2">
             <button type="button" onClick={()=>setResumo(false)} className="rounded-xl border border-slate-300 bg-white py-3 text-sm font-bold text-slate-900">Voltar à edição</button>
             <button type="button" onClick={()=>{setResumo(false);void salvar()}} className="rounded-xl bg-blue-700 py-3 text-sm font-bold text-white">Conferir e enviar</button>
           </div>
@@ -1387,9 +1399,9 @@ export default function OrcamentoRapido() {
               </div>
             </div>
 
-            <div className="grid shrink-0 gap-2 border-t bg-slate-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:grid-cols-2 sm:gap-3 sm:px-5 sm:py-4">
-              <button type="button" onClick={() => setConferenciaAberta(false)} className="rounded-xl border bg-white px-4 py-3 text-sm font-semibold">Voltar e corrigir</button>
-              <button type="button" onClick={() => void confirmarEnvio()} disabled={salvando} className="flex items-center justify-center gap-2 rounded-xl bg-brand-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"><Send size={17}/>{salvando?'Enviando...':'Confirmar e enviar'}</button>
+            <div className="grid shrink-0 grid-cols-2 gap-2 border-t bg-slate-50 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:gap-3 sm:px-5 sm:py-4">
+              <button type="button" onClick={() => setConferenciaAberta(false)} className="rounded-xl border bg-white px-2 py-3 text-xs font-semibold sm:px-4 sm:text-sm">Voltar e corrigir</button>
+              <button type="button" onClick={() => void confirmarEnvio()} disabled={salvando} className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-teal px-2 py-3 text-xs font-semibold text-white disabled:opacity-60 sm:gap-2 sm:px-4 sm:text-sm"><Send size={17}/>{salvando?'Enviando...':'Confirmar e enviar'}</button>
             </div>
           </div>
         </div>
