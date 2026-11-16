@@ -45,6 +45,8 @@ export default function RecebimentoPorParcelasPage() {
   const [selecionadas, setSelecionadas] = useState<Record<string, string>>({})
   const [descontos, setDescontos] = useState<Record<string, string>>({})
   const [juros, setJuros] = useState<Record<string, string>>({})
+  const [multas, setMultas] = useState<Record<string, string>>({})
+  const [valorEntregue, setValorEntregue] = useState('')
   const [forma, setForma] = useState('pix')
   const [data, setData] = useState(isoLocal(new Date()))
   const [referencia, setReferencia] = useState('')
@@ -92,21 +94,27 @@ export default function RecebimentoPorParcelasPage() {
   const total = useMemo(() => Object.values(selecionadas).reduce((s, valor) => s + (valorDigitado(valor) || 0), 0), [selecionadas])
   const totalDesconto = useMemo(() => Object.keys(selecionadas).reduce((s,id)=>s+(valorDigitado(descontos[id])||0),0),[selecionadas,descontos])
   const totalJuros = useMemo(() => Object.keys(selecionadas).reduce((s,id)=>s+(valorDigitado(juros[id])||0),0),[selecionadas,juros])
-  const totalBaixado = Math.round((total+totalDesconto-totalJuros)*100)/100
+  const totalMulta = useMemo(() => Object.keys(selecionadas).reduce((s,id)=>s+(valorDigitado(multas[id])||0),0),[selecionadas,multas])
+  const totalBaixado = Math.round((total+totalDesconto-totalJuros-totalMulta)*100)/100
+  const entregueDigitado = valorEntregue.trim()?valorDigitado(valorEntregue):total
+  const troco = forma==='dinheiro'&&Number.isFinite(entregueDigitado)
+    ?Math.max(0,Math.round((entregueDigitado-total)*100)/100):0
   const vencidas = contas.filter(c => c.vencimento && c.vencimento < isoLocal(new Date()))
   const saldoSelecionado = contas.filter(c=>c.id in selecionadas).reduce((v,c)=>v+saldoParcela(c),0)
   const saldoApos = Math.max(0, Math.round((saldoSelecionado-totalBaixado)*100)/100)
 
-  function alterarAjuste(conta:ContaReceberCliente360,tipo:'desconto'|'juros',texto:string){
+  function alterarAjuste(conta:ContaReceberCliente360,tipo:'desconto'|'juros'|'multa',texto:string){
     const descontoAnterior=valorDigitado(descontos[conta.id])||0
     const jurosAnterior=valorDigitado(juros[conta.id])||0
+    const multaAnterior=valorDigitado(multas[conta.id])||0
     const novo=valorDigitado(texto)
     if(tipo==='desconto')setDescontos(s=>({...s,[conta.id]:texto}))
-    else setJuros(s=>({...s,[conta.id]:texto}))
+    else if(tipo==='juros')setJuros(s=>({...s,[conta.id]:texto}))
+    else setMultas(s=>({...s,[conta.id]:texto}))
     if(!Number.isFinite(novo))return
-    const integralAntes=saldoParcela(conta)-descontoAnterior+jurosAnterior
+    const integralAntes=saldoParcela(conta)-descontoAnterior+jurosAnterior+multaAnterior
     const integralDepois=saldoParcela(conta)-
-      (tipo==='desconto'?novo:descontoAnterior)+(tipo==='juros'?novo:jurosAnterior)
+      (tipo==='desconto'?novo:descontoAnterior)+(tipo==='juros'?novo:jurosAnterior)+(tipo==='multa'?novo:multaAnterior)
     setSelecionadas(atual=>{
       if(!(conta.id in atual)||Math.abs(valorDigitado(atual[conta.id])-integralAntes)>0.009||integralDepois<=0)return atual
       return {...atual,[conta.id]:formatarCampo(integralDepois)}
@@ -117,6 +125,7 @@ export default function RecebimentoPorParcelasPage() {
     if(conta.id in selecionadas){
       setDescontos(a=>{const v={...a};delete v[conta.id];return v})
       setJuros(a=>{const v={...a};delete v[conta.id];return v})
+      setMultas(a=>{const v={...a};delete v[conta.id];return v})
     }
     setSelecionadas(atual => {
       const proximo = { ...atual }
@@ -138,6 +147,8 @@ export default function RecebimentoPorParcelasPage() {
     setSelecionadas(valores)
     setDescontos({})
     setJuros({})
+    setMultas({})
+    setValorEntregue('')
   }
 
   async function salvar() {
@@ -150,27 +161,32 @@ export default function RecebimentoPorParcelasPage() {
       valor: valorDigitado(valorTexto),
       desconto: valorDigitado(descontos[conta_receber_id]),
       juros: valorDigitado(juros[conta_receber_id]),
+      multa: valorDigitado(multas[conta_receber_id]),
     }))
 
     for (const item of alocacoes) {
       const conta = contas.find(c => c.id === item.conta_receber_id)
-      if (!conta || ![item.valor,item.desconto,item.juros].every(Number.isFinite)
-          || item.valor <= 0 || item.desconto < 0 || item.juros < 0
-          || item.valor + item.desconto > saldoParcela(conta) + item.juros + 0.009
-) {
-        setErro('Revise o valor recebido, desconto e juros de cada parcela. A baixa não pode ultrapassar o saldo.')
+      if (!conta || ![item.valor,item.desconto,item.juros,item.multa].every(Number.isFinite)
+          || item.valor <= 0 || item.desconto < 0 || item.juros < 0 || item.multa < 0
+          || item.valor + item.desconto > saldoParcela(conta) + item.juros + item.multa + 0.009
+          || item.desconto + Number(conta.valor_desconto||0) > Number(conta.valor||0) + 0.009) {
+        setErro('Revise o valor recebido, os juros, a multa e o desconto de cada parcela. A baixa não pode ultrapassar o saldo.')
         return
       }
     }
 
     if (!alocacoes.length) {setErro('Selecione ao menos uma parcela.');return}
+    if(forma==='dinheiro' && (!Number.isFinite(entregueDigitado) || entregueDigitado+0.009<total)){
+      setErro('O valor entregue em dinheiro precisa ser igual ou superior ao valor recebido. Confira o troco.')
+      return
+    }
     setSalvando(true)
     try {
       const token=await tokenAtual()
       if(!token)throw new Error('Sessão expirada.')
       const resposta=await fetch('/api/financeiro/cliente-recebimento',{
         method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
-        body:JSON.stringify({clienteId:cliente.id,dataRecebimento:data,forma,referencia,observacoes,alocacoes,origem:origemCaixa?'caixa':'cliente'})
+        body:JSON.stringify({clienteId:cliente.id,dataRecebimento:data,forma,referencia,observacoes,alocacoes,valorEntregue:forma==='dinheiro'?entregueDigitado:total,troco,origem:origemCaixa?'caixa':'cliente'})
       })
       const resultado=await resposta.json()
       if(!resposta.ok||!resultado.ok)throw new Error(resultado.error||'Não foi possível registrar recebimento.')
@@ -184,26 +200,29 @@ export default function RecebimentoPorParcelasPage() {
           const valorMovimento=alocacoesObra.reduce((v,a)=>v+a.valor,0)
           const descontoObra=alocacoesObra.reduce((v,a)=>v+a.desconto,0)
           const jurosObra=alocacoesObra.reduce((v,a)=>v+a.juros,0)
+          const multaObra=alocacoesObra.reduce((v,a)=>v+a.multa,0)
           const original=contasObra.reduce((v,c)=>v+Number(c.valor||0),0)
           const aberto=contasObra.reduce((v,c)=>v+saldoParcela(c),0)
           return {tipo:'receber',nome:cliente.nome,documento:(cliente as Cliente&{cpf_cnpj?:string|null}).cpf_cnpj||null,
             obra:obraId==='sem-obra'?'Não vinculada a obra':obraPorId[obraId]||'Obra cadastrada',
             referencia:referencia||'PRÉVIA (sem movimentação)',descricao:observacoes||'Simulação de recebimento parcial',
             forma,data,valorOriginal:original,valorMovimento,
-            itens:[{id:'SIMULACAO',data,valor:valorMovimento,desconto:descontoObra,juros:jurosObra,forma}],
-            saldo:Math.max(0,Math.round((aberto-valorMovimento-descontoObra+jurosObra)*100)/100),id:'SIMULACAO'} as ReciboInfo
+            itens:[{id:'SIMULACAO',data,valor:valorMovimento,desconto:descontoObra,juros:jurosObra,multa:multaObra,troco:obraId===[...grupos.keys()][0]?troco:0,forma}],
+            saldo:Math.max(0,Math.round((aberto-valorMovimento-descontoObra+jurosObra+multaObra)*100)/100),id:'SIMULACAO'} as ReciboInfo
         }))
         setSucesso(`Simulação: ${moeda(resultado.valor||total)} a receber. Nenhuma baixa foi gravada. Confira os recibos abaixo.`)
         setReciboRegistradoId(null)
         return
       }
-      setSucesso(`Recebimento de ${moeda(resultado.valor??total)} confirmado em ${resultado.parcelas||alocacoes.length} parcela(s). Desconto: ${moeda(totalDesconto)} · Juros: ${moeda(totalJuros)}. Saldo atualizado no Atlas.`)
+      setSucesso(`Recebimento de ${moeda(resultado.valor??total)} confirmado em ${resultado.parcelas||alocacoes.length} parcela(s). Desconto: ${moeda(totalDesconto)} · Juros: ${moeda(totalJuros)} · Multa: ${moeda(totalMulta)} · Troco: ${moeda(troco)}. Saldo atualizado no Atlas.`)
       setReciboRegistradoId(resultado.recebimentoId||null)
       setObrasRecebidas([...new Set(alocacoes.map(a=>contas.find(c=>c.id===a.conta_receber_id)?.obra_id||'sem-obra'))])
       setRecibosSimulados([])
       setSelecionadas({})
       setDescontos({})
       setJuros({})
+      setMultas({})
+      setValorEntregue('')
       setReferencia('')
       setObservacoes('')
       await carregar()
@@ -241,8 +260,8 @@ export default function RecebimentoPorParcelasPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div><h2 className="font-bold text-slate-900">Parcelas em aberto</h2><p className="text-xs text-slate-500">Escolha as parcelas e informe valor recebido, desconto e juros. O valor e o saldo são conferidos antes de confirmar a baixa.</p></div>
-          <div className="flex flex-wrap gap-2"><button onClick={() => selecionar(vencidas)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Selecionar vencidas</button><button onClick={() => selecionar(contas)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Selecionar todas</button><button onClick={() => {setSelecionadas({});setDescontos({});setJuros({})}} className="rounded-lg border px-3 py-2 text-xs font-semibold">Limpar</button></div>
+          <div><h2 className="font-bold text-slate-900">Parcelas em aberto</h2><p className="text-xs text-slate-500">Escolha as parcelas e informe Valor Juros, Valor Multa e Valor Desconto antes da baixa. Valor Troco é calculado no pagamento em dinheiro.</p></div>
+          <div className="flex flex-wrap gap-2"><button onClick={() => selecionar(vencidas)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Selecionar vencidas</button><button onClick={() => selecionar(contas)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Selecionar todas</button><button onClick={() => {setSelecionadas({});setDescontos({});setJuros({});setMultas({});setValorEntregue('')}} className="rounded-lg border px-3 py-2 text-xs font-semibold">Limpar</button></div>
         </div>
 
         <div className="divide-y divide-slate-100">
@@ -250,29 +269,32 @@ export default function RecebimentoPorParcelasPage() {
           {contas.map(conta => {
             const marcada = conta.id in selecionadas
             const valorSaldo = saldoParcela(conta)
-            return <div key={conta.id} className={`grid gap-3 p-4 md:grid-cols-[28px_1fr_minmax(420px,1.2fr)] md:items-center ${marcada ? 'bg-blue-50/40' : ''}`}>
+            return <div key={conta.id} className={`grid gap-3 p-4 xl:grid-cols-[28px_1fr_minmax(500px,1.3fr)] md:items-center ${marcada ? 'bg-blue-50/40' : ''}`}>
               <input type="checkbox" checked={marcada} onChange={() => alternar(conta)} className="h-4 w-4"/>
               <button type="button" onClick={() => alternar(conta)} className="text-left">
                 <p className="font-semibold text-slate-800">{conta.documento || `Parcela ${conta.parcela}/${conta.total_parcelas}`}</p>
                 <p className="mt-1 text-xs text-slate-500">Vence {dataBR(conta.vencimento)} · {conta.obra_id && obraPorId[conta.obra_id] ? obraPorId[conta.obra_id] : 'Sem obra'} · saldo {moeda(valorSaldo)}</p>
               </button>
               <div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                  <label className="text-[11px] font-bold uppercase text-blue-700">Valor Juros (R$)
+                    <input disabled={!marcada} value={juros[conta.id]??''} onChange={e=>alterarAjuste(conta,'juros',e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`Juros da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-blue-200 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
+                  </label>
+                  <label className="text-[11px] font-bold uppercase text-blue-700">Valor Multa (R$)
+                    <input disabled={!marcada} value={multas[conta.id]??''} onChange={e=>alterarAjuste(conta,'multa',e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`Multa da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-blue-200 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
+                  </label>
+                  <label className="text-[11px] font-bold uppercase text-amber-700">Valor Desconto (R$)
+                    <input disabled={!marcada} value={descontos[conta.id]??''} onChange={e=>alterarAjuste(conta,'desconto',e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`Desconto da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-amber-200 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
+                  </label>
                   <label className="text-[11px] font-bold uppercase text-slate-500">Valor recebido
                     <input id={`valor-recebido-${conta.id}`} disabled={!marcada} value={selecionadas[conta.id] ?? ''} onChange={e => setSelecionadas(s => ({ ...s, [conta.id]: e.target.value }))} inputMode="decimal" aria-label={`Valor recebido da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
                   </label>
-                  <label className="text-[11px] font-bold uppercase text-amber-700">Desconto (R$)
-                    <input disabled={!marcada} value={descontos[conta.id]??''} onChange={e=>alterarAjuste(conta,'desconto',e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`Desconto da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-amber-200 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
-                  </label>
-                  <label className="text-[11px] font-bold uppercase text-blue-700">Juros (R$)
-                    <input disabled={!marcada} value={juros[conta.id]??''} onChange={e=>alterarAjuste(conta,'juros',e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`Juros da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-blue-200 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
-                  </label>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  <button type="button" disabled={salvando} onClick={()=>setSelecionadas(s=>({...s,[conta.id]:formatarCampo(valorSaldo-(valorDigitado(descontos[conta.id])||0)+(valorDigitado(juros[conta.id])||0))}))} className="rounded-md border bg-white px-2 py-1 text-[11px] font-bold">Receber tudo</button>
+                  <button type="button" disabled={salvando} onClick={()=>setSelecionadas(s=>({...s,[conta.id]:formatarCampo(valorSaldo-(valorDigitado(descontos[conta.id])||0)+(valorDigitado(juros[conta.id])||0)+(valorDigitado(multas[conta.id])||0))}))} className="rounded-md border bg-white px-2 py-1 text-[11px] font-bold">Receber tudo</button>
                   <button type="button" disabled={salvando} onClick={()=>receberParcial(conta)} className="rounded-md border bg-white px-2 py-1 text-[11px] font-bold">Receber parcial</button>
                 </div>
-                {marcada && <p className="mt-1 text-[11px] font-semibold text-slate-600">Saldo após: {moeda(Math.max(0,valorSaldo+(valorDigitado(juros[conta.id])||0)-(valorDigitado(descontos[conta.id])||0)-(valorDigitado(selecionadas[conta.id])||0)))}</p>}
+                {marcada && <p className="mt-1 text-[11px] font-semibold text-slate-600">Saldo após: {moeda(Math.max(0,valorSaldo+(valorDigitado(juros[conta.id])||0)+(valorDigitado(multas[conta.id])||0)-(valorDigitado(descontos[conta.id])||0)-(valorDigitado(selecionadas[conta.id])||0)))}</p>}
               </div>
             </div>
           })}
@@ -281,8 +303,19 @@ export default function RecebimentoPorParcelasPage() {
 
       <section className="sticky bottom-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase text-slate-400">Total deste recebimento</p><p className="text-2xl font-bold text-emerald-700">{moeda(total)}</p>
-          <p className="mt-1 text-xs text-slate-600">Desconto: <strong className="text-amber-700">{moeda(totalDesconto)}</strong> · Juros: <strong className="text-blue-700">{moeda(totalJuros)}</strong> · Total abatido do principal: <strong>{moeda(totalBaixado)}</strong></p>
-          <p className="text-xs text-slate-500">{Object.keys(selecionadas).length} parcela(s) selecionada(s) · saldo dessas parcelas após recebimento: <strong>{moeda(saldoApos)}</strong></p></div><button disabled={salvando || total <= 0 || !Object.keys(selecionadas).length || (origemCaixa&&!caixaAberto&&!modoPrevia)} onClick={salvar} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-5 py-3 font-bold text-white disabled:opacity-40"><Receipt size={18}/>{salvando ? 'Processando...' : modoPrevia ? 'Simular recebimento (sem gravar)' : 'Confirmar recebimento'}</button></div>
+          <p className="mt-1 text-xs text-slate-600">Valor Juros: <strong className="text-blue-700">{moeda(totalJuros)}</strong> · Valor Multa: <strong className="text-blue-700">{moeda(totalMulta)}</strong> · Valor Desconto: <strong className="text-amber-700">{moeda(totalDesconto)}</strong></p>
+          <p className="text-xs text-slate-600">Abatimento do título: <strong>{moeda(totalBaixado)}</strong> · Valor Troco: <strong>{moeda(troco)}</strong></p>
+          <p className="text-xs text-slate-500">{Object.keys(selecionadas).length} parcela(s) selecionada(s) · saldo dessas parcelas após recebimento: <strong>{moeda(saldoApos)}</strong></p>
+          <div className="mt-3 grid max-w-lg grid-cols-2 gap-3">
+            <label className="text-xs font-bold text-slate-600">Valor entregue (R$)
+              <input inputMode="decimal" disabled={forma!=='dinheiro'} placeholder={formatarCampo(total)} value={forma==='dinheiro'?valorEntregue:''} onChange={e=>setValorEntregue(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm font-semibold disabled:bg-slate-100" aria-label="Valor entregue em dinheiro" />
+            </label>
+            <label className="text-xs font-bold text-slate-600">Valor Troco (R$)
+              <input value={formatarCampo(troco)} readOnly className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-right text-sm font-bold" aria-label="Valor Troco calculado" />
+            </label>
+          </div>
+          <p className="mt-1 text-[11px] text-slate-500">Troco somente para dinheiro. Em branco, considera-se valor entregue igual ao recebimento. O troco não é receita e não reduz o título.</p>
+          </div><button disabled={salvando || total <= 0 || !Object.keys(selecionadas).length || (origemCaixa&&!caixaAberto&&!modoPrevia)} onClick={salvar} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-5 py-3 font-bold text-white disabled:opacity-40"><Receipt size={18}/>{salvando ? 'Processando...' : modoPrevia ? 'Simular recebimento (sem gravar)' : 'Confirmar recebimento'}</button></div>
       </section>
       {!!recibosSimulados.length && <section className="space-y-5" aria-label="Recibos simulados por obra">
         <style jsx global>{`@media print { body * {visibility:hidden!important} .recibo-simulado:not(.selecionado-impressao) {display:none!important} .recibo-simulado.selecionado-impressao, .recibo-simulado.selecionado-impressao * {visibility:visible!important} .recibo-simulado.selecionado-impressao {position:absolute;top:0;left:0;width:100%} }`}</style>

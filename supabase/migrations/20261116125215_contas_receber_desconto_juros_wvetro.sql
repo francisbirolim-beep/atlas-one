@@ -5,6 +5,13 @@ alter table public.financeiro_contas_receber
   add column if not exists valor_juros numeric(14,2) not null default 0;
 alter table public.financeiro_recebimentos
   add column if not exists valor_juros numeric(14,2) not null default 0;
+alter table public.financeiro_contas_receber
+  add column if not exists valor_multa numeric(14,2) not null default 0;
+alter table public.financeiro_recebimentos
+  add column if not exists valor_multa numeric(14,2) not null default 0;
+-- Troco é propriedade do recebimento (não é parcela nem altera o título).
+alter table public.financeiro_recebimentos
+  add column if not exists valor_troco numeric(14,2) not null default 0;
 
 alter table public.financeiro_contas_receber
   drop constraint if exists financeiro_contas_receber_valor_juros_nao_negativo;
@@ -14,6 +21,12 @@ alter table public.financeiro_recebimentos
   drop constraint if exists financeiro_recebimentos_valor_juros_nao_negativo;
 alter table public.financeiro_recebimentos
   add constraint financeiro_recebimentos_valor_juros_nao_negativo check (valor_juros >= 0);
+alter table public.financeiro_contas_receber
+  add constraint financeiro_contas_receber_valor_multa_nao_negativo check (valor_multa >= 0);
+alter table public.financeiro_recebimentos
+  add constraint financeiro_recebimentos_valor_multa_nao_negativo check (valor_multa >= 0);
+alter table public.financeiro_recebimentos
+  add constraint financeiro_recebimentos_valor_troco_nao_negativo check (valor_troco >= 0);
 
 -- Juros acumulados derivam exclusivamente de alocações identificadas.
 -- Atualiza também quando se exclui/estorna uma alocação, sem afetar alocações legadas.
@@ -64,6 +77,54 @@ after insert or update or delete on public.financeiro_recebimento_alocacoes
 for each row execute function private.sincronizar_juros_recebimento_v1();
 revoke all on function private.sincronizar_juros_recebimento_v1() from public, anon, authenticated;
 
+-- Multa tem sincronização independente, incluindo estorno e exclusão de alocações.
+create or replace function private.sincronizar_multa_recebimento_v1()
+returns trigger language plpgsql security definer
+set search_path = public, private, pg_temp as $$
+declare
+  v_conta uuid;
+  v_rec uuid;
+begin
+  if tg_op = 'INSERT' and new.tipo <> 'multa' then return new; end if;
+  if tg_op = 'DELETE' and old.tipo <> 'multa' then return old; end if;
+  if tg_op = 'UPDATE' and old.tipo <> 'multa' and new.tipo <> 'multa' then return new; end if;
+
+  for v_conta in
+    select distinct id from unnest(array[
+      case when tg_op <> 'INSERT' then old.conta_receber_id else null end,
+      case when tg_op <> 'DELETE' then new.conta_receber_id else null end
+    ]) as t(id) where id is not null
+  loop
+    update public.financeiro_contas_receber c
+       set valor_multa = coalesce((
+         select sum(a.valor) from public.financeiro_recebimento_alocacoes a
+          where a.conta_receber_id = v_conta and a.tipo = 'multa'
+       ), 0), updated_at = now()
+     where c.id = v_conta;
+  end loop;
+
+  for v_rec in
+    select distinct id from unnest(array[
+      case when tg_op <> 'INSERT' then old.recebimento_id else null end,
+      case when tg_op <> 'DELETE' then new.recebimento_id else null end
+    ]) as t(id) where id is not null
+  loop
+    update public.financeiro_recebimentos r
+       set valor_multa = coalesce((
+         select sum(a.valor) from public.financeiro_recebimento_alocacoes a
+          where a.recebimento_id = v_rec and a.tipo = 'multa'
+       ), 0)
+     where r.id = v_rec;
+  end loop;
+  return coalesce(new, old);
+end;
+$$;
+drop trigger if exists trg_financeiro_multa_alocacao_v1 on public.financeiro_recebimento_alocacoes;
+create trigger trg_financeiro_multa_alocacao_v1
+after insert or update or delete on public.financeiro_recebimento_alocacoes
+for each row execute function private.sincronizar_multa_recebimento_v1();
+revoke all on function private.sincronizar_multa_recebimento_v1() from public, anon, authenticated;
+
 -- Rotina nova e isolada. O fluxo antigo continua sendo usado quando não há juros
 -- ou desconto novo e o título não possui juros acumulados.
 create or replace function public.registrar_recebimento_cliente_ajustes_v1(
@@ -75,7 +136,8 @@ create or replace function public.registrar_recebimento_cliente_ajustes_v1(
   p_alocacoes jsonb,
   p_usuario_id uuid,
   p_usuario_nome text,
-  p_caixa_id uuid default null
+  p_caixa_id uuid default null,
+  p_troco numeric default 0
 ) returns jsonb
 language plpgsql security definer
 set search_path = public, private, pg_temp as $$
@@ -91,9 +153,11 @@ declare
   v_valor numeric;
   v_desconto numeric;
   v_juros numeric;
+  v_multa numeric;
   v_total numeric := 0;
   v_total_desconto numeric := 0;
   v_total_juros numeric := 0;
+  v_total_multa numeric := 0;
   v_obra_id uuid;
   v_count integer := 0;
 begin
@@ -108,6 +172,10 @@ begin
     raise exception 'Contexto da empresa inconsistente.';
   end if;
   if p_data_recebimento is null then raise exception 'Data de recebimento obrigatória.'; end if;
+  if p_troco is null or p_troco < 0 or p_troco <> round(p_troco,2) or p_troco > 100000000
+      or (coalesce(p_forma,'') <> 'dinheiro' and p_troco > 0) then
+    raise exception 'Troco inválido ou forma de pagamento incompatível.';
+  end if;
   if lower(coalesce(trim(p_forma),'')) not in (
     'pix','dinheiro','boleto','cartao','cartao_debito','cartao_credito',
     'transferencia','cheque','outro','outros'
@@ -133,18 +201,20 @@ begin
   -- Contas bloqueadas em ordem estável para prevenir corrida de baixas simultâneas.
   for v_item in
     select * from jsonb_to_recordset(p_alocacoes)
-      as a(conta_receber_id uuid, valor numeric, desconto numeric, juros numeric)
+      as a(conta_receber_id uuid, valor numeric, desconto numeric, juros numeric, multa numeric)
      order by conta_receber_id
   loop
     v_valor := v_item.valor;
     v_desconto := coalesce(v_item.desconto, 0);
     v_juros := coalesce(v_item.juros, 0);
+    v_multa := coalesce(v_item.multa, 0);
     if v_item.conta_receber_id is null or v_valor is null or v_valor <= 0
-       or v_desconto < 0 or v_juros < 0
+       or v_desconto < 0 or v_juros < 0 or v_multa < 0
        or v_valor <> round(v_valor,2)
        or v_desconto <> round(v_desconto,2)
-       or v_juros <> round(v_juros,2) then
-      raise exception 'Valores de pagamento, desconto ou juros inválidos.';
+       or v_juros <> round(v_juros,2)
+       or v_multa <> round(v_multa,2) then
+      raise exception 'Pagamento, desconto, juros ou multa inválidos.';
     end if;
     select * into v_conta from public.financeiro_contas_receber
       where id = v_item.conta_receber_id and empresa_id = v_empresa
@@ -152,15 +222,17 @@ begin
     if v_conta.id is null or v_conta.status in ('cancelado','pago') then
       raise exception 'Parcela inexistente, cancelada ou já quitada.';
     end if;
-    v_saldo := round(v_conta.valor + coalesce(v_conta.valor_juros,0)
+    v_saldo := round(v_conta.valor + coalesce(v_conta.valor_juros,0) + coalesce(v_conta.valor_multa,0)
       - coalesce(v_conta.valor_pago,0) - coalesce(v_conta.valor_desconto,0),2);
-    if v_saldo <= 0 or v_valor + v_desconto > v_saldo + v_juros + 0.009
+    if v_saldo <= 0 or v_valor + v_desconto > v_saldo + v_juros + v_multa + 0.009
+       or coalesce(v_conta.valor_desconto,0) + v_desconto > v_conta.valor + 0.009
  then
       raise exception 'Recebimento e ajustes ultrapassam o saldo da parcela.';
     end if;
     v_total := v_total + v_valor;
     v_total_desconto := v_total_desconto + v_desconto;
     v_total_juros := v_total_juros + v_juros;
+    v_total_multa := v_total_multa + v_multa;
     v_count := v_count + 1;
   end loop;
 
@@ -173,22 +245,23 @@ begin
 
   insert into public.financeiro_recebimentos (
     empresa_id, cliente_id, cliente_nome, obra_id, data_recebimento,
-    valor, valor_desconto, valor_juros, forma, referencia, observacoes,
+    valor, valor_desconto, valor_juros, valor_multa, valor_troco, forma, referencia, observacoes,
     criado_por_id, criado_por_nome
   ) values (
     v_empresa, p_cliente_id, v_cliente_nome, v_obra_id, p_data_recebimento,
-    v_total, 0, 0, p_forma, nullif(trim(p_referencia),''),
+    v_total, 0, 0, 0, p_troco, p_forma, nullif(trim(p_referencia),''),
     nullif(trim(p_observacoes),''), p_usuario_id, p_usuario_nome
   ) returning id into v_rec_id;
 
   for v_item in
     select * from jsonb_to_recordset(p_alocacoes)
-      as a(conta_receber_id uuid, valor numeric, desconto numeric, juros numeric)
+      as a(conta_receber_id uuid, valor numeric, desconto numeric, juros numeric, multa numeric)
      order by conta_receber_id
   loop
     v_valor := v_item.valor;
     v_desconto := coalesce(v_item.desconto, 0);
     v_juros := coalesce(v_item.juros, 0);
+    v_multa := coalesce(v_item.multa, 0);
     select * into v_conta from public.financeiro_contas_receber
       where id = v_item.conta_receber_id and empresa_id = v_empresa for update;
 
@@ -218,7 +291,18 @@ begin
       );
     end if;
 
+    if v_multa > 0 then
+      insert into public.financeiro_recebimento_alocacoes (
+        empresa_id, recebimento_id, conta_receber_id, obra_id, tipo,
+        valor, criado_por_id, criado_por_nome
+      ) values (
+        v_empresa, v_rec_id, v_conta.id, v_conta.obra_id, 'multa',
+        v_multa, p_usuario_id, p_usuario_nome
+      );
+    end if;
+
     v_saldo_apos := round(v_conta.valor + coalesce(v_conta.valor_juros,0) + v_juros
+      + coalesce(v_conta.valor_multa,0) + v_multa
       - coalesce(v_conta.valor_pago,0) - v_valor
       - coalesce(v_conta.valor_desconto,0) - v_desconto, 2);
     update public.financeiro_contas_receber
@@ -247,10 +331,10 @@ begin
 
   return jsonb_build_object('ok',true,'recebimento_id',v_rec_id,
     'valor',v_total,'desconto',v_total_desconto,'juros',v_total_juros,
-    'parcelas',v_count,'origem',case when p_caixa_id is null then 'cliente' else 'caixa' end);
+    'multa',v_total_multa,'troco',p_troco,'parcelas',v_count,'origem',case when p_caixa_id is null then 'cliente' else 'caixa' end);
 end;
 $$;
-revoke all on function public.registrar_recebimento_cliente_ajustes_v1(uuid,date,text,text,text,jsonb,uuid,text,uuid)
+revoke all on function public.registrar_recebimento_cliente_ajustes_v1(uuid,date,text,text,text,jsonb,uuid,text,uuid,numeric)
   from public, anon, authenticated;
-grant execute on function public.registrar_recebimento_cliente_ajustes_v1(uuid,date,text,text,text,jsonb,uuid,text,uuid)
+grant execute on function public.registrar_recebimento_cliente_ajustes_v1(uuid,date,text,text,text,jsonb,uuid,text,uuid,numeric)
   to service_role;

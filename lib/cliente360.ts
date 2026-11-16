@@ -39,6 +39,7 @@ export interface ContaReceberCliente360 {
   valor_pago?: number | null
   valor_desconto?: number | null
   valor_juros?: number | null
+  valor_multa?: number | null
   status: string
   forma?: string | null
   data_pagamento?: string | null
@@ -55,6 +56,8 @@ export interface RecebimentoCliente360 {
   valor: number
   valor_desconto?: number | null
   valor_juros?: number | null
+  valor_multa?: number | null
+  valor_troco?: number | null
   forma?: string | null
   cartao_parcelas?: number | null
   referencia?: string | null

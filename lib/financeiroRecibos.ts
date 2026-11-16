@@ -5,6 +5,8 @@ export type ItemReciboRecebimento = {
   forma: string | null
   desconto?: number
   juros?: number
+  multa?: number
+  troco?: number
   referencia?: string | null
   obra?: string | null
   cartaoParcelas?: number | null

@@ -152,6 +152,8 @@ export default function ReciboImpressao({
             </div>
             {!!item.desconto && item.desconto > 0 && <p className="mt-2 flex justify-between gap-3 text-amber-800"><span>Desconto concedido</span><b>{moeda(item.desconto)}</b></p>}
             {!!item.juros && item.juros > 0 && <p className="mt-2 flex justify-between gap-3 text-blue-800"><span>Juros acrescidos</span><b>{moeda(item.juros)}</b></p>}
+            {!!item.multa && item.multa > 0 && <p className="mt-2 flex justify-between gap-3 text-blue-800"><span>Multa acrescida</span><b>{moeda(item.multa)}</b></p>}
+            {!!item.troco && item.troco > 0 && <p className="mt-2 flex justify-between gap-3 text-slate-700"><span>Troco devolvido (dinheiro)</span><b>{moeda(item.troco)}</b></p>}
           </div>)}
         </div>
       </section>}
@@ -164,7 +166,7 @@ export default function ReciboImpressao({
         <p className="flex justify-between gap-4 text-sm"><span>Saldo atual em aberto (consulta)</span><b>{r.saldo}</b></p></>}
       </section>
       {dados.consolidado ? <p className="mt-5 text-xs leading-relaxed text-slate-600">Este documento reúne exclusivamente os recebimentos acima, sem criar novos lançamentos. Descontos não integram o valor efetivamente recebido. Não representa quitação integral de uma venda ou obrigação.</p> : <p className="mt-5 text-xs leading-relaxed text-slate-600">
-        Este recibo comprova exclusivamente o valor do recebimento identificado acima.
+        Este recibo comprova exclusivamente o valor do recebimento identificado acima. Troco devolvido não integra o valor recebido.
         {dados.saldo > 0 ? ' Não representa quitação integral da obrigação.' : ' O saldo consultado está zerado.'}
         {' '}O saldo apresentado é a posição atual do título e pode ser diferente do saldo na data do pagamento.
       </p>}

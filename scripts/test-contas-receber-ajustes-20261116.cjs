@@ -15,6 +15,9 @@ const casos=[
   [{valor:100,valor_pago:50,valor_desconto:3,valor_juros:5},52,'baixa parcial com ajustes'],
   [{valor:100,valor_pago:50,valor_desconto:0},50,'legado sem coluna juros'],
   [{valor:100,valor_pago:250,valor_desconto:0,valor_juros:0},0,'saldo nunca negativo'],
+  [{valor:1000,valor_pago:1000,valor_desconto:50,valor_juros:20,valor_multa:30},0,'juros multa desconto integral'],
+  [{valor:500,valor_pago:200,valor_desconto:15,valor_juros:25,valor_multa:10},320,'juros multa desconto parcial'],
+  [{valor:800,valor_pago:0,valor_desconto:0,valor_juros:0,valor_multa:50},850,'multa acrescida'],
 ]
 for(const [conta,esperado,nome] of casos){
  assert.ok(Math.abs(saldo(conta)-esperado)<0.001,nome)
@@ -23,10 +26,14 @@ const route=read('app/api/financeiro/cliente-recebimento/route.ts')
 const ui=read('app/clientes/[id]/financeiro/recebimento/page.tsx')
 const migration=read('supabase/migrations/20261116125215_contas_receber_desconto_juros_wvetro.sql')
 const report=read('app/financeiro/contas-receber/page.tsx')
-assert.match(ui,/Desconto \(R\$\)/)
-assert.match(ui,/Juros \(R\$\)/)
+assert.match(ui,/Valor Desconto \(R\$\)/)
+assert.match(ui,/Valor Juros \(R\$\)/)
+assert.match(ui,/Valor Multa \(R\$\)/)
+assert.match(ui,/Valor Troco \(R\$\)/)
 assert.match(ui,/totalBaixado/)
 assert.match(route,/registrar_recebimento_cliente_ajustes_v1/)
+assert.match(route,/valorEntregue/)
+assert.match(route,/multa:item.multa/)
 assert.match(route,/registrar_recebimento_cliente_caixa_v1/)
 assert.match(route,/registrar_recebimento_cliente_servidor_v1/)
 assert.match(route,/if\(process\.env\.VERCEL_ENV==='preview'\)return/)
@@ -34,4 +41,13 @@ assert.match(migration,/for update/gi)
 assert.match(migration,/grant execute on function public\.registrar_recebimento_cliente_ajustes_v1[\s\S]*to service_role;/)
 assert.doesNotMatch(migration,/create or replace function public\.registrar_recebimento_cliente_parcelas\(/i)
 assert.match(report,/valor_juros/)
-console.log('OK: 7 cálculos de saldo e verificações de isolamento, preview e apresentação.')
+assert.match(report,/valor_multa/)
+assert.match(report,/valor_troco/)
+assert.match(migration,/trg_financeiro_multa_alocacao_v1/)
+assert.match(migration,/p_troco numeric default 0/)
+assert.match(migration,/tipo,\s*valor, criado_por_id, criado_por_nome/)
+const troco=(entregue,recebido)=>Math.round((entregue-recebido)*100)/100
+assert.equal(troco(550,520),30)
+assert.equal(troco(1000,1000),0)
+assert.equal(200+15-25-10,180)
+console.log('OK: 10 cálculos de saldo, 2 trocos e verificações de multa/desconto/juros, isolamento e prévia.')

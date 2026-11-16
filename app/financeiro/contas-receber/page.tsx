@@ -12,7 +12,7 @@ import { saldoParcela } from '@/lib/cliente360Recebimentos'
 import { rotuloFormaRecebimento, type DetalheFormaRecebimento } from '@/lib/recebimentoFormas'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
-type RecebimentoGeral = { formas?:DetalheFormaRecebimento[]; composicaoInconsistente?:boolean; id:string; cliente_id?:string|null; cliente_nome?:string|null; cliente_cpf_cnpj?:string|null; cliente_cidade?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; valor_juros?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
+type RecebimentoGeral = { formas?:DetalheFormaRecebimento[]; composicaoInconsistente?:boolean; id:string; cliente_id?:string|null; cliente_nome?:string|null; cliente_cpf_cnpj?:string|null; cliente_cidade?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; valor_juros?:number|null; valor_multa?:number|null; valor_troco?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
 
 function moeda(valor: number) {
   return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -102,12 +102,12 @@ export default function ContasReceberPage() {
   const saldoFiltrado=filtradas.reduce((s,c)=>s+saldoParcela(c),0)
   const exportar=()=>baixarCSV('atlas-contas-a-receber.csv',csvFinanceiro([
     ['Contas a receber','De',periodo.inicio||'Todos','Até',periodo.fim||'Todos'],
-    ['Cliente','Obra ID','Documento','Parcela','Total parcelas','Vencimento','Data pagamento','Forma','Valor','Desconto','Juros','Saldo','Status'],
-    ...filtradas.map(c=>[c.cliente_nome,c.obra_id?(nomesObras[c.obra_id]||c.obra_id):'',c.documento,c.parcela,c.total_parcelas,dataBR(c.vencimento),dataBR(c.data_pagamento),c.forma,Number(c.valor||0),Number(c.valor_desconto||0),Number(c.valor_juros||0),saldoParcela(c),c.status]),
-    ['TOTAL','','','','','','','',valorFiltrado,'','',saldoFiltrado,''],
+    ['Cliente','Obra ID','Documento','Parcela','Total parcelas','Vencimento','Data pagamento','Forma','Valor','Desconto','Juros','Multa','Saldo','Status'],
+    ...filtradas.map(c=>[c.cliente_nome,c.obra_id?(nomesObras[c.obra_id]||c.obra_id):'',c.documento,c.parcela,c.total_parcelas,dataBR(c.vencimento),dataBR(c.data_pagamento),c.forma,Number(c.valor||0),Number(c.valor_desconto||0),Number(c.valor_juros||0),Number(c.valor_multa||0),saldoParcela(c),c.status]),
+    ['TOTAL','','','','','','','',valorFiltrado,'','','',saldoFiltrado,''],
     [],['RECEBIMENTOS REGISTRADOS NO PERÍODO'],
-    ['Data recebimento','Cliente','Forma','Valor efetivo','Desconto','Juros','Referência'],
-    ...recebimentosFiltrados.map(r=>[dataBR(r.data_recebimento),r.cliente_nome,r.formas?.length?r.formas.map(f=>rotuloFormaRecebimento(f.forma)+': '+moeda(f.valor)).join(' + '):rotuloFormaRecebimento(r.forma),Number(r.valor||0),Number(r.desconto||0),Number(r.valor_juros||0),r.referencia]),
+    ['Data recebimento','Cliente','Forma','Valor efetivo','Desconto','Juros','Multa','Troco','Referência'],
+    ...recebimentosFiltrados.map(r=>[dataBR(r.data_recebimento),r.cliente_nome,r.formas?.length?r.formas.map(f=>rotuloFormaRecebimento(f.forma)+': '+moeda(f.valor)).join(' + '):rotuloFormaRecebimento(r.forma),Number(r.valor||0),Number(r.desconto||0),Number(r.valor_juros||0),Number(r.valor_multa||0),Number(r.valor_troco||0),r.referencia]),
     ['TOTAL RECEBIDO','','',recebimentosFiltrados.reduce((a,r)=>a+Number(r.valor||0),0)]
   ]))
 
@@ -158,7 +158,7 @@ export default function ContasReceberPage() {
               <table className="w-full min-w-[900px] text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50 text-left text-xs text-slate-500">
-                    <th className="p-3">Cliente</th><th className="p-3">Documento</th><th className="p-3">Parcela</th><th className="p-3">Vencimento</th><th className="p-3">Forma</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Juros</th><th className="p-3 text-right">Saldo</th><th className="p-3">Status</th><th className="p-3"></th>
+                    <th className="p-3">Cliente</th><th className="p-3">Documento</th><th className="p-3">Parcela</th><th className="p-3">Vencimento</th><th className="p-3">Forma</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Juros</th><th className="p-3 text-right">Multa</th><th className="p-3 text-right">Saldo</th><th className="p-3">Status</th><th className="p-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -175,6 +175,7 @@ export default function ContasReceberPage() {
                         <td className="p-3 text-right font-semibold">{moeda(Number(conta.valor || 0))}</td>
                         <td className="p-3 text-right font-semibold text-amber-700">{moeda(Number(conta.valor_desconto || 0))}</td>
                         <td className="p-3 text-right font-semibold text-blue-700">{moeda(Number(conta.valor_juros || 0))}</td>
+                        <td className="p-3 text-right font-semibold text-blue-700">{moeda(Number(conta.valor_multa || 0))}</td>
                         <td className="p-3 text-right font-bold text-slate-900">{moeda(saldo)}</td>
                         <td className="p-3"><span className={`rounded-full px-2 py-1 text-xs ${conta.status === 'pago' || saldo <= 0.009 ? 'bg-emerald-100 text-emerald-700' : vencida ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{conta.status === 'pago' || saldo <= 0.009 ? 'pago' : vencida ? 'vencido' : conta.status}</span></td>
                         <td className="p-3 text-right">
@@ -188,7 +189,7 @@ export default function ContasReceberPage() {
                     )
                   })}
                 </tbody>
-              <tfoot><tr className="bg-slate-50 font-bold"><td colSpan={5} className="p-3">TOTAL DO RELATÓRIO</td><td className="p-3 text-right">{moeda(valorFiltrado)}</td><td colSpan={2}/><td className="p-3 text-right">{moeda(saldoFiltrado)}</td><td colSpan={2}/></tr></tfoot></table>
+              <tfoot><tr className="bg-slate-50 font-bold"><td colSpan={5} className="p-3">TOTAL DO RELATÓRIO</td><td className="p-3 text-right">{moeda(valorFiltrado)}</td><td colSpan={3}/><td className="p-3 text-right">{moeda(saldoFiltrado)}</td><td colSpan={2}/></tr></tfoot></table>
               {!filtradas.length && <div className="py-10 text-center text-sm text-slate-400"><WalletCards className="mx-auto mb-2"/>Nenhuma conta encontrada neste filtro.</div>}
             </div>
           )}
@@ -198,19 +199,21 @@ export default function ContasReceberPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[.12em] text-slate-400">Financeiro geral</p>
             <h2 className="mt-1 text-lg font-bold text-slate-900">Histórico de recebimentos</h2>
-            <p className="mt-1 text-sm text-slate-500">Entradas registradas no Atlas com pagamento, desconto e juros discriminados. Total baixado = recebido + desconto − juros.</p>
+            <p className="mt-1 text-sm text-slate-500">Pagamento, desconto, juros, multa e troco discriminados. Total baixado do título = recebido + desconto − juros − multa. Troco não é receita.</p>
           </div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[1100px] text-sm">
               <thead>
                 <tr className="border-b bg-slate-50 text-left text-xs text-slate-500">
-                  <th className="p-3">Data recebimento</th><th className="p-3">Cliente</th><th className="p-3">Forma</th><th className="p-3 text-right">Recebido</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Juros</th><th className="p-3 text-right">Total baixado</th><th className="p-3">Referência</th><th className="p-3">Registrado no Atlas</th><th className="p-3">Responsável</th><th className="no-print p-3">Recibo</th>
+                  <th className="p-3">Data recebimento</th><th className="p-3">Cliente</th><th className="p-3">Forma</th><th className="p-3 text-right">Recebido</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Juros</th><th className="p-3 text-right">Multa</th><th className="p-3 text-right">Troco</th><th className="p-3 text-right">Total baixado</th><th className="p-3">Referência</th><th className="p-3">Registrado no Atlas</th><th className="p-3">Responsável</th><th className="no-print p-3">Recibo</th>
                 </tr>
               </thead>
               <tbody>
                 {recebimentosFiltrados.map(r => {
                   const desconto=Number(r.desconto||0)
                   const juros=Number(r.valor_juros||0)
+                  const multa=Number(r.valor_multa||0)
+                  const troco=Number(r.valor_troco||0)
                   return <tr key={r.id} className="border-b last:border-0">
                     <td className="p-3 font-semibold text-slate-800">{dataBR(r.data_recebimento)}</td>
                     <td className="p-3">{r.cliente_id?<Link href={`/clientes/${r.cliente_id}`} className="font-semibold text-brand-navy hover:underline">{r.cliente_nome||'Cliente'}</Link>:(r.cliente_nome||'Cliente')}</td>
@@ -218,7 +221,9 @@ export default function ContasReceberPage() {
                     <td className="p-3 text-right font-semibold text-emerald-700">{moeda(Number(r.valor||0))}</td>
                     <td className="p-3 text-right font-semibold text-amber-700">{moeda(desconto)}</td>
                     <td className="p-3 text-right font-semibold text-blue-700">{moeda(juros)}</td>
-                    <td className="p-3 text-right font-bold text-slate-900">{moeda(Number(r.valor||0)+desconto-juros)}</td>
+                    <td className="p-3 text-right font-semibold text-blue-700">{moeda(multa)}</td>
+                    <td className="p-3 text-right font-semibold text-slate-700">{moeda(troco)}</td>
+                    <td className="p-3 text-right font-bold text-slate-900">{moeda(Number(r.valor||0)+desconto-juros-multa)}</td>
                     <td className="p-3 text-slate-600">{r.referencia||'—'}</td>
                     <td className="p-3 text-slate-500">{dataHoraBR(r.created_at)}</td>
                     <td className="p-3 text-slate-600">{r.criado_por_nome||'—'}</td><td className="no-print p-3"><Link target="_blank" href={`/financeiro/recibo/receber/${r.id}`} className="rounded-lg border px-3 py-2 text-xs font-semibold">Imprimir recibo</Link></td>
