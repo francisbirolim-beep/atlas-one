@@ -35,7 +35,7 @@ export async function GET(request:NextRequest){
       if(q.length<2)return NextResponse.json({clientes:[]})
       const tokens=q.split(/\s+/).filter(x=>x.length>1).slice(0,5)
       let query=supabaseAdmin.from('clientes')
-        .select('id,nome,apelido,cpf_cnpj,telefone,whatsapp,cidade')
+        .select('id,nome,apelido,cpf_cnpj,telefone,whatsapp,cidade,endereco,bairro,cep')
         .eq('empresa_id',usuario.empresa_id).eq('ativo',true)
       for(const raw of tokens){
         const t=raw.replace(/[^A-Za-zÀ-ÿ0-9-]/g,'')
@@ -46,11 +46,21 @@ export async function GET(request:NextRequest){
       const clientes=(data||[]).filter(c=>correspondeBuscaAtlas(q,c.nome,c.apelido,c.cpf_cnpj,c.telefone,c.whatsapp,c.cidade)).slice(0,20)
       return NextResponse.json({clientes})
     }
+    if(tipo==='vendedores'){
+      // Não existe tabela exclusiva de vendedores neste projeto: opções reais vêm dos usuários da empresa.
+      const {data,error}=await supabaseAdmin.from('usuarios')
+        .select('id,nome,cargo,role').eq('empresa_id',usuario.empresa_id)
+        .order('nome').limit(100)
+      if(error)throw error
+      return NextResponse.json({vendedores:(data||[]).filter(v=>!!v.nome?.trim()).map(v=>({
+        id:v.id,nome:v.nome,cargo:v.cargo
+      })),origem:'usuarios',somenteLeitura:true},{headers:{'Cache-Control':'no-store'}})
+    }
     if(tipo==='obras'){
       const clienteId=request.nextUrl.searchParams.get('clienteId')||''
       if(!uuid.test(clienteId))return NextResponse.json({obras:[]})
       const {data,error}=await supabaseAdmin.from('obras')
-        .select('id,nome,cidade,bairro,endereco,cliente_id')
+        .select('id,nome,cidade,bairro,endereco,numero_endereco,complemento,uf,cep,cliente_id')
         .eq('empresa_id',usuario.empresa_id).eq('cliente_id',clienteId).order('nome').limit(60)
       if(error)throw error
       return NextResponse.json({obras:data||[]})
