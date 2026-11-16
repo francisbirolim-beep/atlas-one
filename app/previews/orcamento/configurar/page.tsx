@@ -11,6 +11,8 @@ import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
 import FotoTipologiaPreview from '@/components/previews/FotoTipologiaPreview'
 import IdentificacaoOrcamentoPreview, { identificacaoVazia, type IdentificacaoOrcamento } from '@/components/previews/IdentificacaoOrcamentoPreview'
+import CondicoesPagamentoOrcamentoPreview from '@/components/previews/CondicoesPagamentoOrcamentoPreview'
+import { resumoPagamentoOrcamento, type DestinoSaldoOrcamento } from '@/lib/previews/pagamentoOrcamento'
 import VariaveisTipologiaPreview, { type CatalogoEngenharia } from '@/components/previews/VariaveisTipologiaPreview'
 import OrcamentoDocumentoPreview, { type OrcamentoDocumento, type ProdutoDocumento, type TipologiaDocumento } from '@/components/previews/OrcamentoDocumentoPreview'
 import { type DadosPrecosAluminio, type SimulacaoPrecoAluminio, lerSimulacaoPreco, precoCorEfetivo } from '@/lib/previews/precificacaoAluminio'
@@ -69,6 +71,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const [descontoTipo,setDescontoTipo]=useState('sem')
   const [desconto,setDesconto]=useState('')
   const [condicoes,setCondicoes]=useState<{id:number;forma:string;valor:string}[]>([{id:1,forma:'PIX',valor:''}])
+  const [destinoSaldo,setDestinoSaldo]=useState<DestinoSaldoOrcamento>('a_definir')
   const proximaCondicao=useRef(1)
   const [validade,setValidade]=useState('')
   const [observacoes,setObservacoes]=useState('')
@@ -181,7 +184,16 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const descontoBruto=descontoTipo==='percentual'?subtotal*numero(desconto)/100:descontoTipo==='valor'?numero(desconto):0
   const descontoInvalido=descontoTipo==='percentual'?numero(desconto)>100:descontoBruto>subtotal
   const descontoValor=Math.max(0,Math.min(subtotal,descontoBruto))
-  const totalProdutos=Math.max(0,subtotal-descontoValor)
+  const totalProdutos=Math.max(0,Math.round((subtotal-descontoValor)*100)/100)
+  const resumoPagamento=resumoPagamentoOrcamento(totalProdutos,condicoes)
+  function aplicarDescontoAdicional(restante:number){
+    const novoValor=Math.round((descontoValor+restante)*100)/100
+    if(temPendencias||novoValor>subtotal)return
+    setDescontoTipo('valor')
+    setDesconto(novoValor.toFixed(2).replace('.',','))
+    setDestinoSaldo('a_definir')
+    setAviso('')
+  }
   const pendencias=[
     ...itens.filter(i=>(valorUnitario(i.produto)??0)<=0)
       .map(i=>({id:'produto:'+i.produto.id,tipo:'Produto sem preço',
@@ -252,6 +264,18 @@ export default function ConfiguradorOrcamentoSobMedida(){
   function gerar(rascunho=false){
     if(temPendencias&&!rascunho){setMostrarPendencias(true);setAviso('Existem preços ou fórmulas técnicas pendentes. Confira a relação antes de finalizar o orçamento.');return}
     if(descontoInvalido){setAviso('Corrija o desconto.');return}
+    if(resumoPagamento.possuiValorInvalido){
+      setAviso('Informe valores válidos em reais nas condições de pagamento.');return
+    }
+    if(!temPendencias&&resumoPagamento.excedenteCentavos>0){
+      setAviso('A soma das condições ultrapassa o valor total do orçamento.');return
+    }
+    if(!temPendencias&&resumoPagamento.saldoCentavos>0&&resumoPagamento.temValorInformado&&destinoSaldo!=='cliente'){
+      setAviso('Complete a distribuição, aplique desconto ou selecione deixar saldo previsto no cliente.');return
+    }
+    if(destinoSaldo==='cliente'&&!identificacao.clienteId){
+      setAviso('Para deixar saldo no cliente, selecione primeiro um cliente cadastrado.');return
+    }
     const ts:TipologiaDocumento[]=medidas.map(m=>({
       id:m.id,nome:m.tipologia.label,linha:m.linha,largura:String(m.largura),altura:String(m.altura),quantidade:m.quantidade,
       cor:m.cor,vidro:m.vidro,contramarco:m.contramarco==='com'?'Com contramarco':m.contramarco==='sem'?'Sem contramarco':'A definir',variaveis:m.variaveis,imagem:m.tipologia.foto_url||null
@@ -268,7 +292,8 @@ export default function ConfiguradorOrcamentoSobMedida(){
       vendedorNome:identificacao.vendedorNome,
       empresa,tipologias:ts,produtos:ps,subtotal,desconto:descontoValor,totalProdutos,
       temPendencias,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.valor})),
-      validadeDias:validade,data:new Date().toLocaleDateString('pt-BR'),
+      destinoSaldo:destinoSaldo==='cliente'&&identificacao.clienteId?'cliente':'a_definir',
+      validadeDias:validade,data:new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),
       referencia:'PREV-'+String(Date.now()),observacoes:observacoes.trim()})
   }
 
@@ -466,9 +491,26 @@ export default function ConfiguradorOrcamentoSobMedida(){
           <div className="mt-2 flex justify-between"><span>Subtotal ajustado dos produtos</span><b>{moeda(totalProdutos)}</b></div>
           <p className="mt-2 font-bold text-amber-800">O total geral permanece pendente de fórmulas técnicas e preços necessários. {pendencias.length} pendência(s) identificadas; consulte os detalhes acima.</p>
         </div>
-        <div className="mt-4 rounded-xl border p-4"><h3 className="text-sm font-black">Condições de pagamento propostas</h3>
-          {condicoes.map(c=><div key={c.id} className="mt-2 flex flex-wrap gap-2"><select className={input+' flex-1'} value={c.forma} onChange={e=>setCondicoes(a=>a.map(x=>x.id===c.id?{...x,forma:e.target.value}:x))}>{['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Transferência','Boleto'].map(x=><option key={x}>{x}</option>)}</select><input className={input+' flex-1'} value={c.valor} onChange={e=>setCondicoes(a=>a.map(x=>x.id===c.id?{...x,valor:e.target.value}:x))} placeholder="Condição ou valor"/>{condicoes.length>1&&<button type="button" onClick={()=>setCondicoes(a=>a.filter(x=>x.id!==c.id))} className="text-red-700"><Trash2 size={16}/></button>}</div>)}
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={()=>{proximaCondicao.current++;setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',valor:''}])}} className="rounded-lg border px-3 py-2 text-xs font-bold">+ Outra condição</button><label className="text-xs font-bold">Validade (dias)<input className={input+' mt-1 w-36'} type="number" min="1" value={validade} onChange={e=>setValidade(e.target.value)} placeholder="A definir"/></label></div>
+        <div className="mt-4">
+          <CondicoesPagamentoOrcamentoPreview
+            condicoes={condicoes}
+            total={totalProdutos}
+            temPendencias={temPendencias}
+            clienteId={identificacao.clienteId}
+            clienteNome={identificacao.clienteNome}
+            destinoSaldo={destinoSaldo}
+            inputClass={input}
+            onAlterar={(id,campo,valor)=>setCondicoes(a=>a.map(c=>c.id===id?{...c,[campo]:valor}:c))}
+            onAdicionar={()=>{proximaCondicao.current++;setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',valor:''}])}}
+            onRemover={id=>setCondicoes(a=>a.filter(c=>c.id!==id))}
+            onDestinoSaldo={setDestinoSaldo}
+            onDescontoAdicional={aplicarDescontoAdicional}
+          >
+            <label className="text-xs font-bold">Validade (dias)
+              <input className={input+' mt-1 w-36'} type="number" min="1" value={validade}
+                onChange={e=>setValidade(e.target.value)} placeholder="A definir"/>
+            </label>
+          </CondicoesPagamentoOrcamentoPreview>
         </div>
 <section className="mt-4 rounded-xl border p-4">
           <label className="block text-sm font-black" htmlFor="observacoes-orc-sob-medida">Observações do orçamento (opcional)</label>
