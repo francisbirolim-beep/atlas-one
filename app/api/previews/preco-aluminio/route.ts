@@ -7,9 +7,11 @@ export const dynamic='force-dynamic'
 
 // Prévia de consulta. Nenhuma mutação de custos, cores ou precificação oficial.
 export async function GET(req:NextRequest){
+  // Consultas somente leitura para usuários autorizados de orçamento ou venda.
   const usuario=await autenticarBalcao(req,'venda-balcao','consulta')
-  if(!usuario||usuario.role!=='master')
-    return NextResponse.json({error:'Prévia restrita ao perfil Master.'},{status:403})
+    ||await autenticarBalcao(req,'fazer-orcamento-msanfyvj','consulta')
+  if(!usuario)
+    return NextResponse.json({error:'Sem permissão de consulta comercial. Solicite acesso ao Master.'},{status:403})
   try{
     const [config,cores]=await Promise.all([
       supabaseAdmin.from('configuracoes_precificacao').select('valor')
