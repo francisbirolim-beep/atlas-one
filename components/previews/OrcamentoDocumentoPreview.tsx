@@ -24,10 +24,10 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
     ...dados.produtos.map(p=>({tipo:'produto' as const,id:p.id,p}))
   ]
   const paginas:(typeof linhas)[]=[]
-  for(let i=0;i<linhas.length;i+=4)paginas.push(linhas.slice(i,i+4))
+  for(let i=0;i<linhas.length;i+=3)paginas.push(linhas.slice(i,i+3))
   if(!paginas.length)paginas.push([])
   return <div role="dialog" aria-modal="true" aria-label="Prévia do orçamento para impressão" className="fixed inset-0 z-[160] overflow-y-auto bg-slate-950/70 p-3 sm:p-5">
-    <style jsx global>{'@media print { @page { size:A4 portrait; margin:0; } html,body{margin:0!important;padding:0!important;background:white!important;} body * { visibility:hidden!important; } .orcamento-meia-folha,.orcamento-meia-folha * { visibility:visible!important; } .orcamento-meia-folha {position:relative!important; width:210mm!important;min-height:148.5mm!important;box-sizing:border-box!important;margin:0!important;padding:7mm 11mm!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;break-after:page!important;page-break-after:always!important;} .orcamento-controles {display:none!important;} .orcamento-meia-folha tr {break-inside:avoid!important;} .orcamento-meia-folha img {max-width:55mm!important;} }'}</style>
+    <style jsx global>{'@media print { @page { size:A4 portrait; margin:0; } html,body{margin:0!important;padding:0!important;background:white!important;} body * { visibility:hidden!important; } .orcamento-meia-folha,.orcamento-meia-folha * { visibility:visible!important; } .orcamento-meia-folha {position:relative!important; width:210mm!important;height:148.5mm!important;max-height:148.5mm!important;overflow:hidden!important;box-sizing:border-box!important;margin:0!important;padding:7mm 11mm!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#fff!important;break-after:page!important;page-break-after:always!important;} .orcamento-controles {display:none!important;} .orcamento-meia-folha tr {break-inside:avoid!important;} .orcamento-meia-folha img {max-width:55mm!important;} }'}</style>
     <div className="mx-auto max-w-[930px]">
       <div className="orcamento-controles mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3">
         <div><h2 className="text-sm font-black">Orçamento · Prévia de impressão</h2><p className="mt-1 text-xs text-slate-500">Formato compacto de meia folha A4 por via; páginas adicionais se necessário.</p></div>
@@ -39,12 +39,12 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={logo} alt="Logotipo original da Esquadrifácio" className="max-h-[43px] max-w-[240px] object-contain object-left"/>
             <h3 className="mt-1 text-[11px] font-black">{nomeEmpresa}</h3>
-            <p className="text-[10px] text-slate-600">{[dados.empresa?.endereco,dados.empresa?.cidadeUf].filter(Boolean).join(' · ')}</p>
-            <p className="text-[10px] text-slate-600">{[dados.empresa?.cnpj?'CNPJ '+dados.empresa.cnpj:null,dados.empresa?.tel?'Tel. '+dados.empresa.tel:null].filter(Boolean).join(' · ')}</p>
+            <p className="text-[10px] text-slate-600">{[dados.empresa?.endereco,dados.empresa?.cidadeUf,dados.empresa?.cep?'CEP '+dados.empresa.cep:null].filter(Boolean).join(' · ')}</p>
+            <p className="text-[10px] text-slate-600">{[dados.empresa?.cnpj?'CNPJ '+dados.empresa.cnpj:null, dados.empresa?.tel?'Tel. '+dados.empresa.tel:null,dados.empresa?.email].filter(Boolean).join(' · ')}</p>
           </div>
           <div className="shrink-0 text-right"><h1 className="text-base font-black uppercase">Orçamento</h1><p className="text-[10px]">{dados.data}</p><p className="mt-1 text-[10px] font-bold text-amber-700">SIMULAÇÃO · NÃO ENVIADO</p>{paginas.length>1&&<p className="text-[10px]">Via {idx+1}/{paginas.length}</p>}</div>
         </header>
-        <section className="mt-3 flex justify-between border-b pb-2 text-xs"><p><span className="text-slate-500">Cliente: </span><b>{dados.cliente||'Cliente a identificar'}</b></p><p><span className="text-slate-500">Validade: </span><b>{dados.validadeDias||'A definir'} dias</b></p></section>
+        <section className="mt-3 flex justify-between border-b pb-2 text-xs"><p><span className="text-slate-500">Cliente: </span><b>{dados.cliente||'Cliente a identificar'}</b></p><p><span className="text-slate-500">Validade: </span><b>{dados.validadeDias?dados.validadeDias+' dias':'A definir'}</b></p></section>
         <table className="mt-3 w-full table-fixed border-collapse text-left text-[10px]">
           <thead className="border-b bg-slate-50"><tr><th className="w-[64%] py-2">Item / descrição / referência</th><th className="w-[8%] text-right">Qtd.</th><th className="w-[14%] text-right">Unitário</th><th className="w-[14%] text-right">Valor</th></tr></thead>
           <tbody>{pagina.map(item=><tr key={item.id} className="border-b align-top">
@@ -67,10 +67,10 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
         </table>
         {idx===paginas.length-1&&<div className="mt-4 grid grid-cols-2 gap-4 text-[10px]">
           <section className="rounded-md border p-3"><b>Condições de pagamento propostas</b>{dados.condicoes.filter(c=>c.forma).map((c,i)=><p key={i} className="mt-1">{c.forma}{c.valor?' · '+c.valor:''}</p>)}<p className="mt-2 text-slate-500">Orçamento sem recebimento registrado.</p></section>
-          <section className="rounded-md border p-3"><div className="flex justify-between"><span>Produtos com valor</span><b>{moeda(dados.subtotal)}</b></div><div className="mt-1 flex justify-between"><span>Desconto nos produtos</span><b>- {moeda(dados.desconto)}</b></div><div className="mt-2 flex justify-between border-t pt-1 font-black"><span>Subtotal ajustado</span><b>{moeda(dados.totalProdutos)}</b></div>{dados.temPendencias&&<p className="mt-2 font-semibold text-amber-700">TOTAL GERAL PENDENTE DE PRECIFICAÇÃO</p>}</section>
+          <section className="rounded-md border p-3"><div className="flex justify-between"><span>Subtotal dos produtos</span><b>{moeda(dados.subtotal)}</b></div><div className="mt-1 flex justify-between"><span>Desconto</span><b>- {moeda(dados.desconto)}</b></div><div className="mt-2 flex justify-between border-t pt-1 font-black"><span>{dados.temPendencias?'Subtotal conhecido':'Total do orçamento'}</span><b>{moeda(dados.totalProdutos)}</b></div>{dados.temPendencias&&<p className="mt-2 font-semibold text-amber-700">TOTAL GERAL PENDENTE DE PRECIFICAÇÃO</p>}</section>
         </div>}
         {idx===paginas.length-1&&<div className="mt-8 grid grid-cols-2 gap-8 text-center text-[10px]"><div className="border-t pt-1">Aceite / assinatura do cliente</div><div className="border-t pt-1">Esquadrifácio</div></div>}
-        <footer className="mt-4 border-t pt-2 text-center text-[9px] font-bold uppercase text-amber-800">Prévia não fiscal e sem validade comercial. Fórmulas, custos e valores pendentes exigem validação.</footer>
+        <footer className="mt-4 border-t pt-2 text-center text-[9px] font-bold uppercase text-amber-800">Prévia de orçamento, sem emissão ou envio ao cliente. {dados.temPendencias?'Valores pendentes exigem precificação antes de proposta definitiva.':'Condições e valores sujeitos à aprovação.'}</footer>
       </article>)}
     </div>
   </div>
