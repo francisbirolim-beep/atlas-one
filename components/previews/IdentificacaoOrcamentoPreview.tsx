@@ -50,10 +50,9 @@ export default function IdentificacaoOrcamentoPreview({value,onChange}:{value:Id
         if(!resp.ok)throw Error(j.error||'Vendedores indisponíveis.')
         if(ativo){
           setVendedores(j.vendedores||[])
-          onChange(antigo=>{
-            // Componentes chamam onChange com valor, não com atualização funcional.
-            return antigo
-          } as never)
+          if(!value.vendedorId&&usuario.id){
+            onChange({...value,vendedorId:usuario.id,vendedorNome:usuario.nome||''})
+          }
         }
       }catch(e){if(ativo&&!(e instanceof DOMException&&e.name==='AbortError'))setErro(e instanceof Error?e.message:'Falha ao consultar usuários.')}
       finally{if(ativo)setCarregandoVendedores(false)}
