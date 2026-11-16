@@ -1,5 +1,4 @@
--- Contas a Pagar: ajuste financeiro aditivo, sem alterar pagamentos existentes.
--- DDL com lock_timeout para desistir rapidamente se houver operação concorrente.
+-- Alteração aditiva; dados existentes não são modificados.
 set local lock_timeout = '2s';
 set local statement_timeout = '30s';
 
