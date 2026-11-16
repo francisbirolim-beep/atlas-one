@@ -31,6 +31,8 @@ const RESUMO_VAZIO: ResumoMedicaoV2 = {
   totalLinhas: 0,
   totalPecas: 0,
   pecasMedidas: 0,
+  pecasEmAndamento: 0,
+  percentualAndamento: 0,
   pecasProntasEnvio: 0,
   pecasEmConferencia: 0,
   pecasAprovadas: 0,
@@ -45,6 +47,7 @@ const STATUS: Record<StatusOperacionalMedicao, { label: string; classe: string }
   liberado: { label: 'Liberado para medir', classe: 'border-sky-200 bg-sky-50 text-sky-700' },
   em_medicao: { label: 'Em medição', classe: 'border-blue-200 bg-blue-50 text-blue-700' },
   com_pendencia: { label: 'Com pendência', classe: 'border-amber-200 bg-amber-50 text-amber-800' },
+  aguardando_conferencia: { label: 'Aguardando conferência', classe: 'border-amber-200 bg-amber-50 text-amber-800' },
   concluido: { label: 'Medição concluída — conferir envio à Produção', classe: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
   aprovado: { label: 'Aprovado', classe: 'border-emerald-300 bg-emerald-100 text-emerald-800' },
 }
@@ -96,8 +99,10 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     // A tela legada salva o item no proprio estado local. Enquanto a Medicao
     // Final nao emite um evento compartilhado, esse refresh leve mantem o
     // progresso e o status sincronizados sem interferir no formulario.
-    const timer = window.setInterval(() => void carregar(), 5000)
-    return () => window.clearInterval(timer)
+    const atualizar = () => void carregar()
+    window.addEventListener('atlas-medicao-atualizada', atualizar)
+    const timer = window.setInterval(atualizar, 5000)
+    return () => { window.clearInterval(timer); window.removeEventListener('atlas-medicao-atualizada', atualizar) }
   }, [carregar])
 
   useEffect(() => {
@@ -422,12 +427,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
           <div className="mt-5 flex items-end justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-900">Progresso da medição</p>
-              <p className="mt-1 text-xs text-slate-500">{resumo.pecasMedidas} de {resumo.totalPecas} peças concluídas</p>
+              <p className="mt-1 text-xs text-slate-500">{resumo.pecasMedidas} de {resumo.totalPecas} peças concluídas · {resumo.pecasEmAndamento} em andamento</p>
             </div>
-            <span className="text-2xl font-bold text-emerald-700">{resumo.percentual}%</span>
+            <span className="text-2xl font-bold text-emerald-700">{resumo.percentualAndamento}%</span>
           </div>
+          <p className="mt-2 text-[10px] text-slate-400">Andamento estimado: peça iniciada vale 50%; só peça concluída conta para finalizar.</p>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.min(100, Math.max(0, resumo.percentual))}%` }} />
+            <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.min(100, Math.max(0, resumo.percentualAndamento))}%` }} />
           </div>
 
           <div className="mt-auto pt-4">
@@ -516,16 +522,16 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               </div>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-slate-900">Progresso da Medição Final</h2>
-                <span className="text-sm font-bold text-emerald-700">{resumo.percentual}%</span>
+                <span className="text-sm font-bold text-emerald-700">{resumo.percentualAndamento}%</span>
               </div>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
                 <div
                   className="h-full rounded-full bg-emerald-600 transition-all"
-                  style={{ width: `${Math.min(100, Math.max(0, resumo.percentual))}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, resumo.percentualAndamento))}%` }}
                 />
               </div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                <span className="inline-flex items-center gap-1.5"><Ruler size={13} /> {resumo.pecasMedidas}/{resumo.totalPecas} peças medidas</span>
+                <span className="inline-flex items-center gap-1.5"><Ruler size={13} /> {resumo.pecasMedidas}/{resumo.totalPecas} peças concluídas ({resumo.percentual}%) · {resumo.pecasEmAndamento} em andamento</span>
                 <span className="inline-flex items-center gap-1.5"><UserRound size={13} /> {responsavelExibicao}</span>
                 {pendenciasAbertas.length > 0 && (
                   <span className="inline-flex items-center gap-1.5 font-medium text-amber-700"><AlertTriangle size={13} /> {pendenciasAbertas.length} pendência(s)</span>
