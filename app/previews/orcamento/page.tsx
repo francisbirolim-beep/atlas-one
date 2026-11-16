@@ -11,6 +11,7 @@ import { listarTipologias } from '@/lib/tipologias'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
+import IdentificacaoOrcamentoPreview, { identificacaoVazia, type IdentificacaoOrcamento } from '@/components/previews/IdentificacaoOrcamentoPreview'
 
 type Modo='escolher'|'sob_medida'|'produtos'
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
@@ -36,9 +37,7 @@ const decimal=(texto:string)=>{
 const formasPagamento=['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Transferência','Boleto']
 export default function OrcamentoPreview(){
   const [modo,setModo]=useState<Modo>('escolher')
-  const [cliente,setCliente]=useState('')
-  const [buscaCliente,setBuscaCliente]=useState('')
-  const [clientes,setClientes]=useState<{id:string;nome:string;cidade:string|null}[]>([])
+  const [identificacao,setIdentificacao]=useState<IdentificacaoOrcamento>(identificacaoVazia)
   const [tipologias,setTipologias]=useState<Tipologia[]>([])
   const [linhasTecnicas,setLinhasTecnicas]=useState<LinhaTecnica[]>([])
   const [tipologiaId,setTipologiaId]=useState('')
@@ -74,18 +73,6 @@ export default function OrcamentoPreview(){
   const [mostrarPendencias,setMostrarPendencias]=useState(false)
   useEffect(()=>{let ativo=true;void lerDadosEmpresa().then(d=>{if(ativo)setEmpresa(d||null)}).catch(()=>{});return()=>{ativo=false}},[])
   useEffect(()=>{let ativo=true;void Promise.all([listarTipologias(),listarLinhasTecnicas()]).then(([ts,ls])=>{if(ativo){setTipologias(ts);setLinhasTecnicas(ls.filter(l=>l.ativo))}}).catch(()=>{});return()=>{ativo=false}},[])
-  useEffect(()=>{
-    if(buscaCliente.trim().length<2||cliente){setClientes([]);return}
-    const ctrl=new AbortController()
-    const timer=setTimeout(()=>void (async()=>{
-      try{
-        const t=await tokenAtual();if(!t)return
-        const r=await fetch('/api/previews/comercial?tipo=clientes&q='+encodeURIComponent(buscaCliente),{headers:{Authorization:'Bearer '+t},signal:ctrl.signal,cache:'no-store'})
-        const j=await r.json();if(r.ok&&!ctrl.signal.aborted)setClientes((j.clientes||[]).slice(0,8))
-      }catch{}
-    })(),240)
-    return()=>{ctrl.abort();clearTimeout(timer)}
-  },[buscaCliente,cliente])
   useEffect(()=>{
     if(modo==='escolher'||revisao)return
     const ctrl=new AbortController()
@@ -137,7 +124,12 @@ export default function OrcamentoPreview(){
       imagem:produto.fotoUrl||produto.fotoCandidataUrl||null
     }))
     setDocumento({
-      cliente,empresa,tipologias:[],produtos:produtosDocumento,
+      cliente:identificacao.clienteNome,
+      clienteDocumento:identificacao.clienteDocumento,clienteTelefone:identificacao.clienteTelefone,
+      enderecoCliente:identificacao.enderecoCliente,obraNome:identificacao.obraNome,
+      enderecoEntrega:identificacao.entregaTipo==='definir'?'':identificacao.enderecoEntrega,
+      vendedorNome:identificacao.vendedorNome,
+      empresa,tipologias:[],produtos:produtosDocumento,
       subtotal:valorConhecido,desconto:descontoAplicado,totalProdutos:valorFinalConhecido,
       temPendencias:totalPendente,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.detalhe})),
       validadeDias,data:new Date().toLocaleDateString('pt-BR'),
@@ -194,16 +186,7 @@ export default function OrcamentoPreview(){
           <div><p className="text-[11px] font-bold text-indigo-600">Tipo selecionado</p><b>{modo==='sob_medida'?'Orçamento sob medida + produtos':'Orçamento de produtos prontos e avulsos'}</b></div>
           <button type="button" onClick={()=>escolherModo('escolher')} className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold">Alterar tipo</button>
         </div>
-        <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-5">
-          <h2 className="text-base font-black">Identificação do orçamento</h2>
-          <p className="mt-1 text-xs text-slate-500">Escolha um cliente existente ou informe um nome apenas para esta simulação.</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-bold text-slate-600">Cliente / responsável<input className={baseInput+' mt-1'} value={cliente} onChange={e=>setCliente(e.target.value)} placeholder="Nome do cliente"/></label>
-            <div><label className="text-xs font-bold text-slate-600">Localizar cliente cadastrado<input className={baseInput+' mt-1'} value={buscaCliente} onChange={e=>{setBuscaCliente(e.target.value);setCliente('')}} placeholder="Buscar por nome ou WhatsApp"/></label>
-              {!!clientes.length&&<div className="mt-1 max-h-40 overflow-y-auto rounded-lg border bg-white">{clientes.map(x=><button type="button" key={x.id} className="block w-full border-b p-2 text-left text-xs hover:bg-blue-50" onClick={()=>{setCliente(x.nome);setBuscaCliente('');setClientes([])}}><b>{x.nome}</b> · {x.cidade||'Cidade não informada'}</button>)}</div>}
-            </div>
-          </div>
-        </section>
+        <IdentificacaoOrcamentoPreview value={identificacao} onChange={setIdentificacao}/>
 
         {!revisao&&modo==='sob_medida'&&<section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
           <div className="flex items-center gap-2"><DraftingCompass size={20} className="text-indigo-700"/><h2 className="text-lg font-black">1. Configurar tipologia sob medida</h2></div>
@@ -276,7 +259,9 @@ export default function OrcamentoPreview(){
           <h2 className="mt-3 text-center text-xl font-black">Revisão da proposta — Simulação</h2>
           <p className="mt-1 text-center text-xs text-slate-500">Nenhum orçamento será salvo, enviado ao cliente ou convertido em pedido.</p>
           <div className="mt-5 grid gap-2 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-            <p><span className="block text-xs text-slate-500">Cliente</span><b>{cliente||'Cliente a identificar'}</b></p>
+            <p><span className="block text-xs text-slate-500">Cliente</span><b>{identificacao.clienteNome||'Cliente a identificar'}</b></p>
+            <p><span className="block text-xs text-slate-500">Vendedor</span><b>{identificacao.vendedorNome||'A definir'}</b></p>
+            <p><span className="block text-xs text-slate-500">Local de entrega / obra</span><b>{identificacao.obraNome||identificacao.enderecoEntrega||'A definir'}</b></p>
             <p><span className="block text-xs text-slate-500">Tipo de orçamento</span><b>{modo==='sob_medida'?'Sob medida + produtos':'Produtos prontos / avulsos'}</b></p>
           </div>
           {!!medidas.length&&<section className="mt-5"><h3 className="mb-2 font-black">Tipologias sob medida ({medidas.length})</h3>{medidas.map(m=><div key={m.id} className="mt-2 flex justify-between gap-4 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.folhas} folha(s) · {m.linha||'Linha pendente'} · {m.cor||'Cor a definir'} · {m.vidro||'Vidro a definir'} · Contramarco: {m.contramarco}</p></div><span className="shrink-0 font-bold text-amber-700">A precificar</span></div>)}</section>}
@@ -371,7 +356,7 @@ export default function OrcamentoPreview(){
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={()=>{setRevisao(false);setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar para editar</button>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setCliente('');setTipoDesconto('sem');setValorDesconto('');setObservacoes('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
+              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setIdentificacao(identificacaoVazia);setTipoDesconto('sem');setValorDesconto('');setObservacoes('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
               <button type="button" onClick={()=>gerarOrcamento()} disabled={descontoInvalido}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <FileText size={17}/> Gerar orçamento / Imprimir PDF <ArrowRight size={17}/>
