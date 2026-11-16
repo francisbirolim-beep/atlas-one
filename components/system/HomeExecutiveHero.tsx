@@ -61,8 +61,8 @@ export default function HomeExecutiveHero({modulos = MODULOS_PADRAO}:{modulos?:H
           <span className={icone+' bg-amber-100 text-amber-700'}><Search size={19}/></span>
           <span className={titulo}>Consulta de Preço</span>
         </Link>}
-        {podeOrcamento && master && <Link href="/previews/orcamento" className={botao}
-          title="Orçamento de produtos ou sob medida — prévia sem gravação">
+        {podeVenda && <Link href="/balcao/orcamentos" className={botao}
+          title="Consultar orçamentos e criar um orçamento operacional">
           <span className={icone+' bg-indigo-100 text-indigo-700'}><FileText size={19}/></span>
           <span className={titulo}>Orçamento</span>
         </Link>}
