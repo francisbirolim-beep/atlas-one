@@ -52,7 +52,7 @@ export default function HomeExecutiveHero({modulos = MODULOS_PADRAO}:{modulos?:H
 
   return (
     <section className="mx-auto w-full max-w-[1500px] px-3 pt-3 sm:px-4 md:px-8" aria-label="Acessos rápidos">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
         {podeOrcamento && <Link href="/orcamento-rapido" className={botao}>
           <span className={icone+' bg-blue-100 text-blue-700'}><FilePlus2 size={19}/></span>
           <span className={titulo}>Pedido de Orçamento</span>
@@ -60,6 +60,11 @@ export default function HomeExecutiveHero({modulos = MODULOS_PADRAO}:{modulos?:H
         {podeVenda && <Link href="/balcao/consulta-preco" className={botao}>
           <span className={icone+' bg-amber-100 text-amber-700'}><Search size={19}/></span>
           <span className={titulo}>Consulta de Preço</span>
+        </Link>}
+        {podeOrcamento && master && <Link href="/previews/orcamento" className={botao}
+          title="Orçamento de produtos ou sob medida — prévia sem gravação">
+          <span className={icone+' bg-indigo-100 text-indigo-700'}><FileText size={19}/></span>
+          <span className={titulo}>Orçamento</span>
         </Link>}
         {podeVenda && <Link href="/balcao" className={botao}>
           <span className={icone+' bg-emerald-100 text-emerald-700'}><ShoppingCart size={19}/></span>
