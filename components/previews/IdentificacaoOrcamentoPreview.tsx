@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MapPin, Search, UserRound, Users } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 
@@ -28,6 +28,8 @@ const enderecoObra=(o:Obra)=>[
 ].filter(Boolean).join(' · ')
 
 export default function IdentificacaoOrcamentoPreview({value,onChange}:{value:IdentificacaoOrcamento;onChange:(next:IdentificacaoOrcamento)=>void}){
+  const valueRef=useRef(value)
+  valueRef.current=value
   const [busca,setBusca]=useState('')
   const [clientes,setClientes]=useState<Cliente[]>([])
   const [obras,setObras]=useState<Obra[]>([])
@@ -50,8 +52,8 @@ export default function IdentificacaoOrcamentoPreview({value,onChange}:{value:Id
         if(!resp.ok)throw Error(j.error||'Vendedores indisponíveis.')
         if(ativo){
           setVendedores(j.vendedores||[])
-          if(!value.vendedorId&&usuario.id){
-            onChange({...value,vendedorId:usuario.id,vendedorNome:usuario.nome||''})
+          if(!valueRef.current.vendedorId&&usuario.id){
+            onChange({...valueRef.current,vendedorId:usuario.id,vendedorNome:usuario.nome||''})
           }
         }
       }catch(e){if(ativo&&!(e instanceof DOMException&&e.name==='AbortError'))setErro(e instanceof Error?e.message:'Falha ao consultar usuários.')}
@@ -96,7 +98,7 @@ export default function IdentificacaoOrcamentoPreview({value,onChange}:{value:Id
     })()
     return()=>ctrl.abort()
   },[value.clienteId])
-  function atualizar(parte:Partial<IdentificacaoOrcamento>){onChange({...value,...parte})}
+  function atualizar(parte:Partial<IdentificacaoOrcamento>){onChange({...valueRef.current,...parte})}
   function selecionarCliente(c:Cliente){
     const endereco=enderecoCliente(c)
     atualizar({clienteId:c.id,clienteNome:c.nome,clienteDocumento:c.cpf_cnpj||'',clienteTelefone:c.whatsapp||c.telefone||'',
