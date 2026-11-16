@@ -70,6 +70,7 @@ export default function OrcamentoPreview(){
   const proximaCondicao=useRef(1)
   const [validadeDias,setValidadeDias]=useState('')
   const [documento,setDocumento]=useState<OrcamentoDocumento|null>(null)
+  const [mostrarPendencias,setMostrarPendencias]=useState(false)
   useEffect(()=>{let ativo=true;void lerDadosEmpresa().then(d=>{if(ativo)setEmpresa(d||null)}).catch(()=>{});return()=>{ativo=false}},[])
   useEffect(()=>{let ativo=true;void Promise.all([listarTipologias(),listarLinhasTecnicas()]).then(([ts,ls])=>{if(ativo){setTipologias(ts);setLinhasTecnicas(ls.filter(l=>l.ativo))}}).catch(()=>{});return()=>{ativo=false}},[])
   useEffect(()=>{
@@ -106,7 +107,8 @@ export default function OrcamentoPreview(){
   const linhasDaTipologia=tipologia?linhasTecnicas.filter(l=>(l.tipologia_ids||[]).includes(tipologia.id)):[]
   const tipologiasFiltradas=tipologias.filter(t=>normaliza(t.label+' '+t.chave).includes(normaliza(buscaTipologia))).slice(0,70)
   const valorConhecido=itens.reduce((s,i)=>s+(unitario(i.produto)||0)*i.quantidade,0)
-  const semPreco=itens.filter(i=>unitario(i.produto)==null).length
+  const produtosSemPreco=itens.filter(i=>(unitario(i.produto)??0)<=0)
+  const semPreco=produtosSemPreco.length
   const totalQtd=itens.reduce((s,i)=>s+i.quantidade,0)
   const descontoDigitado=decimal(valorDesconto)
   const descontoInvalido=tipoDesconto!=='sem'&&( !Number.isFinite(descontoDigitado)||descontoDigitado<0||
@@ -123,7 +125,8 @@ export default function OrcamentoPreview(){
     proximaCondicao.current+=1
     setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',detalhe:''}])
   }
-  function gerarOrcamento(){
+  function gerarOrcamento(rascunho=false){
+    if(semPreco>0&&!rascunho){setMostrarPendencias(true);setAviso('Há produtos sem preço cadastrado. Consulte a relação antes de gerar o orçamento definitivo.');return}
     if(!itens.length&&!medidas.length){setAviso('Inclua produtos antes de gerar o orçamento.');return}
     if(descontoInvalido){setAviso('Corrija o desconto informado.');return}
     const produtosDocumento:ProdutoDocumento[]=itens.map(({produto,quantidade})=>({
@@ -276,6 +279,26 @@ export default function OrcamentoPreview(){
           </div>
           {!!medidas.length&&<section className="mt-5"><h3 className="mb-2 font-black">Tipologias sob medida ({medidas.length})</h3>{medidas.map(m=><div key={m.id} className="mt-2 flex justify-between gap-4 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.folhas} folha(s) · {m.linha||'Linha pendente'} · {m.cor||'Cor a definir'} · {m.vidro||'Vidro a definir'} · Contramarco: {m.contramarco}</p></div><span className="shrink-0 font-bold text-amber-700">A precificar</span></div>)}</section>}
           {!!itens.length&&<section className="mt-5"><h3 className="mb-2 font-black">Produtos ({itens.length})</h3>{itens.map(i=><div key={i.produto.id} className="mt-2 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{i.quantidade} × {i.produto.nome}</b><p className="text-slate-500">{i.produto.codigo} · {i.produto.unidade}</p></div><b>{unitario(i.produto)!=null?moeda(unitario(i.produto)!*i.quantidade):'Sem preço'}</b></div>)}</section>}
+          {semPreco>0&&<section className="mt-5 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
+            <button type="button" onClick={()=>setMostrarPendencias(v=>!v)} className="flex w-full items-center justify-between gap-3 text-left">
+              <span><b className="block text-sm text-amber-950">{semPreco} produto(s) sem preço no orçamento</b>
+                <span className="mt-1 block text-xs text-amber-800">Clique para identificar os itens sem valor. O orçamento não será considerado definitivo até corrigir.</span></span>
+              <span className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-amber-900">{mostrarPendencias?'Ocultar':'Ver pendências'}</span>
+            </button>
+            {mostrarPendencias&&<div className="mt-3 space-y-2 border-t border-amber-200 pt-3">
+              {produtosSemPreco.map(i=><div key={i.produto.id} className="rounded-lg border bg-white p-3">
+                <b className="text-sm">{i.produto.codigo} · {i.produto.nome}</b>
+                <p className="mt-1 text-xs text-slate-600">Quantidade: {i.quantidade} · {i.produto.unidade} · Preço unitário não cadastrado.</p>
+              </div>)}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                <Link href="/cadastro/produtos" className="text-xs font-bold text-indigo-700 underline">Conferir cadastro dos produtos</Link>
+                <button type="button" disabled={descontoInvalido} onClick={()=>gerarOrcamento(true)}
+                  className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-xs font-bold text-amber-950 disabled:opacity-40">
+                  Gerar somente PDF de rascunho (incompleto)
+                </button>
+              </div>
+            </div>}
+          </section>}
           <section className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
             <h3 className="text-sm font-black">Valores e desconto do orçamento</h3>
             <div className="mt-3 flex items-center justify-between gap-3 text-sm">
@@ -339,7 +362,7 @@ export default function OrcamentoPreview(){
             <button type="button" onClick={()=>{setRevisao(false);setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar para editar</button>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setCliente('');setTipoDesconto('sem');setValorDesconto('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
-              <button type="button" onClick={gerarOrcamento} disabled={descontoInvalido}
+              <button type="button" onClick={()=>gerarOrcamento()} disabled={descontoInvalido}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <FileText size={17}/> Gerar orçamento / Imprimir PDF <ArrowRight size={17}/>
               </button>
