@@ -22,6 +22,7 @@ export default function ContasPagarPage(){
  const[fornecedoresCadastro,setFornecedoresCadastro]=useState<FornecedorCadastro[]>([])
  const[modalPagamento,setModalPagamento]=useState<Conta|null>(null)
  const[aviso,setAviso]=useState('')
+ const[ultimoReciboId,setUltimoReciboId]=useState<string|null>(null)
  const[formPagamento,setFormPagamento]=useState<FormPagamento>({dataPagamento:'',formaPagamento:'pix',valorEntregue:'0',valorDesconto:'0',valorJuros:'0',valorMulta:'0',valorTroco:'0'})
  const alterarCampo=(campo:keyof FormPagamento,valor:string)=>setFormPagamento(atual=>({...atual,[campo]:valor}))
 
@@ -46,16 +47,29 @@ export default function ContasPagarPage(){
  async function confirmarPagamento(){
   if(!modalPagamento||!calculoPagamento?.ok||acao)return
   const id=modalPagamento.id
-  setAcao(id+'pagar');setErro('');setAviso('')
+  // Abrir a aba no clique evita o bloqueio de pop-ups após a chamada assíncrona.
+  // A impressão só será liberada depois de o servidor confirmar a baixa.
+  const janelaRecibo=window.open('about:blank','_blank')
+  if(janelaRecibo)janelaRecibo.opener=null
+  setAcao(id+'pagar');setErro('');setAviso('');setUltimoReciboId(null)
   try{
    const t=await tokenAtual();if(!t)throw new Error('Sessão expirada.')
    const r=await fetch('/api/financeiro/contas-pagar',{method:'PATCH',headers:{Authorization:`Bearer ${t}`,'Content-Type':'application/json'},
      body:JSON.stringify({id,acao:'pagar',...formPagamento})})
    const j=await r.json();if(!r.ok)throw new Error(j.error||'Não foi possível confirmar o pagamento.')
-   if(j.simulacao){setContas(prev=>prev.map(c=>c.id===id?{...c,...j.conta}:c));setAviso('Prévia: pagamento simulado com os ajustes informados. Nenhum dado real foi alterado.')}
-   else await carregar()
+   if(j.simulacao){
+    janelaRecibo?.close()
+    setContas(prev=>prev.map(c=>c.id===id?{...c,...j.conta}:c))
+    setAviso('Prévia: pagamento simulado com os ajustes informados. Nenhum dado real foi alterado.')
+   }else{
+    setUltimoReciboId(id)
+    const caminho='/financeiro/recibo/pagar/'+encodeURIComponent(id)+'?acao=imprimir'
+    if(janelaRecibo&&!janelaRecibo.closed)janelaRecibo.location.replace(caminho)
+    else setAviso('Pagamento confirmado. A janela de impressão foi bloqueada pelo navegador. Use o botão Imprimir comprovante.')
+    await carregar()
+   }
    setModalPagamento(null)
-  }catch(e){setErro(e instanceof Error?e.message:'Erro ao confirmar pagamento.')}
+  }catch(e){janelaRecibo?.close();setErro(e instanceof Error?e.message:'Erro ao confirmar pagamento.')}
   finally{setAcao('')}
  }
  async function mudar(id:string,tipo:'reabrir'|'cancelar'){
@@ -108,6 +122,10 @@ export default function ContasPagarPage(){
  <header className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.14em] text-slate-400">Financeiro</p><h1 className="mt-1 text-2xl font-bold">Contas a Pagar</h1><p className="mt-1 text-sm text-slate-600">Lançamentos manuais e títulos gerados por compras, juntos e sem duplicar a cobrança.</p></div><div className="no-print flex flex-wrap items-center gap-2"><FormLancamentoManual tipo="pagar" onSalvo={()=>void carregar()}/><Link href="/compras" className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold">Compras</Link><button title="Atualizar" onClick={()=>void carregar()} className="rounded-xl border bg-white p-2.5"><RefreshCw size={18}/></button></div></header>
  {erro&&<div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
  {aviso&&<div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">{aviso}</div>}
+ {ultimoReciboId&&<div className="no-print flex flex-wrap gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+  <Link href={'/financeiro/recibo/pagar/'+encodeURIComponent(ultimoReciboId)+'?acao=imprimir'} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-emerald-300 bg-white px-3 py-2 font-semibold">Imprimir comprovante</Link>
+  <Link href={'/financeiro/recibo/pagar/'+encodeURIComponent(ultimoReciboId)+'?acao=pdf'} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-emerald-700 px-3 py-2 font-semibold text-white">Baixar PDF</Link>
+ </div>}
  <BarraFiltrosPeriodo periodo={periodo} onPeriodo={setPeriodo} onExportar={csv} adicional={<>
    <label className="text-xs font-semibold text-slate-600">Fornecedor<select value={fornecedor} onChange={e=>setFornecedor(e.target.value)} className="mt-1 block max-w-[220px] rounded-lg border p-2.5 text-sm"><option value="">Todos os fornecedores</option>{fornecedores.map(n=><option key={n} value={n}>{n}</option>)}</select></label>
    <label className="text-xs font-semibold text-slate-600">Situação<select value={situacao} onChange={e=>setSituacao(e.target.value as Situacao)} className="mt-1 block rounded-lg border p-2.5 text-sm">{[['todas','Todas'],['aberto','Em aberto'],['vencido','Vencidas'],['pago','Pagas'],['cancelado','Canceladas']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>

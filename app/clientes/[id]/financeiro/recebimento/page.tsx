@@ -122,6 +122,10 @@ export default function RecebimentoPorParcelasPage() {
     }
 
     if (!alocacoes.length) {setErro('Selecione ao menos uma parcela.');return}
+    // Reserva uma aba no gesto de confirmar. Sem isso o navegador pode bloquear
+    // a impressão ao tentar abrir o recibo depois de aguardar a API.
+    const janelaRecibo=!modoPrevia?window.open('about:blank','_blank'):null
+    if(janelaRecibo)janelaRecibo.opener=null
     setSalvando(true)
     try {
       const token=await tokenAtual()
@@ -133,6 +137,7 @@ export default function RecebimentoPorParcelasPage() {
       const resultado=await resposta.json()
       if(!resposta.ok||!resultado.ok)throw new Error(resultado.error||'Não foi possível registrar recebimento.')
       if(resultado.simulado){
+        janelaRecibo?.close()
         // Dividir por obra: o recibo nunca soma o saldo de outra obra do cliente.
         const grupos=new Map<string,typeof alocacoes>()
         for(const a of alocacoes){const obra=contas.find(c=>c.id===a.conta_receber_id)?.obra_id||'sem-obra';grupos.set(obra,[...(grupos.get(obra)||[]),a])}
@@ -152,15 +157,23 @@ export default function RecebimentoPorParcelasPage() {
         setReciboRegistradoId(null)
         return
       }
-      setSucesso(`Recebimento de ${moeda(resultado.valor||total)} confirmado em ${resultado.parcelas||alocacoes.length} parcela(s). Saldo atualizado no Atlas.`)
-      setReciboRegistradoId(resultado.recebimentoId||null)
+      const idRecibo=typeof resultado.recebimentoId==='string'?resultado.recebimentoId:null
+      setSucesso(`Recebimento de ${moeda(resultado.valor||total)} confirmado em ${resultado.parcelas||alocacoes.length} parcela(s). Saldo atualizado no Atlas.`+
+        (idRecibo?'':' Não foi informado um identificador de recibo. Consulte o histórico.'))
+      setReciboRegistradoId(idRecibo)
+      if(idRecibo&&janelaRecibo&&!janelaRecibo.closed){
+        janelaRecibo.location.replace('/financeiro/recibo/receber/'+encodeURIComponent(idRecibo)+'?acao=imprimir')
+      }else{
+        janelaRecibo?.close()
+        if(idRecibo)setSucesso(`Recebimento de ${moeda(resultado.valor||total)} confirmado. A impressão automática foi bloqueada; use Imprimir no comprovante abaixo.`)
+      }
       setObrasRecebidas([...new Set(alocacoes.map(a=>contas.find(c=>c.id===a.conta_receber_id)?.obra_id||'sem-obra'))])
       setRecibosSimulados([])
       setSelecionadas({})
       setReferencia('')
       setObservacoes('')
       await carregar()
-    }catch(e){setErro(e instanceof Error?e.message:'Erro ao registrar o recebimento. Nenhuma nova tentativa automática foi feita.')}
+    }catch(e){janelaRecibo?.close();setErro(e instanceof Error?e.message:'Erro ao registrar o recebimento. Nenhuma nova tentativa automática foi feita.')}
     finally{setSalvando(false)}
   }
 
@@ -179,7 +192,7 @@ export default function RecebimentoPorParcelasPage() {
 
     <main className="mx-auto max-w-6xl space-y-5 px-4 py-5">
       {erro && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>}
-      {sucesso && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700"><CheckCircle2 size={17}/><span>{sucesso}</span>{reciboRegistradoId&&obrasRecebidas.map(obraId=><Link key={obraId} target="_blank" href={`/financeiro/recibo/receber/${reciboRegistradoId}?obraId=${encodeURIComponent(obraId)}`} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 font-bold">Gerar recibo: {obraId==='sem-obra'?'Sem obra':obraPorId[obraId]||'Obra'}</Link>)}{reciboRegistradoId&&obrasRecebidas.length===1&&<><Link target="_blank" rel="noopener noreferrer" href={'/financeiro/recibo/receber/'+reciboRegistradoId+'?obraId='+encodeURIComponent(obrasRecebidas[0])+'&acao=imprimir'} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 font-bold">Imprimir</Link><Link target="_blank" rel="noopener noreferrer" href={'/financeiro/recibo/receber/'+reciboRegistradoId+'?obraId='+encodeURIComponent(obrasRecebidas[0])+'&acao=pdf'} className="rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white">Baixar PDF</Link></>}</div>}
+      {sucesso && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700"><CheckCircle2 size={17}/><span>{sucesso}</span>{reciboRegistradoId&&obrasRecebidas.map(obraId=><Link key={obraId} target="_blank" href={`/financeiro/recibo/receber/${reciboRegistradoId}?obraId=${encodeURIComponent(obraId)}`} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 font-bold">Gerar recibo: {obraId==='sem-obra'?'Sem obra':obraPorId[obraId]||'Obra'}</Link>)}{reciboRegistradoId&&<><Link target="_blank" rel="noopener noreferrer" href={'/financeiro/recibo/receber/'+reciboRegistradoId+'?acao=imprimir'} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 font-bold">Imprimir</Link><Link target="_blank" rel="noopener noreferrer" href={'/financeiro/recibo/receber/'+reciboRegistradoId+'?acao=pdf'} className="rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white">Baixar PDF</Link></>}</div>}
       {modoPrevia && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Prévia de teste: confirmar recebimento faz uma simulação, sem alterar títulos, caixa ou saldo real do cliente.</div>}
       {origemCaixa&&!caixaAberto&&<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">Caixa não está aberto neste operador. Abra o Caixa antes de confirmar um recebimento real.{modoPrevia?' Você pode continuar testando a simulação.':''}</div>}
 
