@@ -122,11 +122,11 @@ export default function OrcamentoPreview(){
         <h2 className="text-xl font-black">Qual orçamento você deseja fazer?</h2>
         <p className="mt-1 text-sm text-slate-500">O Pedido de Orçamento (atendimento/obra) continua no atalho próprio da Home. Aqui você monta uma proposta detalhada.</p>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <button type="button" onClick={()=>escolherModo('sob_medida')} className="group rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-6 text-left hover:border-indigo-600">
+          <Link href="/previews/orcamento/configurar" className="group rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-6 text-left hover:border-indigo-600">
             <DraftingCompass size={32} className="text-indigo-700"/><h3 className="mt-4 text-lg font-black">Orçamento sob medida</h3>
             <p className="mt-2 text-sm text-slate-600">Selecione tipologias existentes, linha, dimensões, folhas, cor, vidro, contramarco e quantidade. Adicione também perfis, acessórios, vidros e outros produtos ao mesmo orçamento.</p>
             <span className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-indigo-700">Montar sob medida <ArrowRight size={17}/></span>
-          </button>
+          </Link>
           <button type="button" onClick={()=>escolherModo('produtos')} className="group rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-6 text-left hover:border-emerald-600">
             <Package size={32} className="text-emerald-700"/><h3 className="mt-4 text-lg font-black">Orçamento de produtos</h3>
             <p className="mt-2 text-sm text-slate-600">Orce produtos prontos, acessórios, perfis, vidros e materiais unitários por código, descrição, categoria e linha técnica, utilizando os preços cadastrados.</p>
