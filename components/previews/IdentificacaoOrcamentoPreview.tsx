@@ -6,11 +6,13 @@ import { tokenAtual, usuarioAtual } from '@/lib/auth'
 
 export type IdentificacaoOrcamento={
   clienteId:string;clienteNome:string;clienteDocumento:string;clienteTelefone:string;enderecoCliente:string;
+  clienteLogradouro:string;clienteNumero:string;clienteBairro:string;clienteCidade:string;clienteCep:string;
   entregaTipo:'cliente'|'obra'|'outro'|'definir';obraId:string;obraNome:string;enderecoEntrega:string;
   vendedorId:string;vendedorNome:string
 }
 export const identificacaoVazia:IdentificacaoOrcamento={
   clienteId:'',clienteNome:'',clienteDocumento:'',clienteTelefone:'',enderecoCliente:'',
+  clienteLogradouro:'',clienteNumero:'',clienteBairro:'',clienteCidade:'',clienteCep:'',
   entregaTipo:'definir',obraId:'',obraNome:'',enderecoEntrega:'',vendedorId:'',vendedorNome:''
 }
 type Cliente={
@@ -21,7 +23,19 @@ type Obra={id:string;nome:string;endereco?:string|null;numero_endereco?:string|n
   complemento?:string|null;bairro?:string|null;cidade?:string|null;uf?:string|null;cep?:string|null}
 type Vendedor={id:string;nome:string;cargo?:string|null}
 const input='w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500'
-const enderecoCliente=(c:Cliente)=>[c.endereco,c.bairro,c.cidade,c.cep?'CEP '+c.cep:null].filter(Boolean).join(' · ')
+// O cadastro de clientes guarda "endereco" em um único campo, frequentemente
+// com o número no final. Se houver número identificável, separa apenas na prévia.
+function separarRuaNumero(endereco:string){
+  const texto=endereco.trim()
+  const padrao=texto.match(/^(.+?)(?:,\\s*|\\s+)(\\d{1,6}[a-zA-Z]?|S\\/?N)$/i)
+  if(padrao && padrao[1].trim().split(/\\s+/).length>=2)
+    return {logradouro:padrao[1].trim(),numero:padrao[2].trim()}
+  return {logradouro:texto,numero:''}
+}
+const montarEndereco=(campos:{clienteLogradouro:string;clienteNumero:string;clienteBairro:string;clienteCidade:string;clienteCep:string})=>
+  [[campos.clienteLogradouro,campos.clienteNumero].filter(Boolean).join(', '),
+    campos.clienteBairro,campos.clienteCidade,campos.clienteCep?'CEP '+campos.clienteCep:null]
+    .filter(Boolean).join(' · ')
 const enderecoObra=(o:Obra)=>[
   [o.endereco,o.numero_endereco,o.complemento].filter(Boolean).join(', '),
   o.bairro,[o.cidade,o.uf].filter(Boolean).join(' / '),o.cep?'CEP '+o.cep:null
@@ -99,10 +113,22 @@ export default function IdentificacaoOrcamentoPreview({value,onChange}:{value:Id
     return()=>ctrl.abort()
   },[value.clienteId])
   function atualizar(parte:Partial<IdentificacaoOrcamento>){onChange({...valueRef.current,...parte})}
+  function alterarCampoEndereco(campo:'clienteLogradouro'|'clienteNumero'|'clienteBairro'|'clienteCidade'|'clienteCep',texto:string){
+    const atual={...valueRef.current,[campo]:texto}
+    const endereco=montarEndereco(atual)
+    atualizar({...atual,enderecoCliente:endereco,
+      ...(atual.entregaTipo==='cliente'?{enderecoEntrega:endereco}:{})})
+  }
   function selecionarCliente(c:Cliente){
-    const endereco=enderecoCliente(c)
+    const ruaNumero=separarRuaNumero(c.endereco||'')
+    const campos={
+      clienteLogradouro:ruaNumero.logradouro,clienteNumero:ruaNumero.numero,
+      clienteBairro:c.bairro||'',clienteCidade:c.cidade||'',clienteCep:c.cep||''
+    }
+    const endereco=montarEndereco(campos)
     atualizar({clienteId:c.id,clienteNome:c.nome,clienteDocumento:c.cpf_cnpj||'',clienteTelefone:c.whatsapp||c.telefone||'',
-      enderecoCliente:endereco,entregaTipo:endereco?'cliente':'definir',obraId:'',obraNome:'',enderecoEntrega:endereco})
+      ...campos,enderecoCliente:endereco,entregaTipo:endereco?'cliente':'definir',
+      obraId:'',obraNome:'',enderecoEntrega:endereco})
     setBusca('');setClientes([]);setErro('')
   }
   function escolherEntrega(tipo:IdentificacaoOrcamento['entregaTipo']){
@@ -124,8 +150,9 @@ export default function IdentificacaoOrcamentoPreview({value,onChange}:{value:Id
     <div className="mt-4 grid gap-3 md:grid-cols-2">
       <label className="block text-xs font-bold">Nome do cliente / responsável
         <input className={input+' mt-1'} value={value.clienteNome} onChange={e=>atualizar({
-          clienteNome:e.target.value,clienteId:'',clienteDocumento:'',clienteTelefone:'',enderecoCliente:'',
-          entregaTipo:'definir',obraId:'',obraNome:'',enderecoEntrega:''
+          clienteNome:e.target.value,clienteId:'',clienteDocumento:'',clienteTelefone:'',
+          ...(value.clienteId?{clienteLogradouro:'',clienteNumero:'',clienteBairro:'',clienteCidade:'',clienteCep:'',enderecoCliente:'',
+            entregaTipo:'definir' as const,obraId:'',obraNome:'',enderecoEntrega:''}:{})
         })} placeholder="Digite o nome ou selecione um cliente cadastrado"/>
       </label>
       <div className="relative">
@@ -155,11 +182,28 @@ export default function IdentificacaoOrcamentoPreview({value,onChange}:{value:Id
         <input className={input+' mt-1'} value={value.clienteTelefone}
           onChange={e=>atualizar({clienteTelefone:e.target.value})} placeholder="Não informado"/>
       </label>
-      <label className="block text-xs font-bold md:col-span-2">Endereço cadastral do cliente
-        <input className={input+' mt-1'} value={value.enderecoCliente}
-          onChange={e=>atualizar({enderecoCliente:e.target.value,...(value.entregaTipo==='cliente'?{enderecoEntrega:e.target.value}:{})})}
-          placeholder="Rua, número, bairro, cidade, CEP — quando houver"/>
+      <label className="block text-xs font-bold">Endereço / rua / avenida
+        <input className={input+' mt-1'} value={value.clienteLogradouro}
+          onChange={e=>alterarCampoEndereco('clienteLogradouro',e.target.value)}
+          placeholder="Ex.: Rua José Ferreira Guimarães" autoComplete="address-line1"/>
       </label>
+      <label className="block text-xs font-bold">Número da casa / imóvel
+        <input className={input+' mt-1'} value={value.clienteNumero}
+          onChange={e=>alterarCampoEndereco('clienteNumero',e.target.value)}
+          placeholder="Ex.: 1375 ou S/N" autoComplete="address-line2"/>
+      </label>
+      <label className="block text-xs font-bold">Bairro
+        <input className={input+' mt-1'} value={value.clienteBairro}
+          onChange={e=>alterarCampoEndereco('clienteBairro',e.target.value)}
+          placeholder="Informe o bairro"/>
+      </label>
+      <label className="block text-xs font-bold">Cidade
+        <input className={input+' mt-1'} value={value.clienteCidade}
+          onChange={e=>alterarCampoEndereco('clienteCidade',e.target.value)}
+          placeholder="Informe a cidade" autoComplete="address-level2"/>
+      </label>
+      {value.clienteCep&&<p className="text-[11px] text-slate-500 md:col-span-2">CEP cadastrado: {value.clienteCep}</p>}
+      <p className="text-[11px] text-slate-500 md:col-span-2">Os campos são preenchidos com os dados já existentes. Se faltar alguma informação, complete aqui apenas para este orçamento.</p>
     </div>
     <div className="mt-5 border-t pt-4">
       <h3 className="flex items-center gap-2 text-sm font-black"><MapPin size={17} className="text-indigo-700"/> Local da entrega / obra</h3>
