@@ -4,11 +4,13 @@ import { avaliarEstadoAutomacaoMedicao } from './medicaoAutomacaoEstado'
 import type { MedicaoItem, Usuario } from './tipos'
 import { carregarChecklistMedicaoV2, statusItemChecklistV2, validarChecklistObrigatorioV2 } from './medicaoChecklistV2'
 import { verificarFluxoVendaOrcamento } from './medicaoFinal'
+import { medicaoComprovada } from './medicaoComprovacao'
 
 export type ResumoMedicaoV2 = {
   totalLinhas: number
   totalPecas: number
   pecasMedidas: number
+  pecasComRegistro: number
   pecasEmAndamento: number
   percentualAndamento: number
   pecasProntasEnvio: number
@@ -89,10 +91,12 @@ export async function carregarResumoMedicaoV2(medicaoId: string): Promise<Resumo
   )
 
   const pecasEmAndamento = itens.filter(item => item.statusChecklist === 'em_andamento').length
-  // Indicador de atividade: iniciada = 50%, concluída = 100%.
-  // Não substitui percentual de conclusão nem libera envio antecipado.
+  // Somente evidência real da peça: todas as seis medidas ou foto original de trena.
+  // Checklist iniciado, texto e observações isolados NÃO contam como peça medida.
+  // Uma linha agrupada conta no máximo uma peça, até separar as unidades.
+  const pecasComRegistro = itens.filter(item => medicaoComprovada(item)).length
   const percentualAndamento = totalPecas > 0
-    ? Math.min(100, Math.round(((pecasMedidas + pecasEmAndamento * 0.5) / totalPecas) * 100))
+    ? Math.round((pecasComRegistro / totalPecas) * 100)
     : 0
 
   const medidores = Array.from(
@@ -103,6 +107,7 @@ export async function carregarResumoMedicaoV2(medicaoId: string): Promise<Resumo
     totalLinhas: itens.length,
     totalPecas,
     pecasMedidas,
+    pecasComRegistro,
     pecasEmAndamento,
     percentualAndamento,
     pecasProntasEnvio: itens.filter(item => item.medido && item.status_medicao === 'concluida').length,
