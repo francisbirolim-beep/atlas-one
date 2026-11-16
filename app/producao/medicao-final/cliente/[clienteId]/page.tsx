@@ -33,7 +33,7 @@ type OrcamentoResumo = {
   revisao_atual?: boolean | null
   descricao_livre?: string | null
   itens?: unknown[] | null
-  wvetro_fluxo?: { origem?: string | null; numero?: string | null; cliente_nome_wvetro?: string | null } | null
+  wvetro_fluxo?: { origem?: string | null; numero?: string | null; cliente_nome_wvetro?: string | null; situacao?: string | null; validacao_manual_cliente?: boolean | null; fonte_registro?: string | null } | null
 }
 
 type CandidatoItemWVetro = {
@@ -113,6 +113,7 @@ export default function AbrirMedidaFinalCliente() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [orcamentos, setOrcamentos] = useState<OrcamentoResumo[]>([])
+  const [orcamentosVendidos, setOrcamentosVendidos] = useState<string[]>([])
   const [medicoes, setMedicoes] = useState<MedicaoResumo[]>([])
   const [historicosWVetro, setHistoricosWVetro] = useState<HistoricoWVetroResumo[]>([])
   const [candidatosWVetro, setCandidatosWVetro] = useState<CandidatoWVetro[]>([])
@@ -173,8 +174,14 @@ export default function AbrirMedidaFinalCliente() {
       if (o.error) throw o.error
       if (m.error) throw m.error
       if (h.error) throw h.error
+      const idsOrcamentos = (o.data || []).map(orcamento => orcamento.id)
+      const vendas = idsOrcamentos.length > 0
+        ? await supabase.from('vendas_obras').select('orcamento_id').in('orcamento_id', idsOrcamentos)
+        : { data: [] as { orcamento_id: string | null }[], error: null }
+      if (vendas.error) throw vendas.error
       setCliente(c.data as ClienteResumo)
       setOrcamentos((o.data || []) as OrcamentoResumo[])
+      setOrcamentosVendidos((vendas.data || []).map(v => String(v.orcamento_id || '')).filter(Boolean))
       setMedicoes((m.data || []) as MedicaoResumo[])
       setHistoricosWVetro((h.data || []) as HistoricoWVetroResumo[])
     } catch (e) {
@@ -184,12 +191,25 @@ export default function AbrirMedidaFinalCliente() {
     }
   }
 
-  const orcamentosAtuais = useMemo(
-    () => orcamentos.filter(o => o.revisao_atual !== false),
-    [orcamentos]
+  const orcamentosAtuais = useMemo(() => orcamentos.filter(o => {
+    if (o.revisao_atual === false) return false
+    if (orcamentosVendidos.includes(o.id)) return true
+    // Venda W.Vetro pode vir de historico validado, sem venda operacional Atlas.
+    const fluxo = o.wvetro_fluxo
+    const confirmado = fluxo?.validacao_manual_cliente === true || fluxo?.fonte_registro === 'historico_validado'
+    return confirmado && ['V', 'F'].includes(String(fluxo?.situacao || '').trim().toUpperCase())
+  }), [orcamentos, orcamentosVendidos])
+  const medicoesVendidas = useMemo(
+    // Uma medição já iniciada pode pertencer a uma revisão vendida anterior.
+    // Preservamos o acesso à medição sem voltar a listar orçamentos não vendidos.
+    () => medicoes.filter(m => m.orcamento_id && (
+      orcamentosVendidos.includes(m.orcamento_id) ||
+      orcamentosAtuais.some(o => o.id === m.orcamento_id)
+    )),
+    [medicoes, orcamentosVendidos, orcamentosAtuais],
   )
   const candidatosVisiveis = useMemo(
-    () => candidatosWVetro.filter(c => c.statusValidacao !== 'rejeitado'),
+    () => candidatosWVetro.filter(c => c.statusValidacao !== 'rejeitado' && ['V', 'F'].includes(String(c.situacao || '').trim().toUpperCase())),
     [candidatosWVetro]
   )
   const candidatosDescartados = candidatosWVetro.filter(c => c.statusValidacao === 'rejeitado').length
@@ -447,11 +467,11 @@ export default function AbrirMedidaFinalCliente() {
               <p className="mt-1 text-xs">Primeiro faz o contramarco e depois a medida final das esquadrias.</p>
             </div>
 
-            {medicoes.length > 0 && (
+            {medicoesVendidas.length > 0 && (
               <div className="mt-6">
                 <p className="mb-2 text-xs font-black uppercase tracking-[.1em] text-slate-400">Medições já iniciadas</p>
                 <div className="space-y-2">
-                  {medicoes.map(m => (
+                  {medicoesVendidas.map(m => (
                     <Link key={m.id} href={`/producao/medicao-final/${m.id}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
                       <div>
                         <p className="text-sm font-bold text-slate-800">{tipoLabel(m.tipo_medicao)}</p>
@@ -572,22 +592,14 @@ export default function AbrirMedidaFinalCliente() {
 
               {orcamentosAtuais.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
-                  <p className="text-sm font-black text-slate-800">Nenhum orçamento operacional selecionado ainda.</p>
-                  <p className="mt-1 text-xs text-slate-500">Abra um orçamento W.Vetro acima, confira os itens e escolha qual será usado na Medida Final.</p>
+                  <p className="text-sm font-black text-slate-800">Nenhuma venda vinculada encontrada para este cliente.</p>
+                  <p className="mt-1 text-xs text-slate-500">A Medida Final do Cliente 360 mostra apenas orçamentos efetivamente vendidos ou vendas do W.Vetro validadas.</p>
                 </div>
               )}
             </div>
 
-            <button
-              onClick={iniciarSemOrcamento}
-              disabled={criando}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-blue-600 bg-white px-4 py-3 text-sm font-black text-blue-700 disabled:opacity-50"
-            >
-              {criando ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-              Iniciar sem orçamento
-            </button>
-            <p className="mt-2 text-center text-[11px] text-amber-700">
-              Medição sem orçamento é avulsa e não libera Engenharia, Compras ou Produção automaticamente.
+            <p className="mt-4 text-center text-[11px] text-slate-500">
+              Para medições avulsas, utilize o módulo Produção → Medição Final. Aqui são exibidas somente vendas.
             </p>
           </section>
         )}
