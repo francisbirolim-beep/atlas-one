@@ -27,8 +27,8 @@ const input='w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text
 // com o número no final. Se houver número identificável, separa apenas na prévia.
 function separarRuaNumero(endereco:string){
   const texto=endereco.trim()
-  const padrao=texto.match(/^(.+?)(?:,\\s*|\\s+)(\\d{1,6}[a-zA-Z]?|S\\/?N)$/i)
-  if(padrao && padrao[1].trim().split(/\\s+/).length>=2)
+  const padrao=texto.match(/^(.+?)(?:,\s*|\s+)(\d{1,6}[a-zA-Z]?|S\/?N)$/i)
+  if(padrao && padrao[1].trim().split(/\s+/).length>=2)
     return {logradouro:padrao[1].trim(),numero:padrao[2].trim()}
   return {logradouro:texto,numero:''}
 }
