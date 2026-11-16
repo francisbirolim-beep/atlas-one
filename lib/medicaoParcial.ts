@@ -3,7 +3,7 @@ import type { Usuario } from './tipos'
 
 export type EventoHistoricoMedicao = {
   id: string
-  tipo: 'inicio' | 'parcial' | 'retomada'
+  tipo: 'inicio' | 'parcial' | 'retomada' | 'envio'
   data: string
   pecasMedidas: number | null
   pecasAbertas: number | null
@@ -12,6 +12,8 @@ export type EventoHistoricoMedicao = {
 
 export type EstadoParcialMedicao = {
   parcial: boolean
+  encerrada: boolean
+  tempoZerado: boolean
   eventos: EventoHistoricoMedicao[]
   tempoAtivoMs: number
 }
@@ -79,7 +81,7 @@ async function ultimoEventoParcial(medicaoId: string) {
     .from('medicao_revisoes')
     .select('motivo')
     .eq('medicao_id', medicaoId)
-    .in('motivo', ['Medição parcial', 'Retomada da medição'])
+    .in('motivo', ['Medição parcial', 'Retomada da medição', 'Envio parcial para conferencia', 'Envio para conferencia'])
     .order('created_at', { ascending: false })
     .limit(1)
 
@@ -109,7 +111,7 @@ export async function salvarMedicaoParcial(
   if (!['em_medicao', 'com_pendencia'].includes(medicao.status_operacional || '')) {
     return { ok: false, mensagem: 'A medição precisa estar em andamento para ser marcada como parcial.' }
   }
-  if (ultimo === 'Medição parcial') return { ok: false, mensagem: 'Esta medição já está salva como parcial.' }
+  if (ultimo === 'Medição parcial' || ultimo === 'Envio parcial para conferencia') return { ok: false, mensagem: 'Esta medição já está pausada.' }
 
   const registrado = await registrarEvento(medicaoId, 'parcial', usuario)
   if (!registrado) return { ok: false, mensagem: 'Não foi possível registrar o histórico da medição parcial.' }
@@ -121,7 +123,7 @@ export async function retomarMedicaoParcial(
   usuario: Usuario | null,
 ): Promise<{ ok: boolean; mensagem?: string }> {
   const ultimo = await ultimoEventoParcial(medicaoId)
-  if (ultimo !== 'Medição parcial') return { ok: false, mensagem: 'Esta medição não está pausada como parcial.' }
+  if (ultimo !== 'Medição parcial' && ultimo !== 'Envio parcial para conferencia') return { ok: false, mensagem: 'Esta medição não está pausada como parcial.' }
 
   const registrado = await registrarEvento(medicaoId, 'retomada', usuario)
   if (!registrado) return { ok: false, mensagem: 'Não foi possível registrar a retomada no histórico.' }
@@ -144,7 +146,7 @@ function calcularTempoAtivo(iniciadoEm: string | null, eventos: EventoHistoricoM
     const momento = new Date(evento.data).getTime()
     if (!Number.isFinite(momento)) continue
 
-    if (evento.tipo === 'parcial' && inicioSessao > 0) {
+    if ((evento.tipo === 'parcial' || evento.tipo === 'envio') && inicioSessao > 0) {
       total += Math.max(0, momento - inicioSessao)
       inicioSessao = 0
     } else if (evento.tipo === 'retomada' && inicioSessao === 0) {
@@ -160,14 +162,14 @@ export async function carregarEstadoParcialMedicao(medicaoId: string): Promise<E
   const [{ data: medicao }, { data: revisoes, error }] = await Promise.all([
     supabase
       .from('medicoes_finais')
-      .select('iniciado_em, responsavel_nome')
+      .select('iniciado_em, responsavel_nome, status_operacional, concluido_em, aprovado_em')
       .eq('id', medicaoId)
       .maybeSingle(),
     supabase
       .from('medicao_revisoes')
       .select('id, motivo, snapshot, criado_por_nome, created_at')
       .eq('medicao_id', medicaoId)
-      .in('motivo', ['Medição parcial', 'Retomada da medição'])
+      .in('motivo', ['Medição parcial', 'Retomada da medição', 'Envio parcial para conferencia', 'Envio para conferencia'])
       .order('created_at', { ascending: true }),
   ])
 
@@ -189,7 +191,7 @@ export async function carregarEstadoParcialMedicao(medicaoId: string): Promise<E
     const snapshot = revisao.snapshot && typeof revisao.snapshot === 'object' ? revisao.snapshot as Record<string, unknown> : {}
     eventos.push({
       id: revisao.id,
-      tipo: revisao.motivo === 'Medição parcial' ? 'parcial' : 'retomada',
+      tipo: revisao.motivo === 'Medição parcial' ? 'parcial' : revisao.motivo === 'Retomada da medição' ? 'retomada' : 'envio',
       data: revisao.created_at,
       pecasMedidas: Number.isFinite(Number(snapshot.pecas_medidas)) ? Number(snapshot.pecas_medidas) : null,
       pecasAbertas: Number.isFinite(Number(snapshot.pecas_abertas)) ? Number(snapshot.pecas_abertas) : null,
@@ -198,11 +200,19 @@ export async function carregarEstadoParcialMedicao(medicaoId: string): Promise<E
   }
 
   const ultimo = eventos[eventos.length - 1]
-  const parcial = ultimo?.tipo === 'parcial'
+  const encerrada = ['concluido', 'aprovado', 'aguardando_conferencia', 'contramarco_aprovado'].includes(String(medicao?.status_operacional || ''))
+  const parcial = ultimo?.tipo === 'parcial' || (ultimo?.tipo === 'envio' && !encerrada)
+  const tempoZerado = encerrada || ultimo?.tipo === 'envio'
+  const fim = encerrada && (medicao?.concluido_em || medicao?.aprovado_em)
+    ? new Date(medicao.concluido_em || medicao.aprovado_em).getTime()
+    : Date.now()
 
   return {
     parcial,
+    encerrada,
+    tempoZerado,
     eventos,
-    tempoAtivoMs: calcularTempoAtivo(medicao?.iniciado_em || null, eventos),
+    // O total historico nao desaparece quando o mostrador da sessao zera.
+    tempoAtivoMs: calcularTempoAtivo(medicao?.iniciado_em || null, eventos, Number.isFinite(fim) ? fim : Date.now()),
   }
 }
