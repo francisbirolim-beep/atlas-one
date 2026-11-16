@@ -97,18 +97,18 @@ export default function VariaveisTipologiaPreview({
   return <section className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="flex items-center gap-2 text-lg font-black"><Settings2 size={20} className="text-indigo-700"/> Variáveis de configuração da tipologia</h3>
-        <p className="mt-1 text-xs text-slate-600">{tipologiaNome} · Opções específicas cadastradas no Atlas e rascunhos desta prévia.</p>
+        <p className="mt-1 text-xs text-slate-600">{tipologiaNome} · Opções trazidas automaticamente dos vínculos no cadastro de engenharia da tipologia.</p>
       </div>
       {master&&<button type="button" onClick={()=>setGerenciar(v=>!v)} className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-bold text-indigo-700">
         <Plus size={15}/> {gerenciar?'Fechar cadastro':'Cadastrar variáveis'}
       </button>}
     </div>
     <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-900">
-      <b>Estrutura de engenharia:</b> {totalVinculadas} variável(is) já vinculada(s) a esta tipologia no Atlas, {rascunhos.filter(x=>x.tipologiaId===tipologiaId).length} rascunho(s) adicional(is). As fórmulas de custo, corte e margem da tipologia serão vinculadas em uma etapa futura, após validação.
+      <b>Estrutura de engenharia:</b> {totalVinculadas} variável(is) já vinculada(s) a esta tipologia no Atlas.{master?' Novas variáveis nesta prévia são apenas rascunhos.':' Para cadastrar ou alterar variáveis, utilize o cadastro de tipologias.'} As fórmulas de custo, corte e margem serão vinculadas depois de validadas.
     </div>
     {carregando&&<p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">Carregando variáveis já cadastradas...</p>}
     {erro&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{erro}</p>}
-    {!carregando&&!erro&&!definicoes.length&&<p className="rounded-xl border border-dashed p-4 text-xs text-slate-500">Não há variáveis vinculadas a esta tipologia. O Master pode vincular uma variável existente ou cadastrar as opções que serão utilizadas aqui.</p>}
+    {!carregando&&!erro&&!definicoes.length&&<p className="rounded-xl border border-dashed p-4 text-xs text-slate-500">Esta tipologia ainda não possui variáveis vinculadas no cadastro técnico. Quando forem cadastradas e associadas à tipologia, aparecerão automaticamente aqui.</p>}
     <div className="grid gap-3 md:grid-cols-2">
       {definicoes.map(d=><div key={d.id} className="rounded-xl border border-slate-200 bg-white p-3">
         <div className="mb-2 flex items-start justify-between gap-2">
