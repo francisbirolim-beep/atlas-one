@@ -1,0 +1,330 @@
+'use client'
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardList, DraftingCompass, FileText, Layers3, Plus, Search, Trash2 } from 'lucide-react'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { lerDadosEmpresa } from '@/lib/configGeral'
+import { listarTipologias } from '@/lib/tipologias'
+import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
+import type { Tipologia } from '@/lib/tipos'
+import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
+import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
+import VariaveisTipologiaPreview, { type CatalogoEngenharia, type RascunhoVariavel } from '@/components/previews/VariaveisTipologiaPreview'
+import OrcamentoDocumentoPreview, { type OrcamentoDocumento, type ProdutoDocumento, type TipologiaDocumento } from '@/components/previews/OrcamentoDocumentoPreview'
+
+type Vidro={id:string;descricao:string;produtoAtlasId:string|null;referenciaNaoPrecificada:boolean}
+type Produto={id:string;codigo:string;nome:string;descricao:string;unidade:string;categoria:string;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null}
+type Item={produto:Produto;quantidade:number}
+type Medida={id:string;tipologia:Tipologia;largura:number;altura:number;cor:string;linha:string;vidro:string;contramarco:string;quantidade:number;variaveis:{nome:string;valor:string}[];pendentes:number}
+const input='w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
+const moeda=(v:number)=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
+const valorUnitario=(p:Produto)=>p.precoPromocional!=null&&p.precoPromocional>0?p.precoPromocional:p.preco
+const normalizar=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+const numero=(s:string)=>Number(String(s).trim().replace(',','.'))||0
+const novoId=()=>Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)
+const categorias=[['todos','Todos'],['perfil','Perfis'],['acessorio','Acessórios'],['vidro','Vidros'],['pronto','Produtos prontos'],['outros','Outros']] as const
+
+export default function ConfiguradorOrcamentoSobMedida(){
+  const [cliente,setCliente]=useState('')
+  const [empresa,setEmpresa]=useState<EmpresaRecibo|null>(null)
+  const [master,setMaster]=useState(false)
+  const [masterId,setMasterId]=useState('')
+  const [armazenamentoCarregado,setArmazenamentoCarregado]=useState(false)
+  const [rascunhos,setRascunhos]=useState<RascunhoVariavel[]>([])
+  const [tipologias,setTipologias]=useState<Tipologia[]>([])
+  const [linhasTecnicas,setLinhasTecnicas]=useState<LinhaTecnica[]>([])
+  const [erroReferencias,setErroReferencias]=useState('')
+  const [vidros,setVidros]=useState<Vidro[]>([])
+  const [etapa,setEtapa]=useState<1|2|3>(1)
+  const [largura,setLargura]=useState('')
+  const [altura,setAltura]=useState('')
+  const [cor,setCor]=useState('')
+  const [quantidade,setQuantidade]=useState('1')
+  const [buscaTipologia,setBuscaTipologia]=useState('')
+  const [filtroLinhaTipologia,setFiltroLinhaTipologia]=useState('')
+  const [tipologiaId,setTipologiaId]=useState('')
+  const [linhaId,setLinhaId]=useState('')
+  const [vidroId,setVidroId]=useState('')
+  const [contramarco,setContramarco]=useState('a_definir')
+  const [catalogo,setCatalogo]=useState<CatalogoEngenharia|null>(null)
+  const [variaveisCarregando,setVariaveisCarregando]=useState(false)
+  const [erroVariaveis,setErroVariaveis]=useState('')
+  const [valores,setValores]=useState<Record<string,string>>({})
+  const [medidas,setMedidas]=useState<Medida[]>([])
+  const [mostrarProdutos,setMostrarProdutos]=useState(false)
+  const [buscaProduto,setBuscaProduto]=useState('')
+  const [categoria,setCategoria]=useState('todos')
+  const [linhaProduto,setLinhaProduto]=useState('')
+  const [linhasProdutos,setLinhasProdutos]=useState<{id:string;nome:string}[]>([])
+  const [filtroPreco,setFiltroPreco]=useState('todos')
+  const [produtos,setProdutos]=useState<Produto[]>([])
+  const [itens,setItens]=useState<Item[]>([])
+  const [erroProdutos,setErroProdutos]=useState('')
+  const [aviso,setAviso]=useState('')
+  const [revisao,setRevisao]=useState(false)
+  const [descontoTipo,setDescontoTipo]=useState('sem')
+  const [desconto,setDesconto]=useState('')
+  const [condicoes,setCondicoes]=useState<{id:number;forma:string;valor:string}[]>([{id:1,forma:'PIX',valor:''}])
+  const proximaCondicao=useRef(1)
+  const [validade,setValidade]=useState('')
+  const [documento,setDocumento]=useState<OrcamentoDocumento|null>(null)
+
+  useEffect(()=>{
+    let ativo=true
+    void Promise.all([listarTipologias(),listarLinhasTecnicas()]).then(([ts,ls])=>{if(ativo){setTipologias(ts);setLinhasTecnicas(ls.filter(l=>l.ativo))}}).catch(()=>{if(ativo)setErroReferencias('Não foi possível carregar todas as tipologias e linhas técnicas.')})
+    void lerDadosEmpresa().then(d=>{if(ativo)setEmpresa(d||null)}).catch(()=>{})
+    void usuarioAtual().then(u=>{
+      if(!ativo)return
+      const autorizado=u?.role==='master'
+      setMaster(autorizado)
+      if(autorizado&&u?.id){
+        setMasterId(u.id)
+        try{
+          const j=window.localStorage.getItem('atlasone:previa:variaveis-tipologia:v1:'+u.id)
+          if(j){
+            const data=JSON.parse(j)
+            if(Array.isArray(data))setRascunhos(data.filter((v:unknown)=>{
+              const item=v as Partial<RascunhoVariavel>|null
+              return !!item&&typeof item.id==='string'&&typeof item.tipologiaId==='string'&&typeof item.nome==='string'&&Array.isArray(item.opcoes)
+            }).slice(0,400))
+          }
+        }catch{}
+      }
+      setArmazenamentoCarregado(true)
+    }).catch(()=>{if(ativo)setArmazenamentoCarregado(true)})
+    return()=>{ativo=false}
+  },[])
+  useEffect(()=>{
+    if(!master||!masterId||!armazenamentoCarregado)return
+    try{window.localStorage.setItem('atlasone:previa:variaveis-tipologia:v1:'+masterId,JSON.stringify(rascunhos))}catch{}
+  },[master,masterId,armazenamentoCarregado,rascunhos])
+  useEffect(()=>{
+    const ctrl=new AbortController()
+    void (async()=>{
+      try{
+        const token=await tokenAtual();if(!token)return
+        const r=await fetch('/api/previews/engenharia?tipo=vidros',{headers:{Authorization:'Bearer '+token},signal:ctrl.signal,cache:'no-store'})
+        const data=await r.json()
+        if(!r.ok)throw Error(data.error||'Vidros indisponíveis.')
+        if(!ctrl.signal.aborted)setVidros(data.vidros||[])
+      }catch(e){if(!ctrl.signal.aborted)setErroReferencias(e instanceof Error?e.message:'Erro ao consultar vidros.')}
+    })()
+    return()=>ctrl.abort()
+  },[])
+  useEffect(()=>{
+    if(!tipologiaId){setCatalogo(null);return}
+    const ctrl=new AbortController()
+    setVariaveisCarregando(true);setErroVariaveis('')
+    void (async()=>{
+      try{
+        const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+        const r=await fetch('/api/previews/engenharia?tipo=variaveis&tipologiaId='+encodeURIComponent(tipologiaId),{headers:{Authorization:'Bearer '+token},signal:ctrl.signal,cache:'no-store'})
+        const data=await r.json();if(!r.ok)throw Error(data.error||'Falha nas variáveis.')
+        if(!ctrl.signal.aborted)setCatalogo({variaveis:data.variaveis||[],vinculadas:data.vinculadas||[]})
+      }catch(e){if(!ctrl.signal.aborted){setErroVariaveis(e instanceof Error?e.message:'Erro no catálogo técnico.');setCatalogo(null)}}
+      finally{if(!ctrl.signal.aborted)setVariaveisCarregando(false)}
+    })()
+    return()=>ctrl.abort()
+  },[tipologiaId])
+  useEffect(()=>{
+    if(!mostrarProdutos)return
+    const ctrl=new AbortController()
+    const timer=setTimeout(()=>void (async()=>{
+      try{
+        const token=await tokenAtual();if(!token)throw Error('Sessão expirada.')
+        const params=new URLSearchParams({tipo:'produtos',q:buscaProduto,categoria,precoFiltro:filtroPreco})
+        if(linhaProduto)params.set('linhaId',linhaProduto)
+        const r=await fetch('/api/previews/comercial?'+params.toString(),{headers:{Authorization:'Bearer '+token},signal:ctrl.signal,cache:'no-store'})
+        const data=await r.json();if(!r.ok)throw Error(data.error||'Catálogo indisponível.')
+        if(!ctrl.signal.aborted){setProdutos(data.produtos||[]);setLinhasProdutos(data.linhas||[]);setErroProdutos('')}
+      }catch(e){if(!ctrl.signal.aborted){setErroProdutos(e instanceof Error?e.message:'Erro ao buscar produtos.');setProdutos([])}}
+    })(),buscaProduto?220:60)
+    return()=>{ctrl.abort();clearTimeout(timer)}
+  },[mostrarProdutos,buscaProduto,categoria,linhaProduto,filtroPreco])
+
+  const tipologia=tipologias.find(t=>t.id===tipologiaId)
+  const linhasVinculadas=tipologia?linhasTecnicas.filter(l=>(l.tipologia_ids||[]).includes(tipologia.id)):[]
+  const outrasLinhas=linhasTecnicas.filter(l=>!linhasVinculadas.some(v=>v.id===l.id))
+  const tipologiasFiltradas=tipologias.filter(t=>normalizar(t.label+' '+t.chave).includes(normalizar(buscaTipologia)))
+    .filter(t=>!filtroLinhaTipologia||linhasTecnicas.some(l=>l.id===filtroLinhaTipologia&&(l.tipologia_ids||[]).includes(t.id))).slice(0,110)
+  const linhaSelecionada=linhasTecnicas.find(l=>l.id===linhaId)
+  const vidroSelecionado=vidros.find(v=>v.id===vidroId)
+  const folhas=tipologia?.label.match(/\b0?(\d{1,2})\s*folhas?\b/i)?.[1]||null
+  const subtotal=itens.reduce((s,i)=>s+(valorUnitario(i.produto)||0)*i.quantidade,0)
+  const pendentesPreco=itens.filter(i=>valorUnitario(i.produto)==null).length
+  const descontoBruto=descontoTipo==='percentual'?subtotal*numero(desconto)/100:descontoTipo==='valor'?numero(desconto):0
+  const descontoInvalido=descontoTipo==='percentual'?numero(desconto)>100:descontoBruto>subtotal
+  const descontoValor=Math.max(0,Math.min(subtotal,descontoBruto))
+  const totalProdutos=Math.max(0,subtotal-descontoValor)
+  const variaveisDisponiveis=useMemo(()=>{
+    const atuais=(catalogo?.vinculadas||[]).map(v=>{
+      const variavel=catalogo?.variaveis.find(x=>x.id===v.variavelId)
+      return variavel&&variavel.chave!=='folhas'?{id:'atlas:'+variavel.id,nome:variavel.label,obrigatoria:v.obrigatorio,origem:'atlas'}:null
+    }).filter(Boolean) as {id:string;nome:string;obrigatoria:boolean;origem:string}[]
+    return [...atuais,...rascunhos.filter(r=>r.tipologiaId===tipologiaId).map(r=>({id:r.id,nome:r.nome,obrigatoria:r.obrigatoria,origem:'rascunho'}))]
+  },[catalogo,rascunhos,tipologiaId])
+
+  function avancarMedidas(){
+    if(!(numero(largura)>0&&numero(altura)>0)){setAviso('Informe largura e altura válidas em milímetros.');return}
+    if(!Number.isInteger(Number(quantidade))||Number(quantidade)<1){setAviso('Informe a quantidade.');return}
+    setEtapa(2);setAviso('')
+  }
+  function escolherTipologia(id:string){
+    const t=tipologias.find(x=>x.id===id)
+    const relacionadas=t?linhasTecnicas.filter(l=>(l.tipologia_ids||[]).includes(t.id)):[]
+    setTipologiaId(id);setLinhaId(relacionadas.length===1?relacionadas[0].id:'')
+    setValores({});setAviso('')
+  }
+  function avancarVariaveis(){
+    if(!tipologia){setAviso('Escolha uma tipologia cadastrada.');return}
+    if(linhasVinculadas.length&&!linhaId){setAviso('Selecione uma linha técnica vinculada à tipologia.');return}
+    setEtapa(3);setAviso('')
+  }
+  function incluirTipologia(){
+    if(!tipologia)return
+    const escolhas=variaveisDisponiveis.filter(v=>String(valores[v.id]||'').trim()).map(v=>({nome:v.nome,valor:valores[v.id]}))
+    const pendentes=variaveisDisponiveis.filter(v=>v.obrigatoria&&!String(valores[v.id]||'').trim()).length
+    setMedidas(a=>[...a,{
+      id:novoId(),tipologia,largura:numero(largura),altura:numero(altura),cor,linha:linhaSelecionada?.nome||'',
+      vidro:vidroSelecionado?.descricao||'',contramarco,quantidade:Number(quantidade),
+      variaveis:escolhas,pendentes
+    }])
+    setEtapa(1);setLargura('');setAltura('');setQuantidade('1');setTipologiaId('');setLinhaId('');setVidroId('');setValores({})
+    setAviso('Tipologia adicionada. Configure outra ou revise o orçamento.')
+  }
+  function adicionarProduto(p:Produto){
+    setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1}]})
+  }
+  function alterarQtd(id:string,n:number){if(!Number.isInteger(n)||n<1||n>99999)return;setItens(a=>a.map(x=>x.produto.id===id?{...x,quantidade:n}:x))}
+  function gerar(){
+    if(descontoInvalido){setAviso('Corrija o desconto.');return}
+    const ts:TipologiaDocumento[]=medidas.map(m=>({
+      id:m.id,nome:m.tipologia.label,linha:m.linha,largura:String(m.largura),altura:String(m.altura),quantidade:m.quantidade,
+      cor:m.cor,vidro:m.vidro,contramarco:m.contramarco==='com'?'Com contramarco':m.contramarco==='sem'?'Sem contramarco':'A definir',variaveis:m.variaveis
+    }))
+    const ps:ProdutoDocumento[]=itens.map(i=>({
+      id:i.produto.id,codigo:i.produto.codigo,nome:i.produto.nome,descricao:i.produto.descricao,unidade:i.produto.unidade,
+      quantidade:i.quantidade,preco:valorUnitario(i.produto),imagem:i.produto.fotoUrl||i.produto.fotoCandidataUrl||null
+    }))
+    setDocumento({cliente,empresa,tipologias:ts,produtos:ps,subtotal,desconto:descontoValor,totalProdutos,
+      temPendencias:medidas.length>0||pendentesPreco>0,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.valor})),
+      validadeDias:validade,data:new Date().toLocaleDateString('pt-BR')})
+  }
+
+  return <main className="min-h-screen bg-[#f3f6fb] px-3 pb-14 pt-5 text-slate-900 sm:px-6">
+    <div className="mx-auto max-w-[1300px] space-y-5">
+      <header className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3">
+        <Link href="/previews/orcamento" aria-label="Voltar aos tipos de orçamento" className="rounded-xl border bg-white p-2.5"><ArrowLeft size={19}/></Link>
+        <div><p className="text-[11px] font-bold uppercase tracking-widest text-indigo-700">Atlas One / Comercial / Prévia</p>
+          <h1 className="text-2xl font-black sm:text-3xl">Orçamento sob medida</h1>
+          <p className="text-sm text-slate-500">Configurar medidas, tipologia, linha, vidro e variáveis técnicas.</p></div></div>
+        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">PRÉVIA · SEM GRAVAÇÃO NO ATLAS OFICIAL</span>
+      </header>
+      <section className="rounded-2xl border bg-white p-4 shadow-sm"><label className="text-xs font-bold text-slate-600">Cliente / responsável<input className={input+' mt-1'} placeholder="Cliente do orçamento" value={cliente} onChange={e=>setCliente(e.target.value)}/></label></section>
+      {!revisao&&<div className="grid grid-cols-3 gap-2 rounded-2xl border bg-white p-2">
+        {([{n:1,label:'1 · Medidas'},{n:2,label:'2 · Tipologia e linha'},{n:3,label:'3 · Variáveis'}] as const).map(v=><button key={v.n} type="button" onClick={()=>setEtapa(v.n)} disabled={v.n===2&&!(numero(largura)>0&&numero(altura)>0)||v.n===3&&!tipologiaId} className={'rounded-xl px-2 py-3 text-xs font-bold disabled:opacity-40 '+(etapa===v.n?'bg-indigo-700 text-white':'bg-white text-slate-600')}>{v.label}</button>)}
+      </div>}
+      {aviso&&<p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{aviso}</p>}
+
+      {!revisao&&etapa===1&&<section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <h2 className="flex items-center gap-2 text-lg font-black"><DraftingCompass size={21} className="text-indigo-700"/> 1. Medidas, cor e quantidade</h2>
+        <p className="mt-1 text-xs text-slate-500">Informe primeiro as medidas. A sugestão de linha virá do cadastro de vínculos da tipologia; regras futuras avaliarão limites dimensionais.</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="text-xs font-bold">Largura (mm) *<input className={input+' mt-1'} type="number" min="1" placeholder="Ex.: 1200" value={largura} onChange={e=>setLargura(e.target.value)}/></label>
+          <label className="text-xs font-bold">Altura (mm) *<input className={input+' mt-1'} type="number" min="1" placeholder="Ex.: 1000" value={altura} onChange={e=>setAltura(e.target.value)}/></label>
+          <label className="text-xs font-bold">Cor / acabamento<input className={input+' mt-1'} value={cor} onChange={e=>setCor(e.target.value)} placeholder="Cor do acabamento"/></label>
+          <label className="text-xs font-bold">Quantidade<input className={input+' mt-1'} type="number" min="1" value={quantidade} onChange={e=>setQuantidade(e.target.value)}/></label>
+        </div>
+        <div className="mt-4 flex justify-end"><button type="button" onClick={avancarMedidas} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-bold text-white">Próximo: tipologia <ArrowRight size={17}/></button></div>
+      </section>}
+      {!revisao&&etapa===2&&<section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <h2 className="flex items-center gap-2 text-lg font-black"><Layers3 size={21} className="text-indigo-700"/> 2. Tipologia, linha técnica e vidro</h2>
+        <p className="mt-1 text-xs text-slate-500">{largura} × {altura} mm · Cor {cor||'A definir'}. O número de folhas já é definido pelo cadastro da tipologia.</p>
+        {erroReferencias&&<p role="alert" className="mt-2 text-xs text-red-700">{erroReferencias}</p>}
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="text-xs font-bold">Pesquisar tipologia<input className={input+' mt-1'} value={buscaTipologia} onChange={e=>setBuscaTipologia(e.target.value)} placeholder="Janela, porta, correr..."/></label>
+          <label className="text-xs font-bold">Filtrar tipologias por linha<select className={input+' mt-1'} value={filtroLinhaTipologia} onChange={e=>{setFiltroLinhaTipologia(e.target.value);setTipologiaId('');setLinhaId('')}}><option value="">Todas as linhas</option>{linhasTecnicas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select></label>
+          <label className="text-xs font-bold md:col-span-2">Tipologia<select className={input+' mt-1'} value={tipologiaId} onChange={e=>escolherTipologia(e.target.value)}><option value="">Selecione a tipologia cadastrada</option>{tipologiasFiltradas.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
+          {tipologia&&<p className="rounded-lg bg-indigo-50 p-3 text-xs text-indigo-900 md:col-span-2"><b>{tipologia.label}</b> · Folhas: {folhas?folhas+' (pela tipologia)':'conforme cadastro técnico'}</p>}
+          <label className="text-xs font-bold">Linha técnica<select className={input+' mt-1'} value={linhaId} disabled={!tipologia} onChange={e=>setLinhaId(e.target.value)}>
+            <option value="">Selecione / a definir</option>
+            {!!linhasVinculadas.length&&<optgroup label="Linhas já vinculadas">{linhasVinculadas.map(l=><option value={l.id} key={l.id}>{l.nome}</option>)}</optgroup>}
+            {!!outrasLinhas.length&&<optgroup label="Outras linhas (vínculo a validar)">{outrasLinhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</optgroup>}
+          </select></label>
+          <label className="text-xs font-bold">Vidro / espelho e espessura<select className={input+' mt-1'} value={vidroId} onChange={e=>setVidroId(e.target.value)}><option value="">A definir / sem vidro</option>{vidros.map(v=><option key={v.id} value={v.id}>{v.descricao}</option>)}</select></label>
+          <label className="text-xs font-bold">Contramarco<select className={input+' mt-1'} value={contramarco} onChange={e=>setContramarco(e.target.value)}><option value="a_definir">A definir</option><option value="com">Com contramarco</option><option value="sem">Sem contramarco</option></select></label>
+        </div>
+        {tipologia&&<p className="mt-3 rounded-lg bg-blue-50 p-3 text-xs text-blue-800">{linhasVinculadas.length?String(linhasVinculadas.length)+' linha(s) técnica(s) vinculada(s). Sugestão baseada no cadastro, não em limite dimensional.':'Nenhuma linha vinculada: é possível escolher outra para teste, mas o vínculo técnico precisa ser validado.'}</p>}
+        {vidroSelecionado&&<p className="mt-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Referência real W.Vetro: {vidroSelecionado.descricao}. {vidroSelecionado.referenciaNaoPrecificada?'Sem vínculo comercial e sem preço técnico cadastrado.':'Vínculo comercial encontrado; cálculo técnico ainda pendente.'}</p>}
+        <div className="mt-5 flex flex-wrap justify-between gap-3"><button type="button" onClick={()=>setEtapa(1)} className="rounded-xl border px-4 py-3 text-sm font-bold">Voltar às medidas</button><button type="button" onClick={avancarVariaveis} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-bold text-white">Próximo: variáveis <ArrowRight size={17}/></button></div>
+      </section>}
+      {!revisao&&etapa===3&&tipologia&&<section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="mb-4 rounded-xl bg-indigo-50 p-3 text-xs"><b>{tipologia.label}</b> · {largura} × {altura} mm · {linhaSelecionada?.nome||'Linha a definir'} · {cor||'Cor a definir'}</div>
+        <VariaveisTipologiaPreview key={tipologia.id} tipologiaId={tipologia.id} tipologiaNome={tipologia.label}
+          master={master} catalogo={catalogo} rascunhos={rascunhos} onChangeRascunhos={setRascunhos}
+          selecoes={valores} onChangeSelecoes={setValores} carregando={variaveisCarregando} erro={erroVariaveis}/>
+        <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800"><b>Formulação posterior:</b> custos, composição, perdas, cortes e margem própria da tipologia ainda dependem de regras técnicas validadas. A margem unitária não será aplicada automaticamente.</p>
+        <div className="mt-4 flex flex-wrap justify-between gap-2"><button type="button" onClick={()=>setEtapa(2)} className="rounded-xl border px-4 py-3 text-sm font-bold">Voltar à tipologia</button><button type="button" onClick={incluirTipologia} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-bold text-white"><Plus size={17}/> Adicionar tipologia configurada</button></div>
+      </section>}
+      {!revisao&&!!medidas.length&&<section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-black">Tipologias adicionadas ({medidas.length})</h2>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">{medidas.map(m=><div key={m.id} className="flex items-start justify-between gap-3 rounded-xl border bg-slate-50 p-3">
+          <div><b className="text-sm">{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-xs text-slate-500">{m.largura} × {m.altura} mm · {m.linha||'Linha a definir'} · {m.cor||'Cor a definir'}</p>
+            {m.variaveis.length>0&&<p className="mt-1 text-[11px] text-slate-600">{m.variaveis.map(v=>v.nome+': '+v.valor).join(' · ')}</p>}
+            {m.pendentes>0&&<p className="mt-1 text-[11px] text-amber-700">{m.pendentes} variável(is) obrigatória(s) pendente(s)</p>}
+            <p className="mt-2 text-xs font-bold text-amber-800">Custo e preço: aguardando fórmula técnica</p>
+          </div><button type="button" aria-label="Remover tipologia" onClick={()=>setMedidas(a=>a.filter(x=>x.id!==m.id))} className="rounded-lg border p-2 text-red-700"><Trash2 size={15}/></button>
+        </div>)}</div>
+      </section>}
+      {!revisao&&<section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-black">Produtos adicionais ao orçamento</h2><p className="mt-1 text-xs text-slate-500">O catálogo fica fechado até você escolher adicionar perfis, acessórios ou produtos prontos.</p></div>
+          <button type="button" onClick={()=>setMostrarProdutos(v=>!v)} className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-bold text-indigo-700">{mostrarProdutos?'Fechar catálogo':'Adicionar produto ao orçamento'} {mostrarProdutos?<ChevronDown size={15}/>:<Plus size={15}/>}</button>
+        </div>
+        {!!itens.length&&<p className="mt-3 text-xs font-semibold">{itens.length} produto(s) adicionados · Subtotal conhecido: {moeda(subtotal)}.</p>}
+      </section>}
+      {!revisao&&mostrarProdutos&&<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_310px]">
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <h2 className="flex items-center gap-2 text-base font-black"><Search size={18}/> Pesquisar produtos adicionais</h2>
+          <input className={input+' mt-3'} placeholder="Código, nome ou descrição..." value={buscaProduto} onChange={e=>setBuscaProduto(e.target.value)}/>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">{categorias.map(c=><button type="button" key={c[0]} onClick={()=>{setCategoria(c[0]);setLinhaProduto('')}} className={'rounded-lg border p-2 text-xs font-bold '+(categoria===c[0]?'bg-blue-700 text-white':'bg-slate-50')}>{c[1]}</button>)}</div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2"><label className="text-xs font-bold">Linha técnica<select className={input+' mt-1'} value={linhaProduto} onChange={e=>setLinhaProduto(e.target.value)}><option value="">Todas as linhas</option>{linhasProdutos.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select></label>
+            <label className="text-xs font-bold">Preço<select className={input+' mt-1'} value={filtroPreco} onChange={e=>setFiltroPreco(e.target.value)}><option value="todos">Todos</option><option value="com">Com preço</option><option value="sem">Sem preço</option></select></label></div>
+          {erroProdutos&&<p role="alert" className="mt-2 text-xs text-red-700">{erroProdutos}</p>}
+          <div className="mt-3 max-h-[510px] space-y-2 overflow-y-auto">{produtos.map(p=><div key={p.id} className="flex items-center gap-3 rounded-xl border p-3">
+            <FotoProdutoPreview nome={p.nome} fotoUrl={p.fotoUrl} fotoCandidataUrl={p.fotoCandidataUrl} tamanho="pequeno"/>
+            <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{p.nome}</b><p className="text-[11px] text-slate-500">{p.codigo} · {p.unidade}</p><b className="mt-1 block text-xs text-blue-700">{valorUnitario(p)!=null?moeda(valorUnitario(p)!):'Preço a cadastrar'}</b></div>
+            <button type="button" aria-label={'Adicionar '+p.nome} onClick={()=>adicionarProduto(p)} className="rounded-lg bg-blue-700 p-2 text-white"><Plus size={17}/></button>
+          </div>)}</div>
+          {!erroProdutos&&!produtos.length&&<p className="mt-3 text-xs text-slate-500">Nenhum produto cadastrado encontrado com estes filtros.</p>}
+        </section>
+        <aside className="rounded-2xl border bg-white p-4 shadow-sm"><h3 className="text-sm font-black">Itens avulsos adicionados</h3>
+          {itens.map(i=><div key={i.produto.id} className="mt-3 border-b pb-3"><b className="text-xs">{i.produto.nome}</b><p className="text-xs text-slate-600">{valorUnitario(i.produto)!=null?moeda(valorUnitario(i.produto)!):'Preço pendente'}</p><div className="mt-2 flex items-center gap-2"><label className="text-xs">Qtd.</label><input type="number" min="1" className="w-20 rounded-lg border p-1.5 text-center text-xs" value={i.quantidade} onChange={e=>alterarQtd(i.produto.id,Number(e.target.value))}/><button type="button" aria-label="Remover item" onClick={()=>setItens(a=>a.filter(x=>x.produto.id!==i.produto.id))} className="ml-auto text-red-700"><Trash2 size={15}/></button></div></div>)}
+          <div className="mt-3 flex justify-between text-xs font-bold"><span>Subtotal conhecido</span><span>{moeda(subtotal)}</span></div>
+          <button type="button" onClick={()=>setMostrarProdutos(false)} className="mt-3 w-full rounded-lg border py-2 text-xs font-bold">Concluir inclusão de produtos</button>
+        </aside>
+      </div>}
+      {!revisao&&<div className="flex justify-end"><button type="button" onClick={()=>{if(!medidas.length){setAviso('Adicione pelo menos uma tipologia sob medida.');return}setRevisao(true);setAviso('')}} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-6 py-3 text-sm font-bold text-white">Revisar orçamento <ArrowRight size={17}/></button></div>}
+      {revisao&&<section className="mx-auto max-w-4xl rounded-2xl border bg-white p-5 shadow-sm sm:p-8">
+        <h2 className="flex items-center justify-center gap-2 text-xl font-black"><Check size={22} className="text-emerald-700"/> Revisão da proposta — Simulação</h2>
+        <p className="mt-2 text-center text-xs text-slate-500">Cliente: {cliente||'A identificar'}. Nenhum orçamento, pedido, pagamento ou custo técnico será gravado.</p>
+        {medidas.map(m=><div key={m.id} className="mt-4 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.linha||'Linha pendente'} · {m.vidro||'Vidro pendente'}</p><p className="text-slate-500">{m.variaveis.map(v=>v.nome+': '+v.valor).join(' · ')||'Variáveis ainda não escolhidas'}</p></div><b className="text-amber-800">A precificar</b></div>)}
+        {itens.map(i=><div key={i.produto.id} className="mt-3 flex justify-between border-b pb-2 text-xs"><span>{i.quantidade} × {i.produto.nome}</span><b>{valorUnitario(i.produto)!=null?moeda(valorUnitario(i.produto)!*i.quantidade):'A precificar'}</b></div>)}
+        <div className="mt-4 rounded-xl bg-blue-50 p-4 text-xs"><div className="flex justify-between"><span>Subtotal conhecido dos produtos</span><b>{moeda(subtotal)}</b></div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="font-bold">Tipo de desconto<select className={input+' mt-1'} value={descontoTipo} onChange={e=>setDescontoTipo(e.target.value)}><option value="sem">Sem desconto</option><option value="valor">Valor (R$)</option><option value="percentual">Percentual (%)</option></select></label>
+            <label className="font-bold">Desconto<input className={input+' mt-1'} inputMode="decimal" value={desconto} disabled={descontoTipo==='sem'} onChange={e=>setDesconto(e.target.value)} placeholder="Valor ou %"/></label></div>
+          {descontoInvalido&&<p className="mt-2 text-red-700">O desconto excede o limite permitido.</p>}
+          <div className="mt-2 flex justify-between"><span>Subtotal ajustado dos produtos</span><b>{moeda(totalProdutos)}</b></div>
+          <p className="mt-2 font-bold text-amber-800">O total geral permanece pendente das fórmulas da tipologia e de produtos sem preço ({pendentesPreco}).</p>
+        </div>
+        <div className="mt-4 rounded-xl border p-4"><h3 className="text-sm font-black">Condições de pagamento propostas</h3>
+          {condicoes.map(c=><div key={c.id} className="mt-2 flex flex-wrap gap-2"><select className={input+' flex-1'} value={c.forma} onChange={e=>setCondicoes(a=>a.map(x=>x.id===c.id?{...x,forma:e.target.value}:x))}>{['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Transferência','Boleto'].map(x=><option key={x}>{x}</option>)}</select><input className={input+' flex-1'} value={c.valor} onChange={e=>setCondicoes(a=>a.map(x=>x.id===c.id?{...x,valor:e.target.value}:x))} placeholder="Condição ou valor"/>{condicoes.length>1&&<button type="button" onClick={()=>setCondicoes(a=>a.filter(x=>x.id!==c.id))} className="text-red-700"><Trash2 size={16}/></button>}</div>)}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={()=>{proximaCondicao.current++;setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',valor:''}])}} className="rounded-lg border px-3 py-2 text-xs font-bold">+ Outra condição</button><label className="text-xs font-bold">Validade (dias)<input className={input+' mt-1 w-36'} type="number" min="1" value={validade} onChange={e=>setValidade(e.target.value)} placeholder="A definir"/></label></div>
+        </div>
+        <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">A margem unitária não entra na fórmula da tipologia. O documento é apenas uma simulação; não será enviado, faturado nem gravado.</p>
+        <div className="mt-4 flex flex-wrap justify-between gap-3"><button type="button" onClick={()=>setRevisao(false)} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar e ajustar</button><button type="button" onClick={gerar} disabled={descontoInvalido} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-xs font-bold text-white disabled:opacity-50"><FileText size={16}/> Gerar PDF do orçamento (prévia)</button></div>
+      </section>}
+    </div>
+    {documento&&<OrcamentoDocumentoPreview dados={documento} fechar={()=>setDocumento(null)}/>}
+  </main>
+}
