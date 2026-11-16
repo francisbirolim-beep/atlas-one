@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, ClipboardList, DraftingCompass, FileText, ImageOff, Minus, Package, Plus, Search, ShoppingBag, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import { lerDadosEmpresa } from '@/lib/configGeral'
+import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
+import OrcamentoDocumentoPreview, { type OrcamentoDocumento, type ProdutoDocumento } from '@/components/previews/OrcamentoDocumentoPreview'
 import { listarTipologias } from '@/lib/tipologias'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
@@ -24,6 +27,13 @@ const moeda=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL
 const unitario=(p:Produto)=>p.precoPromocional!=null&&p.precoPromocional>0?p.precoPromocional:p.preco
 const idNovo=()=>Date.now()+Math.floor(Math.random()*1000)
 const normaliza=(s:string)=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+const decimal=(texto:string)=>{
+  const v=String(texto||'').trim().replace(/\s/g,'').replace(/R\$/gi,'')
+  if(!v)return 0
+  const n=Number(v.includes(',')?v.replace(/\./g,'').replace(',','.'):v)
+  return Number.isFinite(n)?n:NaN
+}
+const formasPagamento=['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Transferência','Boleto']
 export default function OrcamentoPreview(){
   const [modo,setModo]=useState<Modo>('escolher')
   const [cliente,setCliente]=useState('')
@@ -53,6 +63,14 @@ export default function OrcamentoPreview(){
   const [erro,setErro]=useState('')
   const [aviso,setAviso]=useState('')
   const [revisao,setRevisao]=useState(false)
+  const [empresa,setEmpresa]=useState<EmpresaRecibo|null>(null)
+  const [tipoDesconto,setTipoDesconto]=useState<'sem'|'percentual'|'valor'>('sem')
+  const [valorDesconto,setValorDesconto]=useState('')
+  const [condicoes,setCondicoes]=useState<{id:number;forma:string;detalhe:string}[]>([{id:1,forma:'PIX',detalhe:''}])
+  const proximaCondicao=useRef(1)
+  const [validadeDias,setValidadeDias]=useState('')
+  const [documento,setDocumento]=useState<OrcamentoDocumento|null>(null)
+  useEffect(()=>{let ativo=true;void lerDadosEmpresa().then(d=>{if(ativo)setEmpresa(d||null)}).catch(()=>{});return()=>{ativo=false}},[])
   useEffect(()=>{let ativo=true;void Promise.all([listarTipologias(),listarLinhasTecnicas()]).then(([ts,ls])=>{if(ativo){setTipologias(ts);setLinhasTecnicas(ls.filter(l=>l.ativo))}}).catch(()=>{});return()=>{ativo=false}},[])
   useEffect(()=>{
     if(buscaCliente.trim().length<2||cliente){setClientes([]);return}
@@ -90,6 +108,37 @@ export default function OrcamentoPreview(){
   const valorConhecido=itens.reduce((s,i)=>s+(unitario(i.produto)||0)*i.quantidade,0)
   const semPreco=itens.filter(i=>unitario(i.produto)==null).length
   const totalQtd=itens.reduce((s,i)=>s+i.quantidade,0)
+  const descontoDigitado=decimal(valorDesconto)
+  const descontoInvalido=tipoDesconto!=='sem'&&( !Number.isFinite(descontoDigitado)||descontoDigitado<0||
+    (tipoDesconto==='percentual'&&descontoDigitado>100)||
+    (tipoDesconto==='valor'&&descontoDigitado>valorConhecido))
+  const descontoAplicado=tipoDesconto==='sem'||descontoInvalido?0:
+    Math.min(valorConhecido,Math.round((tipoDesconto==='percentual'?valorConhecido*descontoDigitado/100:descontoDigitado)*100)/100)
+  const valorFinalConhecido=Math.round((valorConhecido-descontoAplicado)*100)/100
+  const totalPendente=medidas.length>0||semPreco>0
+  function alterarCondicao(id:number, campo:'forma'|'detalhe', valor:string){
+    setCondicoes(anteriores=>anteriores.map(c=>c.id===id?{...c,[campo]:valor}:c))
+  }
+  function adicionarCondicao(){
+    proximaCondicao.current+=1
+    setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',detalhe:''}])
+  }
+  function gerarOrcamento(){
+    if(!itens.length&&!medidas.length){setAviso('Inclua produtos antes de gerar o orçamento.');return}
+    if(descontoInvalido){setAviso('Corrija o desconto informado.');return}
+    const produtosDocumento:ProdutoDocumento[]=itens.map(({produto,quantidade})=>({
+      id:produto.id,codigo:produto.codigo,nome:produto.nome,descricao:produto.descricao,
+      unidade:produto.unidade,quantidade,preco:unitario(produto),
+      // Não usar fotos candidatas ou genéricas: apenas a foto realmente vinculada ao item.
+      imagem:produto.fotoUrl||null
+    }))
+    setDocumento({
+      cliente,empresa,tipologias:[],produtos:produtosDocumento,
+      subtotal:valorConhecido,desconto:descontoAplicado,totalProdutos:valorFinalConhecido,
+      temPendencias:totalPendente,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.detalhe})),
+      validadeDias,data:new Date().toLocaleDateString('pt-BR')
+    })
+  }
   function adicionarProduto(p:Produto){setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1}]});setAviso('')}
   function qtdProduto(id:string,valor:number){if(!Number.isInteger(valor)||valor<1||valor>99999)return;setItens(a=>a.map(x=>x.produto.id===id?{...x,quantidade:valor}:x))}
   function adicionarSobMedida(){
@@ -104,7 +153,7 @@ export default function OrcamentoPreview(){
     if(modo==='produtos'&&!itens.length){setAviso('Adicione pelo menos um produto.');return}
     setAviso('');setRevisao(true)
   }
-  function escolherModo(v:Modo){setModo(v);setRevisao(false);setAviso('')}
+  function escolherModo(v:Modo){setModo(v);setRevisao(false);setDocumento(null);setAviso('')}
   function limparFiltros(){setBusca('');setCategoria('todos');setLinha('');setPrecoFiltro('todos')}
   return <main className="min-h-screen bg-[#f3f6fb] px-3 pb-14 pt-5 text-slate-900 sm:px-6">
     <div className="mx-auto max-w-[1410px] space-y-5">
