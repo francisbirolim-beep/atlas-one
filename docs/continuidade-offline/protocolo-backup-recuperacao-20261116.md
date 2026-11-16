@@ -27,7 +27,7 @@
 | Destino `K:` | `\\SERVIDOR\Faktory_Sistema`: compartilhamento do próprio host, não é backup offsite |
 | Rotinas agendadas Windows | Nenhuma rotina Atlas específica identificada pela filtragem dos nomes de tarefas; isso não prova que inexista outro agente de backup |
 | Logs Vercel | Busca de `/api/backup` na janela de 24h não retornou registros; ausência de log não comprova ausência de chamadas |
-| Backup gerenciado Supabase | **Não confirmado**: o conector disponível não fornece listagem de snapshots administrados pela plataforma nem o plano contratual |
+| Backup gerenciado Supabase | Organização Atlas One confirmada no **plano Pro**; a plataforma documenta backups diários e retenção nominal de 7 dias no Pro, **mas existência, datas e integridade dos snapshots ainda não verificadas**, pois o conector não lista esses backups |
 | Restauração completa | **Não executada** |
 
 A documentação atual do Supabase confirma que backup do banco **não inclui o conteúdo binário** dos objetos armazenados pela Storage API; a base contém somente seus metadados. Consultar: https://supabase.com/docs/guides/platform/backups
@@ -93,7 +93,8 @@ A documentação atual do Supabase confirma que backup do banco **não inclui o 
 - [x] Destino `K:` identificado como compartilhamento do próprio servidor
 - [x] Risco de restauração destrutiva documentado
 - [ ] Backup completo, cifrado e independente criado
-- [ ] Disponibilidade e retenção de backups Supabase verificadas
+- [x] Plano Supabase Pro identificado (elegibilidade documental para backups diários)
+- [ ] Existência, datas, cobertura e retenção real dos backups gerenciados verificadas
 - [ ] Storage exportado e checksums verificados
 - [ ] Restauração de base e anexos testada em ambiente isolado
 - [ ] Ensaios de falha/recuperação e RPO/RTO registrados
