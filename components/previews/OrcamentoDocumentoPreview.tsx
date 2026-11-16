@@ -106,7 +106,9 @@ const css='\
 .oc-continua{display:flex;justify-content:space-between;gap:3mm;font-size:7.5pt;font-weight:700;border-bottom:1px solid #cbd5e1;padding-bottom:1.5mm}\
 .oc-cliente{display:block;border-bottom:1px solid #e2e8f0;padding:1mm 0;font-size:7.1pt;line-height:1.12}\
 .oc-cliente p{margin:.35mm 0;overflow-wrap:anywhere}\
-.oc-cliente-linha{display:flex;justify-content:space-between;gap:3mm}\
+.oc-cliente-linha{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:5mm}\
+.oc-cliente-direita{text-align:right;min-width:30mm}\
+.oc-cliente-direita p{margin:.5mm 0;white-space:nowrap}\
 .oc-tabela{width:100%;border-collapse:collapse;table-layout:fixed;text-align:left;margin-top:1mm;font-size:7.3pt}\
 .oc-tabela th{font-size:6.8pt;background:#f3f5f7;padding:.8mm .7mm;border-bottom:1px solid #cbd5e1}\
 .oc-tabela td{padding:.6mm .7mm;vertical-align:middle;border-bottom:1px solid #e2e8f0}\
@@ -205,14 +207,16 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
             </header>}
             {primeira&&<section className="oc-cliente">
               <div className="oc-cliente-linha">
-                <span>Cliente: <b>{dados.cliente||'Cliente a identificar'}</b>
-                  {dados.clienteDocumento&&<span> · CPF/CNPJ: {dados.clienteDocumento}</span>}
-                </span>
-                <span>Validade: <b>{dados.validadeDias?dados.validadeDias+' dias':'A definir'}</b></span>
+                <div>
+                  <p><b>Cliente:</b> {dados.cliente||'Cliente a identificar'}</p>
+                  {dados.clienteDocumento&&<p><b>CPF/CNPJ:</b> {dados.clienteDocumento}</p>}
+                  {dados.clienteTelefone&&<p><b>Contato:</b> {dados.clienteTelefone}</p>}
+                </div>
+                <div className="oc-cliente-direita">
+                  <p><b>Validade:</b> {dados.validadeDias?dados.validadeDias+' dias':'A definir'}</p>
+                  <p><b>Vendedor:</b> {dados.vendedorNome||'Não informado'}</p>
+                </div>
               </div>
-              <p><b>Vendedor:</b> {dados.vendedorNome||'Não informado'}
-                {dados.clienteTelefone&&<> · <b>Contato:</b> {dados.clienteTelefone}</>}
-              </p>
               {dados.enderecoCliente&&<p><b>Endereço do cliente:</b> {dados.enderecoCliente}</p>}
               {(dados.enderecoEntrega||dados.obraNome)&&<p>
                 <b>{dados.obraNome?'Obra / entrega:':'Local da entrega:'}</b> {dados.obraNome&&dados.obraNome+' · '}{dados.enderecoEntrega||'A definir'}
