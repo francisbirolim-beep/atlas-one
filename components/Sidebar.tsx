@@ -26,6 +26,7 @@ import { listarPermissoesUsuario, listarSetores, nivelEfetivo } from '@/lib/seto
 import { podeAcessarRotaCatalogada } from '@/lib/permissoesRota'
 import { lerAcessoUsuarioConfig, type AcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import { podeExecutarAcao, permissaoDaRotaProducao } from '@/lib/producaoPermissoes'
+import { permissaoExplicitaPainelGeral } from '@/lib/painelGeralAcesso'
 import { carregarAcessoCadastro, podeAcaoCadastro } from '@/lib/acessoCadastroOperacional'
 import { agruparGuias, GUIAS } from '@/lib/guias'
 import { ITENS_ADMIN } from '@/lib/navegacaoAdmin'
@@ -144,7 +145,7 @@ export default function Sidebar() {
     const emAdministracao = ITENS_ADMIN.some(item => pathname === item.href || pathname.startsWith(`${item.href}/`))
     if (emAdministracao) setAdminAberto(true)
     if (pathname === '/balcao' || pathname.startsWith('/balcao/')) setGruposAbertos(prev => ({...prev, Comercial:true}))
-    if (pathname === '/kanban' || pathname.startsWith('/kanban/') || pathname === '/producao') setGruposAbertos(prev => ({...prev, Kanban:true}))
+    if (pathname === '/kanban' || pathname.startsWith('/kanban/') || pathname === '/visao-geral-projetos') setGruposAbertos(prev => ({...prev, Kanban:true}))
     if (pathname === '/relatorios' || pathname.startsWith('/relatorios/')) setGruposAbertos(prev => ({...prev, 'Relatórios':true}))
     if (pathname === '/atlas-ia' || pathname.startsWith('/atlas-ia/')) setGruposAbertos(prev => ({...prev, 'IA Atlas':true}))
   }, [pathname])
@@ -224,8 +225,9 @@ export default function Sidebar() {
   // O Kanban tem um acesso próprio, mas cada item preserva a permissão da rota original.
   const kanbanComercialCombina = guiaLiberada('/kanban') &&
     (!termo || correspondePesquisaAtlas(termo,'Kanban Comercial','Kanban','/kanban'))
-  const kanbanGeralCombina = guiaLiberada('/producao') &&
-    (!termo || correspondePesquisaAtlas(termo,'Kanban Geral','Produção','/producao'))
+  const kanbanGeralCombina = (usuario?.role === 'master' ||
+    (acessoCarregado && permissaoExplicitaPainelGeral(usuario?.role || '', configAcesso, 'visao-geral-projetos'))) &&
+    (!termo || correspondePesquisaAtlas(termo,'Kanban Geral','Visão Geral de Projetos','/visao-geral-projetos'))
   const kanbanCombina = kanbanComercialCombina || kanbanGeralCombina
 
   // Vendas e Entrada de NF deixam de ocupar botões soltos, sem perder acesso.
@@ -233,7 +235,7 @@ export default function Sidebar() {
   const gruposNavegacao = useMemo(() => {
     const grupos = gruposVisiveis.map(grupo => ({
       ...grupo,
-      itens: grupo.itens.filter(guia => guia.href !== '/kanban' && guia.href !== '/producao'),
+      itens: grupo.itens.filter(guia => guia.href !== '/kanban'),
     }))
     if (balcaoCombina && !grupos.some(grupo => grupo.grupo === 'Comercial'))
       grupos.unshift({grupo:'Comercial', itens:[]})
@@ -285,7 +287,7 @@ export default function Sidebar() {
               </button>
               {(!!termo || !!gruposAbertos.Kanban) && <div className="ml-3 space-y-0.5 border-l border-slate-200 pl-2">
                 {kanbanComercialCombina && <Link href="/kanban/comercial" className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] ${pathname === '/kanban/comercial' || pathname.startsWith('/kanban/comercial/') ? 'bg-brand-navy font-semibold text-white' : 'text-slate-600 hover:bg-slate-100'}`}><Columns3 size={15}/> Kanban Comercial</Link>}
-                {kanbanGeralCombina && <Link href="/producao" className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] ${ativo('/producao')?'bg-brand-navy font-semibold text-white':'text-slate-600 hover:bg-slate-100'}`}><Columns3 size={15}/> Kanban Geral</Link>}
+                {kanbanGeralCombina && <Link href="/visao-geral-projetos" className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] ${ativo('/visao-geral-projetos')?'bg-brand-navy font-semibold text-white':'text-slate-600 hover:bg-slate-100'}`}><Columns3 size={15}/> Kanban Geral</Link>}
               </div>}
             </section>
           )}
