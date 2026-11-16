@@ -26,8 +26,11 @@ function aplicarCategoria(consulta:any,categoria:Categoria,prefixo=''):any{
 }
 
 export async function GET(request:NextRequest){
+  // Atalhos aprovados: acesso de leitura conforme o setor de venda ou orçamento.
+  // Não confundir publicação da interface com autorização para visualizar dados.
   const usuario=await autenticarBalcao(request,'venda-balcao','consulta')
-  if(!usuario||usuario.role!=='master')return NextResponse.json({error:'Prévia disponível somente para o perfil Master.'},{status:403})
+    ||await autenticarBalcao(request,'fazer-orcamento-msanfyvj','consulta')
+  if(!usuario)return NextResponse.json({error:'Sem permissão de consulta comercial. Solicite acesso ao Master.'},{status:403})
   const tipo=request.nextUrl.searchParams.get('tipo')||'produtos'
   const q=(request.nextUrl.searchParams.get('q')||'').slice(0,110).trim()
   try{
@@ -167,11 +170,13 @@ export async function GET(request:NextRequest){
         fotoCandidataUrl:fotos.has(p.id)?null:candidatas.get(p.id)||null, // Aparece automaticamente com aviso de validação pendente.
         preco:Number(p.preco||0)>0?Number(p.preco):null,
         precoPromocional:p.preco_promocional!=null&&Number(p.preco_promocional)>0?Number(p.preco_promocional):null,
-        custo:p.custo!=null?Number(p.custo):null,
-        custoWvetroUltimo:p.custo_wvetro_ultimo!=null?Number(p.custo_wvetro_ultimo):null,
-        custoWvetroMin:p.custo_wvetro_min!=null?Number(p.custo_wvetro_min):null,
-        custoWvetroMax:p.custo_wvetro_max!=null?Number(p.custo_wvetro_max):null,
-        margemPercentual:p.margem_percentual!=null?Number(p.margem_percentual):null,
+        // Custos e margens seguem restritos ao Master. Funcionários recebem
+        // somente preços de venda e os demais dados necessários à consulta.
+        custo:usuario.role==='master'&&p.custo!=null?Number(p.custo):null,
+        custoWvetroUltimo:usuario.role==='master'&&p.custo_wvetro_ultimo!=null?Number(p.custo_wvetro_ultimo):null,
+        custoWvetroMin:usuario.role==='master'&&p.custo_wvetro_min!=null?Number(p.custo_wvetro_min):null,
+        custoWvetroMax:usuario.role==='master'&&p.custo_wvetro_max!=null?Number(p.custo_wvetro_max):null,
+        margemPercentual:usuario.role==='master'&&p.margem_percentual!=null?Number(p.margem_percentual):null,
         pesoKgM:p.peso_kg_m!=null?Number(p.peso_kg_m):null,
         pesoKg:p.peso_kg!=null?Number(p.peso_kg):null,
       })),linhas,limitado:(data||[]).length===120
