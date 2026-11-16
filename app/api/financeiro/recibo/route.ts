@@ -109,13 +109,21 @@ export async function GET(req:NextRequest){
    return NextResponse.json({ok:true,recibo},{headers:{'Cache-Control':'no-store'}})
   }
   if(tipo==='pagar'){
-   const {data:t,error}=await supabaseAdmin.from('financeiro_contas_pagar').select('id,fornecedor_id,fornecedor_nome,valor,valor_pago,vencimento,data_pagamento,descricao,documento,forma_pagamento,status').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle()
+   let {data:t,error}=await supabaseAdmin.from('financeiro_contas_pagar').select('id,fornecedor_id,fornecedor_nome,valor,valor_pago,vencimento,data_pagamento,descricao,documento,forma_pagamento,status,valor_desconto,valor_juros,valor_multa,valor_troco').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle()
+   if(error && process.env.VERCEL_ENV==='preview' && /valor_desconto|valor_juros|valor_multa|valor_troco/i.test(error.message)){
+     const anterior=await supabaseAdmin.from('financeiro_contas_pagar').select('id,fornecedor_id,fornecedor_nome,valor,valor_pago,vencimento,data_pagamento,descricao,documento,forma_pagamento,status').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle()
+     t=anterior.data?{...anterior.data,valor_desconto:0,valor_juros:0,valor_multa:0,valor_troco:0}:null
+     error=anterior.error
+   }
    if(error)throw error
    if(!t)return bad('Título inexistente.',404)
    if(t.status!=='pago'||!t.data_pagamento)return bad('Recibo disponível somente após pagamento confirmado.',422)
    const fornecedor=t.fornecedor_id?await supabaseAdmin.from('fornecedores').select('nome,cnpj_cpf').eq('empresa_id',u.empresa_id).eq('id',t.fornecedor_id).maybeSingle():null
    const pago=Number(t.valor_pago??t.valor)
-   const recibo:ReciboInfo={tipo:'pagar',id,nome:fornecedor?.data?.nome||t.fornecedor_nome||'Beneficiário',documento:fornecedor?.data?.cnpj_cpf||null,descricao:t.descricao,referencia:t.documento,data:t.data_pagamento,forma:t.forma_pagamento,valorOriginal:Number(t.valor||0),valorMovimento:pago,saldo:Math.max(0,Number(t.valor||0)-pago)}
+   const desconto=Number(t.valor_desconto||0),juros=Number(t.valor_juros||0)
+   const multa=Number(t.valor_multa||0),troco=Number(t.valor_troco||0)
+   const recibo:ReciboInfo={tipo:'pagar',id,nome:fornecedor?.data?.nome||t.fornecedor_nome||'Beneficiário',documento:fornecedor?.data?.cnpj_cpf||null,descricao:t.descricao,referencia:t.documento,data:t.data_pagamento,forma:t.forma_pagamento,valorOriginal:Number(t.valor||0),valorMovimento:pago,saldo:Math.max(0,Number(t.valor||0)-desconto+juros+multa-pago),
+     ajustesPagamento:{desconto,juros,multa,troco,valorEntregue:pago+troco}}
    return NextResponse.json({ok:true,recibo})
   }
   const {data:rec,error}=await supabaseAdmin.from('financeiro_recebimentos').select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,cartao_parcelas,forma,referencia,observacoes,status').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle()
