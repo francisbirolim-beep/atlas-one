@@ -38,16 +38,22 @@ export default function IdentificarCliente() {
   const [rascunhosDisponiveis, setRascunhosDisponiveis] = useState<RascunhoOffline<IdentificacaoRascunhoOrcamento>[]>([])
   const [pendentesDisponiveis, setPendentesDisponiveis] = useState<PendenteOrcamento[]>([])
   const [usuarioRascunhoId, setUsuarioRascunhoId] = useState<string | null>(null)
+  const [erroLeituraLocal, setErroLeituraLocal] = useState('')
   useEffect(() => {
     let ativo = true
     void (async () => {
       const perfil = await usuarioAtual().catch(() => null)
       const usuarioId = perfil?.id || usuarioCacheLocal()?.id || null
-      const [rascunhos, pendentes] = await Promise.all([
-        listarRascunhos<IdentificacaoRascunhoOrcamento>().catch(() => []),
-        listarPendentes().catch(() => []),
+      const [resultadoRascunhos, resultadoPendentes] = await Promise.allSettled([
+        listarRascunhos<IdentificacaoRascunhoOrcamento>(),
+        listarPendentes(),
       ])
       if (!ativo) return
+      const rascunhos = resultadoRascunhos.status === 'fulfilled' ? resultadoRascunhos.value : []
+      const pendentes = resultadoPendentes.status === 'fulfilled' ? resultadoPendentes.value : []
+      if (resultadoRascunhos.status === 'rejected' || resultadoPendentes.status === 'rejected') {
+        setErroLeituraLocal('Não foi possível consultar os rascunhos deste navegador. Isso não significa que foram apagados. Não limpe os dados do site.')
+      }
       setUsuarioRascunhoId(usuarioId)
       setRascunhosDisponiveis(rascunhos.filter(r =>
         !r.dados?.usuarioCriadorId || (usuarioId && r.dados.usuarioCriadorId === usuarioId),
@@ -343,6 +349,8 @@ export default function IdentificarCliente() {
             <p className="mt-1 text-sm leading-6 text-slate-500">
               Pesquise um cliente existente e selecione-o para abrir as opções. Para cadastrar um novo cliente, digite nome e sobrenome no campo de pesquisa.
             </p>
+            <p className="mt-3 text-xs text-slate-500">Rascunhos são guardados no navegador e aparelho em que foram preenchidos.</p>
+            {erroLeituraLocal && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-800">{erroLeituraLocal}</p>}
             {rascunhosDaBusca.length > 0 && (
               <section className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3" aria-label="Pedidos de orçamento em andamento pelo nome">
                 <h3 className="mb-2 text-sm font-bold text-amber-950">Rascunhos encontrados pelo nome neste aparelho</h3>
