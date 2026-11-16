@@ -10,6 +10,7 @@ import type { Tipologia } from '@/lib/tipos'
 import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
 import FotoTipologiaPreview from '@/components/previews/FotoTipologiaPreview'
+import IdentificacaoOrcamentoPreview, { identificacaoVazia, type IdentificacaoOrcamento } from '@/components/previews/IdentificacaoOrcamentoPreview'
 import VariaveisTipologiaPreview, { type CatalogoEngenharia } from '@/components/previews/VariaveisTipologiaPreview'
 import OrcamentoDocumentoPreview, { type OrcamentoDocumento, type ProdutoDocumento, type TipologiaDocumento } from '@/components/previews/OrcamentoDocumentoPreview'
 import { type DadosPrecosAluminio, type SimulacaoPrecoAluminio, lerSimulacaoPreco, precoCorEfetivo } from '@/lib/previews/precificacaoAluminio'
@@ -28,7 +29,7 @@ const novoId=()=>Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,
 const categorias=[['todos','Todos'],['perfil','Perfis'],['acessorio','Acessórios'],['vidro','Vidros'],['pronto','Produtos prontos'],['outros','Outros']] as const
 
 export default function ConfiguradorOrcamentoSobMedida(){
-  const [cliente,setCliente]=useState('')
+  const [identificacao,setIdentificacao]=useState<IdentificacaoOrcamento>(identificacaoVazia)
   const [empresa,setEmpresa]=useState<EmpresaRecibo|null>(null)
   const [tipologias,setTipologias]=useState<TipologiaCatalogo[]>([])
   const [carregandoTipologias,setCarregandoTipologias]=useState(true)
@@ -259,7 +260,13 @@ export default function ConfiguradorOrcamentoSobMedida(){
       id:i.produto.id,codigo:i.produto.codigo,nome:i.produto.nome,descricao:i.produto.descricao,unidade:i.produto.unidade,
       quantidade:i.quantidade,preco:valorUnitario(i.produto),imagem:i.produto.fotoUrl||i.produto.fotoCandidataUrl||null
     }))
-    setDocumento({cliente,empresa,tipologias:ts,produtos:ps,subtotal,desconto:descontoValor,totalProdutos,
+    setDocumento({
+      cliente:identificacao.clienteNome,
+      clienteDocumento:identificacao.clienteDocumento,clienteTelefone:identificacao.clienteTelefone,
+      enderecoCliente:identificacao.enderecoCliente,obraNome:identificacao.obraNome,
+      enderecoEntrega:identificacao.entregaTipo==='definir'?'':identificacao.enderecoEntrega,
+      vendedorNome:identificacao.vendedorNome,
+      empresa,tipologias:ts,produtos:ps,subtotal,desconto:descontoValor,totalProdutos,
       temPendencias,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.valor})),
       validadeDias:validade,data:new Date().toLocaleDateString('pt-BR'),
       referencia:'PREV-'+String(Date.now()),observacoes:observacoes.trim()})
@@ -274,7 +281,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
           <p className="text-sm text-slate-500">Configurar medidas, tipologia, linha, vidro e variáveis técnicas.</p></div></div>
         <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">PRÉVIA · SEM GRAVAÇÃO NO ATLAS OFICIAL</span>
       </header>
-      <section className="rounded-2xl border bg-white p-4 shadow-sm"><label className="text-xs font-bold text-slate-600">Cliente / responsável<input className={input+' mt-1'} placeholder="Cliente do orçamento" value={cliente} onChange={e=>setCliente(e.target.value)}/></label></section>
+      <IdentificacaoOrcamentoPreview value={identificacao} onChange={setIdentificacao}/>
       {!revisao&&<div className="grid grid-cols-3 gap-2 rounded-2xl border bg-white p-2">
         {([{n:1,label:'1 · Medidas'},{n:2,label:'2 · Tipologia e linha'},{n:3,label:'3 · Variáveis'}] as const).map(v=><button key={v.n} type="button" onClick={()=>setEtapa(v.n)} disabled={v.n===2&&!(numero(largura)>0&&numero(altura)>0)||v.n===3&&!tipologiaId} className={'rounded-xl px-2 py-3 text-xs font-bold disabled:opacity-40 '+(etapa===v.n?'bg-indigo-700 text-white':'bg-white text-slate-600')}>{v.label}</button>)}
       </div>}
@@ -424,7 +431,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
       {!revisao&&<div className="flex justify-end"><button type="button" onClick={()=>{if(!medidas.length){setAviso('Adicione pelo menos uma tipologia sob medida.');return}setRevisao(true);setAviso('')}} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-6 py-3 text-sm font-bold text-white">Revisar orçamento <ArrowRight size={17}/></button></div>}
       {revisao&&<section className="mx-auto max-w-4xl rounded-2xl border bg-white p-5 shadow-sm sm:p-8">
         <h2 className="flex items-center justify-center gap-2 text-xl font-black"><Check size={22} className="text-emerald-700"/> Revisão da proposta — Simulação</h2>
-        <p className="mt-2 text-center text-xs text-slate-500">Cliente: {cliente||'A identificar'}. Nenhum orçamento, pedido, pagamento ou custo técnico será gravado.</p>
+        <p className="mt-2 text-center text-xs text-slate-500">Cliente: {identificacao.clienteNome||'A identificar'} · Vendedor: {identificacao.vendedorNome||'A definir'}. Nenhum orçamento, pedido, pagamento ou custo técnico será gravado.</p>
         {medidas.map(m=><div key={m.id} className="mt-4 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.linha||'Linha pendente'} · {m.vidro||'Vidro pendente'}</p><p className="text-slate-500">{m.variaveis.map(v=>v.nome+': '+v.valor).join(' · ')||'Variáveis ainda não escolhidas'}</p></div><b className="text-amber-800">A precificar</b></div>)}
         {itens.map(i=><div key={i.produto.id} className="mt-3 flex justify-between border-b pb-2 text-xs"><span>{i.quantidade} × {i.produto.nome}</span><b>{valorUnitario(i.produto)!=null?moeda(valorUnitario(i.produto)!*i.quantidade):'A precificar'}</b></div>)}
         {temPendencias&&<section className="mt-5 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
