@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { Printer, X } from 'lucide-react'
 import { LOGOTIPO_PDF_FUNDO_CLARO } from '@/lib/brandingRelatorios'
 import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
+import { resumoPagamentoOrcamento, valorEmCentavos, reais, type DestinoSaldoOrcamento } from '@/lib/previews/pagamentoOrcamento'
 
 export type ProdutoDocumento={id:string;codigo:string;nome:string;descricao:string;unidade:string;quantidade:number;preco:number|null;imagem:string|null}
 export type TipologiaDocumento={
@@ -17,7 +18,8 @@ export type OrcamentoDocumento={
   subtotal:number;desconto:number;totalProdutos:number;temPendencias:boolean;
   condicoes:CondicaoDocumento[];validadeDias:string;data:string;referencia:string;observacoes:string;
   clienteDocumento?:string;clienteTelefone?:string;enderecoCliente?:string;
-  obraNome?:string;enderecoEntrega?:string;vendedorNome?:string
+  obraNome?:string;enderecoEntrega?:string;vendedorNome?:string;
+  destinoSaldo?:DestinoSaldoOrcamento
 }
 type ItemDocumento={tipo:'tipologia';id:string;t:TipologiaDocumento}|{tipo:'produto';id:string;p:ProdutoDocumento}
 type Pagina={itens:ItemDocumento[]}
@@ -52,7 +54,7 @@ function fechamentoAltura(d:OrcamentoDocumento){
   const cond=d.condicoes.filter(c=>c.forma)
   const observacao=d.observacoes.trim()
   const linhas=observacao.split('\n').reduce((sum,x)=>sum+Math.max(1,Math.ceil(x.length/125)),0)
-  return Math.max(13,9+cond.length*2.6)+10+
+  return Math.max(19,14+cond.length*2.6)+12+
     (observacao?3.5+linhas*2.5:0)+(d.temPendencias?3:0)
 }
 /** Prioriza mais produtos em cada metade A4, guardando o fechamento só para o final. */
@@ -120,8 +122,8 @@ const css='\
 .oc-total-linha{display:flex;justify-content:space-between;gap:2mm;margin-bottom:.8mm}.oc-total{border-top:1px solid #94a3b8;margin-top:1mm;padding-top:1mm;font-weight:800;font-size:8pt}\
 .oc-observacoes{border:1px solid #cbd5e1;border-radius:1mm;padding:1.8mm 2mm;margin-top:2mm;overflow-wrap:anywhere}\
 .oc-observacoes p{margin:.6mm 0 0;white-space:pre-wrap}\
-.oc-assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:10mm;text-align:center;font-size:6.9pt;margin-top:4mm}\
-.oc-assinaturas span{display:block;border-top:1px solid #94a3b8;padding-top:.8mm}\
+.oc-assinaturas{display:flex;justify-content:center;text-align:center;font-size:6.9pt;margin-top:4mm}\
+.oc-assinaturas span{display:block;width:53%;border-top:1px solid #94a3b8;padding-top:.8mm}\
 \
 @media screen and (max-width:840px){.oc-visual{overflow-x:auto}.oc-folha{margin-left:0;margin-right:0}}\
 @media print{\
@@ -162,6 +164,8 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
   const nome=dados.empresa?.nome||'Esquadrifácio Soluções em Alumínio'
   const numero=dados.referencia||'SIMULAÇÃO'
   const obs=dados.observacoes.trim()
+  const distribuicao=resumoPagamentoOrcamento(dados.totalProdutos,dados.condicoes)
+  const saldoCliente=dados.destinoSaldo==='cliente'&&distribuicao.saldoCentavos>0
   if(!portal)return null
   return createPortal(<div role="dialog" aria-modal="true" aria-label="Prévia de impressão do orçamento"
     className="oc-dialog fixed inset-0 z-[160] overflow-y-auto bg-slate-950/70 p-3 sm:p-5">
@@ -199,7 +203,7 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
               </div>
               <div className="oc-titulo">
                 <h1>ORÇAMENTO</h1><b>Nº {numero}</b>
-                <p>{dados.data} · Página {index+1} de {paginas.length}</p>
+                <p>Data e hora: {dados.data}</p><p>Página {index+1} de {paginas.length}</p>
                 <p className="font-bold text-amber-700">SIMULAÇÃO · NÃO EMITIDO</p>
               </div>
             </header>:<header className="oc-continua">
@@ -254,9 +258,23 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
             {ultima&&<div className="oc-final">
               <div className="oc-final-grid">
                 <section className="oc-quadro">
-                  <b>Condições de pagamento</b>
-                  {dados.condicoes.filter(c=>c.forma).map((c,i)=><p key={i}>{c.forma}{c.valor?' · '+c.valor:''}</p>)}
-                  <p>Sem recebimento registrado.</p>
+                  <b>Condições de pagamento · {moeda(dados.totalProdutos)}</b>
+                  {dados.condicoes.filter(c=>c.forma&&c.valor.trim()).map((c,i)=>{
+                    const centavos=valorEmCentavos(c.valor)
+                    return <div key={i} className="oc-total-linha">
+                      <span>{c.forma}</span>
+                      <b>{centavos!=null&&Number.isFinite(centavos)?moeda(reais(centavos)):'A definir'}</b>
+                    </div>
+                  })}
+                  {!distribuicao.temValorInformado&&<p>Pagamento a combinar</p>}
+                  <div className="oc-total-linha" style={{borderTop:'1px solid #e2e8f0',paddingTop:'.8mm',marginTop:'.8mm'}}>
+                    <span>Pagamentos previstos</span><b>{moeda(reais(distribuicao.valorPrevistoCentavos))}</b>
+                  </div>
+                  {distribuicao.saldoCentavos>0&&<div className="oc-total-linha">
+                    <span>{saldoCliente?'Saldo previsto no cliente':'Saldo a definir'}</span>
+                    <b>{moeda(reais(distribuicao.saldoCentavos))}</b>
+                  </div>}
+                  <p>Condições propostas · sem recebimento nesta simulação.</p>
                 </section>
                 <section className="oc-quadro">
                   <div className="oc-total-linha"><span>Subtotal</span><b>{moeda(dados.subtotal)}</b></div>
@@ -266,7 +284,7 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
                 </section>
               </div>
               {obs&&<section className="oc-observacoes"><b>Observações</b><p>{obs}</p></section>}
-              <div className="oc-assinaturas"><span>Assinatura do cliente</span><span>Esquadrifácio</span></div>
+              <div className="oc-assinaturas"><span>Assinatura do cliente</span></div>
             </div>}
           </article>
         })}
