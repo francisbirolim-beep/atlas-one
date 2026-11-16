@@ -17,7 +17,7 @@ type TipologiaCatalogo=Tipologia & {foto_url?:string|null;linhaIds:string[]}
 type Vidro={id:string;descricao:string;produtoAtlasId:string|null;referenciaNaoPrecificada:boolean}
 type Produto={id:string;codigo:string;nome:string;descricao:string;unidade:string;categoria:string;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null}
 type Item={produto:Produto;quantidade:number}
-type Medida={id:string;tipologia:Tipologia;largura:number;altura:number;cor:string;linha:string;vidro:string;contramarco:string;quantidade:number;variaveis:{nome:string;valor:string}[];pendentes:number}
+type Medida={id:string;tipologia:TipologiaCatalogo;largura:number;altura:number;cor:string;linha:string;vidro:string;contramarco:string;quantidade:number;variaveis:{nome:string;valor:string}[];pendentes:number}
 const input='w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
 const moeda=(v:number)=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const valorUnitario=(p:Produto)=>p.precoPromocional!=null&&p.precoPromocional>0?p.precoPromocional:p.preco
@@ -197,7 +197,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
     if(descontoInvalido){setAviso('Corrija o desconto.');return}
     const ts:TipologiaDocumento[]=medidas.map(m=>({
       id:m.id,nome:m.tipologia.label,linha:m.linha,largura:String(m.largura),altura:String(m.altura),quantidade:m.quantidade,
-      cor:m.cor,vidro:m.vidro,contramarco:m.contramarco==='com'?'Com contramarco':m.contramarco==='sem'?'Sem contramarco':'A definir',variaveis:m.variaveis
+      cor:m.cor,vidro:m.vidro,contramarco:m.contramarco==='com'?'Com contramarco':m.contramarco==='sem'?'Sem contramarco':'A definir',variaveis:m.variaveis,imagem:m.tipologia.foto_url||null
     }))
     const ps:ProdutoDocumento[]=itens.map(i=>({
       id:i.produto.id,codigo:i.produto.codigo,nome:i.produto.nome,descricao:i.produto.descricao,unidade:i.produto.unidade,
