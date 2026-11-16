@@ -425,12 +425,37 @@ export default function ConfiguradorOrcamentoSobMedida(){
         <p className="mt-2 text-center text-xs text-slate-500">Cliente: {cliente||'A identificar'}. Nenhum orçamento, pedido, pagamento ou custo técnico será gravado.</p>
         {medidas.map(m=><div key={m.id} className="mt-4 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.linha||'Linha pendente'} · {m.vidro||'Vidro pendente'}</p><p className="text-slate-500">{m.variaveis.map(v=>v.nome+': '+v.valor).join(' · ')||'Variáveis ainda não escolhidas'}</p></div><b className="text-amber-800">A precificar</b></div>)}
         {itens.map(i=><div key={i.produto.id} className="mt-3 flex justify-between border-b pb-2 text-xs"><span>{i.quantidade} × {i.produto.nome}</span><b>{valorUnitario(i.produto)!=null?moeda(valorUnitario(i.produto)!*i.quantidade):'A precificar'}</b></div>)}
+        {temPendencias&&<section className="mt-5 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
+          <button type="button" onClick={()=>setMostrarPendencias(v=>!v)}
+            className="flex w-full items-center justify-between gap-3 text-left">
+            <span><b className="block text-sm text-amber-950">Atenção: {pendencias.length} pendência(s) impedem o orçamento definitivo</b>
+              <span className="mt-1 block text-xs text-amber-800">Clique para ver qual produto, cor ou tipologia está sem preço ou composição.</span></span>
+            <span className="shrink-0 rounded-lg bg-white px-3 py-2 text-xs font-bold text-amber-800">{mostrarPendencias?'Ocultar detalhes':'Ver pendências'}</span>
+          </button>
+          {mostrarPendencias&&<div className="mt-4 space-y-2 border-t border-amber-200 pt-3">
+            {pendencias.map(p=><div key={p.id} className="rounded-lg border border-amber-200 bg-white p-3">
+              <b className="block text-xs text-amber-900">{p.tipo}</b>
+              <p className="mt-1 text-sm font-bold text-slate-800">{p.titulo}</p>
+              <p className="mt-1 text-xs text-slate-600">{p.detalhe}</p>
+            </div>)}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div className="flex flex-wrap gap-3">
+                <Link href="/previews/cadastros/preco-aluminio" className="text-xs font-bold text-indigo-700 underline">Ver preços do alumínio e das cores</Link>
+                <Link href="/cadastro/produtos" className="text-xs font-bold text-indigo-700 underline">Ver cadastro de produtos</Link>
+              </div>
+              <button type="button" onClick={()=>gerar(true)} disabled={descontoInvalido}
+                className="rounded-lg border border-amber-400 bg-white px-4 py-2.5 text-xs font-bold text-amber-950 disabled:opacity-40">
+                Gerar apenas rascunho em PDF (com pendências)
+              </button>
+            </div>
+          </div>}
+        </section>}
         <div className="mt-4 rounded-xl bg-blue-50 p-4 text-xs"><div className="flex justify-between"><span>Subtotal conhecido dos produtos</span><b>{moeda(subtotal)}</b></div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="font-bold">Tipo de desconto<select className={input+' mt-1'} value={descontoTipo} onChange={e=>setDescontoTipo(e.target.value)}><option value="sem">Sem desconto</option><option value="valor">Valor (R$)</option><option value="percentual">Percentual (%)</option></select></label>
             <label className="font-bold">Desconto<input className={input+' mt-1'} inputMode="decimal" value={desconto} disabled={descontoTipo==='sem'} onChange={e=>setDesconto(e.target.value)} placeholder="Valor ou %"/></label></div>
           {descontoInvalido&&<p className="mt-2 text-red-700">O desconto excede o limite permitido.</p>}
           <div className="mt-2 flex justify-between"><span>Subtotal ajustado dos produtos</span><b>{moeda(totalProdutos)}</b></div>
-          <p className="mt-2 font-bold text-amber-800">O total geral permanece pendente das fórmulas da tipologia e de produtos sem preço ({pendentesPreco}).</p>
+          <p className="mt-2 font-bold text-amber-800">O total geral permanece pendente de fórmulas técnicas e preços necessários. {pendencias.length} pendência(s) identificadas; consulte os detalhes acima.</p>
         </div>
         <div className="mt-4 rounded-xl border p-4"><h3 className="text-sm font-black">Condições de pagamento propostas</h3>
           {condicoes.map(c=><div key={c.id} className="mt-2 flex flex-wrap gap-2"><select className={input+' flex-1'} value={c.forma} onChange={e=>setCondicoes(a=>a.map(x=>x.id===c.id?{...x,forma:e.target.value}:x))}>{['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Transferência','Boleto'].map(x=><option key={x}>{x}</option>)}</select><input className={input+' flex-1'} value={c.valor} onChange={e=>setCondicoes(a=>a.map(x=>x.id===c.id?{...x,valor:e.target.value}:x))} placeholder="Condição ou valor"/>{condicoes.length>1&&<button type="button" onClick={()=>setCondicoes(a=>a.filter(x=>x.id!==c.id))} className="text-red-700"><Trash2 size={16}/></button>}</div>)}
