@@ -180,6 +180,29 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const descontoInvalido=descontoTipo==='percentual'?numero(desconto)>100:descontoBruto>subtotal
   const descontoValor=Math.max(0,Math.min(subtotal,descontoBruto))
   const totalProdutos=Math.max(0,subtotal-descontoValor)
+  const pendencias=[
+    ...itens.filter(i=>(valorUnitario(i.produto)??0)<=0)
+      .map(i=>({id:'produto:'+i.produto.id,tipo:'Produto sem preço',
+        titulo:i.produto.codigo+' · '+i.produto.nome,
+        detalhe:'Preço unitário não cadastrado; informe o valor no cadastro do produto.'})),
+    ...medidas.flatMap(m=>{
+      const c=coresDados?.cores.find(x=>x.id===m.corId)
+      const semCor=!c||!coresDados||precoCorEfetivo(c,coresDados,ajustesPrecos)==null
+      return [
+        ...(semCor?[{id:'cor:'+m.id,tipo:'Cor/alumínio sem preço',
+          titulo:m.cor||'Cor não cadastrada',
+          detalhe:'Tipologia '+m.tipologia.label+': confira preço Natural e adicional/valor da cor.'}]:[]),
+        ...(!m.vidroId?[{id:'vidro:'+m.id,tipo:'Vidro a definir',
+          titulo:m.tipologia.label,detalhe:'O vidro e sua precificação técnica ainda precisam ser especificados.'}]:[]),
+        {id:'tecnica:'+m.id,tipo:'Composição técnica pendente',
+          titulo:m.tipologia.label+' · '+m.largura+' × '+m.altura+' mm',
+          detalhe:'A composição de perfis e acessórios e a fórmula completa de custo ainda não estão validadas. Não é possível apontar os acessórios individuais sem a receita técnica cadastrada.'},
+        ...(m.pendentes>0?[{id:'variaveis:'+m.id,tipo:'Variáveis obrigatórias pendentes',
+          titulo:m.tipologia.label,detalhe:m.pendentes+' variável(is) obrigatória(s) sem seleção.'}]:[]),
+      ]
+    }),
+  ]
+  const temPendencias=pendencias.length>0
   // As variáveis vêm do vínculo no cadastro da tipologia; não são criadas no orçamento.
   const variaveisDisponiveis=useMemo(()=>
     (catalogo?.vinculadas||[]).map(v=>{
@@ -208,14 +231,15 @@ export default function ConfiguradorOrcamentoSobMedida(){
   }
   function incluirTipologia(){
     if(!tipologia)return
+    if(!corId||!corSelecionada){setAviso('Escolha uma cor cadastrada.');setEtapa(1);return}
     const escolhas=variaveisDisponiveis.filter(v=>String(valores[v.id]||'').trim()).map(v=>({nome:v.nome,valor:valores[v.id]}))
     const pendentes=variaveisDisponiveis.filter(v=>v.obrigatoria&&!String(valores[v.id]||'').trim()).length
     setMedidas(a=>[...a,{
-      id:novoId(),tipologia,largura:numero(largura),altura:numero(altura),cor,linha:linhaSelecionada?.nome||'',
-      vidro:vidroSelecionado?.descricao||'',contramarco,quantidade:Number(quantidade),
+      id:novoId(),tipologia,largura:numero(largura),altura:numero(altura),cor,corId,linha:linhaSelecionada?.nome||'',
+      vidro:vidroSelecionado?.descricao||'',vidroId,contramarco,quantidade:Number(quantidade),
       variaveis:escolhas,pendentes
     }])
-    setEtapa(1);setLargura('');setAltura('');setQuantidade('1');setTipologiaId('');setVidroId('');setContramarco('');setBuscaTipologia('');setValores({})
+    setEtapa(1);setLargura('');setAltura('');setCorId('');setQuantidade('1');setTipologiaId('');setVidroId('');setContramarco('');setBuscaTipologia('');setValores({})
     setAviso('Tipologia adicionada. Configure outra ou revise o orçamento.')
   }
   function adicionarProduto(p:Produto){
@@ -223,6 +247,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
   }
   function alterarQtd(id:string,n:number){if(!Number.isInteger(n)||n<1||n>99999)return;setItens(a=>a.map(x=>x.produto.id===id?{...x,quantidade:n}:x))}
   function gerar(){
+    if(temPendencias){setMostrarPendencias(true);setAviso('Existem preços ou fórmulas técnicas pendentes. Confira a relação antes de finalizar o orçamento.');return}
     if(descontoInvalido){setAviso('Corrija o desconto.');return}
     const ts:TipologiaDocumento[]=medidas.map(m=>({
       id:m.id,nome:m.tipologia.label,linha:m.linha,largura:String(m.largura),altura:String(m.altura),quantidade:m.quantidade,
@@ -233,7 +258,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
       quantidade:i.quantidade,preco:valorUnitario(i.produto),imagem:i.produto.fotoUrl||i.produto.fotoCandidataUrl||null
     }))
     setDocumento({cliente,empresa,tipologias:ts,produtos:ps,subtotal,desconto:descontoValor,totalProdutos,
-      temPendencias:medidas.length>0||pendentesPreco>0,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.valor})),
+      temPendencias,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.valor})),
       validadeDias:validade,data:new Date().toLocaleDateString('pt-BR')})
   }
 
