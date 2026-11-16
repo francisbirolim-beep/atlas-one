@@ -239,26 +239,78 @@ export default function ConfiguradorOrcamentoSobMedida(){
         <p className="mt-1 text-xs text-slate-500">{largura} × {altura} mm · Cor {cor||'A definir'}. O número de folhas já é definido pelo cadastro da tipologia.</p>
         {erroReferencias&&<p role="alert" className="mt-2 text-xs text-red-700">{erroReferencias}</p>}
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <label className="text-xs font-bold">Pesquisar tipologia<input className={input+' mt-1'} value={buscaTipologia} onChange={e=>setBuscaTipologia(e.target.value)} placeholder="Janela, porta, correr..."/></label>
-          <label className="text-xs font-bold">Filtrar tipologias por linha<select className={input+' mt-1'} value={filtroLinhaTipologia} onChange={e=>{setFiltroLinhaTipologia(e.target.value);setTipologiaId('');setLinhaId('')}}><option value="">Todas as linhas</option>{linhasTecnicas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select></label>
-          <label className="text-xs font-bold md:col-span-2">Tipologia<select className={input+' mt-1'} value={tipologiaId} onChange={e=>escolherTipologia(e.target.value)}><option value="">Selecione a tipologia cadastrada</option>{tipologiasFiltradas.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select></label>
-          {tipologia&&<p className="rounded-lg bg-indigo-50 p-3 text-xs text-indigo-900 md:col-span-2"><b>{tipologia.label}</b> · Folhas: {folhas?folhas+' (pela tipologia)':'conforme cadastro técnico'}</p>}
-          <label className="text-xs font-bold">Linha técnica<select className={input+' mt-1'} value={linhaId} disabled={!tipologia} onChange={e=>setLinhaId(e.target.value)}>
-            <option value="">Selecione / a definir</option>
-            {!!linhasVinculadas.length&&<optgroup label="Linhas já vinculadas">{linhasVinculadas.map(l=><option value={l.id} key={l.id}>{l.nome}</option>)}</optgroup>}
-            {!!outrasLinhas.length&&<optgroup label="Outras linhas (vínculo a validar)">{outrasLinhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</optgroup>}
-          </select></label>
-          <label className="text-xs font-bold">Vidro / espelho e espessura<select className={input+' mt-1'} value={vidroId} onChange={e=>setVidroId(e.target.value)}><option value="">A definir / sem vidro</option>{vidros.map(v=><option key={v.id} value={v.id}>{v.descricao}</option>)}</select></label>
-          <label className="text-xs font-bold">Contramarco<select className={input+' mt-1'} value={contramarco} onChange={e=>setContramarco(e.target.value)}><option value="a_definir">A definir</option><option value="com">Com contramarco</option><option value="sem">Sem contramarco</option></select></label>
+          <label className="text-xs font-bold">Pesquisar tipologia
+            <input className={input+' mt-1'} value={buscaTipologia}
+              onChange={e=>{setBuscaTipologia(e.target.value);setTipologiaId('');setValores({})}}
+              placeholder="Digite janela, correr, duas folhas..." autoComplete="off"/>
+          </label>
+          <label className="text-xs font-bold">Filtrar por linha técnica
+            <select className={input+' mt-1'} value={filtroLinhaTipologia}
+              onChange={e=>{setFiltroLinhaTipologia(e.target.value);setTipologiaId('');setValores({})}}>
+              <option value="">Todas as linhas</option>
+              {linhasTecnicas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}
+            </select>
+          </label>
         </div>
-        {tipologia&&<p className="mt-3 rounded-lg bg-blue-50 p-3 text-xs text-blue-800">{linhasVinculadas.length?String(linhasVinculadas.length)+' linha(s) técnica(s) vinculada(s). Sugestão baseada no cadastro, não em limite dimensional.':'Nenhuma linha vinculada: é possível escolher outra para teste, mas o vínculo técnico precisa ser validado.'}</p>}
+        <div className="mt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-black">Escolha a tipologia pelas fotos</h3>
+            <span className="text-xs text-slate-500" aria-live="polite">
+              {carregandoTipologias?'Carregando tipologias...':todasFiltradas.length+' modelo(s) encontrado(s)'}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">A pesquisa mostra os modelos correspondentes enquanto você digita. O filtro superior define a linha que será usada no orçamento.</p>
+          {!carregandoTipologias&&!erroReferencias&&tipologiasFiltradas.length===0&&
+            <p className="mt-3 rounded-xl border border-dashed p-4 text-xs text-slate-600">Nenhuma tipologia cadastrada combina com essa busca e linha. Tente outro termo ou selecione outra linha.</p>}
+          <div className="mt-3 grid max-h-[480px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
+            {tipologiasFiltradas.map(t=><button type="button" key={t.id}
+              aria-pressed={tipologiaId===t.id} aria-label={'Selecionar tipologia '+t.label}
+              onClick={()=>escolherTipologia(t.id)}
+              className={'flex min-w-0 items-center gap-3 rounded-xl border-2 p-2.5 text-left transition hover:border-indigo-400 hover:bg-indigo-50 '+(tipologiaId===t.id?'border-indigo-600 bg-indigo-50':'border-slate-200 bg-white')}>
+              <FotoTipologiaPreview fotoUrl={t.foto_url} nome={t.label}/>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-bold leading-snug text-slate-900">{t.label}</span>
+                <span className="mt-1 block text-[11px] text-slate-500">{(t.linhaIds||[]).map(id=>linhasTecnicas.find(l=>l.id===id)?.nome).filter(Boolean).join(' · ')||'Linha não vinculada'}</span>
+                {tipologiaId===t.id&&<span className="mt-2 block text-[11px] font-bold text-indigo-700">Modelo selecionado</span>}
+              </span>
+            </button>)}
+          </div>
+        </div>
+        {tipologia&&<div className="mt-4 flex flex-wrap items-center gap-4 rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+          <FotoTipologiaPreview fotoUrl={tipologia.foto_url} nome={tipologia.label} tamanho="detalhe"/>
+          <div className="min-w-0 flex-1 text-xs text-indigo-950">
+            <b className="block text-sm">{tipologia.label}</b>
+            <p className="mt-1">Folhas: {folhas?folhas+' (definido pela tipologia)':'conforme cadastro técnico'}</p>
+            <p className="mt-1"><b>Linha:</b> {linhaSelecionada?.nome||'Selecione no filtro superior'}</p>
+            <p className="mt-2 text-[11px]">Foto associada diretamente a esta tipologia no cadastro. Nenhuma imagem foi gerada.</p>
+          </div>
+        </div>}
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="text-xs font-bold">Vidro / espelho e espessura
+            <select className={input+' mt-1'} value={vidroId} onChange={e=>setVidroId(e.target.value)}>
+              <option value="">A definir / sem vidro</option>
+              {vidros.map(v=><option key={v.id} value={v.id}>{v.descricao}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-bold">Contramarco
+            <select className={input+' mt-1'} value={contramarco} onChange={e=>setContramarco(e.target.value)}>
+              <option value="" disabled>Escolha com ou sem contramarco</option>
+              <option value="com">Com contramarco</option>
+              <option value="sem">Sem contramarco</option>
+            </select>
+          </label>
+        </div>
+        {tipologia&&<p className="mt-3 rounded-lg bg-blue-50 p-3 text-xs text-blue-800">
+          {linhasVinculadas.length?String(linhasVinculadas.length)+' linha(s) cadastrada(s) para esta tipologia. A linha definida no filtro superior será usada em todo o orçamento.':'Esta tipologia não tem linha cadastrada. Ela precisa ser vinculada na engenharia antes de selecionar uma linha.'}
+          As regras de limite dimensional serão configuradas posteriormente.
+        </p>}
         {vidroSelecionado&&<p className="mt-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Referência real W.Vetro: {vidroSelecionado.descricao}. {vidroSelecionado.referenciaNaoPrecificada?'Sem vínculo comercial e sem preço técnico cadastrado.':'Vínculo comercial encontrado; cálculo técnico ainda pendente.'}</p>}
         <div className="mt-5 flex flex-wrap justify-between gap-3"><button type="button" onClick={()=>setEtapa(1)} className="rounded-xl border px-4 py-3 text-sm font-bold">Voltar às medidas</button><button type="button" onClick={avancarVariaveis} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-bold text-white">Próximo: variáveis <ArrowRight size={17}/></button></div>
       </section>}
       {!revisao&&etapa===3&&tipologia&&<section className="rounded-2xl border bg-white p-5 shadow-sm">
         <div className="mb-4 rounded-xl bg-indigo-50 p-3 text-xs"><b>{tipologia.label}</b> · {largura} × {altura} mm · {linhaSelecionada?.nome||'Linha a definir'} · {cor||'Cor a definir'}</div>
         <VariaveisTipologiaPreview key={tipologia.id} tipologiaId={tipologia.id} tipologiaNome={tipologia.label}
-          master={master} catalogo={catalogo} rascunhos={rascunhos} onChangeRascunhos={setRascunhos}
+          master={false} catalogo={catalogo} rascunhos={[]} onChangeRascunhos={()=>{}}
           selecoes={valores} onChangeSelecoes={setValores} carregando={variaveisCarregando} erro={erroVariaveis}/>
         <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800"><b>Formulação posterior:</b> custos, composição, perdas, cortes e margem própria da tipologia ainda dependem de regras técnicas validadas. A margem unitária não será aplicada automaticamente.</p>
         <div className="mt-4 flex flex-wrap justify-between gap-2"><button type="button" onClick={()=>setEtapa(2)} className="rounded-xl border px-4 py-3 text-sm font-bold">Voltar à tipologia</button><button type="button" onClick={incluirTipologia} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-bold text-white"><Plus size={17}/> Adicionar tipologia configurada</button></div>
