@@ -211,6 +211,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
     }).filter((v):v is {id:string;nome:string;obrigatoria:boolean}=>v!==null),[catalogo])
 
   function avancarMedidas(){
+    if(!corId||!corSelecionada){setAviso('Selecione uma cor cadastrada para a esquadria.');return}
     if(!(numero(largura)>0&&numero(altura)>0)){setAviso('Informe largura e altura válidas em milímetros.');return}
     if(!Number.isInteger(Number(quantidade))||Number(quantidade)<1){setAviso('Informe a quantidade.');return}
     setEtapa(2);setAviso('')
@@ -246,8 +247,8 @@ export default function ConfiguradorOrcamentoSobMedida(){
     setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1}]})
   }
   function alterarQtd(id:string,n:number){if(!Number.isInteger(n)||n<1||n>99999)return;setItens(a=>a.map(x=>x.produto.id===id?{...x,quantidade:n}:x))}
-  function gerar(){
-    if(temPendencias){setMostrarPendencias(true);setAviso('Existem preços ou fórmulas técnicas pendentes. Confira a relação antes de finalizar o orçamento.');return}
+  function gerar(rascunho=false){
+    if(temPendencias&&!rascunho){setMostrarPendencias(true);setAviso('Existem preços ou fórmulas técnicas pendentes. Confira a relação antes de finalizar o orçamento.');return}
     if(descontoInvalido){setAviso('Corrija o desconto.');return}
     const ts:TipologiaDocumento[]=medidas.map(m=>({
       id:m.id,nome:m.tipologia.label,linha:m.linha,largura:String(m.largura),altura:String(m.altura),quantidade:m.quantidade,
@@ -283,7 +284,19 @@ export default function ConfiguradorOrcamentoSobMedida(){
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="text-xs font-bold">Largura (mm) *<input className={input+' mt-1'} type="number" min="1" placeholder="Ex.: 1200" value={largura} onChange={e=>setLargura(e.target.value)}/></label>
           <label className="text-xs font-bold">Altura (mm) *<input className={input+' mt-1'} type="number" min="1" placeholder="Ex.: 1000" value={altura} onChange={e=>setAltura(e.target.value)}/></label>
-          <label className="text-xs font-bold">Cor / acabamento<input className={input+' mt-1'} value={cor} onChange={e=>setCor(e.target.value)} placeholder="Cor do acabamento"/></label>
+          <div className="space-y-1">
+            <label className="block text-xs font-bold">Cor / acabamento * (cadastro existente)
+              <select className={input+' mt-1'} value={corId} onChange={e=>setCorId(e.target.value)} required>
+                <option value="">Selecione uma cor cadastrada</option>
+                {(coresDados?.cores||[]).map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </label>
+            {corSelecionada&&<p className={'text-[11px] font-semibold '+(precoCor==null?'text-amber-800':'text-slate-600')}>
+              Preço de referência do alumínio: {precoCor!=null?moeda(precoCor)+'/kg':'Sem preço cadastrado'}
+            </p>}
+            {coresErro&&<p role="alert" className="text-xs text-red-700">{coresErro}</p>}
+            <Link href="/previews/cadastros/preco-aluminio" className="inline-block text-[11px] font-bold text-indigo-700 underline">Consultar tabela de preços por cor (Master)</Link>
+          </div>
           <label className="text-xs font-bold">Quantidade<input className={input+' mt-1'} type="number" min="1" value={quantidade} onChange={e=>setQuantidade(e.target.value)}/></label>
         </div>
         <div className="mt-4 flex justify-end"><button type="button" onClick={avancarMedidas} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-sm font-bold text-white">Próximo: tipologia <ArrowRight size={17}/></button></div>
@@ -424,7 +437,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={()=>{proximaCondicao.current++;setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',valor:''}])}} className="rounded-lg border px-3 py-2 text-xs font-bold">+ Outra condição</button><label className="text-xs font-bold">Validade (dias)<input className={input+' mt-1 w-36'} type="number" min="1" value={validade} onChange={e=>setValidade(e.target.value)} placeholder="A definir"/></label></div>
         </div>
         <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">A margem unitária não entra na fórmula da tipologia. O documento é apenas uma simulação; não será enviado, faturado nem gravado.</p>
-        <div className="mt-4 flex flex-wrap justify-between gap-3"><button type="button" onClick={()=>setRevisao(false)} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar e ajustar</button><button type="button" onClick={gerar} disabled={descontoInvalido} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-xs font-bold text-white disabled:opacity-50"><FileText size={16}/> Gerar PDF do orçamento (prévia)</button></div>
+        <div className="mt-4 flex flex-wrap justify-between gap-3"><button type="button" onClick={()=>setRevisao(false)} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar e ajustar</button><button type="button" onClick={()=>gerar()} disabled={descontoInvalido} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-xs font-bold text-white disabled:opacity-50"><FileText size={16}/> Gerar PDF do orçamento (prévia)</button></div>
       </section>}
     </div>
     {documento&&<OrcamentoDocumentoPreview dados={documento} fechar={()=>setDocumento(null)}/>}
