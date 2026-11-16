@@ -617,12 +617,12 @@ export default function DetalheMedicaoFinal() {
       {previsaoFotoVaoUrl && <div className="fixed inset-0 z-[120] overflow-y-auto bg-slate-950/70 p-3 md:p-8" role="dialog" aria-modal="true" aria-label="Impressão com fotos dos vãos">
         <div className="mx-auto max-w-5xl rounded-xl bg-white p-3 md:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-lg font-bold text-slate-900">Medida Final com fotos dos vãos</h2><p className="text-xs text-slate-600">Confira as fotos nesta prévia antes de imprimir. Peças incompletas são identificadas como pendentes.</p></div>
+            <div><h2 className="text-lg font-bold text-slate-900">Medida Final com fotos do vão e das trenas</h2><p className="text-xs text-slate-600">Confira as fotos nesta prévia antes de imprimir. Peças incompletas são identificadas como pendentes.</p></div>
             <div className="flex gap-2"><a href={previsaoFotoVaoUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white">Abrir este PDF / imprimir</a>
               <button type="button" onClick={() => setPrevisaoFotoVaoUrl(null)} className="rounded-lg border px-3 py-2 text-sm font-semibold">Fechar</button>
             </div>
           </div>
-          <iframe title="Prévia A4 com fotos reais dos vãos" src={previsaoFotoVaoUrl} className="h-[75vh] w-full rounded-lg border bg-white" />
+          <iframe title="Prévia A4 com fotos reais do vão e das trenas" src={previsaoFotoVaoUrl} className="h-[75vh] w-full rounded-lg border bg-white" />
         </div>
       </div>}
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-3">
@@ -654,7 +654,7 @@ export default function DetalheMedicaoFinal() {
               className="inline-flex items-center gap-1.5 rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-50"
             >
               {gerandoFotoVao ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
-              {gerandoFotoVao ? 'Carregando as fotos dos vãos...' : 'Visualizar e imprimir com fotos dos vãos'}
+              {gerandoFotoVao ? 'Carregando as fotos dos vãos...' : 'Visualizar e imprimir fotos do vão e das trenas'}
             </button>
           )}
           {erroFotoVao && <p role="alert" className="w-full rounded-lg border border-red-300 bg-red-50 p-2 text-sm text-red-700">{erroFotoVao}</p>}

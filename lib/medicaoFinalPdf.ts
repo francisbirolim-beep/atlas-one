@@ -477,7 +477,11 @@ export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, i
       (f.categoria === 'checklist:foto_vao' ||
         /foto do v[aã]o/i.test(f.legenda || ''))
     )
-    fotosEncontradas += fotos.length
+    const fotosTrena = [
+      { url: item.foto_larguras_url || null, legenda: 'Trena — largura' },
+      { url: item.foto_alturas_url || null, legenda: 'Trena — altura' },
+    ]
+    fotosEncontradas += fotos.length + fotosTrena.filter(f => f.url).length
     const paginas = Math.max(1, fotos.length)
     for (let fotoIndice = 0; fotoIndice < paginas; fotoIndice++) {
       if (!primeiraPagina) doc.addPage()
@@ -485,7 +489,7 @@ export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, i
       let y = 16
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(13)
-      doc.text('ATLAS ONE — MEDIDA FINAL COM FOTO DO VÃO', 15, y)
+      doc.text('ATLAS ONE — MEDIDA FINAL COM FOTOS DO VÃO E TRENAS', 15, y)
       y += 8
 
       const situacao = statusItemChecklistV2(item, dados.campos, dados.respostas)
@@ -535,34 +539,69 @@ export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, i
       doc.text('FOTO DO VÃO / LOCAL', 15, y)
       y += 6
 
+      // Na primeira página de cada peça, imprimir o vão e os dois visores
+      // das trenas. Outras fotos do mesmo vão continuam em folhas próprias.
+      const mostrarTrenas = fotoIndice === 0
       const largura = 180
-      const altura = Math.min(144, 271 - y)
+      const altura = mostrarTrenas
+        ? Math.max(45, Math.min(95, 270 - y - 7 - 7 - 50 - 5))
+        : Math.min(144, 271 - y)
       doc.setDrawColor(208, 218, 226)
       doc.rect(15, y, largura, altura)
 
-      const foto = fotos[fotoIndice]
-      if (foto?.url) {
-        const imagem = await carregarFotoVaoParaPdf(foto.url)
+      const incorporarImagem = async (url: string, legenda: string, x: number, yy: number, w: number, h: number) => {
         try {
+          const imagem = await carregarFotoVaoParaPdf(url)
           const info = doc.getImageProperties(imagem)
-          const escala = Math.min((largura - 6) / info.width, (altura - 9) / info.height)
-          const w = info.width * escala
-          const h = info.height * escala
-          doc.addImage(imagem, formatoImagem(imagem), 15 + (largura - w) / 2, y + (altura - h) / 2, w, h, undefined, 'FAST')
+          const escala = Math.min((w - 6) / info.width, (h - 9) / info.height)
+          const iw = info.width * escala
+          const ih = info.height * escala
+          doc.addImage(imagem, formatoImagem(imagem), x + (w - iw) / 2, yy + (h - ih) / 2, iw, ih, undefined, 'FAST')
           fotosInseridas++
         } catch {
-          throw new Error('A foto do vão não pôde ser incorporada ao PDF. Nenhum arquivo incompleto foi gerado.')
+          throw new Error('Não foi possível incluir a foto ' + legenda + ' no PDF. Nenhum arquivo incompleto foi gerado.')
         }
+      }
+
+      const foto = fotos[fotoIndice]
+      if (foto?.url) {
+        await incorporarImagem(foto.url, 'do vão', 15, y, largura, altura)
       } else {
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(9)
         doc.text('Foto do vão ainda não cadastrada nesta tipologia.', 20, y + 15)
       }
       y += altura + 7
+
+      if (mostrarTrenas) {
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.text('FOTOS DAS TRENAS — LARGURA E ALTURA', 15, y)
+        y += 6
+        const larguraTrena = 87
+        const alturaTrena = 50
+        for (const [indiceTrena, trena] of fotosTrena.entries()) {
+          const xTrena = indiceTrena === 0 ? 15 : 108
+          doc.setDrawColor(208, 218, 226)
+          doc.rect(xTrena, y, larguraTrena, alturaTrena)
+          if (trena.url) {
+            await incorporarImagem(trena.url, trena.legenda, xTrena, y, larguraTrena, alturaTrena - 5)
+          } else {
+            doc.setFont('helvetica', 'normal')
+            doc.setFontSize(7)
+            doc.text('Foto não cadastrada', xTrena + 4, y + 13)
+          }
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(7)
+          doc.text(trena.legenda, xTrena + larguraTrena / 2, y + alturaTrena - 2, { align: 'center' })
+        }
+        y += alturaTrena + 5
+      }
+
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7)
-      const rodape = foto ? `Foto ${fotoIndice + 1}/${fotos.length}: ${texto(foto.legenda || 'Vão / local')}` : 'Sem foto cadastrada'
-      doc.text(rodape, 15, y, { maxWidth: 180 })
+      const rodape = foto ? 'Vão ' + (fotoIndice + 1) + '/' + fotos.length + ': ' + texto(foto.legenda || 'Vão / local') : 'Vão sem foto cadastrada'
+      doc.text(rodape, 15, Math.min(y, 281), { maxWidth: 180 })
       doc.setTextColor(95, 105, 116)
       doc.setFontSize(7)
       doc.text('Conferência visual. Confira as medidas antes da fabricação.', 15, 288)
@@ -571,9 +610,9 @@ export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, i
   }
   // Falhar explicitamente caso a consulta das fotos não tenha retornado nenhuma.
   // Nunca apresentar uma ficha vazia como se as evidências tivessem sido impressas.
-  if (!fotosEncontradas) throw new Error('Nenhuma foto do vão foi encontrada nesta medição.')
+  if (!fotosEncontradas) throw new Error('Nenhuma foto do vão ou das trenas foi encontrada nesta medição.')
   if (fotosInseridas !== fotosEncontradas) {
-    throw new Error('Nem todas as fotos dos vãos foram incorporadas ao PDF. Tente novamente.')
+    throw new Error('Nem todas as fotos dos vãos e das trenas foram incorporadas ao PDF. Tente novamente.')
   }
   if (salvar) {
     doc.save(`medida-final-fotos-dos-vaos-${medicao.id}.pdf`)

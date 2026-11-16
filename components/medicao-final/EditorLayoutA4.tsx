@@ -246,16 +246,16 @@ export default function EditorLayoutA4({ fechar, medicao, itens, obraId, podeEdi
             {medicao.tipo_medicao !== 'contramarco' && itens.length > 0 && (
               <button type="button" onClick={() => void abrirPreviaFotoVao()} disabled={gerandoFotoVao}
                 className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-50">
-                {gerandoFotoVao ? 'Carregando fotos dos vãos...' : 'Visualizar PDF com fotos dos vãos'}
+                {gerandoFotoVao ? 'Carregando fotos dos vãos...' : 'Visualizar PDF com fotos do vão e das trenas'}
               </button>
             )}
             {previaFotoVaoUrl && <button type="button" onClick={() => setPreviaFotoVaoUrl(null)}
               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">Voltar ao PDF da medida final</button>}
             {pdfExibidoUrl && <a href={pdfExibidoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={13} />Abrir este PDF / imprimir</a>}
           </div>
-          {previaFotoVaoUrl && <p className="mb-2 text-xs font-semibold text-blue-800">Exibindo a ficha com as fotos dos vãos. O botão Abrir este PDF / imprimir abre exatamente esta versão.</p>}
+          {previaFotoVaoUrl && <p className="mb-2 text-xs font-semibold text-blue-800">Exibindo a ficha com fotos do vão e das trenas. O botão Abrir este PDF / imprimir abre exatamente esta versão.</p>}
           {carregando || gerandoPrevia || gerandoFotoVao ? <p role="status" className="mb-2 flex items-center gap-2 text-sm text-slate-600"><Loader2 size={15} className="animate-spin" />{gerandoFotoVao ? 'Preparando fotos dos vãos para impressão...' : carregando ? 'Carregando configuração...' : 'Atualizando PDF com as medidas e fotos...'}</p> : null}
-          {pdfExibidoUrl ? <iframe title={previaFotoVaoUrl ? 'PDF A4 com fotos dos vãos' : 'Prévia real do PDF de Medida Final em folha A4'} src={pdfExibidoUrl} className="w-full h-[650px] bg-white rounded-lg border border-slate-300" /> :
+          {pdfExibidoUrl ? <iframe title={previaFotoVaoUrl ? 'PDF A4 com fotos do vão e das trenas' : 'Prévia real do PDF de Medida Final em folha A4'} src={pdfExibidoUrl} className="w-full h-[650px] bg-white rounded-lg border border-slate-300" /> :
             <><FolhaA4 layout={layout} />
             <p className="text-xs text-center text-slate-500 mt-3">{configuracaoDisponivel ? 'Gerando a prévia real da medição...' : 'Prévia ilustrativa até carregar o layout salvo.'}</p></>}
         </div>
