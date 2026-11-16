@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { buscarAcessoValidoMedicao } from '@/lib/medicaoAcessoExternoServer'
+import { medicaoComprovada } from '@/lib/medicaoComprovacao'
 
 export async function POST(_req: NextRequest, { params }: { params: { token: string } }) {
   const acesso = await buscarAcessoValidoMedicao(params.token)
@@ -19,14 +20,14 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
 
   const { data: itens, error: itensError } = await supabaseAdmin
     .from('medicao_itens')
-    .select('id, quantidade, medido')
+    .select('id,quantidade,largura_baixo_mm,largura_meio_mm,largura_cima_mm,altura_direita_mm,altura_meio_mm,altura_esquerda_mm,foto_larguras_url,foto_alturas_url')
     .eq('medicao_id', acesso.medicao_id)
 
   if (itensError) return NextResponse.json({ error: 'Nao foi possivel conferir as pecas da medicao.' }, { status: 500 })
 
   const lista = itens || []
   const total = lista.reduce((soma, item) => soma + Math.max(1, Number(item.quantidade || 1)), 0)
-  const medidas = lista.reduce((soma, item) => soma + (item.medido ? 1 : 0), 0)
+  const medidas = lista.reduce((soma, item) => soma + (medicaoComprovada(item) ? 1 : 0), 0)
   const abertas = Math.max(0, total - medidas)
 
   if (medidas === 0) {
@@ -85,6 +86,6 @@ export async function POST(_req: NextRequest, { params }: { params: { token: str
     ok: true,
     pecasMedidas: medidas,
     pecasAbertas: abertas,
-    mensagem: `Medicao parcial enviada: ${medidas} peca(s) concluida(s) e ${abertas} em aberto.`,
+    mensagem: `Medicao parcial registrada: ${medidas} peca(s) documentada(s) e ${abertas} em aberto. Checklists tecnicos pendentes nao foram aprovados.`,
   })
 }
