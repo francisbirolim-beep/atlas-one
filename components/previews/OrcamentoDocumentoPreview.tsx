@@ -104,8 +104,8 @@ const css='\
 .oc-logo{display:block;max-width:42mm;height:8mm;width:auto;object-fit:contain;object-position:left center}\
 .oc-titulo{text-align:right;flex-shrink:0}.oc-titulo h1{font-size:12pt;font-weight:800;margin:0 0 .5mm}.oc-titulo b{font-size:8pt}.oc-titulo p{font-size:6.9pt;margin:.4mm 0}\
 .oc-continua{display:flex;justify-content:space-between;gap:3mm;font-size:7.5pt;font-weight:700;border-bottom:1px solid #cbd5e1;padding-bottom:1.5mm}\
-.oc-cliente{display:block;border-bottom:1px solid #e2e8f0;padding:1mm 0;font-size:7.1pt;line-height:1.12}
-.oc-cliente p{margin:.35mm 0;overflow-wrap:anywhere}
+.oc-cliente{display:block;border-bottom:1px solid #e2e8f0;padding:1mm 0;font-size:7.1pt;line-height:1.12}\
+.oc-cliente p{margin:.35mm 0;overflow-wrap:anywhere}\
 .oc-cliente-linha{display:flex;justify-content:space-between;gap:3mm}\
 .oc-tabela{width:100%;border-collapse:collapse;table-layout:fixed;text-align:left;margin-top:1mm;font-size:7.3pt}\
 .oc-tabela th{font-size:6.8pt;background:#f3f5f7;padding:.8mm .7mm;border-bottom:1px solid #cbd5e1}\
@@ -132,8 +132,8 @@ body > :not(#orcamento-portal){display:none!important}\
 .oc-controles{display:none!important}\
 .oc-folha{width:196mm!important;min-width:196mm!important;max-width:196mm!important;height:auto!important;min-height:0!important;max-height:none!important;box-shadow:none!important;margin:0!important;padding:0!important;overflow:visible!important;border:0!important;display:block!important;break-after:page!important;page-break-after:always!important}\
 .oc-folha:last-child{break-after:auto!important;page-break-after:auto!important}\
-.oc-metade{box-sizing:border-box!important;width:196mm!important;height:auto!important;min-height:0!important;max-height:none!important;flex:none!important;padding:3mm 5mm!important;overflow:visible!important;break-inside:avoid!important;page-break-inside:avoid!important}
-.oc-folha-dupla .oc-metade{height:137mm!important;min-height:137mm!important;max-height:137mm!important;overflow:hidden!important}
+.oc-metade{box-sizing:border-box!important;width:196mm!important;height:auto!important;min-height:0!important;max-height:none!important;flex:none!important;padding:3mm 5mm!important;overflow:visible!important;break-inside:avoid!important;page-break-inside:avoid!important}\
+.oc-folha-dupla .oc-metade{height:137mm!important;min-height:137mm!important;max-height:137mm!important;overflow:hidden!important}\
 .oc-folha-unica .oc-metade{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}\
 .oc-metade+.oc-metade{border-top:none!important}\
 .oc-tabela tr,.oc-final{break-inside:avoid!important;page-break-inside:avoid!important}\
