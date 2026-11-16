@@ -7,7 +7,7 @@ import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 export type ProdutoDocumento={id:string;codigo:string;nome:string;descricao:string;unidade:string;quantidade:number;preco:number|null;imagem:string|null}
 export type TipologiaDocumento={
   id:string;nome:string;linha:string;largura:string;altura:string;quantidade:number;cor:string;vidro:string;
-  contramarco:string;variaveis:{nome:string;valor:string}[]
+  contramarco:string;variaveis:{nome:string;valor:string}[];imagem?:string|null
 }
 export type CondicaoDocumento={forma:string;valor:string}
 export type OrcamentoDocumento={
@@ -49,9 +49,11 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
           <thead className="border-b bg-slate-50"><tr><th className="w-[64%] py-2">Item / descrição / referência</th><th className="w-[8%] text-right">Qtd.</th><th className="w-[14%] text-right">Unitário</th><th className="w-[14%] text-right">Valor</th></tr></thead>
           <tbody>{pagina.map(item=><tr key={item.id} className="border-b align-top">
             {item.tipo==='tipologia'?<>
-              <td className="py-2 pr-3"><b>{item.t.nome}</b><p className="mt-1 text-slate-600">{item.t.largura} × {item.t.altura} mm · {item.t.linha||'Linha a definir'} · {item.t.cor||'Cor a definir'}</p><p className="text-slate-600">Vidro: {item.t.vidro||'A definir'} · Contramarco: {item.t.contramarco}</p>
+              <td className="py-2 pr-3"><div className="flex items-start gap-2">
+                {item.t.imagem&&<img src={item.t.imagem} alt={'Foto cadastrada da tipologia '+item.t.nome} className="h-12 w-12 shrink-0 object-contain" loading="lazy"/>}
+                <div className="min-w-0"><b>{item.t.nome}</b><p className="mt-1 text-slate-600">{item.t.largura} × {item.t.altura} mm · {item.t.linha||'Linha a definir'} · {item.t.cor||'Cor a definir'}</p><p className="text-slate-600">Vidro: {item.t.vidro||'A definir'} · Contramarco: {item.t.contramarco}</p>
                 {item.t.variaveis.length>0&&<p className="mt-1 text-slate-500">{item.t.variaveis.map(v=>v.nome+': '+v.valor).join(' · ')}</p>}
-                <p className="mt-1 text-[10px] font-semibold text-amber-700">Croqui e custo técnico pendentes de validação</p>
+                <p className="mt-1 text-[10px] font-semibold text-amber-700">{item.t.imagem?'Foto original da tipologia · custo a calcular':'Sem croqui cadastrado · custo a calcular'}</p></div></div>
               </td><td className="py-2 text-right">{item.t.quantidade}</td><td className="py-2 text-right text-amber-700">A calcular</td><td className="py-2 text-right font-semibold text-amber-700">Pendente</td>
             </>:<>
               <td className="py-2 pr-3">
