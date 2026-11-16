@@ -32,6 +32,7 @@ export type ReciboInfo={
   valorOriginal:number;valorMovimento:number;saldo:number;id:string;assinaturaDataUri?:string|null
   consolidado?: boolean
   itens?: ItemReciboRecebimento[]
+  ajustesPagamento?: { desconto:number; juros:number; multa:number; troco:number; valorEntregue:number }
 
 }
 export function textoRecibo(d:ReciboInfo){

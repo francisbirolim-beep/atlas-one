@@ -154,6 +154,15 @@ export default function ReciboImpressao({
           </div>)}
         </div>
       </section>}
+      {dados.tipo==='pagar' && dados.ajustesPagamento && <section className="mt-5 space-y-2 rounded-xl border border-slate-200 p-4 text-sm">
+        <h2 className="mb-2 font-bold text-slate-800">Composição do pagamento</h2>
+        <p className="flex justify-between"><span>Valor original do título</span><b>{r.original}</b></p>
+        <p className="flex justify-between"><span>Desconto</span><b>{moeda(dados.ajustesPagamento.desconto)}</b></p>
+        <p className="flex justify-between"><span>Juros</span><b>{moeda(dados.ajustesPagamento.juros)}</b></p>
+        <p className="flex justify-between"><span>Multa</span><b>{moeda(dados.ajustesPagamento.multa)}</b></p>
+        <p className="flex justify-between"><span>Valor entregue ao fornecedor</span><b>{moeda(dados.ajustesPagamento.valorEntregue)}</b></p>
+        <p className="flex justify-between"><span>Troco devolvido</span><b>{moeda(dados.ajustesPagamento.troco)}</b></p>
+      </section>}
       <section className="atlas-recibo-resumo mt-7 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-5">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{dados.tipo === 'pagar' ? 'Valor pago' : dados.consolidado ? 'Total efetivamente recebido' : 'Valor recebido neste lançamento'}</span>
@@ -162,7 +171,10 @@ export default function ReciboImpressao({
         {!dados.consolidado && <><p className="flex justify-between gap-4 text-sm"><span>Valor total dos títulos considerados</span><b>{r.original}</b></p>
         <p className="flex justify-between gap-4 text-sm"><span>Saldo atual em aberto (consulta)</span><b>{r.saldo}</b></p></>}
       </section>
-      {dados.consolidado ? <p className="mt-5 text-xs leading-relaxed text-slate-600">Este documento reúne exclusivamente os recebimentos acima, sem criar novos lançamentos. Descontos não integram o valor efetivamente recebido. Não representa quitação integral de uma venda ou obrigação.</p> : <p className="mt-5 text-xs leading-relaxed text-slate-600">
+      {dados.consolidado ? <p className="mt-5 text-xs leading-relaxed text-slate-600">Este documento reúne exclusivamente os recebimentos acima, sem criar novos lançamentos. Descontos não integram o valor efetivamente recebido. Não representa quitação integral de uma venda ou obrigação.</p> : dados.tipo==='pagar' ? <p className="mt-5 text-xs leading-relaxed text-slate-600">
+        Este documento registra o pagamento identificado acima, com os ajustes financeiros discriminados. O troco recebido não integra o pagamento líquido.
+        {dados.saldo > 0 ? ' O saldo não está zerado.' : ' O título consta como quitado.'}
+      </p> : <p className="mt-5 text-xs leading-relaxed text-slate-600">
         Este recibo comprova exclusivamente o valor do recebimento identificado acima.
         {dados.saldo > 0 ? ' Não representa quitação integral da obrigação.' : ' O saldo consultado está zerado.'}
         {' '}O saldo apresentado é a posição atual do título e pode ser diferente do saldo na data do pagamento.
