@@ -185,8 +185,8 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
           <button type="button" aria-pressed={precos==='com_unitario'} onClick={()=>setPrecos('com_unitario')}
             className={'rounded-lg border px-4 py-2 text-xs font-bold '+(precos==='com_unitario'?'border-indigo-700 bg-indigo-700 text-white':'bg-white')}>Unitário e total</button>
           <button type="button" aria-pressed={precos==='so_total'} onClick={()=>setPrecos('so_total')}
-            className={'rounded-lg border px-4 py-2 text-xs font-bold '+(precos==='so_total'?'border-indigo-700 bg-indigo-700 text-white':'bg-white')}>Somente total por produto</button>
-          <p className="w-full text-[11px] text-slate-500">A escolha não altera o valor do orçamento. Na impressão, mantenha A4, vertical e escala de 100%.</p>
+            className={'rounded-lg border px-4 py-2 text-xs font-bold '+(precos==='so_total'?'border-indigo-700 bg-indigo-700 text-white':'bg-white')}>Sem preços nos itens</button>
+          <p className="w-full text-[11px] text-slate-500">Na opção sem preços nos itens, cada linha mostra R$ 0,00; o valor total do orçamento permanece correto. Na impressão, mantenha A4, vertical e escala de 100%.</p>
         </fieldset>
       </section>
       {folhas.map((metades,folhaIndex)=><section key={folhaIndex} className={'oc-folha '+(metades.length===2?'oc-folha-dupla':'oc-folha-unica')} aria-label={'Folha A4 '+(folhaIndex+1)}>
@@ -243,7 +243,7 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
                   </div></div></td>
                   <td className="oc-direita">{item.t.quantidade}</td>
                   {unit&&<td className="oc-direita font-bold text-amber-700">Pendente</td>}
-                  <td className="oc-direita font-bold text-amber-700">A calcular</td>
+                  <td className="oc-direita font-bold text-amber-700">{unit?'A calcular':moeda(0)}</td>
                 </>:<>
                   <td><div className="oc-item"><Foto url={item.p.imagem} nome={'Imagem cadastrada de '+item.p.nome}/><div className="oc-item-texto">
                     <b>{item.p.nome}</b><p>{item.p.codigo||'Sem código'} · {item.p.unidade}</p>
@@ -251,7 +251,7 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
                   </div></div></td>
                   <td className="oc-direita">{item.p.quantidade}</td>
                   {unit&&<td className="oc-direita">{item.p.preco!=null?moeda(item.p.preco):'A precificar'}</td>}
-                  <td className="oc-direita font-bold">{item.p.preco!=null?moeda(item.p.preco*item.p.quantidade):'Pendente'}</td>
+                  <td className="oc-direita font-bold">{!unit?moeda(0):item.p.preco!=null?moeda(item.p.preco*item.p.quantidade):'Pendente'}</td>
                 </>}
               </tr>)}</tbody>
             </table>}
