@@ -16,6 +16,32 @@ export async function GET(req: NextRequest) {
 
   const tipo=req.nextUrl.searchParams.get('tipo')||'variaveis'
   try {
+    if(tipo==='tipologias'){
+      // Busca somente os cadastros reais. A foto é da própria tipologia,
+      // e os vínculos de linha são lidos diretamente de linha_tipologias.
+      const [ts,ls,vs]=await Promise.all([
+        supabaseAdmin.from('tipologias')
+          .select('id,chave,label,categoria,ordem,foto_url,ativo')
+          .eq('ativo',true).order('ordem',{ascending:true}).limit(500),
+        supabaseAdmin.from('linhas_tecnicas')
+          .select('id,chave,nome,ordem,apelidos,ativo')
+          .eq('ativo',true).order('ordem',{ascending:true}).limit(500),
+        supabaseAdmin.from('linha_tipologias')
+          .select('tipologia_id,linha_id').limit(5000)
+      ])
+      if(ts.error||ls.error||vs.error)throw ts.error||ls.error||vs.error
+      const links=vs.data||[]
+      const tipologias=(ts.data||[]).map(t=>({
+        ...t,
+        linhaIds:links.filter(v=>v.tipologia_id===t.id).map(v=>v.linha_id)
+      }))
+      const linhas=(ls.data||[]).map(l=>({
+        ...l,
+        tipologia_ids:links.filter(v=>v.linha_id===l.id).map(v=>v.tipologia_id)
+      }))
+      return NextResponse.json({tipologias,linhas,somenteLeitura:true},
+        {headers:{'Cache-Control':'no-store'}})
+    }
     if(tipo==='variaveis'){
       const tipologiaId=req.nextUrl.searchParams.get('tipologiaId')||''
       if(tipologiaId&&!uuid.test(tipologiaId))
