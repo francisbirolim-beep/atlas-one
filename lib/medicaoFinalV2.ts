@@ -9,6 +9,8 @@ export type ResumoMedicaoV2 = {
   totalLinhas: number
   totalPecas: number
   pecasMedidas: number
+  pecasEmAndamento: number
+  percentualAndamento: number
   pecasProntasEnvio: number
   pecasEmConferencia: number
   pecasAprovadas: number
@@ -23,6 +25,7 @@ export type StatusOperacionalMedicao =
   | 'liberado'
   | 'em_medicao'
   | 'com_pendencia'
+  | 'aguardando_conferencia'
   | 'concluido'
   | 'aprovado'
 
@@ -71,7 +74,10 @@ export type ResultadoTransicaoMedicao = {
 
 export async function carregarResumoMedicaoV2(medicaoId: string): Promise<ResumoMedicaoV2> {
   const dados = await carregarChecklistMedicaoV2(medicaoId)
-  const itens = dados.itens.map(item => ({ ...item, medido: statusItemChecklistV2(item, dados.campos, dados.respostas) === 'concluida' }))
+  const itens = dados.itens.map(item => {
+    const statusChecklist = statusItemChecklistV2(item, dados.campos, dados.respostas)
+    return { ...item, statusChecklist, medido: statusChecklist === 'concluida' }
+  })
   const totalPecas = itens.reduce((total, item) => total + Math.max(1, item.quantidade || 1), 0)
 
   // Regra conservadora: uma linha antiga com quantidade 3 e apenas um conjunto
@@ -82,6 +88,13 @@ export async function carregarResumoMedicaoV2(medicaoId: string): Promise<Resumo
     0,
   )
 
+  const pecasEmAndamento = itens.filter(item => item.statusChecklist === 'em_andamento').length
+  // Indicador de atividade: iniciada = 50%, concluída = 100%.
+  // Não substitui percentual de conclusão nem libera envio antecipado.
+  const percentualAndamento = totalPecas > 0
+    ? Math.min(100, Math.round(((pecasMedidas + pecasEmAndamento * 0.5) / totalPecas) * 100))
+    : 0
+
   const medidores = Array.from(
     new Set(itens.map(item => item.medido_por_nome).filter((nome): nome is string => Boolean(nome))),
   )
@@ -90,6 +103,8 @@ export async function carregarResumoMedicaoV2(medicaoId: string): Promise<Resumo
     totalLinhas: itens.length,
     totalPecas,
     pecasMedidas,
+    pecasEmAndamento,
+    percentualAndamento,
     pecasProntasEnvio: itens.filter(item => item.medido && item.status_medicao === 'concluida').length,
     pecasEmConferencia: itens.filter(item => item.status_medicao === 'aguardando_conferencia').length,
     pecasAprovadas: itens.filter(item => item.status_medicao === 'aprovada').length,
