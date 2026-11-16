@@ -15,7 +15,9 @@ export type CondicaoDocumento={forma:string;valor:string}
 export type OrcamentoDocumento={
   cliente:string;empresa:EmpresaRecibo|null;tipologias:TipologiaDocumento[];produtos:ProdutoDocumento[];
   subtotal:number;desconto:number;totalProdutos:number;temPendencias:boolean;
-  condicoes:CondicaoDocumento[];validadeDias:string;data:string;referencia:string;observacoes:string
+  condicoes:CondicaoDocumento[];validadeDias:string;data:string;referencia:string;observacoes:string;
+  clienteDocumento?:string;clienteTelefone?:string;enderecoCliente?:string;
+  obraNome?:string;enderecoEntrega?:string;vendedorNome?:string
 }
 type ItemDocumento={tipo:'tipologia';id:string;t:TipologiaDocumento}|{tipo:'produto';id:string;p:ProdutoDocumento}
 type Pagina={itens:ItemDocumento[]}
@@ -63,7 +65,8 @@ function paginar(d:OrcamentoDocumento,precos:Precos):Pagina[]{
   const fim=fechamentoAltura(d),paginas:Pagina[]=[]
   let index=0
   while(index<itens.length){
-    const capacidade=paginas.length?128:104
+    const detalhes=(d.enderecoCliente?3:0)+(d.enderecoEntrega?3:0)+(d.vendedorNome?2:0)
+    const capacidade=paginas.length?128:Math.max(90,104-detalhes)
     const sobrando=itens.slice(index).reduce((a,item)=>a+itemAltura(item,precos),0)
     if(sobrando+fim<=capacidade){paginas.push({itens:itens.slice(index)});break}
     const inicio=index
@@ -77,7 +80,8 @@ function paginar(d:OrcamentoDocumento,precos:Precos):Pagina[]{
     paginas.push({itens:itens.slice(inicio,index)})
   }
   const ultima=paginas[paginas.length-1]
-  const capacidade=paginas.length===1?104:128
+  const detalhes=(d.enderecoCliente?3:0)+(d.enderecoEntrega?3:0)+(d.vendedorNome?2:0)
+  const capacidade=paginas.length===1?Math.max(90,104-detalhes):128
   const usado=ultima.itens.reduce((v,item)=>v+itemAltura(item,precos),0)
   if(usado+fim>capacidade){
     if(ultima.itens.length>1){
@@ -92,7 +96,7 @@ function paginar(d:OrcamentoDocumento,precos:Precos):Pagina[]{
 
 /** A4 vertical: 2 blocos. Folga de 1 mm evita página extra em Safari/WebKit. */
 const css='\
-.oc-folha{box-sizing:border-box;width:210mm;height:296mm;margin:0 auto 15px;background:white;display:flex;flex-direction:column;box-shadow:0 12px 30px #0003;overflow:hidden}\
+.oc-folha{box-sizing:border-box;width:210mm;height:auto;margin:0 auto 15px;background:white;display:flex;flex-direction:column;box-shadow:0 12px 30px #0003;overflow:hidden}\
 .oc-metade{box-sizing:border-box;width:210mm;height:148mm;flex:0 0 148mm;overflow:hidden;padding:4mm 9mm;display:flex;flex-direction:column;background:white;color:#182334;font:7.4pt/1.15 Arial,Helvetica,sans-serif}\
 .oc-metade+.oc-metade{border-top:1px dashed #cbd5e1}\
 .oc-header{display:flex;justify-content:space-between;gap:4mm;border-bottom:1px solid #334155;padding-bottom:1mm}\
@@ -100,7 +104,9 @@ const css='\
 .oc-logo{display:block;max-width:42mm;height:8mm;width:auto;object-fit:contain;object-position:left center}\
 .oc-titulo{text-align:right;flex-shrink:0}.oc-titulo h1{font-size:12pt;font-weight:800;margin:0 0 .5mm}.oc-titulo b{font-size:8pt}.oc-titulo p{font-size:6.9pt;margin:.4mm 0}\
 .oc-continua{display:flex;justify-content:space-between;gap:3mm;font-size:7.5pt;font-weight:700;border-bottom:1px solid #cbd5e1;padding-bottom:1.5mm}\
-.oc-cliente{display:flex;justify-content:space-between;gap:3mm;border-bottom:1px solid #e2e8f0;padding:1.1mm 0;font-size:7.1pt}\
+.oc-cliente{display:block;border-bottom:1px solid #e2e8f0;padding:1mm 0;font-size:7.1pt;line-height:1.12}
+.oc-cliente p{margin:.35mm 0;overflow-wrap:anywhere}
+.oc-cliente-linha{display:flex;justify-content:space-between;gap:3mm}\
 .oc-tabela{width:100%;border-collapse:collapse;table-layout:fixed;text-align:left;margin-top:1mm;font-size:7.3pt}\
 .oc-tabela th{font-size:6.8pt;background:#f3f5f7;padding:.8mm .7mm;border-bottom:1px solid #cbd5e1}\
 .oc-tabela td{padding:.6mm .7mm;vertical-align:middle;border-bottom:1px solid #e2e8f0}\
@@ -117,16 +123,18 @@ const css='\
 \
 @media screen and (max-width:840px){.oc-visual{overflow-x:auto}.oc-folha{margin-left:0;margin-right:0}}\
 @media print{\
-@page{size:A4 portrait;margin:0}\
-html,body{width:210mm!important;height:auto!important;margin:0!important;padding:0!important;background:white!important}\
+@page{size:A4 portrait;margin:7mm 7mm}\
+html,body{width:auto!important;height:auto!important;margin:0!important;padding:0!important;background:white!important}\
 body > :not(#orcamento-portal){display:none!important}\
-#orcamento-portal{display:block!important;position:static!important;width:210mm!important;height:auto!important;margin:0!important;padding:0!important}\
+#orcamento-portal{display:block!important;position:static!important;width:196mm!important;height:auto!important;margin:0!important;padding:0!important}\
 .oc-dialog{position:static!important;inset:auto!important;display:block!important;overflow:visible!important;background:white!important;padding:0!important}\
-.oc-visual{width:210mm!important;max-width:none!important;overflow:visible!important;margin:0!important;padding:0!important}\
+.oc-visual{width:196mm!important;max-width:none!important;overflow:visible!important;margin:0!important;padding:0!important}\
 .oc-controles{display:none!important}\
-.oc-folha{width:210mm!important;min-width:210mm!important;max-width:210mm!important;height:296mm!important;min-height:296mm!important;max-height:296mm!important;box-shadow:none!important;margin:0!important;padding:0!important;overflow:hidden!important;border:0!important;break-after:page!important;page-break-after:always!important}\
+.oc-folha{width:196mm!important;min-width:196mm!important;max-width:196mm!important;height:auto!important;min-height:0!important;max-height:none!important;box-shadow:none!important;margin:0!important;padding:0!important;overflow:visible!important;border:0!important;display:block!important;break-after:page!important;page-break-after:always!important}\
 .oc-folha:last-child{break-after:auto!important;page-break-after:auto!important}\
-.oc-metade{width:210mm!important;height:148mm!important;min-height:148mm!important;max-height:148mm!important;flex:0 0 148mm!important;padding:4mm 9mm!important;overflow:hidden!important;break-inside:avoid!important}\
+.oc-metade{box-sizing:border-box!important;width:196mm!important;height:auto!important;min-height:0!important;max-height:none!important;flex:none!important;padding:3mm 5mm!important;overflow:visible!important;break-inside:avoid!important;page-break-inside:avoid!important}
+.oc-folha-dupla .oc-metade{height:137mm!important;min-height:137mm!important;max-height:137mm!important;overflow:hidden!important}
+.oc-folha-unica .oc-metade{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}\
 .oc-metade+.oc-metade{border-top:none!important}\
 .oc-tabela tr,.oc-final{break-inside:avoid!important;page-break-inside:avoid!important}\
 .oc-foto,.oc-logo{-webkit-print-color-adjust:exact;print-color-adjust:exact}\
@@ -175,7 +183,7 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
           <p className="w-full text-[11px] text-slate-500">A escolha não altera o valor do orçamento. Na impressão, mantenha A4, vertical e escala de 100%.</p>
         </fieldset>
       </section>
-      {folhas.map((metades,folhaIndex)=><section key={folhaIndex} className="oc-folha" aria-label={'Folha A4 '+(folhaIndex+1)}>
+      {folhas.map((metades,folhaIndex)=><section key={folhaIndex} className={'oc-folha '+(metades.length===2?'oc-folha-dupla':'oc-folha-unica')} aria-label={'Folha A4 '+(folhaIndex+1)}>
         {metades.map((pagina,metadeIndex)=>{
           const index=folhaIndex*2+metadeIndex,primeira=index===0,ultima=index===paginas.length-1
           const unit=precos==='com_unitario'
@@ -196,8 +204,19 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
               <b>Continuação do orçamento nº {numero}</b><span>Página {index+1} de {paginas.length}</span>
             </header>}
             {primeira&&<section className="oc-cliente">
-              <span>Cliente: <b>{dados.cliente||'Cliente a identificar'}</b></span>
-              <span>Validade: <b>{dados.validadeDias?dados.validadeDias+' dias':'A definir'}</b></span>
+              <div className="oc-cliente-linha">
+                <span>Cliente: <b>{dados.cliente||'Cliente a identificar'}</b>
+                  {dados.clienteDocumento&&<span> · CPF/CNPJ: {dados.clienteDocumento}</span>}
+                </span>
+                <span>Validade: <b>{dados.validadeDias?dados.validadeDias+' dias':'A definir'}</b></span>
+              </div>
+              <p><b>Vendedor:</b> {dados.vendedorNome||'Não informado'}
+                {dados.clienteTelefone&&<> · <b>Contato:</b> {dados.clienteTelefone}</>}
+              </p>
+              {dados.enderecoCliente&&<p><b>Endereço do cliente:</b> {dados.enderecoCliente}</p>}
+              {(dados.enderecoEntrega||dados.obraNome)&&<p>
+                <b>{dados.obraNome?'Obra / entrega:':'Local da entrega:'}</b> {dados.obraNome&&dados.obraNome+' · '}{dados.enderecoEntrega||'A definir'}
+              </p>}
             </section>}
             {pagina.itens.length>0&&<table className="oc-tabela">
               <thead><tr>
@@ -247,7 +266,7 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
             </div>}
           </article>
         })}
-        {metades.length===1&&<div aria-hidden="true" className="oc-metade"/>}
+        {/* Não inserir uma meia folha vazia: Safari a transformava em página 2. */}
       </section>)}
     </div>
   </div>,portal)
