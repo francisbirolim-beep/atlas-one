@@ -3,16 +3,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardList, DraftingCompass, FileText, Layers3, Plus, Search, Trash2 } from 'lucide-react'
-import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { tokenAtual } from '@/lib/auth'
 import { lerDadosEmpresa } from '@/lib/configGeral'
-import { listarTipologias } from '@/lib/tipologias'
-import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
+import { type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
 import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
-import VariaveisTipologiaPreview, { type CatalogoEngenharia, type RascunhoVariavel } from '@/components/previews/VariaveisTipologiaPreview'
+import FotoTipologiaPreview from '@/components/previews/FotoTipologiaPreview'
+import VariaveisTipologiaPreview, { type CatalogoEngenharia } from '@/components/previews/VariaveisTipologiaPreview'
 import OrcamentoDocumentoPreview, { type OrcamentoDocumento, type ProdutoDocumento, type TipologiaDocumento } from '@/components/previews/OrcamentoDocumentoPreview'
 
+type TipologiaCatalogo=Tipologia & {foto_url?:string|null;linhaIds:string[]}
 type Vidro={id:string;descricao:string;produtoAtlasId:string|null;referenciaNaoPrecificada:boolean}
 type Produto={id:string;codigo:string;nome:string;descricao:string;unidade:string;categoria:string;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null}
 type Item={produto:Produto;quantidade:number}
@@ -28,11 +29,8 @@ const categorias=[['todos','Todos'],['perfil','Perfis'],['acessorio','Acessório
 export default function ConfiguradorOrcamentoSobMedida(){
   const [cliente,setCliente]=useState('')
   const [empresa,setEmpresa]=useState<EmpresaRecibo|null>(null)
-  const [master,setMaster]=useState(false)
-  const [masterId,setMasterId]=useState('')
-  const [armazenamentoCarregado,setArmazenamentoCarregado]=useState(false)
-  const [rascunhos,setRascunhos]=useState<RascunhoVariavel[]>([])
-  const [tipologias,setTipologias]=useState<Tipologia[]>([])
+  const [tipologias,setTipologias]=useState<TipologiaCatalogo[]>([])
+  const [carregandoTipologias,setCarregandoTipologias]=useState(true)
   const [linhasTecnicas,setLinhasTecnicas]=useState<LinhaTecnica[]>([])
   const [erroReferencias,setErroReferencias]=useState('')
   const [vidros,setVidros]=useState<Vidro[]>([])
@@ -44,9 +42,8 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const [buscaTipologia,setBuscaTipologia]=useState('')
   const [filtroLinhaTipologia,setFiltroLinhaTipologia]=useState('')
   const [tipologiaId,setTipologiaId]=useState('')
-  const [linhaId,setLinhaId]=useState('')
   const [vidroId,setVidroId]=useState('')
-  const [contramarco,setContramarco]=useState('a_definir')
+  const [contramarco,setContramarco]=useState('')
   const [catalogo,setCatalogo]=useState<CatalogoEngenharia|null>(null)
   const [variaveisCarregando,setVariaveisCarregando]=useState(false)
   const [erroVariaveis,setErroVariaveis]=useState('')
@@ -72,33 +69,28 @@ export default function ConfiguradorOrcamentoSobMedida(){
 
   useEffect(()=>{
     let ativo=true
-    void Promise.all([listarTipologias(),listarLinhasTecnicas()]).then(([ts,ls])=>{if(ativo){setTipologias(ts);setLinhasTecnicas(ls.filter(l=>l.ativo))}}).catch(()=>{if(ativo)setErroReferencias('Não foi possível carregar todas as tipologias e linhas técnicas.')})
+    const ctrl=new AbortController()
+    void (async()=>{
+      try {
+        const token=await tokenAtual()
+        if(!token)throw Error('Faça login no Atlas One para consultar as tipologias.')
+        const resp=await fetch('/api/previews/engenharia?tipo=tipologias',{
+          headers:{Authorization:'Bearer '+token},signal:ctrl.signal,cache:'no-store'
+        })
+        const dados=await resp.json()
+        if(!resp.ok)throw Error(dados.error||'Não foi possível carregar as tipologias.')
+        if(ativo&&!ctrl.signal.aborted){
+          setTipologias(dados.tipologias||[])
+          setLinhasTecnicas(dados.linhas||[])
+          setErroReferencias('')
+        }
+      }catch(e){
+        if(ativo&&!ctrl.signal.aborted)setErroReferencias(e instanceof Error?e.message:'Erro ao carregar tipologias.')
+      }finally{if(ativo&&!ctrl.signal.aborted)setCarregandoTipologias(false)}
+    })()
     void lerDadosEmpresa().then(d=>{if(ativo)setEmpresa(d||null)}).catch(()=>{})
-    void usuarioAtual().then(u=>{
-      if(!ativo)return
-      const autorizado=u?.role==='master'
-      setMaster(autorizado)
-      if(autorizado&&u?.id){
-        setMasterId(u.id)
-        try{
-          const j=window.localStorage.getItem('atlasone:previa:variaveis-tipologia:v1:'+u.id)
-          if(j){
-            const data=JSON.parse(j)
-            if(Array.isArray(data))setRascunhos(data.filter((v:unknown)=>{
-              const item=v as Partial<RascunhoVariavel>|null
-              return !!item&&typeof item.id==='string'&&typeof item.tipologiaId==='string'&&typeof item.nome==='string'&&Array.isArray(item.opcoes)
-            }).slice(0,400))
-          }
-        }catch{}
-      }
-      setArmazenamentoCarregado(true)
-    }).catch(()=>{if(ativo)setArmazenamentoCarregado(true)})
-    return()=>{ativo=false}
+    return()=>{ativo=false;ctrl.abort()}
   },[])
-  useEffect(()=>{
-    if(!master||!masterId||!armazenamentoCarregado)return
-    try{window.localStorage.setItem('atlasone:previa:variaveis-tipologia:v1:'+masterId,JSON.stringify(rascunhos))}catch{}
-  },[master,masterId,armazenamentoCarregado,rascunhos])
   useEffect(()=>{
     const ctrl=new AbortController()
     void (async()=>{
@@ -144,11 +136,13 @@ export default function ConfiguradorOrcamentoSobMedida(){
   },[mostrarProdutos,buscaProduto,categoria,linhaProduto,filtroPreco])
 
   const tipologia=tipologias.find(t=>t.id===tipologiaId)
-  const linhasVinculadas=tipologia?linhasTecnicas.filter(l=>(l.tipologia_ids||[]).includes(tipologia.id)):[]
-  const outrasLinhas=linhasTecnicas.filter(l=>!linhasVinculadas.some(v=>v.id===l.id))
-  const tipologiasFiltradas=tipologias.filter(t=>normalizar(t.label+' '+t.chave).includes(normalizar(buscaTipologia)))
-    .filter(t=>!filtroLinhaTipologia||linhasTecnicas.some(l=>l.id===filtroLinhaTipologia&&(l.tipologia_ids||[]).includes(t.id))).slice(0,110)
-  const linhaSelecionada=linhasTecnicas.find(l=>l.id===linhaId)
+  const linhasVinculadas=tipologia?linhasTecnicas.filter(l=>tipologia.linhaIds.includes(l.id)):[]
+  // A busca textual e a linha superior trabalham no mesmo conjunto de vínculos reais.
+  const todasFiltradas=tipologias
+    .filter(t=>normalizar(t.label+' '+t.chave).includes(normalizar(buscaTipologia.trim())))
+    .filter(t=>!filtroLinhaTipologia||t.linhaIds.includes(filtroLinhaTipologia))
+  const tipologiasFiltradas=todasFiltradas.slice(0,140)
+  const linhaSelecionada=linhasTecnicas.find(l=>l.id===filtroLinhaTipologia)
   const vidroSelecionado=vidros.find(v=>v.id===vidroId)
   const folhas=tipologia?.label.match(/\b0?(\d{1,2})\s*folhas?\b/i)?.[1]||null
   const subtotal=itens.reduce((s,i)=>s+(valorUnitario(i.produto)||0)*i.quantidade,0)
@@ -157,13 +151,12 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const descontoInvalido=descontoTipo==='percentual'?numero(desconto)>100:descontoBruto>subtotal
   const descontoValor=Math.max(0,Math.min(subtotal,descontoBruto))
   const totalProdutos=Math.max(0,subtotal-descontoValor)
-  const variaveisDisponiveis=useMemo(()=>{
-    const atuais=(catalogo?.vinculadas||[]).map(v=>{
+  // As variáveis vêm do vínculo no cadastro da tipologia; não são criadas no orçamento.
+  const variaveisDisponiveis=useMemo(()=>
+    (catalogo?.vinculadas||[]).map(v=>{
       const variavel=catalogo?.variaveis.find(x=>x.id===v.variavelId)
-      return variavel&&variavel.chave!=='folhas'?{id:'atlas:'+variavel.id,nome:variavel.label,obrigatoria:v.obrigatorio,origem:'atlas'}:null
-    }).filter(Boolean) as {id:string;nome:string;obrigatoria:boolean;origem:string}[]
-    return [...atuais,...rascunhos.filter(r=>r.tipologiaId===tipologiaId).map(r=>({id:r.id,nome:r.nome,obrigatoria:r.obrigatoria,origem:'rascunho'}))]
-  },[catalogo,rascunhos,tipologiaId])
+      return variavel&&variavel.chave!=='folhas'?{id:'atlas:'+variavel.id,nome:variavel.label,obrigatoria:v.obrigatorio}:null
+    }).filter((v):v is {id:string;nome:string;obrigatoria:boolean}=>v!==null),[catalogo])
 
   function avancarMedidas(){
     if(!(numero(largura)>0&&numero(altura)>0)){setAviso('Informe largura e altura válidas em milímetros.');return}
@@ -171,14 +164,17 @@ export default function ConfiguradorOrcamentoSobMedida(){
     setEtapa(2);setAviso('')
   }
   function escolherTipologia(id:string){
-    const t=tipologias.find(x=>x.id===id)
-    const relacionadas=t?linhasTecnicas.filter(l=>(l.tipologia_ids||[]).includes(t.id)):[]
-    setTipologiaId(id);setLinhaId(relacionadas.length===1?relacionadas[0].id:'')
-    setValores({});setAviso('')
+    setTipologiaId(id);setValores({});setAviso('')
   }
   function avancarVariaveis(){
-    if(!tipologia){setAviso('Escolha uma tipologia cadastrada.');return}
-    if(linhasVinculadas.length&&!linhaId){setAviso('Selecione uma linha técnica vinculada à tipologia.');return}
+    if(!tipologia){setAviso('Escolha uma tipologia nos resultados da pesquisa.');return}
+    if(!filtroLinhaTipologia){setAviso('Selecione a linha técnica no filtro superior.');return}
+    if(!tipologia.linhaIds.includes(filtroLinhaTipologia)){
+      setAviso('A tipologia escolhida não está vinculada à linha selecionada.');return
+    }
+    if(contramarco!=='com'&&contramarco!=='sem'){
+      setAviso('Informe se a tipologia é com ou sem contramarco.');return
+    }
     setEtapa(3);setAviso('')
   }
   function incluirTipologia(){
@@ -190,7 +186,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
       vidro:vidroSelecionado?.descricao||'',contramarco,quantidade:Number(quantidade),
       variaveis:escolhas,pendentes
     }])
-    setEtapa(1);setLargura('');setAltura('');setQuantidade('1');setTipologiaId('');setLinhaId('');setVidroId('');setValores({})
+    setEtapa(1);setLargura('');setAltura('');setQuantidade('1');setTipologiaId('');setVidroId('');setContramarco('');setBuscaTipologia('');setValores({})
     setAviso('Tipologia adicionada. Configure outra ou revise o orçamento.')
   }
   function adicionarProduto(p:Produto){
