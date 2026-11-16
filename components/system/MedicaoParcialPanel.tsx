@@ -45,6 +45,7 @@ function formatarData(valor: string) {
 function rotuloEvento(evento: EventoHistoricoMedicao) {
   if (evento.tipo === 'inicio') return 'Medição iniciada'
   if (evento.tipo === 'parcial') return 'Medição salva como parcial'
+  if (evento.tipo === 'envio') return 'Medição enviada para conferência'
   return 'Medição retomada'
 }
 
@@ -74,6 +75,8 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
   const [pecas, setPecas] = useState<PecaResumo[]>([])
   const [eventos, setEventos] = useState<EventoHistoricoMedicao[]>([])
   const [parcial, setParcial] = useState(false)
+  const [encerrada, setEncerrada] = useState(false)
+  const [tempoZerado, setTempoZerado] = useState(false)
   const [tempoBase, setTempoBase] = useState(0)
   const [carregadoEm, setCarregadoEm] = useState(Date.now())
   const [agora, setAgora] = useState(Date.now())
@@ -98,6 +101,8 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
     const instante = Date.now()
     setEventos(estado.eventos)
     setParcial(estado.parcial)
+    setEncerrada(estado.encerrada)
+    setTempoZerado(estado.tempoZerado)
     setTempoBase(estado.tempoAtivoMs)
     setCarregadoEm(instante)
     setAgora(instante)
@@ -164,7 +169,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
     return () => { window.clearInterval(timer); window.removeEventListener('atlas-medicao-atualizada', atualizar) }
   }, [carregar])
 
-  const tempoExibido = parcial || !eventos.some(evento => evento.tipo === 'inicio') ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
+  const tempoExibido = tempoZerado ? 0 : parcial || !eventos.some(evento => evento.tipo === 'inicio') ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
   const feitas = pecas.filter(peca => peca.status === 'concluida').length
   const emAndamento = pecas.filter(peca => peca.status === 'em_andamento').length
   const pendentes = pecas.filter(peca => peca.status === 'pendente').length
@@ -221,7 +226,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
   }
 
   async function alternarParcial() {
-    if (processando) return
+    if (processando || encerrada) return
     setProcessando(true)
     setMensagem('')
     setErro('')
@@ -250,15 +255,16 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
             <Clock3 size={17} className="text-slate-500" />
             <span className="text-xl font-bold tabular-nums text-slate-900">{formatarDuracao(tempoExibido)}</span>
           </div>
+          {tempoZerado && <p className="mt-1 text-[10px] text-slate-500">Cronômetro zerado após o envio. Tempo trabalhado registrado: {formatarDuracao(tempoBase)}.</p>}
           <div className="mt-4 grid grid-cols-3 gap-2">
             <div className="rounded-lg bg-emerald-50 px-2 py-2 text-center"><p className="text-lg font-bold text-emerald-700">{feitas}</p><p className="text-[10px] font-medium text-emerald-700">Concluídas</p></div>
             <div className="rounded-lg bg-blue-50 px-2 py-2 text-center"><p className="text-lg font-bold text-blue-700">{emAndamento}</p><p className="text-[10px] font-medium text-blue-700">Em andamento</p></div>
             <div className="rounded-lg bg-slate-100 px-2 py-2 text-center"><p className="text-lg font-bold text-slate-700">{pendentes}</p><p className="text-[10px] font-medium text-slate-600">Pendentes</p></div>
           </div>
           <div className="mt-auto pt-4">
-            <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada} className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
+            <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada || encerrada} className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
               {processando ? <Loader2 size={14} className="animate-spin" /> : parcial ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-              {parcial ? 'Retomar medição' : 'Salvar medição parcial'}
+              {encerrada ? 'Medição enviada' : parcial ? 'Retomar medição' : 'Salvar medição parcial'}
             </button>
             {!iniciada && <p className="mt-1.5 text-[10px] text-slate-500">Inicie a medição antes de salvar como parcial.</p>}
           </div>
@@ -291,15 +297,15 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
                   <span className="text-xs text-blue-700">◐ {emAndamento} em andamento</span>
                   <span className="text-xs text-slate-500">○ {pendentes} pendente(s)</span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">O tempo considera somente os períodos em que a medição esteve em andamento; ao salvar parcial, ele fica pausado.</p>
+                <p className="mt-1 text-xs text-slate-500">O relógio zera quando a medição é enviada, mas o tempo trabalhado fica no histórico.{tempoZerado ? ` Total registrado: ${formatarDuracao(tempoBase)}.` : ''}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => setMostrarHistorico(valor => !valor)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
                   <History size={14} /> Histórico
                 </button>
-                <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
+                <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada || encerrada} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
                   {processando ? <Loader2 size={14} className="animate-spin" /> : parcial ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-                  {parcial ? 'Retomar medição' : 'Salvar medição parcial'}
+                  {encerrada ? 'Medição enviada' : parcial ? 'Retomar medição' : 'Salvar medição parcial'}
                 </button>
               </div>
             </div>
