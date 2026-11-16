@@ -133,8 +133,8 @@ export default function OrcamentoPreview(){
     const produtosDocumento:ProdutoDocumento[]=itens.map(({produto,quantidade})=>({
       id:produto.id,codigo:produto.codigo,nome:produto.nome,descricao:produto.descricao,
       unidade:produto.unidade,quantidade,preco:unitario(produto),
-      // Não usar fotos candidatas ou genéricas: apenas a foto realmente vinculada ao item.
-      imagem:produto.fotoUrl||null
+      // Fotos existentes vinculadas pelo produto_id, inclusive importadas pendentes; nenhuma imagem genérica.
+      imagem:produto.fotoUrl||produto.fotoCandidataUrl||null
     }))
     setDocumento({
       cliente,empresa,tipologias:[],produtos:produtosDocumento,
