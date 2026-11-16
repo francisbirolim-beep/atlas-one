@@ -12,6 +12,8 @@ import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
 import IdentificacaoOrcamentoPreview, { identificacaoVazia, type IdentificacaoOrcamento } from '@/components/previews/IdentificacaoOrcamentoPreview'
+import CondicoesPagamentoOrcamentoPreview from '@/components/previews/CondicoesPagamentoOrcamentoPreview'
+import { resumoPagamentoOrcamento, type DestinoSaldoOrcamento } from '@/lib/previews/pagamentoOrcamento'
 
 type Modo='escolher'|'sob_medida'|'produtos'
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
@@ -34,7 +36,6 @@ const decimal=(texto:string)=>{
   const n=Number(v.includes(',')?v.replace(/\./g,'').replace(',','.'):v)
   return Number.isFinite(n)?n:NaN
 }
-const formasPagamento=['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Transferência','Boleto']
 export default function OrcamentoPreview(){
   const [modo,setModo]=useState<Modo>('escolher')
   const [identificacao,setIdentificacao]=useState<IdentificacaoOrcamento>(identificacaoVazia)
@@ -65,7 +66,8 @@ export default function OrcamentoPreview(){
   const [empresa,setEmpresa]=useState<EmpresaRecibo|null>(null)
   const [tipoDesconto,setTipoDesconto]=useState<'sem'|'percentual'|'valor'>('sem')
   const [valorDesconto,setValorDesconto]=useState('')
-  const [condicoes,setCondicoes]=useState<{id:number;forma:string;detalhe:string}[]>([{id:1,forma:'PIX',detalhe:''}])
+  const [condicoes,setCondicoes]=useState<{id:number;forma:string;valor:string}[]>([{id:1,forma:'PIX',valor:''}])
+  const [destinoSaldo,setDestinoSaldo]=useState<DestinoSaldoOrcamento>('a_definir')
   const proximaCondicao=useRef(1)
   const [validadeDias,setValidadeDias]=useState('')
   const [observacoes,setObservacoes]=useState('')
@@ -106,17 +108,36 @@ export default function OrcamentoPreview(){
     Math.min(valorConhecido,Math.round((tipoDesconto==='percentual'?valorConhecido*descontoDigitado/100:descontoDigitado)*100)/100)
   const valorFinalConhecido=Math.round((valorConhecido-descontoAplicado)*100)/100
   const totalPendente=medidas.length>0||semPreco>0
-  function alterarCondicao(id:number, campo:'forma'|'detalhe', valor:string){
+  const resumoPagamento=resumoPagamentoOrcamento(valorFinalConhecido,condicoes)
+  function aplicarDescontoAdicional(restante:number){
+    const novoValor=Math.round((descontoAplicado+restante)*100)/100
+    if(totalPendente||novoValor>valorConhecido)return
+    setTipoDesconto('valor')
+    setValorDesconto(novoValor.toFixed(2).replace('.',','))
+    setDestinoSaldo('a_definir')
+    setAviso('')
+  }
+  function alterarCondicao(id:number, campo:'forma'|'valor', valor:string){
     setCondicoes(anteriores=>anteriores.map(c=>c.id===id?{...c,[campo]:valor}:c))
   }
   function adicionarCondicao(){
     proximaCondicao.current+=1
-    setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',detalhe:''}])
+    setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',valor:''}])
   }
   function gerarOrcamento(rascunho=false){
     if(semPreco>0&&!rascunho){setMostrarPendencias(true);setAviso('Há produtos sem preço cadastrado. Consulte a relação antes de gerar o orçamento definitivo.');return}
     if(!itens.length&&!medidas.length){setAviso('Inclua produtos antes de gerar o orçamento.');return}
     if(descontoInvalido){setAviso('Corrija o desconto informado.');return}
+    if(resumoPagamento.possuiValorInvalido){setAviso('Informe valores válidos em reais nas condições de pagamento.');return}
+    if(!totalPendente&&resumoPagamento.excedenteCentavos>0){
+      setAviso('As condições de pagamento excedem o total do orçamento. Corrija a diferença.');return
+    }
+    if(!totalPendente&&resumoPagamento.saldoCentavos>0&&resumoPagamento.temValorInformado&&destinoSaldo!=='cliente'){
+      setAviso('Existe saldo não distribuído. Complete os pagamentos, aplique desconto ou selecione deixar saldo previsto no cliente.');return
+    }
+    if(destinoSaldo==='cliente'&&!identificacao.clienteId){
+      setAviso('Para deixar saldo marcado, selecione primeiro um cliente cadastrado no Atlas One.');return
+    }
     const produtosDocumento:ProdutoDocumento[]=itens.map(({produto,quantidade})=>({
       id:produto.id,codigo:produto.codigo,nome:produto.nome,descricao:produto.descricao,
       unidade:produto.unidade,quantidade,preco:unitario(produto),
@@ -131,8 +152,9 @@ export default function OrcamentoPreview(){
       vendedorNome:identificacao.vendedorNome,
       empresa,tipologias:[],produtos:produtosDocumento,
       subtotal:valorConhecido,desconto:descontoAplicado,totalProdutos:valorFinalConhecido,
-      temPendencias:totalPendente,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.detalhe})),
-      validadeDias,data:new Date().toLocaleDateString('pt-BR'),
+      temPendencias:totalPendente,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.valor})),
+      destinoSaldo:destinoSaldo==='cliente'&&identificacao.clienteId?'cliente':'a_definir',
+      validadeDias,data:new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),
       referencia:'PREV-'+String(Date.now()),observacoes:observacoes.trim()
     })
   }
@@ -314,33 +336,25 @@ export default function OrcamentoPreview(){
               Orçamento com {semPreco} produto(s) sem preço e {medidas.length} tipologia(s) a precificar. O valor geral é pendente e não será apresentado como total definitivo.
             </p>}
           </section>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
-            <h3 className="text-sm font-black">Condições de pagamento da proposta</h3>
-            <p className="mt-1 text-xs text-slate-500">Escolha uma ou mais formas de pagamento. Estas são condições propostas, sem registrar recebimento.</p>
-            <div className="mt-3 space-y-3">
-              {condicoes.map((c,i)=><div key={c.id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto] items-end gap-2">
-                <label className="min-w-0 text-xs font-bold">Forma {i+1}
-                  <select className={baseInput+' mt-1'} value={c.forma} onChange={e=>alterarCondicao(c.id,'forma',e.target.value)}>
-                    {formasPagamento.map(forma=><option key={forma} value={forma}>{forma}</option>)}
-                  </select>
-                </label>
-                <label className="min-w-0 text-xs font-bold">Valor ou condição
-                  <input className={baseInput+' mt-1'} value={c.detalhe} onChange={e=>alterarCondicao(c.id,'detalhe',e.target.value)}
-                    placeholder="Ex.: R$ 80,00 ou 50%"/>
-                </label>
-                <button type="button" disabled={condicoes.length===1}
-                  onClick={()=>setCondicoes(a=>a.filter(x=>x.id!==c.id))}
-                  aria-label={'Remover forma de pagamento '+(i+1)}
-                  className="mb-0 rounded-xl border p-3 text-red-600 disabled:cursor-not-allowed disabled:opacity-30"><Trash2 size={16}/></button>
-              </div>)}
-            </div>
-            <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-              <button type="button" onClick={adicionarCondicao} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700"><Plus size={15}/> Adicionar outra forma de pagamento</button>
-              <label className="text-xs font-bold">Validade da proposta (dias)
-                <input className={baseInput+' mt-1 w-40'} type="number" min="1" max="365" value={validadeDias} onChange={e=>setValidadeDias(e.target.value)} placeholder="A definir"/>
-              </label>
-            </div>
-          </section>
+          <CondicoesPagamentoOrcamentoPreview
+            condicoes={condicoes}
+            total={valorFinalConhecido}
+            temPendencias={totalPendente}
+            clienteId={identificacao.clienteId}
+            clienteNome={identificacao.clienteNome}
+            destinoSaldo={destinoSaldo}
+            inputClass={baseInput}
+            onAlterar={alterarCondicao}
+            onAdicionar={adicionarCondicao}
+            onRemover={id=>setCondicoes(a=>a.filter(c=>c.id!==id))}
+            onDestinoSaldo={setDestinoSaldo}
+            onDescontoAdicional={aplicarDescontoAdicional}
+          >
+            <label className="text-xs font-bold">Validade da proposta (dias)
+              <input className={baseInput+' mt-1 w-40'} type="number" min="1" max="365"
+                value={validadeDias} onChange={e=>setValidadeDias(e.target.value)} placeholder="A definir"/>
+            </label>
+          </CondicoesPagamentoOrcamentoPreview>
 <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
             <label className="block text-sm font-black" htmlFor="observacoes-orc-produtos">Observações do orçamento (opcional)</label>
             <p className="mt-1 text-xs text-slate-500">Escreva prazos, entrega, condições de montagem e outras informações. O texto aparecerá somente na última página.</p>
@@ -356,7 +370,7 @@ export default function OrcamentoPreview(){
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={()=>{setRevisao(false);setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar para editar</button>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setIdentificacao(identificacaoVazia);setTipoDesconto('sem');setValorDesconto('');setObservacoes('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
+              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setIdentificacao(identificacaoVazia);setTipoDesconto('sem');setValorDesconto('');setCondicoes([{id:1,forma:'PIX',valor:''}]);setDestinoSaldo('a_definir');setObservacoes('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
               <button type="button" onClick={()=>gerarOrcamento()} disabled={descontoInvalido}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <FileText size={17}/> Gerar orçamento / Imprimir PDF <ArrowRight size={17}/>
