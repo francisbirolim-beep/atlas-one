@@ -427,6 +427,36 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
  * as medidas ainda estão em rascunho. NÃO altera o PDF final de fabricação.
  * Um item por folha evita reduzir ou cortar a foto.
  */
+async function carregarFotoVaoParaPdf(url: string): Promise<string> {
+  const origem = await carregarImagem(url)
+  if (!origem) throw new Error('Não foi possível carregar uma foto do vão. Verifique a conexão e tente novamente.')
+  // Fotos de celular podem superar 3 MB cada. Reduzir apenas no PDF,
+  // sem modificar o arquivo original, acelera a abertura e evita PDF pesado.
+  if (typeof document === 'undefined' || typeof Image === 'undefined') return origem
+  return await new Promise<string>((resolve, reject) => {
+    const foto = new Image()
+    foto.onload = () => {
+      try {
+        if (!foto.naturalWidth || !foto.naturalHeight) throw new Error('Imagem sem dimensões válidas.')
+        const escala = Math.min(1, 1600 / Math.max(foto.naturalWidth, foto.naturalHeight))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(foto.naturalWidth * escala))
+        canvas.height = Math.max(1, Math.round(foto.naturalHeight * escala))
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('Não foi possível preparar a imagem para impressão.')
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(foto, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.78))
+      } catch {
+        reject(new Error('Não foi possível preparar a foto do vão para o PDF.'))
+      }
+    }
+    foto.onerror = () => reject(new Error('Falha ao ler a foto do vão para impressão.'))
+    foto.src = origem
+  })
+}
+
 export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, itens: MedicaoItem[], salvar = true) {
   if (medicao.tipo_medicao === 'contramarco') {
     throw new Error('A ficha de fotos dos vãos é destinada à medição de tipologias.')
@@ -439,6 +469,7 @@ export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, i
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   let primeiraPagina = true
   let fotosEncontradas = 0
+  let fotosInseridas = 0
 
   for (const [indice, item] of itens.entries()) {
     const fotos = dados.fotos.filter(f =>
@@ -511,21 +542,16 @@ export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, i
 
       const foto = fotos[fotoIndice]
       if (foto?.url) {
-        const imagem = await carregarImagem(foto.url)
-        if (imagem) {
-          try {
-            const info = doc.getImageProperties(imagem)
-            const escala = Math.min((largura - 6) / info.width, (altura - 9) / info.height)
-            const w = info.width * escala
-            const h = info.height * escala
-            doc.addImage(imagem, formatoImagem(imagem), 15 + (largura - w) / 2, y + (altura - h) / 2, w, h, undefined, 'FAST')
-          } catch {
-            doc.setFontSize(8)
-            doc.text('Não foi possível incorporar esta foto ao PDF.', 19, y + 11)
-          }
-        } else {
-          doc.setFontSize(8)
-          doc.text('Foto registrada, mas indisponível para carregar no PDF.', 19, y + 11)
+        const imagem = await carregarFotoVaoParaPdf(foto.url)
+        try {
+          const info = doc.getImageProperties(imagem)
+          const escala = Math.min((largura - 6) / info.width, (altura - 9) / info.height)
+          const w = info.width * escala
+          const h = info.height * escala
+          doc.addImage(imagem, formatoImagem(imagem), 15 + (largura - w) / 2, y + (altura - h) / 2, w, h, undefined, 'FAST')
+          fotosInseridas++
+        } catch {
+          throw new Error('A foto do vão não pôde ser incorporada ao PDF. Nenhum arquivo incompleto foi gerado.')
         }
       } else {
         doc.setFont('helvetica', 'normal')
@@ -546,6 +572,9 @@ export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, i
   // Falhar explicitamente caso a consulta das fotos não tenha retornado nenhuma.
   // Nunca apresentar uma ficha vazia como se as evidências tivessem sido impressas.
   if (!fotosEncontradas) throw new Error('Nenhuma foto do vão foi encontrada nesta medição.')
+  if (fotosInseridas !== fotosEncontradas) {
+    throw new Error('Nem todas as fotos dos vãos foram incorporadas ao PDF. Tente novamente.')
+  }
   if (salvar) {
     doc.save(`medida-final-fotos-dos-vaos-${medicao.id}.pdf`)
   }

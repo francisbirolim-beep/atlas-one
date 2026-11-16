@@ -58,6 +58,12 @@ async function main() {
 
   urls = []
   await assert.rejects(gerarPdfMedicaoFinalComFotosDoVao(medicao,itens,false),/Nenhuma foto do v.o/, 'não imprimir sem foto como se estivesse tudo certo')
-  console.log('PASS: PDF com foto embutida, rascunho identificado, peça sem foto, A4 e emissão final preservada.')
+  urls = [{item_id:'i1',url:'https://fotos-indisponiveis.local/vao-1.jpg',legenda:'Foto do vão / local',categoria:'checklist:foto_vao'}]
+  await assert.rejects(gerarPdfMedicaoFinalComFotosDoVao(medicao,itens,false),/Não foi possível carregar uma foto/, 'falha na foto não pode gerar PDF aparentemente completo')
+  const editor=fs.readFileSync('components/medicao-final/EditorLayoutA4.tsx','utf8')
+  assert.match(editor,/href=\{pdfExibidoUrl\}/,'botão de impressão precisa abrir o PDF exibido')
+  assert.match(editor,/src=\{pdfExibidoUrl\}/,'prévia precisa exibir o mesmo PDF com fotos')
+  assert.match(editor,/setPreviaFotoVaoUrl\(URL.createObjectURL/,'botão de fotos precisa ativar a prévia com fotos')
+  console.log('PASS: fotos embutidas, arquivo incompleto bloqueado, prévia e impressão sincronizadas, A4 e emissão final preservada.')
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>{require.extensions['.ts']=originalTs})

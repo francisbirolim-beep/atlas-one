@@ -74,6 +74,27 @@ export default function DetalheMedicaoFinal() {
   const [erroImportarPdf, setErroImportarPdf] = useState('')
   const [processandoConferencia, setProcessandoConferencia] = useState(false)
   const [editorLayoutAberto, setEditorLayoutAberto] = useState(false)
+  const [previsaoFotoVaoUrl, setPrevisaoFotoVaoUrl] = useState<string | null>(null)
+  const [gerandoFotoVao, setGerandoFotoVao] = useState(false)
+  const [erroFotoVao, setErroFotoVao] = useState('')
+
+  useEffect(() => () => {
+    if (previsaoFotoVaoUrl) URL.revokeObjectURL(previsaoFotoVaoUrl)
+  }, [previsaoFotoVaoUrl])
+
+  async function abrirPdfFotoVao() {
+    if (!medicao || gerandoFotoVao) return
+    setGerandoFotoVao(true)
+    setErroFotoVao('')
+    try {
+      const doc = await gerarPdfMedicaoFinalComFotosDoVao(medicao, itens, false)
+      setPrevisaoFotoVaoUrl(URL.createObjectURL(doc.output('blob')))
+    } catch (e) {
+      setErroFotoVao(e instanceof Error ? e.message : 'Não foi possível incluir as fotos no PDF.')
+    } finally {
+      setGerandoFotoVao(false)
+    }
+  }
 
   const master = usuario?.role === 'master'
   const ehContramarco = medicao?.tipo_medicao === 'contramarco'
@@ -593,6 +614,17 @@ export default function DetalheMedicaoFinal() {
       </header>
 
       {editorLayoutAberto && <EditorLayoutA4 medicao={medicao} itens={itens} obraId={(medicao as MedicaoFinal & { obra_id?: string | null }).obra_id || null} podeEditar={master} fechar={() => setEditorLayoutAberto(false)} />}
+      {previsaoFotoVaoUrl && <div className="fixed inset-0 z-[120] overflow-y-auto bg-slate-950/70 p-3 md:p-8" role="dialog" aria-modal="true" aria-label="Impressão com fotos dos vãos">
+        <div className="mx-auto max-w-5xl rounded-xl bg-white p-3 md:p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-lg font-bold text-slate-900">Medida Final com fotos dos vãos</h2><p className="text-xs text-slate-600">Confira as fotos nesta prévia antes de imprimir. Peças incompletas são identificadas como pendentes.</p></div>
+            <div className="flex gap-2"><a href={previsaoFotoVaoUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white">Abrir este PDF / imprimir</a>
+              <button type="button" onClick={() => setPrevisaoFotoVaoUrl(null)} className="rounded-lg border px-3 py-2 text-sm font-semibold">Fechar</button>
+            </div>
+          </div>
+          <iframe title="Prévia A4 com fotos reais dos vãos" src={previsaoFotoVaoUrl} className="h-[75vh] w-full rounded-lg border bg-white" />
+        </div>
+      </div>}
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -617,13 +649,15 @@ export default function DetalheMedicaoFinal() {
           {!ehContramarco && itens.length > 0 && (
             <button
               type="button"
-              onClick={() => void gerarPdfMedicaoFinalComFotosDoVao(medicao, itens)
-                .catch(e => alert(e instanceof Error ? e.message : 'Falha ao gerar PDF com fotos dos vãos.'))}
-              className="inline-flex items-center gap-1.5 rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+              onClick={() => void abrirPdfFotoVao()}
+              disabled={gerandoFotoVao}
+              className="inline-flex items-center gap-1.5 rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-50"
             >
-              <Camera size={16} /> Imprimir Medida Final com fotos dos vãos
+              {gerandoFotoVao ? <Loader2 size={16} className="animate-spin" /> : <Camera size={16} />}
+              {gerandoFotoVao ? 'Carregando as fotos dos vãos...' : 'Visualizar e imprimir com fotos dos vãos'}
             </button>
           )}
+          {erroFotoVao && <p role="alert" className="w-full rounded-lg border border-red-300 bg-red-50 p-2 text-sm text-red-700">{erroFotoVao}</p>}
           {itens.length > 0 && (
             <button
               onClick={() => gerarPdfMedicaoFinal(medicao, itens)}
