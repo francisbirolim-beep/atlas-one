@@ -69,6 +69,7 @@ export default function OrcamentoPreview(){
   const [condicoes,setCondicoes]=useState<{id:number;forma:string;detalhe:string}[]>([{id:1,forma:'PIX',detalhe:''}])
   const proximaCondicao=useRef(1)
   const [validadeDias,setValidadeDias]=useState('')
+  const [observacoes,setObservacoes]=useState('')
   const [documento,setDocumento]=useState<OrcamentoDocumento|null>(null)
   const [mostrarPendencias,setMostrarPendencias]=useState(false)
   useEffect(()=>{let ativo=true;void lerDadosEmpresa().then(d=>{if(ativo)setEmpresa(d||null)}).catch(()=>{});return()=>{ativo=false}},[])
@@ -139,7 +140,8 @@ export default function OrcamentoPreview(){
       cliente,empresa,tipologias:[],produtos:produtosDocumento,
       subtotal:valorConhecido,desconto:descontoAplicado,totalProdutos:valorFinalConhecido,
       temPendencias:totalPendente,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.detalhe})),
-      validadeDias,data:new Date().toLocaleDateString('pt-BR')
+      validadeDias,data:new Date().toLocaleDateString('pt-BR'),
+      referencia:'PREV-'+String(Date.now()),observacoes:observacoes.trim()
     })
   }
   function adicionarProduto(p:Produto){setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1}]});setAviso('')}
@@ -354,6 +356,14 @@ export default function OrcamentoPreview(){
               </label>
             </div>
           </section>
+<section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
+            <label className="block text-sm font-black" htmlFor="observacoes-orc-produtos">Observações do orçamento (opcional)</label>
+            <p className="mt-1 text-xs text-slate-500">Escreva prazos, entrega, condições de montagem e outras informações. O texto aparecerá somente na última página.</p>
+            <textarea id="observacoes-orc-produtos" className={baseInput+' mt-3 min-h-[100px] resize-y'}
+              value={observacoes} onChange={e=>setObservacoes(e.target.value)}
+              maxLength={480} placeholder="Ex.: prazo de entrega de 15 dias úteis; retirada no balcão."/>
+            <p className="mt-1 text-right text-[11px] text-slate-500">{observacoes.length}/480 caracteres</p>
+          </section>
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
             <b>Prévia de orçamento:</b> o documento terá logotipo original, dados da empresa, produtos, imagens cadastradas, quantidades, valores, desconto e condições de pagamento. Nenhum orçamento é salvo nem enviado ao cliente e nenhum recebimento é registrado.
           </div>
@@ -361,7 +371,7 @@ export default function OrcamentoPreview(){
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={()=>{setRevisao(false);setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar para editar</button>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setCliente('');setTipoDesconto('sem');setValorDesconto('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
+              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setCliente('');setTipoDesconto('sem');setValorDesconto('');setObservacoes('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
               <button type="button" onClick={()=>gerarOrcamento()} disabled={descontoInvalido}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <FileText size={17}/> Gerar orçamento / Imprimir PDF <ArrowRight size={17}/>
