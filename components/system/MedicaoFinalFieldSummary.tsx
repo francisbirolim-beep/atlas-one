@@ -31,6 +31,7 @@ const RESUMO_VAZIO: ResumoMedicaoV2 = {
   totalLinhas: 0,
   totalPecas: 0,
   pecasMedidas: 0,
+  pecasComRegistro: 0,
   pecasEmAndamento: 0,
   percentualAndamento: 0,
   pecasProntasEnvio: 0,
@@ -427,11 +428,12 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
           <div className="mt-5 flex items-end justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-900">Progresso da medição</p>
-              <p className="mt-1 text-xs text-slate-500">{resumo.pecasMedidas} de {resumo.totalPecas} peças concluídas · {resumo.pecasEmAndamento} em andamento</p>
+              <p className="mt-1 text-xs text-slate-500">{resumo.pecasComRegistro} de {resumo.totalPecas} peças com medição documentada</p>
+              <p className="mt-1 text-[11px] text-slate-500">{resumo.pecasMedidas} checklist(s) concluído(s) · {resumo.pecasEmAndamento} em andamento</p>
             </div>
             <span className="text-2xl font-bold text-emerald-700">{resumo.percentualAndamento}%</span>
           </div>
-          <p className="mt-2 text-[10px] text-slate-400">Andamento estimado: peça iniciada vale 50%; só peça concluída conta para finalizar.</p>
+          <p className="mt-2 text-[10px] text-slate-500">Percentual real: peças com seis medidas válidas ou foto original de trena salva. O checklist é conferido separadamente antes de concluir.</p>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.min(100, Math.max(0, resumo.percentualAndamento))}%` }} />
           </div>
