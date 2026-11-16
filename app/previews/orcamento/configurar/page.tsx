@@ -70,6 +70,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const [condicoes,setCondicoes]=useState<{id:number;forma:string;valor:string}[]>([{id:1,forma:'PIX',valor:''}])
   const proximaCondicao=useRef(1)
   const [validade,setValidade]=useState('')
+  const [observacoes,setObservacoes]=useState('')
   const [documento,setDocumento]=useState<OrcamentoDocumento|null>(null)
 
   useEffect(()=>{
@@ -260,7 +261,8 @@ export default function ConfiguradorOrcamentoSobMedida(){
     }))
     setDocumento({cliente,empresa,tipologias:ts,produtos:ps,subtotal,desconto:descontoValor,totalProdutos,
       temPendencias,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.valor})),
-      validadeDias:validade,data:new Date().toLocaleDateString('pt-BR')})
+      validadeDias:validade,data:new Date().toLocaleDateString('pt-BR'),
+      referencia:'PREV-'+String(Date.now()),observacoes:observacoes.trim()})
   }
 
   return <main className="min-h-screen bg-[#f3f6fb] px-3 pb-14 pt-5 text-slate-900 sm:px-6">
@@ -461,6 +463,14 @@ export default function ConfiguradorOrcamentoSobMedida(){
           {condicoes.map(c=><div key={c.id} className="mt-2 flex flex-wrap gap-2"><select className={input+' flex-1'} value={c.forma} onChange={e=>setCondicoes(a=>a.map(x=>x.id===c.id?{...x,forma:e.target.value}:x))}>{['PIX','Dinheiro','Cartão de débito','Cartão de crédito','Transferência','Boleto'].map(x=><option key={x}>{x}</option>)}</select><input className={input+' flex-1'} value={c.valor} onChange={e=>setCondicoes(a=>a.map(x=>x.id===c.id?{...x,valor:e.target.value}:x))} placeholder="Condição ou valor"/>{condicoes.length>1&&<button type="button" onClick={()=>setCondicoes(a=>a.filter(x=>x.id!==c.id))} className="text-red-700"><Trash2 size={16}/></button>}</div>)}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><button type="button" onClick={()=>{proximaCondicao.current++;setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',valor:''}])}} className="rounded-lg border px-3 py-2 text-xs font-bold">+ Outra condição</button><label className="text-xs font-bold">Validade (dias)<input className={input+' mt-1 w-36'} type="number" min="1" value={validade} onChange={e=>setValidade(e.target.value)} placeholder="A definir"/></label></div>
         </div>
+<section className="mt-4 rounded-xl border p-4">
+          <label className="block text-sm font-black" htmlFor="observacoes-orc-sob-medida">Observações do orçamento (opcional)</label>
+          <p className="mt-1 text-xs text-slate-500">Será impresso somente no encerramento, na última página do orçamento.</p>
+          <textarea id="observacoes-orc-sob-medida" className={input+' mt-3 min-h-[100px] resize-y'}
+            value={observacoes} onChange={e=>setObservacoes(e.target.value)}
+            maxLength={480} placeholder="Ex.: prazo de fabricação, condições de entrega, informações sobre montagem ou garantia."/>
+          <p className="mt-1 text-right text-[11px] text-slate-500">{observacoes.length}/480 caracteres</p>
+        </section>
         <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">A margem unitária não entra na fórmula da tipologia. O documento é apenas uma simulação; não será enviado, faturado nem gravado.</p>
         <div className="mt-4 flex flex-wrap justify-between gap-3"><button type="button" onClick={()=>setRevisao(false)} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar e ajustar</button><button type="button" onClick={()=>gerar()} disabled={descontoInvalido} className="inline-flex items-center gap-2 rounded-xl bg-indigo-700 px-5 py-3 text-xs font-bold text-white disabled:opacity-50"><FileText size={16}/> Gerar PDF do orçamento (prévia)</button></div>
       </section>}
