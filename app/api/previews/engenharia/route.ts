@@ -10,9 +10,11 @@ export const dynamic = 'force-dynamic'
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function GET(req: NextRequest) {
+  // Consultas somente leitura para usuários autorizados de orçamento ou venda.
   const usuario=await autenticarBalcao(req,'venda-balcao','consulta')
-  if(!usuario||usuario.role!=='master')
-    return NextResponse.json({error:'Prévia disponível somente para o perfil Master.'},{status:403})
+    ||await autenticarBalcao(req,'fazer-orcamento-msanfyvj','consulta')
+  if(!usuario)
+    return NextResponse.json({error:'Sem permissão de consulta comercial. Solicite acesso ao Master.'},{status:403})
 
   const tipo=req.nextUrl.searchParams.get('tipo')||'variaveis'
   try {
