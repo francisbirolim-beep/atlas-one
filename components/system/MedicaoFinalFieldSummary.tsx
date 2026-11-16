@@ -148,6 +148,10 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
   const pendenciasAbertas = pendencias.filter(p => p.status === 'aberta')
   const fluxoVendaBloqueado = Boolean(operacao?.orcamento_id) && operacao?.fluxo_venda_ativo === false
   const podeConcluir = resumo.totalPecas > 0 && resumo.percentual === 100 && resumo.itensAgrupados.length === 0 && pendenciasAbertas.length === 0 && !fluxoVendaBloqueado
+  const podeEnviarParcialDocumentada = resumo.pecasComRegistro > 0 &&
+    resumo.pecasComRegistro < resumo.totalPecas &&
+    ['em_medicao', 'com_pendencia'].includes(operacao?.status_operacional || '') &&
+    !fluxoVendaBloqueado
   const motivoNaoConcluir = fluxoVendaBloqueado
     ? 'Confirme a venda antes de concluir.'
     : resumo.totalPecas === 0
@@ -290,6 +294,43 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
       setMensagem(operacao?.iniciado_em ? 'Medição retomada.' : 'Medição iniciada.')
       await carregar()
       window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
+    } finally {
+      setProcessando(false)
+    }
+  }
+
+  async function enviarParcialDocumentada() {
+    if (!master || !podeEnviarParcialDocumentada || processando || responsaveisRevisao.length === 0) return
+    const quantidade = resumo.pecasComRegistro
+    if (!window.confirm(
+      `Encaminhar ${quantidade} de ${resumo.totalPecas} peças com medição documentada aos responsáveis para conferência?\n\nIsto não aprova a medição, não conclui checklists nem libera fabricação. A peça restante continuará aberta.`,
+    )) return
+    limparRetorno()
+    setProcessando(true)
+    try {
+      const token = await tokenAtual()
+      if (!token) { setErro('Sessão expirada. Entre novamente para enviar.'); return }
+      const resposta = await fetch(`/api/medicao-final/${medicaoId}/conferencia`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'enviar_registro_parcial', responsaveis: responsaveisRevisao }),
+      })
+      const dados = await resposta.json().catch(() => ({}))
+      if (!resposta.ok) { setErro(dados.error || 'Não foi possível enviar a parcial.'); return }
+      if (dados.simulado) {
+        setMensagem(`PRÉVIA: envio de ${dados.enviados} de ${resumo.totalPecas} posições simulado; nenhuma tarefa, notificação ou medição foi alterada.`)
+      } else if (dados.avisosPendentes) {
+        setErro(dados.mensagem || 'A parcial ficou registrada, porém os avisos precisam ser reenviados.')
+      } else {
+        setMensagem(`Parcial enviada: ${dados.enviados} medições documentadas, ${dados.pendentes} pendente(s), ${dados.notificados} responsável(is) avisado(s).`)
+      }
+      if (!dados.simulado) {
+        await carregar()
+        window.dispatchEvent(new CustomEvent('atlas-medicao-atualizada', { detail: { medicaoId } }))
+      }
+    } catch (e) {
+      console.error('Erro no envio da Medição Final parcial:', e)
+      setErro('Não foi possível confirmar o envio parcial.')
     } finally {
       setProcessando(false)
     }
@@ -466,6 +507,12 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
 
           {['em_medicao', 'com_pendencia'].includes(operacao?.status_operacional || '') && (
             <div className="mt-3 space-y-2">
+              {master && podeEnviarParcialDocumentada && (
+                <button type="button" onClick={() => setOperacoesAbertas(true)}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800">
+                  <ClipboardCheck size={14} /> Enviar parcial para conferência ({resumo.pecasComRegistro})
+                </button>
+              )}
               {resumo.pecasProntasEnvio > 0 && resumo.percentual < 100 && !fluxoVendaBloqueado && (
                 <button
                   type="button"
@@ -608,6 +655,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               </button>
             )}
 
+            {master && podeEnviarParcialDocumentada && (
+              <button type="button" onClick={() => document.getElementById('envio-parcial-documentado')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800">
+                <ClipboardCheck size={14} /> Enviar parcial registrada ({resumo.pecasComRegistro})
+              </button>
+            )}
+
             {['em_medicao', 'com_pendencia'].includes(operacao?.status_operacional || '') &&
               resumo.pecasProntasEnvio > 0 && resumo.percentual < 100 && !fluxoVendaBloqueado && (
               <button
@@ -650,6 +704,23 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
             </button>
           </div>
         </div>
+
+        {master && podeEnviarParcialDocumentada && (
+          <div id="envio-parcial-documentado" className="border-b border-blue-200 bg-blue-50/70 p-3 md:p-4">
+            <p className="text-sm font-bold text-blue-900">Encaminhar medição parcial para conferência</p>
+            <p className="mt-1 text-xs text-blue-800">
+              {resumo.pecasComRegistro} de {resumo.totalPecas} peças com medidas ou fotos de trena salvas.
+              O checklist técnico continua independente: {resumo.pecasMedidas} peça(s) totalmente concluída(s).
+              A peça restante permanece aberta.
+            </p>
+            {seletorResponsaveis}
+            <button type="button" disabled={processando || responsaveisRevisao.length === 0}
+              onClick={() => void enviarParcialDocumentada()}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-40">
+              <ClipboardCheck size={14} /> {processando ? 'Enviando...' : `Enviar parcial (${resumo.pecasComRegistro}) e avisar responsáveis`}
+            </button>
+          </div>
+        )}
 
         {revisando && (
           <div className="border-b border-blue-200 bg-blue-50/70 p-3 md:p-4">
