@@ -6,7 +6,9 @@ import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { buscarMedicao, listarItensMedicao } from '@/lib/medicaoFinal'
 import { lerAcessoUsuarioConfig } from '@/lib/acessoUsuario'
 import { listarPermissoesUsuario, listarSetores } from '@/lib/setores'
-import { carregarChecklistMedicaoV2, statusItemChecklistV2 } from '@/lib/medicaoChecklistV2'
+import { camposDoItemV2, carregarChecklistMedicaoV2, statusItemChecklistV2, valorRespostaItemV2 } from '@/lib/medicaoChecklistV2'
+import { valorValidoChecklist } from '@/lib/medicaoChecklistRegras'
+import { medicaoComprovada } from '@/lib/medicaoComprovacao'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import type { MedicaoItem, Usuario } from '@/lib/tipos'
 import {
@@ -23,6 +25,12 @@ type PecaResumo = {
   ambiente: string
   medido: boolean
   iniciado: boolean
+  comRegistro: boolean
+  pendencias: string[]
+  tipoEsquadria: string
+  folhas: string
+  larguraOrcada: number | null
+  alturaOrcada: number | null
   quantidade: number
   ordem: number
   medidoPor: string
@@ -53,6 +61,37 @@ function separarDescricao(descricao: string) {
   const partes = descricao.split(/\s+[—–]\s+/)
   if (partes.length < 2) return { tipologia: descricao, ambiente: 'Não informado' }
   return { tipologia: partes.slice(0, -1).join(' — '), ambiente: partes.at(-1) || 'Não informado' }
+}
+
+// Miniatura referencial baseada EXCLUSIVAMENTE no tipo e nas folhas do item vendido.
+ // Não representa detalhe de montagem nem substitui o croqui técnico aberto na peça.
+function MiniCroquiTipologia({ peca }: { peca: PecaResumo }) {
+  const texto = `${peca.tipoEsquadria} ${peca.tipologia}`.toLocaleLowerCase('pt-BR')
+  const folhasInformadas = peca.folhas.match(/\d+/)?.[0] || peca.descricao.match(/(\d+)\s*folhas?/i)?.[1]
+  const folhas = folhasInformadas ? Number(folhasInformadas) : 0
+  const qtdFolhas = Number.isInteger(folhas) && folhas >= 1 && folhas <= 8 ? folhas : 0
+  const correr = /correr/.test(texto)
+  const abrir = !correr && /abrir|pivotante|giro/.test(texto)
+  const maximAr = !correr && /maxim|basculante|projetante/.test(texto)
+  const dimensoes = peca.larguraOrcada && peca.alturaOrcada
+    ? `${peca.larguraOrcada} × ${peca.alturaOrcada} mm · orçamento`
+    : qtdFolhas ? `${qtdFolhas} folha(s) cadastrada(s)` : 'Referência da tipologia'
+  return (
+    <span className="flex w-[88px] shrink-0 flex-col items-center gap-0.5" title="Esquema referencial do item vendido; consulte o croqui técnico ao abrir a peça">
+      <svg role="img" aria-label={`Esquema referencial de ${peca.tipologia}, sem escala`}
+        viewBox="0 0 88 54" className="h-[48px] w-[84px] rounded-md border border-slate-200 bg-white">
+        <rect x="8" y="7" width="72" height="39" fill="#f8fafc" stroke="#475569" strokeWidth="2" />
+        {qtdFolhas > 1 && Array.from({ length: qtdFolhas - 1 }, (_, i) =>
+          <line key={i} x1={8 + 72 * (i + 1) / qtdFolhas} y1="7" x2={8 + 72 * (i + 1) / qtdFolhas} y2="46" stroke="#64748b" strokeWidth="1.2" />
+        )}
+        {correr && <><path d="M32 28 H14 M14 28 l5 -4 M14 28 l5 4" stroke="#2563eb" strokeWidth="1.6" fill="none" /><path d="M55 28 H74 M74 28 l-5 -4 M74 28 l-5 4" stroke="#2563eb" strokeWidth="1.6" fill="none" /></>}
+        {abrir && <path d="M10 9 L77 44" stroke="#2563eb" strokeWidth="1.4" strokeDasharray="3 2" />}
+        {maximAr && <path d="M10 10 L44 34 L78 10" stroke="#2563eb" strokeWidth="1.4" fill="none" />}
+        {!qtdFolhas && !correr && !abrir && !maximAr && <text x="44" y="34" fontSize="17" fill="#64748b" textAnchor="middle">?</text>}
+      </svg>
+      <span className="text-center text-[9px] leading-3 text-slate-500">{dimensoes}</span>
+    </span>
+  )
 }
 
 function itemIniciado(item: MedicaoItem) {
@@ -110,6 +149,11 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
       const descricao = item.descricao || item.tipo_outro_texto || item.tipo_esquadria || 'Peça'
       const partes = separarDescricao(descricao)
       const status = statusItemChecklistV2(item, checklist.campos, checklist.respostas)
+      const comRegistro = medicaoComprovada(item)
+      const pendencias = camposDoItemV2(checklist.campos, item, checklist.respostas)
+        .filter(campo => campo.obrigatorio && !valorValidoChecklist(campo, valorRespostaItemV2(item, campo, checklist.respostas)))
+        .map(campo => campo.nome)
+      if (!comRegistro) pendencias.unshift('Medidas ou fotos da trena')
       return {
         id: item.id,
         descricao,
@@ -117,6 +161,12 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
         ambiente: item.ambiente?.trim() || partes.ambiente,
         medido: status === 'concluida',
         iniciado: status !== 'pendente',
+        comRegistro,
+        pendencias,
+        tipoEsquadria: item.tipo_esquadria || '',
+        folhas: item.folhas || '',
+        larguraOrcada: Number(item.orcamento_largura_mm) > 0 ? Number(item.orcamento_largura_mm) : null,
+        alturaOrcada: Number(item.orcamento_altura_mm) > 0 ? Number(item.orcamento_altura_mm) : null,
         quantidade: Math.max(1, Number(item.quantidade || 1)),
         ordem: Number(item.ordem || 0),
         medidoPor: item.medido_por_nome || '',
@@ -171,6 +221,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
 
   const tempoExibido = tempoZerado ? 0 : parcial || !eventos.some(evento => evento.tipo === 'inicio') ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
   const feitas = pecas.filter(peca => peca.status === 'concluida').length
+  const registradas = pecas.filter(peca => peca.comRegistro).length
   const emAndamento = pecas.filter(peca => peca.status === 'em_andamento').length
   const pendentes = pecas.filter(peca => peca.status === 'pendente').length
   const iniciada = eventos.some(evento => evento.tipo === 'inicio')
@@ -339,7 +390,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
                 <p className="mt-0.5 text-xs text-slate-500">Visualize e acesse o checklist técnico de cada tipologia</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <span className="text-xs font-medium text-slate-500">{pecas.length} tipologia(s) · {feitas} concluída(s) · {emAndamento} em andamento · {pendentes} pendente(s)</span>
+                <span className="text-xs font-medium text-slate-500">{pecas.length} tipologia(s) · {registradas} com medição registrada · {feitas} checklist(s) concluído(s) · {pendentes} pendente(s)</span>
                 <button type="button" onClick={async () => {
                   const medicao = await buscarMedicao(medicaoId)
                   if (!medicao) {
@@ -359,9 +410,9 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
             </div>
 
             <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
-              <div className="hidden min-w-[860px] grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 md:grid"><span>#</span><span>Tipologia</span><span>Ambiente</span><span className="text-center">Quantidade</span><span>Status</span><span>Medido por / atualização</span><span /></div>
+              <div className="hidden min-w-[860px] grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 md:grid"><span>#</span><span>Croqui / tipologia</span><span>Ambiente</span><span className="text-center">Quantidade</span><span>Status</span><span>Medido por / atualização</span><span /></div>
               {pecasFiltradas.map((peca) => {
-                const status = peca.medido ? 'Concluída' : peca.iniciado ? 'Em andamento' : 'Pendente'
+                const status = peca.medido ? 'Concluída' : peca.comRegistro ? 'Registrada · conferir' : peca.iniciado ? 'Em andamento' : 'Pendente'
                 const podeRemoverPeca = podeRemoverItem && !peca.medido && !peca.iniciado
                 return (
                   <div key={peca.id} className="relative border-b border-slate-100 last:border-b-0">
@@ -371,7 +422,13 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
                       className={`grid w-full min-w-0 grid-cols-[38px_1fr_auto] items-center gap-2 px-3 py-3 text-left transition hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px] ${podeRemoverPeca ? 'pr-14 md:pr-14' : ''}`}
                     >
                       <span className="text-xs font-bold text-slate-500">{String(pecas.findIndex(p => p.id === peca.id) + 1).padStart(2, '0')}</span>
-                      <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : ''}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <MiniCroquiTipologia peca={peca} />
+                        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : ''}</span>
+                        {peca.pendencias.length > 0 && <span title={peca.pendencias.join(', ')} className="mt-0.5 block truncate text-[11px] text-amber-700">Falta conferir: {peca.pendencias.join(', ')}</span>}
+                        <span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
+                      </span>
                       <span className="hidden text-xs text-slate-600 md:block">{peca.ambiente}</span>
                       <span className="hidden text-center text-xs text-slate-600 md:block">{peca.quantidade}</span>
                       <span className={`hidden w-fit rounded-full px-2 py-1 text-[11px] font-semibold md:inline-flex ${peca.medido ? 'bg-emerald-50 text-emerald-700' : peca.iniciado ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{status}</span>
