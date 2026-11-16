@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ArrowRight, Check, ChevronDown, ClipboardList, DraftingCompass, FileText, Layers3, Plus, Search, Trash2 } from 'lucide-react'
-import { tokenAtual } from '@/lib/auth'
+import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import { lerDadosEmpresa } from '@/lib/configGeral'
 import { type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
@@ -12,12 +12,13 @@ import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
 import FotoTipologiaPreview from '@/components/previews/FotoTipologiaPreview'
 import VariaveisTipologiaPreview, { type CatalogoEngenharia } from '@/components/previews/VariaveisTipologiaPreview'
 import OrcamentoDocumentoPreview, { type OrcamentoDocumento, type ProdutoDocumento, type TipologiaDocumento } from '@/components/previews/OrcamentoDocumentoPreview'
+import { type DadosPrecosAluminio, type SimulacaoPrecoAluminio, lerSimulacaoPreco, precoCorEfetivo } from '@/lib/previews/precificacaoAluminio'
 
 type TipologiaCatalogo=Tipologia & {foto_url?:string|null;linhaIds:string[]}
 type Vidro={id:string;descricao:string;produtoAtlasId:string|null;referenciaNaoPrecificada:boolean}
 type Produto={id:string;codigo:string;nome:string;descricao:string;unidade:string;categoria:string;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null}
 type Item={produto:Produto;quantidade:number}
-type Medida={id:string;tipologia:TipologiaCatalogo;largura:number;altura:number;cor:string;linha:string;vidro:string;contramarco:string;quantidade:number;variaveis:{nome:string;valor:string}[];pendentes:number}
+type Medida={id:string;tipologia:TipologiaCatalogo;largura:number;altura:number;cor:string;corId:string;linha:string;vidro:string;vidroId:string;contramarco:string;quantidade:number;variaveis:{nome:string;valor:string}[];pendentes:number}
 const input='w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
 const moeda=(v:number)=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const valorUnitario=(p:Produto)=>p.precoPromocional!=null&&p.precoPromocional>0?p.precoPromocional:p.preco
@@ -37,7 +38,11 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const [etapa,setEtapa]=useState<1|2|3>(1)
   const [largura,setLargura]=useState('')
   const [altura,setAltura]=useState('')
-  const [cor,setCor]=useState('')
+  const [corId,setCorId]=useState('')
+  const [coresDados,setCoresDados]=useState<DadosPrecosAluminio|null>(null)
+  const [coresErro,setCoresErro]=useState('')
+  const [ajustesPrecos,setAjustesPrecos]=useState<SimulacaoPrecoAluminio>({})
+  const [mostrarPendencias,setMostrarPendencias]=useState(false)
   const [quantidade,setQuantidade]=useState('1')
   const [buscaTipologia,setBuscaTipologia]=useState('')
   const [filtroLinhaTipologia,setFiltroLinhaTipologia]=useState('')
@@ -95,6 +100,27 @@ export default function ConfiguradorOrcamentoSobMedida(){
     const ctrl=new AbortController()
     void (async()=>{
       try{
+        const usuario=await usuarioAtual()
+        const token=await tokenAtual()
+        if(!usuario||!token)throw Error('Faça login para consultar as cores.')
+        const r=await fetch('/api/previews/preco-aluminio',{
+          headers:{Authorization:'Bearer '+token},cache:'no-store',signal:ctrl.signal
+        })
+        const data=await r.json()
+        if(!r.ok)throw Error(data.error||'Não foi possível consultar a tabela de cores.')
+        if(!ctrl.signal.aborted){
+          setCoresDados({natural:data.natural??null,cores:data.cores||[]})
+          if(usuario.role==='master')setAjustesPrecos(lerSimulacaoPreco(usuario.id))
+          setCoresErro('')
+        }
+      }catch(e){if(!ctrl.signal.aborted)setCoresErro(e instanceof Error?e.message:'Erro na tabela de cores.')}
+    })()
+    return()=>ctrl.abort()
+  },[])
+  useEffect(()=>{
+    const ctrl=new AbortController()
+    void (async()=>{
+      try{
         const token=await tokenAtual();if(!token)return
         const r=await fetch('/api/previews/engenharia?tipo=vidros',{headers:{Authorization:'Bearer '+token},signal:ctrl.signal,cache:'no-store'})
         const data=await r.json()
@@ -135,6 +161,9 @@ export default function ConfiguradorOrcamentoSobMedida(){
     return()=>{ctrl.abort();clearTimeout(timer)}
   },[mostrarProdutos,buscaProduto,categoria,linhaProduto,filtroPreco])
 
+  const corSelecionada=coresDados?.cores.find(c=>c.id===corId)
+  const cor=corSelecionada?.nome||''
+  const precoCor=corSelecionada&&coresDados?precoCorEfetivo(corSelecionada,coresDados,ajustesPrecos):null
   const tipologia=tipologias.find(t=>t.id===tipologiaId)
   const linhasVinculadas=tipologia?linhasTecnicas.filter(l=>tipologia.linhaIds.includes(l.id)):[]
   // A busca textual e a linha superior trabalham no mesmo conjunto de vínculos reais.
