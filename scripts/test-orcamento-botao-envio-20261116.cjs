@@ -1,0 +1,18 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const source = fs.readFileSync(path.join(__dirname, '..', 'app/orcamento-rapido/page.tsx'), 'utf8')
+const footer = source.match(/<div className="fixed inset-x-0 bottom-0[\s\S]*?(?=\{resumo && <div)/)?.[0]
+assert.ok(footer, 'Barra fixa da coleta deve existir')
+assert.match(footer, /onClick=\{\(\) => void salvar\(\)\}/, 'Botão de envio abre a validação existente')
+assert.match(footer, /'Enviar orçamento'/, 'Envio visível no pedido comum')
+assert.match(footer, /'Salvar orçamento e continuar'/, 'Fluxo sob medida preservado')
+assert.match(footer, /disabled=\{salvando\}/, 'Bloqueia novo clique durante o envio')
+assert.match(footer, /onClick=\{\(\)=>setResumo\(true\)\}/, 'Resumo segue disponível')
+assert.match(footer, /onClick=\{adicionar\}/, 'Adicionar item segue disponível')
+assert.match(source, /async function salvar\(\) \{[\s\S]*?setConferenciaAberta\(true\)/, 'Envio mantém validação e conferência')
+assert.match(source, /onClick=\{\(\) => void confirmarEnvio\(\)\}/, 'Confirmação final segue disponível')
+assert.match(source, /const resultado = await criarOrcamentoNoServidor\(dadosForm\)/, 'Persistência original mantida')
+assert.match(source, /pb-40 pt-5 sm:px-6 sm:pb-28/, 'Conteúdo não deve ficar sob o rodapé móvel')
+console.log('OK: botão de envio visível; resumo, conferência e fluxo sob medida preservados')
