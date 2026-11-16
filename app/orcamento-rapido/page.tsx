@@ -1039,7 +1039,7 @@ export default function OrcamentoRapido() {
         </div>
       </div>
 
-      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className="mx-auto max-w-6xl space-y-4 px-3 pb-28 pt-5 sm:px-6 sm:pt-6">
+      <main onInput={() => setRascunhoIniciado(true)} onChange={() => setRascunhoIniciado(true)} className="mx-auto max-w-6xl space-y-4 px-3 pb-40 pt-5 sm:px-6 sm:pb-28 sm:pt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="mb-1 text-xs font-bold uppercase tracking-widest text-blue-600">Etapa de levantamento</p>
@@ -1312,10 +1312,11 @@ export default function OrcamentoRapido() {
         </div>
       </main>
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <p className="hidden text-xs font-semibold text-slate-600 sm:block">{itens.length} itens no levantamento · Rascunho individual por cliente</p>
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
+          <p className="hidden text-xs font-semibold text-slate-600 lg:block">{itens.length} itens no levantamento · Rascunho individual por cliente</p>
           <button type="button" onClick={adicionar} className={secundario}><Plus size={16}/> Adicionar</button>
-          <button type="button" onClick={()=>setResumo(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-800"><FileText size={17}/> Visualizar resumo</button>
+          <button type="button" onClick={()=>setResumo(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-3 py-3 text-sm font-extrabold text-white hover:bg-blue-800 sm:px-5"><FileText size={17}/> Visualizar resumo</button>
+          <button type="button" onClick={() => void salvar()} disabled={salvando} className="inline-flex min-w-[150px] flex-1 items-center justify-center gap-2 rounded-xl bg-brand-teal px-4 py-3 text-sm font-extrabold text-white hover:brightness-95 disabled:opacity-60 sm:flex-none"><Send size={17}/>{salvando ? 'Enviando...' : fluxoSobMedida ? 'Salvar orçamento e continuar' : 'Enviar orçamento'}</button>
         </div>
       </div>
       {resumo && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3" role="dialog" aria-modal="true" aria-label="Resumo da coleta">
