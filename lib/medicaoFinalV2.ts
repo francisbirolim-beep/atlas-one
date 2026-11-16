@@ -9,6 +9,7 @@ export type ResumoMedicaoV2 = {
   totalLinhas: number
   totalPecas: number
   pecasMedidas: number
+  pecasEmAndamento: number
   pecasProntasEnvio: number
   pecasEmConferencia: number
   pecasAprovadas: number
@@ -71,7 +72,10 @@ export type ResultadoTransicaoMedicao = {
 
 export async function carregarResumoMedicaoV2(medicaoId: string): Promise<ResumoMedicaoV2> {
   const dados = await carregarChecklistMedicaoV2(medicaoId)
-  const itens = dados.itens.map(item => ({ ...item, medido: statusItemChecklistV2(item, dados.campos, dados.respostas) === 'concluida' }))
+  const itens = dados.itens.map(item => {
+    const statusChecklist = statusItemChecklistV2(item, dados.campos, dados.respostas)
+    return { ...item, statusChecklist, medido: statusChecklist === 'concluida' }
+  })
   const totalPecas = itens.reduce((total, item) => total + Math.max(1, item.quantidade || 1), 0)
 
   // Regra conservadora: uma linha antiga com quantidade 3 e apenas um conjunto
@@ -90,6 +94,8 @@ export async function carregarResumoMedicaoV2(medicaoId: string): Promise<Resumo
     totalLinhas: itens.length,
     totalPecas,
     pecasMedidas,
+    // Evidenciar avanço de preenchimento sem confundir com conclusão.
+    pecasEmAndamento: itens.filter(item => item.statusChecklist === 'em_andamento').length,
     pecasProntasEnvio: itens.filter(item => item.medido && item.status_medicao === 'concluida').length,
     pecasEmConferencia: itens.filter(item => item.status_medicao === 'aguardando_conferencia').length,
     pecasAprovadas: itens.filter(item => item.status_medicao === 'aprovada').length,

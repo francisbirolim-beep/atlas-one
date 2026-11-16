@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { ItemEsquadria } from '@/lib/tipos'
+import { interpretarTresLeiturasTrena } from '@/lib/medicaoLeituraManual'
 
 type Eixo = 'largura' | 'altura'
 type CampoMedida =
@@ -43,9 +44,27 @@ export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
     altura: { tipo: 'ocioso', mensagem: '' },
   })
   const processados = useRef(new Set<string>())
+  const [entradaManual, setEntradaManual] = useState<Record<Eixo, string>>({ largura: '', altura: '' })
 
   function atualizarEstado(eixo: Eixo, estado: EstadoLeitura) {
     setEstados(prev => ({ ...prev, [eixo]: estado }))
+  }
+
+  function aplicarManual(eixo: Eixo) {
+    const valores = interpretarTresLeiturasTrena(entradaManual[eixo])
+    if (!valores) {
+      atualizarEstado(eixo, {
+        tipo: 'erro',
+        mensagem: 'Informe três leituras de cima para baixo. Exemplo: 1.509 1.507 1.501 (metros) ou 1509 1507 1501 (mm).',
+      })
+      return
+    }
+    const mapeados = eixo === 'largura' ? [valores[2], valores[1], valores[0]] : valores
+    CAMPOS[eixo].forEach((campo, index) => onAtualizar(campo, mapeados[index]))
+    atualizarEstado(eixo, {
+      tipo: 'sucesso',
+      mensagem: 'Leituras aplicadas manualmente em milímetros. Confira as posições e clique em Salvar medidas. A foto original está preservada.',
+    })
   }
 
   async function analisar(eixo: Eixo, manual = false) {
@@ -109,9 +128,16 @@ export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
         ? [medidas[2], medidas[1], medidas[0]]
         : medidas
 
-      CAMPOS[eixo].forEach((campo, index) => onAtualizar(campo, Math.round(medidasParaCampos[index])))
-
       const confianca = Math.round((Number(json?.confianca) || 0) * 100)
+      if (confianca < 75) {
+        setEntradaManual(prev => ({ ...prev, [eixo]: medidas.join(' ') }))
+        atualizarEstado(eixo, {
+          tipo: 'erro',
+          mensagem: 'A IA identificou os três valores, mas com confiança insuficiente. Confira o visor e confirme manualmente. Nenhum campo foi alterado.',
+        })
+        return
+      }
+      CAMPOS[eixo].forEach((campo, index) => onAtualizar(campo, Math.round(medidasParaCampos[index])))
       const ordem = eixo === 'largura' ? 'Baixo · Meio · Cima' : 'Direita · Meio · Esquerda'
       atualizarEstado(eixo, {
         tipo: 'sucesso',
@@ -147,7 +173,7 @@ export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
         return (
           <div
             key={eixo}
-            className={`flex items-start gap-2 rounded-lg px-2.5 py-2 text-[10px] ${
+            className={`flex flex-wrap items-start gap-2 rounded-lg px-2.5 py-2 text-[10px] ${
               estado.tipo === 'sucesso'
                 ? 'bg-emerald-50 text-emerald-700'
                 : estado.tipo === 'erro'
@@ -175,10 +201,29 @@ export default function LeituraTrenaIA({ item, onAtualizar }: Props) {
                 <RefreshCw size={12} />
               </button>
             )}
+            {estado.tipo === 'erro' && (
+              <div className="w-full rounded-lg border border-amber-200 bg-white p-2.5">
+                <label className="block text-xs font-semibold text-amber-900">
+                  Conferência manual — três números do visor ({eixo})
+                  <input type="text" inputMode="decimal"
+                    aria-label={'Três leituras da trena de ' + eixo + ', de cima para baixo'}
+                    value={entradaManual[eixo]}
+                    onChange={e => setEntradaManual(prev => ({ ...prev, [eixo]: e.target.value }))}
+                    placeholder={eixo === 'largura' ? '1.509 1.507 1.501' : '2.265 2.267 2.264'}
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                  />
+                </label>
+                <p className="mt-1 text-[11px] text-slate-600">Informe em ordem de cima para baixo. Aceita metros (1.509) ou milímetros (1509). Não altera nada sem sua confirmação.</p>
+                <button type="button" onClick={() => aplicarManual(eixo)}
+                  className="mt-2 rounded-md bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800">
+                  Aplicar leituras para conferir
+                </button>
+              </div>
+            )}
           </div>
         )
       })}
-      <p className="text-[10px] text-slate-400">A IA sugere as medidas; confira o visor antes de salvar o orçamento.</p>
+      <p className="text-[10px] text-slate-400">A IA apenas sugere valores. Confira o visor e salve as seis medidas desta peça antes de concluir.</p>
     </div>
   )
 }

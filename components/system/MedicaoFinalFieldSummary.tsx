@@ -31,6 +31,7 @@ const RESUMO_VAZIO: ResumoMedicaoV2 = {
   totalLinhas: 0,
   totalPecas: 0,
   pecasMedidas: 0,
+  pecasEmAndamento: 0,
   pecasProntasEnvio: 0,
   pecasEmConferencia: 0,
   pecasAprovadas: 0,
@@ -96,8 +97,13 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
     // A tela legada salva o item no proprio estado local. Enquanto a Medicao
     // Final nao emite um evento compartilhado, esse refresh leve mantem o
     // progresso e o status sincronizados sem interferir no formulario.
-    const timer = window.setInterval(() => void carregar(), 5000)
-    return () => window.clearInterval(timer)
+    const atualizarAgora = () => void carregar()
+    window.addEventListener('atlas-medicao-atualizada', atualizarAgora)
+    const timer = window.setInterval(atualizarAgora, 5000)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('atlas-medicao-atualizada', atualizarAgora)
+    }
   }, [carregar])
 
   useEffect(() => {
@@ -139,6 +145,9 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
   }, [operacao?.responsavel_nome, resumo.medidores])
 
   const statusAtual = STATUS[operacao?.status_operacional || 'aguardando_liberacao'] || STATUS.aguardando_liberacao
+  const percentualIniciadas = resumo.totalPecas > 0
+    ? Math.round((Math.min(resumo.totalPecas, resumo.pecasMedidas + resumo.pecasEmAndamento) / resumo.totalPecas) * 100)
+    : 0
   const pendenciasAbertas = pendencias.filter(p => p.status === 'aberta')
   const fluxoVendaBloqueado = Boolean(operacao?.orcamento_id) && operacao?.fluxo_venda_ativo === false
   const podeConcluir = resumo.totalPecas > 0 && resumo.percentual === 100 && resumo.itensAgrupados.length === 0 && pendenciasAbertas.length === 0 && !fluxoVendaBloqueado
@@ -423,12 +432,18 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
             <div>
               <p className="text-sm font-semibold text-slate-900">Progresso da medição</p>
               <p className="mt-1 text-xs text-slate-500">{resumo.pecasMedidas} de {resumo.totalPecas} peças concluídas</p>
+              <p className="mt-1 text-xs font-semibold text-blue-700">{resumo.pecasEmAndamento} em andamento · {percentualIniciadas}% das peças iniciadas</p>
             </div>
             <span className="text-2xl font-bold text-emerald-700">{resumo.percentual}%</span>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${Math.min(100, Math.max(0, resumo.percentual))}%` }} />
           </div>
+
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100" aria-label={`${percentualIniciadas}% das peças iniciadas`}>
+            <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${percentualIniciadas}%` }} />
+          </div>
+          <p className="mt-1 text-[10px] text-slate-500">Verde: concluídas. Azul: iniciadas ou concluídas.</p>
 
           <div className="mt-auto pt-4">
             <p className="inline-flex items-center gap-1.5 text-xs text-slate-500"><UserRound size={13} /> Responsável: <span className="font-semibold text-slate-700">{responsavelExibicao}</span></p>
@@ -526,6 +541,7 @@ export default function MedicaoFinalFieldSummary({ medicaoId, embedded = false }
               </div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                 <span className="inline-flex items-center gap-1.5"><Ruler size={13} /> {resumo.pecasMedidas}/{resumo.totalPecas} peças medidas</span>
+                <span className="font-semibold text-blue-700">{resumo.pecasEmAndamento} em andamento ({percentualIniciadas}% iniciadas)</span>
                 <span className="inline-flex items-center gap-1.5"><UserRound size={13} /> {responsavelExibicao}</span>
                 {pendenciasAbertas.length > 0 && (
                   <span className="inline-flex items-center gap-1.5 font-medium text-amber-700"><AlertTriangle size={13} /> {pendenciasAbertas.length} pendência(s)</span>

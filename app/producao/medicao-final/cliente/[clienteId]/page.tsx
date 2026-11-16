@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { criarMedicaoDoOrcamento, criarMedicaoManualCliente, verificarFluxoVendaOrcamento, type TipoMedicaoFinal } from '@/lib/medicaoFinal'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import type { Usuario } from '@/lib/tipos'
+import { orcamentoVendidoParaMedicao } from '@/lib/medicaoOrcamentosVendidos'
 
 type ClienteResumo = { id: string; nome: string; cidade?: string | null }
 type OrcamentoItemResumo = {
@@ -33,7 +34,7 @@ type OrcamentoResumo = {
   revisao_atual?: boolean | null
   descricao_livre?: string | null
   itens?: unknown[] | null
-  wvetro_fluxo?: { origem?: string | null; numero?: string | null; cliente_nome_wvetro?: string | null } | null
+  wvetro_fluxo?: { origem?: string | null; numero?: string | null; cliente_nome_wvetro?: string | null; situacao?: string | null; validacao_manual_cliente?: boolean | null; fonte_registro?: string | null } | null
 }
 
 type CandidatoItemWVetro = {
@@ -113,6 +114,7 @@ export default function AbrirMedidaFinalCliente() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [cliente, setCliente] = useState<ClienteResumo | null>(null)
   const [orcamentos, setOrcamentos] = useState<OrcamentoResumo[]>([])
+  const [orcamentosComVenda, setOrcamentosComVenda] = useState<Set<string>>(new Set())
   const [medicoes, setMedicoes] = useState<MedicaoResumo[]>([])
   const [historicosWVetro, setHistoricosWVetro] = useState<HistoricoWVetroResumo[]>([])
   const [candidatosWVetro, setCandidatosWVetro] = useState<CandidatoWVetro[]>([])
@@ -146,7 +148,7 @@ export default function AbrirMedidaFinalCliente() {
         return
       }
 
-      const [c, o, m, h] = await Promise.all([
+      const [c, o, m, h, v] = await Promise.all([
         supabase.from('clientes').select('id,nome,cidade').eq('id', clienteId).maybeSingle(),
         supabase
           .from('orcamentos')
@@ -167,14 +169,18 @@ export default function AbrirMedidaFinalCliente() {
           .eq('somente_historico', true)
           .order('data_emissao', { ascending: false })
           .limit(200),
+        // Fonte de verdade da venda confirmada. Não exibir propostas não vendidas.
+        supabase.from('vendas_obras').select('orcamento_id').eq('cliente_id', clienteId),
       ])
 
       if (c.error || !c.data) throw new Error('Cliente não encontrado.')
       if (o.error) throw o.error
       if (m.error) throw m.error
       if (h.error) throw h.error
+      if (v.error) throw new Error('Não foi possível conferir as vendas do cliente. Os orçamentos não serão exibidos até a conferência ficar disponível.')
       setCliente(c.data as ClienteResumo)
       setOrcamentos((o.data || []) as OrcamentoResumo[])
+      setOrcamentosComVenda(new Set((v.data || []).map(x => x.orcamento_id).filter((id): id is string => Boolean(id))))
       setMedicoes((m.data || []) as MedicaoResumo[])
       setHistoricosWVetro((h.data || []) as HistoricoWVetroResumo[])
     } catch (e) {
@@ -185,12 +191,17 @@ export default function AbrirMedidaFinalCliente() {
   }
 
   const orcamentosAtuais = useMemo(
-    () => orcamentos.filter(o => o.revisao_atual !== false),
-    [orcamentos]
+    () => orcamentos.filter(o => o.revisao_atual !== false && orcamentoVendidoParaMedicao(o, orcamentosComVenda)),
+    [orcamentos, orcamentosComVenda]
   )
   const candidatosVisiveis = useMemo(
-    () => candidatosWVetro.filter(c => c.statusValidacao !== 'rejeitado'),
+    () => candidatosWVetro.filter(c => c.statusValidacao !== 'rejeitado' && ['V', 'F'].includes(String(c.situacao || '').trim().toUpperCase())),
     [candidatosWVetro]
+  )
+  const medicoesDeVendas = useMemo(
+    () => medicoes.filter(m => m.orcamento_id &&
+      orcamentos.some(o => o.id === m.orcamento_id && orcamentoVendidoParaMedicao(o, orcamentosComVenda))),
+    [medicoes, orcamentos, orcamentosComVenda],
   )
   const candidatosDescartados = candidatosWVetro.filter(c => c.statusValidacao === 'rejeitado').length
 
@@ -447,11 +458,11 @@ export default function AbrirMedidaFinalCliente() {
               <p className="mt-1 text-xs">Primeiro faz o contramarco e depois a medida final das esquadrias.</p>
             </div>
 
-            {medicoes.length > 0 && (
+            {medicoesDeVendas.length > 0 && (
               <div className="mt-6">
                 <p className="mb-2 text-xs font-black uppercase tracking-[.1em] text-slate-400">Medições já iniciadas</p>
                 <div className="space-y-2">
-                  {medicoes.map(m => (
+                  {medicoesDeVendas.map(m => (
                     <Link key={m.id} href={`/producao/medicao-final/${m.id}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
                       <div>
                         <p className="text-sm font-bold text-slate-800">{tipoLabel(m.tipo_medicao)}</p>
@@ -483,16 +494,16 @@ export default function AbrirMedidaFinalCliente() {
             </div>
 
             <h2 className="text-xl font-black text-slate-900">Selecionar orçamento</h2>
-            <p className="mt-1 text-sm text-slate-500">Lista com as tipologias de cada um.</p>
+            <p className="mt-1 text-sm text-slate-500">Somente vendas confirmadas. Orçamentos em aberto não aparecem na Medida Final.</p>
 
             {mensagemSync && (
               <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">{mensagemSync}</div>
             )}
 
-            {candidatosWVetro.length > 0 && (
+            {candidatosVisiveis.length > 0 && (
               <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50/60 p-3">
                 <p className="text-sm font-black text-slate-900">Confirmar orçamento do W.Vetro</p>
-                <p className="mt-1 text-xs text-slate-500">Valide somente os registros que realmente pertencem a este cliente.</p>
+                <p className="mt-1 text-xs text-slate-500">Somente registros W.Vetro marcados como vendidos. Valide o vínculo antes de criar a medição.</p>
                 <div className="mt-3 space-y-2">
                   {candidatosVisiveis.map(candidato => {
                     const ocupado = candidatoOcupado === candidato.historicoId
@@ -572,22 +583,14 @@ export default function AbrirMedidaFinalCliente() {
 
               {orcamentosAtuais.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
-                  <p className="text-sm font-black text-slate-800">Nenhum orçamento operacional selecionado ainda.</p>
-                  <p className="mt-1 text-xs text-slate-500">Abra um orçamento W.Vetro acima, confira os itens e escolha qual será usado na Medida Final.</p>
+                  <p className="text-sm font-black text-slate-800">Nenhuma venda confirmada encontrada para este cliente.</p>
+                  <p className="mt-1 text-xs text-slate-500">Confirme a venda antes de criar a Medida Final. Para venda W.Vetro, use a sincronização e valide o vínculo vendido acima.</p>
                 </div>
               )}
             </div>
 
-            <button
-              onClick={iniciarSemOrcamento}
-              disabled={criando}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-blue-600 bg-white px-4 py-3 text-sm font-black text-blue-700 disabled:opacity-50"
-            >
-              {criando ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-              Iniciar sem orçamento
-            </button>
-            <p className="mt-2 text-center text-[11px] text-amber-700">
-              Medição sem orçamento é avulsa e não libera Engenharia, Compras ou Produção automaticamente.
+            <p className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
+              Neste acesso pelo Cliente 360, a Medida Final é exclusiva das vendas confirmadas. Medições avulsas continuam disponíveis no módulo Produção.
             </p>
           </section>
         )}

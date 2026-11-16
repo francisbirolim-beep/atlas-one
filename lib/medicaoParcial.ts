@@ -14,6 +14,7 @@ export type EstadoParcialMedicao = {
   parcial: boolean
   eventos: EventoHistoricoMedicao[]
   tempoAtivoMs: number
+  encerrada: boolean
 }
 
 async function resumoPecas(medicaoId: string) {
@@ -160,7 +161,7 @@ export async function carregarEstadoParcialMedicao(medicaoId: string): Promise<E
   const [{ data: medicao }, { data: revisoes, error }] = await Promise.all([
     supabase
       .from('medicoes_finais')
-      .select('iniciado_em, responsavel_nome')
+      .select('iniciado_em, responsavel_nome, status_operacional, concluido_em')
       .eq('id', medicaoId)
       .maybeSingle(),
     supabase
@@ -200,9 +201,17 @@ export async function carregarEstadoParcialMedicao(medicaoId: string): Promise<E
   const ultimo = eventos[eventos.length - 1]
   const parcial = ultimo?.tipo === 'parcial'
 
+  const encerrada = ['concluido', 'aprovado'].includes(medicao?.status_operacional || '') ||
+    Boolean(medicao?.concluido_em)
+  const dataFim = medicao?.concluido_em ? new Date(medicao.concluido_em).getTime() : Date.now()
   return {
     parcial,
     eventos,
-    tempoAtivoMs: calcularTempoAtivo(medicao?.iniciado_em || null, eventos),
+    encerrada,
+    // Não apagar o tempo trabalhado do histórico. Congelar no envio.
+    tempoAtivoMs: calcularTempoAtivo(
+      medicao?.iniciado_em || null, eventos,
+      Number.isFinite(dataFim) ? dataFim : Date.now(),
+    ),
   }
 }

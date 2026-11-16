@@ -24,6 +24,7 @@ type PecaResumo = {
   medido: boolean
   iniciado: boolean
   quantidade: number
+  folhas: number
   ordem: number
   medidoPor: string
   atualizadoEm: string
@@ -69,11 +70,25 @@ function itemIniciado(item: MedicaoItem) {
   )
 }
 
+/** Esquema simplificado da divisão de folhas; o croqui técnico com cotas permanece no detalhe. */
+function MiniCroquiTipologia({ folhas }: { folhas: number }) {
+  const totalFolhas = Math.min(8, Math.max(1, Math.round(folhas || 1)))
+  return <svg role="img" aria-label={`Croqui esquemático de ${totalFolhas} folha(s); abra para ver medidas`}
+    viewBox="0 0 84 50" className="h-12 w-[74px] shrink-0 rounded-md border border-slate-200 bg-white">
+    <rect x="8" y="8" width="68" height="34" rx="1" fill="#f8fafc" stroke="#475569" strokeWidth="2" />
+    {Array.from({ length: totalFolhas - 1 }, (_, i) =>
+      <line key={i} x1={8 + 68 * (i + 1) / totalFolhas} y1="8"
+        x2={8 + 68 * (i + 1) / totalFolhas} y2="42" stroke="#94a3b8" strokeWidth="1.5" />
+    )}
+  </svg>
+}
+
 export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo = 'completo', embedded = false }: { medicaoId: string; onSelecionarPeca?: (itemId: string) => void; modo?: 'completo' | 'controle' | 'lista'; embedded?: boolean }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [pecas, setPecas] = useState<PecaResumo[]>([])
   const [eventos, setEventos] = useState<EventoHistoricoMedicao[]>([])
   const [parcial, setParcial] = useState(false)
+  const [encerrada, setEncerrada] = useState(false)
   const [tempoBase, setTempoBase] = useState(0)
   const [carregadoEm, setCarregadoEm] = useState(Date.now())
   const [agora, setAgora] = useState(Date.now())
@@ -98,6 +113,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
     const instante = Date.now()
     setEventos(estado.eventos)
     setParcial(estado.parcial)
+    setEncerrada(estado.encerrada)
     setTempoBase(estado.tempoAtivoMs)
     setCarregadoEm(instante)
     setAgora(instante)
@@ -113,6 +129,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
         medido: status === 'concluida',
         iniciado: status !== 'pendente',
         quantidade: Math.max(1, Number(item.quantidade || 1)),
+        folhas: Number(String(item.folhas || item.descricao?.match(/(\d+)\s*folhas?/i)?.[1] || '1').match(/\d+/)?.[0]) || 1,
         ordem: Number(item.ordem || 0),
         medidoPor: item.medido_por_nome || '',
         atualizadoEm: item.medido_em || item.updated_at || '',
@@ -164,7 +181,10 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
     return () => { window.clearInterval(timer); window.removeEventListener('atlas-medicao-atualizada', atualizar) }
   }, [carregar])
 
-  const tempoExibido = parcial || !eventos.some(evento => evento.tipo === 'inicio') ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
+  // Após envio definitivo: cronômetro zerado para nova sessão,
+  // duração efetiva preservada em histórico.
+  const tempoExibido = encerrada ? 0 : parcial || !eventos.some(evento => evento.tipo === 'inicio')
+    ? tempoBase : tempoBase + Math.max(0, agora - carregadoEm)
   const feitas = pecas.filter(peca => peca.status === 'concluida').length
   const emAndamento = pecas.filter(peca => peca.status === 'em_andamento').length
   const pendentes = pecas.filter(peca => peca.status === 'pendente').length
@@ -221,7 +241,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
   }
 
   async function alternarParcial() {
-    if (processando) return
+    if (processando || encerrada) return
     setProcessando(true)
     setMensagem('')
     setErro('')
@@ -249,6 +269,7 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
           <div className="mt-3 flex items-center gap-2">
             <Clock3 size={17} className="text-slate-500" />
             <span className="text-xl font-bold tabular-nums text-slate-900">{formatarDuracao(tempoExibido)}</span>
+            {encerrada && <span className="text-xs font-semibold text-emerald-700">Encerrado</span>}
           </div>
           <div className="mt-4 grid grid-cols-3 gap-2">
             <div className="rounded-lg bg-emerald-50 px-2 py-2 text-center"><p className="text-lg font-bold text-emerald-700">{feitas}</p><p className="text-[10px] font-medium text-emerald-700">Concluídas</p></div>
@@ -256,10 +277,11 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
             <div className="rounded-lg bg-slate-100 px-2 py-2 text-center"><p className="text-lg font-bold text-slate-700">{pendentes}</p><p className="text-[10px] font-medium text-slate-600">Pendentes</p></div>
           </div>
           <div className="mt-auto pt-4">
-            <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada} className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
+            <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada || encerrada} className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
               {processando ? <Loader2 size={14} className="animate-spin" /> : parcial ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-              {parcial ? 'Retomar medição' : 'Salvar medição parcial'}
+              {encerrada ? 'Medição encerrada' : parcial ? 'Retomar medição' : 'Salvar medição parcial'}
             </button>
+            {encerrada && <p className="mt-1.5 text-[10px] text-slate-600">Tempo trabalhado registrado: {formatarDuracao(tempoBase)}. Cronômetro zerado após envio.</p>}
             {!iniciada && <p className="mt-1.5 text-[10px] text-slate-500">Inicie a medição antes de salvar como parcial.</p>}
           </div>
           <details className="pt-3"><summary className="cursor-pointer text-xs font-semibold text-slate-500">Histórico da medição</summary>
@@ -287,19 +309,20 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Controle da medição</p>
                 <div className="mt-1 flex flex-wrap items-center gap-3">
                   <span className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-900"><Clock3 size={16} /> {formatarDuracao(tempoExibido)}</span>
+                  {encerrada && <span className="text-xs text-emerald-700">Encerrado · total registrado {formatarDuracao(tempoBase)}</span>}
                   <span className="text-xs text-emerald-700">✓ {feitas} concluída(s)</span>
                   <span className="text-xs text-blue-700">◐ {emAndamento} em andamento</span>
                   <span className="text-xs text-slate-500">○ {pendentes} pendente(s)</span>
                 </div>
-                <p className="mt-1 text-xs text-slate-500">O tempo considera somente os períodos em que a medição esteve em andamento; ao salvar parcial, ele fica pausado.</p>
+                <p className="mt-1 text-xs text-slate-500">O tempo considera somente os períodos em andamento. Ao concluir e enviar a medição, o cronômetro zera e a duração permanece no histórico.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => setMostrarHistorico(valor => !valor)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
                   <History size={14} /> Histórico
                 </button>
-                <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
+                <button type="button" onClick={() => void alternarParcial()} disabled={processando || !iniciada || encerrada} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 ${parcial ? 'bg-blue-700 hover:bg-blue-800' : 'bg-amber-600 hover:bg-amber-700'}`}>
                   {processando ? <Loader2 size={14} className="animate-spin" /> : parcial ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-                  {parcial ? 'Retomar medição' : 'Salvar medição parcial'}
+                  {encerrada ? 'Medição encerrada' : parcial ? 'Retomar medição' : 'Salvar medição parcial'}
                 </button>
               </div>
             </div>
@@ -365,7 +388,10 @@ export default function MedicaoParcialPanel({ medicaoId, onSelecionarPeca, modo 
                       className={`grid w-full min-w-0 grid-cols-[38px_1fr_auto] items-center gap-2 px-3 py-3 text-left transition hover:bg-slate-50 md:grid-cols-[46px_1.7fr_1fr_90px_130px_140px_24px] ${podeRemoverPeca ? 'pr-14 md:pr-14' : ''}`}
                     >
                       <span className="text-xs font-bold text-slate-500">{String(pecas.findIndex(p => p.id === peca.id) + 1).padStart(2, '0')}</span>
-                      <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : ''}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <MiniCroquiTipologia folhas={peca.folhas} />
+                        <span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-800">{peca.tipologia}</span><span className="mt-0.5 block truncate text-[11px] text-slate-400">{peca.descricao !== peca.tipologia ? peca.descricao : 'Croqui esquemático; toque para medir'}</span><span className="block text-[11px] text-slate-400 md:hidden">{peca.ambiente}</span></span>
+                      </span>
                       <span className="hidden text-xs text-slate-600 md:block">{peca.ambiente}</span>
                       <span className="hidden text-center text-xs text-slate-600 md:block">{peca.quantidade}</span>
                       <span className={`hidden w-fit rounded-full px-2 py-1 text-[11px] font-semibold md:inline-flex ${peca.medido ? 'bg-emerald-50 text-emerald-700' : peca.iniciado ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>{status}</span>
