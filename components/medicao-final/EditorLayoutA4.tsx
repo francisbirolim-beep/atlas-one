@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, ExternalLink, Eye, Loader2, RotateCcw, Save, X } from 'lucide-react'
 import type { MedicaoFinal, MedicaoItem } from '@/lib/tipos'
-import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
+import { gerarPdfMedicaoFinal, gerarPdfMedicaoFinalComFotosDoVao } from '@/lib/medicaoFinalPdf'
 import {
   consultarConfiguracaoLayoutMedicaoA4, LAYOUT_MEDICAO_A4_PADRAO,
   restaurarLayoutGeralDaObra, salvarLayoutMedicaoA4, type LayoutMedicaoA4,
@@ -226,6 +226,14 @@ export default function EditorLayoutA4({ fechar, medicao, itens, obraId, podeEdi
         <div className="bg-slate-200/70 rounded-xl p-3 md:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <p className="inline-flex items-center gap-2 text-sm text-slate-700 font-semibold"><Eye size={16} /> Prévia real · papel A4 (210 × 297 mm)</p>
+            {medicao.tipo_medicao !== 'contramarco' && itens.length > 0 && (
+              <button type="button"
+                onClick={() => void gerarPdfMedicaoFinalComFotosDoVao(medicao, itens)
+                  .catch(e => setErro(e instanceof Error ? e.message : 'Falha ao gerar PDF com fotos dos vãos.'))}
+                className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100">
+                Imprimir com fotos dos vãos
+              </button>
+            )}
             {previaUrl && <a href={previaUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700"><ExternalLink size={13} />Abrir PDF / imprimir</a>}
           </div>
           {carregando || gerandoPrevia ? <p role="status" className="mb-2 flex items-center gap-2 text-sm text-slate-600"><Loader2 size={15} className="animate-spin" />{carregando ? 'Carregando configuração...' : 'Atualizando PDF com as medidas e fotos...'}</p> : null}

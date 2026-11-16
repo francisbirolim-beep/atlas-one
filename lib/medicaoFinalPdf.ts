@@ -421,6 +421,137 @@ export async function gerarPdfMedicaoFinal(medicao: MedicaoFinal, itens: Medicao
   return doc
 }
 
+
+/**
+ * Impressão adicional de conferência: inclui fotos reais do vão, mesmo quando
+ * as medidas ainda estão em rascunho. NÃO altera o PDF final de fabricação.
+ * Um item por folha evita reduzir ou cortar a foto.
+ */
+export async function gerarPdfMedicaoFinalComFotosDoVao(medicao: MedicaoFinal, itens: MedicaoItem[], salvar = true) {
+  if (medicao.tipo_medicao === 'contramarco') {
+    throw new Error('A ficha de fotos dos vãos é destinada à medição de tipologias.')
+  }
+  if (!itens.length) throw new Error('Esta medição ainda não possui tipologias.')
+  const [identificacao, dados] = await Promise.all([
+    identificacaoPdf(medicao),
+    carregarChecklistMedicaoV2(medicao.id),
+  ])
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  let primeiraPagina = true
+  let fotosEncontradas = 0
+
+  for (const [indice, item] of itens.entries()) {
+    const fotos = dados.fotos.filter(f =>
+      f.item_id === item.id &&
+      (f.categoria === 'checklist:foto_vao' ||
+        /foto do v[aã]o/i.test(f.legenda || ''))
+    )
+    fotosEncontradas += fotos.length
+    const paginas = Math.max(1, fotos.length)
+    for (let fotoIndice = 0; fotoIndice < paginas; fotoIndice++) {
+      if (!primeiraPagina) doc.addPage()
+      primeiraPagina = false
+      let y = 16
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(13)
+      doc.text('ATLAS ONE — MEDIDA FINAL COM FOTO DO VÃO', 15, y)
+      y += 8
+
+      const situacao = statusItemChecklistV2(item, dados.campos, dados.respostas)
+      doc.setFontSize(8)
+      if (situacao !== 'concluida') {
+        doc.setTextColor(166, 54, 24)
+        doc.text('FICHA DE CONFERÊNCIA — MEDIDAS PENDENTES — NÃO LIBERA FABRICAÇÃO', 15, y)
+      } else {
+        doc.setTextColor(20, 110, 64)
+        doc.text('MEDIÇÃO CONCLUÍDA — REGISTRO FOTOGRÁFICO DO VÃO', 15, y)
+      }
+      doc.setTextColor(0, 0, 0)
+      y += 9
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.text('Cliente: ' + texto(identificacao.cliente_nome || medicao.cliente_nome), 15, y, { maxWidth: 110 })
+      doc.text('Obra: ' + texto(identificacao.nome_obra), 132, y, { maxWidth: 63 })
+      y += 6
+      doc.text('Orçamento: ' + texto(identificacao.numero_orcamento), 15, y)
+      doc.text('Posição: ' + (indice + 1) + ' de ' + itens.length, 132, y)
+      y += 6
+      doc.setDrawColor(210, 220, 228)
+      doc.line(15, y, 195, y)
+      y += 7
+
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9.5)
+      const titulo = `${indice + 1}. ${texto(item.descricao || item.tipo_esquadria)} — ${texto(item.ambiente)} (${texto(item.quantidade)} un.)`
+      const tituloLinhas = doc.splitTextToSize(titulo, 180) as string[]
+      doc.text(tituloLinhas, 15, y)
+      y += tituloLinhas.length * 5 + 7
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5)
+      const linhas = [
+        `Largura: cima ${texto(item.largura_cima_mm)} mm | meio ${texto(item.largura_meio_mm)} mm | baixo ${texto(item.largura_baixo_mm)} mm`,
+        `Altura: esquerda ${texto(item.altura_esquerda_mm)} mm | meio ${texto(item.altura_meio_mm)} mm | direita ${texto(item.altura_direita_mm)} mm`,
+        `Vão: ${texto(item.vao_largura_mm)} × ${texto(item.vao_altura_mm)} mm | Produção: ${texto(item.producao_largura_mm)} × ${texto(item.producao_altura_mm)} mm`,
+      ]
+      for (const linha of linhas) {
+        doc.text(linha, 15, y, { maxWidth: 180 })
+        y += 7
+      }
+      y += 3
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.text('FOTO DO VÃO / LOCAL', 15, y)
+      y += 6
+
+      const largura = 180
+      const altura = Math.min(144, 271 - y)
+      doc.setDrawColor(208, 218, 226)
+      doc.rect(15, y, largura, altura)
+
+      const foto = fotos[fotoIndice]
+      if (foto?.url) {
+        const imagem = await carregarImagem(foto.url)
+        if (imagem) {
+          try {
+            const info = doc.getImageProperties(imagem)
+            const escala = Math.min((largura - 6) / info.width, (altura - 9) / info.height)
+            const w = info.width * escala
+            const h = info.height * escala
+            doc.addImage(imagem, formatoImagem(imagem), 15 + (largura - w) / 2, y + (altura - h) / 2, w, h, undefined, 'FAST')
+          } catch {
+            doc.setFontSize(8)
+            doc.text('Não foi possível incorporar esta foto ao PDF.', 19, y + 11)
+          }
+        } else {
+          doc.setFontSize(8)
+          doc.text('Foto registrada, mas indisponível para carregar no PDF.', 19, y + 11)
+        }
+      } else {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(9)
+        doc.text('Foto do vão ainda não cadastrada nesta tipologia.', 20, y + 15)
+      }
+      y += altura + 7
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7)
+      const rodape = foto ? `Foto ${fotoIndice + 1}/${fotos.length}: ${texto(foto.legenda || 'Vão / local')}` : 'Sem foto cadastrada'
+      doc.text(rodape, 15, y, { maxWidth: 180 })
+      doc.setTextColor(95, 105, 116)
+      doc.setFontSize(7)
+      doc.text('Conferência visual. Confira as medidas antes da fabricação.', 15, 288)
+      doc.setTextColor(0, 0, 0)
+    }
+  }
+  // Falhar explicitamente caso a consulta das fotos não tenha retornado nenhuma.
+  // Nunca apresentar uma ficha vazia como se as evidências tivessem sido impressas.
+  if (!fotosEncontradas) throw new Error('Nenhuma foto do vão foi encontrada nesta medição.')
+  if (salvar) {
+    doc.save(`medida-final-fotos-dos-vaos-${medicao.id}.pdf`)
+  }
+  return doc
+}
+
 /** Renderizador A4 opt-in: somente usado quando o administrador salva um layout diferente do original. */
 async function gerarPdfMedicaoFinalPersonalizado(
   medicao: MedicaoFinal,
