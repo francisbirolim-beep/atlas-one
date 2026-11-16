@@ -276,15 +276,78 @@ export default function OrcamentoPreview(){
           </div>
           {!!medidas.length&&<section className="mt-5"><h3 className="mb-2 font-black">Tipologias sob medida ({medidas.length})</h3>{medidas.map(m=><div key={m.id} className="mt-2 flex justify-between gap-4 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.folhas} folha(s) · {m.linha||'Linha pendente'} · {m.cor||'Cor a definir'} · {m.vidro||'Vidro a definir'} · Contramarco: {m.contramarco}</p></div><span className="shrink-0 font-bold text-amber-700">A precificar</span></div>)}</section>}
           {!!itens.length&&<section className="mt-5"><h3 className="mb-2 font-black">Produtos ({itens.length})</h3>{itens.map(i=><div key={i.produto.id} className="mt-2 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{i.quantidade} × {i.produto.nome}</b><p className="text-slate-500">{i.produto.codigo} · {i.produto.unidade}</p></div><b>{unitario(i.produto)!=null?moeda(unitario(i.produto)!*i.quantidade):'Sem preço'}</b></div>)}</section>}
-          <div className="mt-5 rounded-xl bg-blue-50 p-4"><div className="flex justify-between font-black"><span>Subtotal conhecido dos produtos</span><span>{moeda(valorConhecido)}</span></div>
-            {(medidas.length>0||semPreco>0)&&<p className="mt-2 text-xs font-bold text-amber-800">Total da proposta pendente: tipologias e/ou produtos sem preço dependem de precificação. Nenhum valor foi inventado.</p>}
-          </div>
+          <section className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <h3 className="text-sm font-black">Valores e desconto do orçamento</h3>
+            <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+              <span>Subtotal dos produtos com preço</span><b>{moeda(valorConhecido)}</b>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-bold text-slate-700">Aplicar desconto
+                <select className={baseInput+' mt-1'} value={tipoDesconto} onChange={e=>{setTipoDesconto(e.target.value as 'sem'|'percentual'|'valor');setAviso('')}}>
+                  <option value="sem">Sem desconto</option>
+                  <option value="valor">Desconto em valor (R$)</option>
+                  <option value="percentual">Desconto em porcentagem (%)</option>
+                </select>
+              </label>
+              <label className="text-xs font-bold text-slate-700">{tipoDesconto==='percentual'?'Porcentagem do desconto':tipoDesconto==='valor'?'Valor do desconto em R$':'Valor do desconto (opcional)'}
+                <input className={baseInput+' mt-1'} inputMode="decimal" value={valorDesconto} onChange={e=>{setValorDesconto(e.target.value);setAviso('')}} placeholder={tipoDesconto==='percentual'?'Ex.: 10':'Ex.: 25,00'} disabled={tipoDesconto==='sem'}/>
+              </label>
+            </div>
+            {descontoInvalido&&<p role="alert" className="mt-3 text-xs font-bold text-red-700">Informe um desconto válido: percentual entre 0 e 100 ou valor até o subtotal conhecido.</p>}
+            <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+              <span>Desconto aplicado</span><b>- {moeda(descontoAplicado)}</b>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-blue-200 pt-3 text-base font-black text-blue-800">
+              <span>{totalPendente?'Subtotal ajustado conhecido':'Valor final do orçamento'}</span><span>{moeda(valorFinalConhecido)}</span>
+            </div>
+            {totalPendente&&<p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+              Orçamento com {semPreco} produto(s) sem preço e {medidas.length} tipologia(s) a precificar. O valor geral é pendente e não será apresentado como total definitivo.
+            </p>}
+          </section>
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4">
+            <h3 className="text-sm font-black">Condições de pagamento da proposta</h3>
+            <p className="mt-1 text-xs text-slate-500">Escolha uma ou mais formas de pagamento. Estas são condições propostas, sem registrar recebimento.</p>
+            <div className="mt-3 space-y-3">
+              {condicoes.map((c,i)=><div key={c.id} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto] items-end gap-2">
+                <label className="min-w-0 text-xs font-bold">Forma {i+1}
+                  <select className={baseInput+' mt-1'} value={c.forma} onChange={e=>alterarCondicao(c.id,'forma',e.target.value)}>
+                    {formasPagamento.map(forma=><option key={forma} value={forma}>{forma}</option>)}
+                  </select>
+                </label>
+                <label className="min-w-0 text-xs font-bold">Valor ou condição
+                  <input className={baseInput+' mt-1'} value={c.detalhe} onChange={e=>alterarCondicao(c.id,'detalhe',e.target.value)}
+                    placeholder="Ex.: R$ 80,00 ou 50%"/>
+                </label>
+                <button type="button" disabled={condicoes.length===1}
+                  onClick={()=>setCondicoes(a=>a.filter(x=>x.id!==c.id))}
+                  aria-label={'Remover forma de pagamento '+(i+1)}
+                  className="mb-0 rounded-xl border p-3 text-red-600 disabled:cursor-not-allowed disabled:opacity-30"><Trash2 size={16}/></button>
+              </div>)}
+            </div>
+            <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+              <button type="button" onClick={adicionarCondicao} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-bold text-blue-700"><Plus size={15}/> Adicionar outra forma de pagamento</button>
+              <label className="text-xs font-bold">Validade da proposta (dias)
+                <input className={baseInput+' mt-1 w-40'} type="number" min="1" max="365" value={validadeDias} onChange={e=>setValidadeDias(e.target.value)} placeholder="A definir"/>
+              </label>
+            </div>
+          </section>
           <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-            <b>Somente prévia:</b> as variáveis ainda não executam fórmulas de engenharia, corte, perdas ou margem de tipologias. A integração definitiva será feita depois da sua aprovação.
+            <b>Prévia de orçamento:</b> o documento terá logotipo original, dados da empresa, produtos, imagens cadastradas, quantidades, valores, desconto e condições de pagamento. Nenhum orçamento é salvo nem enviado ao cliente e nenhum recebimento é registrado.
           </div>
-          <div className="mt-5 flex flex-wrap justify-between gap-3"><button type="button" onClick={()=>setRevisao(false)} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar para editar</button><button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setCliente('')}} className="rounded-xl bg-blue-700 px-5 py-3 text-xs font-bold text-white">Nova simulação</button></div>
+          {aviso&&<p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{aviso}</p>}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <button type="button" onClick={()=>{setRevisao(false);setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar para editar</button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setCliente('');setTipoDesconto('sem');setValorDesconto('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
+              <button type="button" onClick={gerarOrcamento} disabled={descontoInvalido}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                <FileText size={17}/> Gerar orçamento / Imprimir PDF <ArrowRight size={17}/>
+              </button>
+            </div>
+          </div>
         </section>}
       </>}
     </div>
+    {documento&&<OrcamentoDocumentoPreview dados={documento} fechar={()=>setDocumento(null)}/>}
   </main>
 }
