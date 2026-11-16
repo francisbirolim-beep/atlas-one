@@ -521,8 +521,8 @@ export default function OrcamentoRapido() {
 
   async function salvarRascunhoAgora() {
     if (salvandoRascunhoManual) return
-    if (!clienteNome.trim() || !rascunhoUsuarioId) {
-      setErroSalvamentoLocal('Selecione ou informe o cliente e aguarde sua sessão para salvar o rascunho.')
+    if (!clienteNome.trim()) {
+      setErroSalvamentoLocal('Informe o nome do cliente para salvar o rascunho.')
       return
     }
     setSalvandoRascunhoManual(true)
@@ -538,7 +538,10 @@ export default function OrcamentoRapido() {
   }
 
   useEffect(() => {
-    if (!rascunhoCarregado || !rascunhoIniciado || salvando || salvo || salvoOffline || !clienteNome.trim() || !rascunhoUsuarioId) return
+    // O primeiro nome preenchido (também por seleção/prefill) deve gerar rascunho.
+    // Falhas transitórias ao resolver o perfil não podem impedir a proteção local:
+    // quando o ID da sessão chegar, a mesma chave será atualizada com o autor.
+    if (!rascunhoCarregado || salvando || salvo || salvoOffline || !clienteNome.trim()) return
     const timer = window.setTimeout(() => {
       salvarRascunho(rascunhoChave, montarRascunhoAtual())
         .then(() => { setRascunhoSalvoEm(new Date().toISOString()); setErroSalvamentoLocal('') })
@@ -1053,7 +1056,7 @@ export default function OrcamentoRapido() {
           <div><span className="mr-1 inline-flex align-middle"><Info size={16}/></span>
             {rascunhoSalvoEm ? 'Rascunho de ' + clienteNome + ' salvo neste aparelho às ' + new Date(rascunhoSalvoEm).toLocaleTimeString('pt-BR') : clienteNome.trim() ? 'O rascunho deste cliente será salvo automaticamente durante o preenchimento.' : 'Novo orçamento em branco. Informe o cliente para começar a salvar o rascunho.'}
           </div>
-          <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual || !clienteNome.trim() || !rascunhoUsuarioId} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-900 disabled:opacity-50">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
+          <button type="button" onClick={()=>void salvarRascunhoAgora()} disabled={salvandoRascunhoManual || !clienteNome.trim()} className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-900 disabled:opacity-50">{salvandoRascunhoManual?'Salvando...':'Salvar medição agora'}</button>
           {erroSalvamentoLocal && <p role="alert" className="w-full text-xs font-semibold text-red-700">{erroSalvamentoLocal}</p>}
         </div>
 
