@@ -20,7 +20,7 @@ import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { uploadFotoMedicao } from '@/lib/upload'
 import { salvarFotoMedicaoItem, salvarFotoCampoExtraMedicao } from '@/lib/medicaoFoto'
 import { listarTipologias } from '@/lib/tipologias'
-import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
+import { gerarPdfMedicaoFinal, gerarPdfMedicaoFinalComFotosDoVao } from '@/lib/medicaoFinalPdf'
 import { gerarPdfPlanoCorteContramarcos } from '@/lib/contramarcoPlanoCortePdf'
 import { obterRascunho, salvarPendente, salvarRascunho } from '@/lib/offlineFila'
 import ContramarcoFlow from '@/components/medicao-final/ContramarcoFlow'
@@ -612,6 +612,16 @@ export default function DetalheMedicaoFinal() {
               onClick={() => void gerarPdfPlanoCorteContramarcos(medicao, itens)}
               className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900">
               <FileText size={16}/> Plano de Corte A4
+            </button>
+          )}
+          {!ehContramarco && itens.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void gerarPdfMedicaoFinalComFotosDoVao(medicao, itens)
+                .catch(e => alert(e instanceof Error ? e.message : 'Falha ao gerar PDF com fotos dos vãos.'))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              <Camera size={16} /> Imprimir Medida Final com fotos dos vãos
             </button>
           )}
           {itens.length > 0 && (
