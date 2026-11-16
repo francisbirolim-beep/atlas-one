@@ -36,7 +36,7 @@ export default function ReciboVendaPreview(props:ReciboProps){
   const {aberto,fechar,nomeCliente,nomeAssinatura,documento,cidade,obra,tipoDestino,dataHora,itens,subtotal,desconto,total,recebido,saldo,status,formas,empresa}=props
   if(!aberto)return null
   const situacao=status==='quitada'?'Quitada (simulação)':status==='parcial'?'Recebimento parcial · saldo marcado':'Marcada · sem recebimento'
-  const data=dataHora?new Date(dataHora).toLocaleString('pt-BR'):'—'
+  const data=dataHora?new Date(dataHora).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'
   const logo=empresa?.logoUrl?.startsWith('https://')?empresa.logoUrl:LOGOTIPO_PDF_FUNDO_CLARO
   const empresaNome=empresa?.nome||'Esquadrifácio Soluções em Alumínio'
   const vinculo=tipoDestino==='obra'?'Obra '+(obra||'—'):tipoDestino==='cliente'?'Cliente cadastrado':'Venda ao consumidor'
@@ -62,7 +62,7 @@ export default function ReciboVendaPreview(props:ReciboProps){
               <p className="text-[10px] text-slate-600">{[empresa?.endereco,empresa?.cidadeUf,empresa?.cep?'CEP '+empresa.cep:null].filter(Boolean).join(' · ')}</p>
               <p className="text-[10px] text-slate-600">{[empresa?.cnpj?'CNPJ '+empresa.cnpj:null,empresa?.tel?'Telefone '+empresa.tel:null,empresa?.email].filter(Boolean).join(' · ')}</p>
             </div>
-            <div className="shrink-0 text-right"><h1 className="text-sm font-black">COMPROVANTE DE VENDA</h1><p className="mt-1 text-[10px]">{data}</p><p className="mt-1 text-[10px] font-bold text-amber-700">SIMULAÇÃO · NÃO FISCAL</p>{paginas.length>1&&<p className="text-[10px]">Parte {indice+1}/{paginas.length}</p>}</div>
+            <div className="shrink-0 text-right"><h1 className="text-sm font-black">COMPROVANTE DE VENDA</h1><p className="mt-1 text-[10px]">Data e hora: {data}</p><p className="mt-1 text-[10px] font-bold text-amber-700">SIMULAÇÃO · NÃO FISCAL</p>{paginas.length>1&&<p className="text-[10px]">Parte {indice+1}/{paginas.length}</p>}</div>
           </header>
           <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-b pb-2 text-[10px]">
             <p><span className="text-slate-500">Cliente: </span><b>{nomeCliente}</b></p>
@@ -90,9 +90,9 @@ export default function ReciboVendaPreview(props:ReciboProps){
               <div className="mt-2 flex justify-between border-t pt-1 text-[12px] font-black"><span>Valor final</span><span>{moeda(total)}</span></div>
             </section>
           </div>}
-          {ultima&&<div className="mt-7 grid grid-cols-2 gap-8 text-center text-[10px]">
-            <div><div className="border-t border-slate-600 pt-1">Assinatura do cliente</div><p className="mt-1">{nomeAssinatura||nomeCliente}</p></div>
-            <div><div className="border-t border-slate-600 pt-1">Responsável / Esquadrifácio</div></div>
+          {ultima&&<div className="mt-7 text-center text-[10px]">
+            <div className="mx-auto w-1/2 border-t border-slate-600 pt-1">Assinatura do cliente</div>
+            <p className="mt-1">{nomeAssinatura||nomeCliente}</p>
           </div>}
           <footer className="mt-3 border-t pt-1 text-center text-[9px] font-semibold uppercase text-amber-700">Prévia sem validade fiscal ou comprobatória. Nenhuma venda, quitação ou dívida registrada.</footer>
         </div>
