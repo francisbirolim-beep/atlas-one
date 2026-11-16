@@ -31,19 +31,27 @@ function Foto({url,nome,logo=false}:{url?:string|null;nome:string;logo?:boolean}
   return <img src={url!} alt={nome} loading="eager" onError={()=>setFalhou(true)}
     className={logo?'oc-logo':'oc-foto'}/>
 }
+/** Estimativas em mm alinhadas às fotos e linhas compactas do CSS.
+ * Os textos continuam completos: somente espaçamento e tipografia são reduzidos.
+ */
 function itemAltura(item:ItemDocumento,precos:Precos){
-  const largo=precos==='so_total'?98:85
+  const caracteres=precos==='so_total'?115:100
   if(item.tipo==='tipologia'){
     const vars=item.t.variaveis.map(x=>x.nome+': '+x.valor).join(' · ')
-    return Math.max(item.t.imagem?14:10,9+Math.ceil(item.t.nome.length/largo)*2.7+Math.ceil(vars.length/110)*2.6)
+    return Math.max(item.t.imagem?10.6:8,6.4+
+      Math.max(1,Math.ceil(item.t.nome.length/caracteres))*2.15+
+      Math.max(1,Math.ceil(vars.length/135))*2)
   }
-  return Math.max(item.p.imagem?14:10,8+Math.ceil(item.p.nome.length/largo)*2.6+Math.ceil((item.p.descricao||'').length/110)*2.5)
+  return Math.max(item.p.imagem?10.6:7.5,6.3+
+    Math.max(1,Math.ceil(item.p.nome.length/caracteres))*2.1+
+    (item.p.descricao?Math.ceil(item.p.descricao.length/140)*1.85:0))
 }
 function fechamentoAltura(d:OrcamentoDocumento){
   const cond=d.condicoes.filter(c=>c.forma)
   const observacao=d.observacoes.trim()
-  const linhas=observacao.split('\n').reduce((sum,x)=>sum+Math.max(1,Math.ceil(x.length/110)),0)
-  return Math.max(15,11+cond.length*3)+15+(observacao?5+linhas*3:0)+(d.temPendencias?4:0)
+  const linhas=observacao.split('\n').reduce((sum,x)=>sum+Math.max(1,Math.ceil(x.length/125)),0)
+  return Math.max(13,9+cond.length*2.6)+10+
+    (observacao?3.5+linhas*2.5:0)+(d.temPendencias?3:0)
 }
 /** Prioriza mais produtos em cada metade A4, guardando o fechamento só para o final. */
 function paginar(d:OrcamentoDocumento,precos:Precos):Pagina[]{
@@ -55,7 +63,7 @@ function paginar(d:OrcamentoDocumento,precos:Precos):Pagina[]{
   const fim=fechamentoAltura(d),paginas:Pagina[]=[]
   let index=0
   while(index<itens.length){
-    const capacidade=paginas.length?126:103
+    const capacidade=paginas.length?128:104
     const sobrando=itens.slice(index).reduce((a,item)=>a+itemAltura(item,precos),0)
     if(sobrando+fim<=capacidade){paginas.push({itens:itens.slice(index)});break}
     const inicio=index
@@ -69,43 +77,44 @@ function paginar(d:OrcamentoDocumento,precos:Precos):Pagina[]{
     paginas.push({itens:itens.slice(inicio,index)})
   }
   const ultima=paginas[paginas.length-1]
-  const capacidade=paginas.length===1?103:126
+  const capacidade=paginas.length===1?104:128
   const usado=ultima.itens.reduce((v,item)=>v+itemAltura(item,precos),0)
   if(usado+fim>capacidade){
     if(ultima.itens.length>1){
       const removido=ultima.itens.pop()!
       paginas.push({itens:[removido]})
-      if(itemAltura(removido,precos)+fim>126)paginas.push({itens:[]})
+      // Encerramento em continuação só quando realmente não cabe junto a um item.
+      if(itemAltura(removido,precos)+fim>128)paginas.push({itens:[]})
     }else paginas.push({itens:[]})
   }
   return paginas
 }
 
-/** Impressão física em A4 vertical: 2 blocos de 148,5 mm em cada folha. */
+/** A4 vertical: 2 blocos. Folga de 1 mm evita página extra em Safari/WebKit. */
 const css='\
-.oc-folha{box-sizing:border-box;width:210mm;height:297mm;margin:0 auto 15px;background:white;display:flex;flex-direction:column;box-shadow:0 12px 30px #0003;overflow:hidden}\
-.oc-metade{box-sizing:border-box;width:210mm;height:148.5mm;flex:0 0 148.5mm;overflow:hidden;padding:5mm 9mm;display:flex;flex-direction:column;background:white;color:#182334;font:7.7pt/1.19 Arial,Helvetica,sans-serif}\
+.oc-folha{box-sizing:border-box;width:210mm;height:296mm;margin:0 auto 15px;background:white;display:flex;flex-direction:column;box-shadow:0 12px 30px #0003;overflow:hidden}\
+.oc-metade{box-sizing:border-box;width:210mm;height:148mm;flex:0 0 148mm;overflow:hidden;padding:4mm 9mm;display:flex;flex-direction:column;background:white;color:#182334;font:7.4pt/1.15 Arial,Helvetica,sans-serif}\
 .oc-metade+.oc-metade{border-top:1px dashed #cbd5e1}\
 .oc-header{display:flex;justify-content:space-between;gap:4mm;border-bottom:1px solid #334155;padding-bottom:1mm}\
-.oc-header h3{font-size:7.7pt;font-weight:800;margin:.6mm 0 .3mm}.oc-header p{font-size:6.8pt;line-height:1.14;margin:0;color:#475569}\
-.oc-logo{display:block;max-width:42mm;height:9mm;width:auto;object-fit:contain;object-position:left center}\
+.oc-header h3{font-size:7.5pt;font-weight:800;margin:.3mm 0 .2mm}.oc-header p{font-size:6.8pt;line-height:1.1;margin:0;color:#475569}\
+.oc-logo{display:block;max-width:42mm;height:8mm;width:auto;object-fit:contain;object-position:left center}\
 .oc-titulo{text-align:right;flex-shrink:0}.oc-titulo h1{font-size:12pt;font-weight:800;margin:0 0 .5mm}.oc-titulo b{font-size:8pt}.oc-titulo p{font-size:6.9pt;margin:.4mm 0}\
 .oc-continua{display:flex;justify-content:space-between;gap:3mm;font-size:7.5pt;font-weight:700;border-bottom:1px solid #cbd5e1;padding-bottom:1.5mm}\
-.oc-cliente{display:flex;justify-content:space-between;gap:3mm;border-bottom:1px solid #e2e8f0;padding:1.6mm 0;font-size:7.2pt}\
-.oc-tabela{width:100%;border-collapse:collapse;table-layout:fixed;text-align:left;margin-top:1.5mm;font-size:7.6pt}\
-.oc-tabela th{font-size:6.9pt;background:#f3f5f7;padding:1.2mm .8mm;border-bottom:1px solid #cbd5e1}\
-.oc-tabela td{padding:1.3mm .8mm;vertical-align:top;border-bottom:1px solid #e2e8f0}\
+.oc-cliente{display:flex;justify-content:space-between;gap:3mm;border-bottom:1px solid #e2e8f0;padding:1.1mm 0;font-size:7.1pt}\
+.oc-tabela{width:100%;border-collapse:collapse;table-layout:fixed;text-align:left;margin-top:1mm;font-size:7.3pt}\
+.oc-tabela th{font-size:6.8pt;background:#f3f5f7;padding:.8mm .7mm;border-bottom:1px solid #cbd5e1}\
+.oc-tabela td{padding:.6mm .7mm;vertical-align:middle;border-bottom:1px solid #e2e8f0}\
 .oc-direita{text-align:right;white-space:nowrap}.oc-item{display:flex;gap:1.5mm;min-width:0;align-items:flex-start}\
-.oc-foto{display:block;flex:0 0 12mm;width:12mm;height:12mm;object-fit:contain}\
-.oc-item-texto{min-width:0;overflow-wrap:anywhere}.oc-item-texto b{font-size:7.5pt;line-height:1.16}.oc-item-texto p{font-size:6.9pt;color:#64748b;margin:.5mm 0 0;line-height:1.15}\
-.oc-final{margin-top:2.5mm;font-size:7pt;break-inside:avoid}.oc-final-grid{display:grid;grid-template-columns:1fr 1fr;gap:2mm}\
-.oc-quadro{border:1px solid #cbd5e1;border-radius:1.5mm;padding:1.8mm;min-width:0}.oc-quadro p{margin:.8mm 0 0;overflow-wrap:anywhere}\
+.oc-foto{display:block;flex:0 0 9.5mm;width:9.5mm;height:9.5mm;object-fit:contain}\
+.oc-item-texto{min-width:0;overflow-wrap:anywhere}.oc-item-texto b{font-size:7.1pt;line-height:1.1}.oc-item-texto p{font-size:6.7pt;color:#64748b;margin:.3mm 0 0;line-height:1.1}\
+.oc-final{margin-top:1.6mm;font-size:7pt;break-inside:avoid}.oc-final-grid{display:grid;grid-template-columns:1fr 1fr;gap:2mm}\
+.oc-quadro{border:1px solid #cbd5e1;border-radius:1.5mm;padding:1.3mm;min-width:0}.oc-quadro p{margin:.5mm 0 0;overflow-wrap:anywhere}\
 .oc-total-linha{display:flex;justify-content:space-between;gap:2mm;margin-bottom:.8mm}.oc-total{border-top:1px solid #94a3b8;margin-top:1mm;padding-top:1mm;font-weight:800;font-size:8pt}\
 .oc-observacoes{border:1px solid #cbd5e1;border-radius:1mm;padding:1.8mm 2mm;margin-top:2mm;overflow-wrap:anywhere}\
 .oc-observacoes p{margin:.6mm 0 0;white-space:pre-wrap}\
-.oc-assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:10mm;text-align:center;font-size:6.9pt;margin-top:6mm}\
+.oc-assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:10mm;text-align:center;font-size:6.9pt;margin-top:4mm}\
 .oc-assinaturas span{display:block;border-top:1px solid #94a3b8;padding-top:.8mm}\
-.oc-rodape{margin-top:auto;border-top:1px solid #e2e8f0;padding-top:.8mm;font-size:6.5pt;text-align:center;color:#9a3412}\
+\
 @media screen and (max-width:840px){.oc-visual{overflow-x:auto}.oc-folha{margin-left:0;margin-right:0}}\
 @media print{\
 @page{size:A4 portrait;margin:0}\
@@ -115,9 +124,9 @@ body > :not(#orcamento-portal){display:none!important}\
 .oc-dialog{position:static!important;inset:auto!important;display:block!important;overflow:visible!important;background:white!important;padding:0!important}\
 .oc-visual{width:210mm!important;max-width:none!important;overflow:visible!important;margin:0!important;padding:0!important}\
 .oc-controles{display:none!important}\
-.oc-folha{width:210mm!important;min-width:210mm!important;max-width:210mm!important;height:297mm!important;min-height:297mm!important;max-height:297mm!important;box-shadow:none!important;margin:0!important;padding:0!important;overflow:hidden!important;border:0!important;break-after:page!important;page-break-after:always!important}\
+.oc-folha{width:210mm!important;min-width:210mm!important;max-width:210mm!important;height:296mm!important;min-height:296mm!important;max-height:296mm!important;box-shadow:none!important;margin:0!important;padding:0!important;overflow:hidden!important;border:0!important;break-after:page!important;page-break-after:always!important}\
 .oc-folha:last-child{break-after:auto!important;page-break-after:auto!important}\
-.oc-metade{width:210mm!important;height:148.5mm!important;min-height:148.5mm!important;max-height:148.5mm!important;flex:0 0 148.5mm!important;padding:5mm 9mm!important;overflow:hidden!important;break-inside:avoid!important}\
+.oc-metade{width:210mm!important;height:148mm!important;min-height:148mm!important;max-height:148mm!important;flex:0 0 148mm!important;padding:4mm 9mm!important;overflow:hidden!important;break-inside:avoid!important}\
 .oc-metade+.oc-metade{border-top:none!important}\
 .oc-tabela tr,.oc-final{break-inside:avoid!important;page-break-inside:avoid!important}\
 .oc-foto,.oc-logo{-webkit-print-color-adjust:exact;print-color-adjust:exact}\
@@ -236,11 +245,6 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
               {obs&&<section className="oc-observacoes"><b>Observações</b><p>{obs}</p></section>}
               <div className="oc-assinaturas"><span>Assinatura do cliente</span><span>Esquadrifácio</span></div>
             </div>}
-            <footer className="oc-rodape">
-              Prévia nº {numero} · Página {index+1} de {paginas.length}
-              {ultima?' · Simulação, sem emissão':' · Continua na próxima página'}
-              {ultima&&dados.temPendencias?' · Valores pendentes':''}
-            </footer>
           </article>
         })}
         {metades.length===1&&<div aria-hidden="true" className="oc-metade"/>}
