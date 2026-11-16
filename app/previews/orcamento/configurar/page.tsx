@@ -257,7 +257,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
     }))
     const ps:ProdutoDocumento[]=itens.map(i=>({
       id:i.produto.id,codigo:i.produto.codigo,nome:i.produto.nome,descricao:i.produto.descricao,unidade:i.produto.unidade,
-      quantidade:i.quantidade,preco:valorUnitario(i.produto),imagem:i.produto.fotoUrl||i.produto.fotoCandidataUrl||null
+      quantidade:i.quantidade,preco:valorUnitario(i.produto),imagem:i.produto.fotoUrl||null
     }))
     setDocumento({cliente,empresa,tipologias:ts,produtos:ps,subtotal,desconto:descontoValor,totalProdutos,
       temPendencias,condicoes:condicoes.map(c=>({forma:c.forma,valor:c.valor})),
