@@ -42,7 +42,7 @@ export async function GET(req:NextRequest){
    const vendaFiltro=req.nextUrl.searchParams.get('vendaId')
    if(vendaFiltro && !uuid.test(vendaFiltro))return bad('Venda inválida.')
    const resultado=await supabaseAdmin.from('financeiro_recebimentos')
-     .select('id,cliente_id,obra_id,venda_obra_id,data_recebimento,valor,valor_desconto,cartao_parcelas,forma,referencia,status')
+     .select('id,cliente_id,obra_id,venda_obra_id,data_recebimento,valor,valor_desconto,valor_juros,cartao_parcelas,forma,referencia,status')
      .eq('empresa_id',u.empresa_id).in('id',ids)
    if(resultado.error)throw resultado.error
    const recebimentos=resultado.data||[]
@@ -90,7 +90,7 @@ export async function GET(req:NextRequest){
    const descontosPorId=new Map<string,number>()
    for(const a of descontosResp.data||[]) descontosPorId.set(a.recebimento_id,(descontosPorId.get(a.recebimento_id)||0)+Number(a.valor||0))
    const itens:ItemReciboRecebimento[]=recebimentos.map(r=>({
-     id:r.id,data:r.data_recebimento,valor:Number(r.valor||0),desconto:Math.max(Number(r.valor_desconto||0),descontosPorId.get(r.id)||0),
+     id:r.id,data:r.data_recebimento,valor:Number(r.valor||0),desconto:Math.max(Number(r.valor_desconto||0),descontosPorId.get(r.id)||0),juros:Number(r.valor_juros||0),
      forma:r.forma,referencia:r.referencia,obra:r.obra_id?obras.get(r.obra_id)||null:null,
      cartaoParcelas:r.cartao_parcelas,
      formas:formas.filter(f=>f.recebimento_id===r.id).map(f=>({forma:f.forma,valor:Number(f.valor),parcelas:f.parcelas}))
@@ -118,7 +118,7 @@ export async function GET(req:NextRequest){
    const recibo:ReciboInfo={tipo:'pagar',id,nome:fornecedor?.data?.nome||t.fornecedor_nome||'Beneficiário',documento:fornecedor?.data?.cnpj_cpf||null,descricao:t.descricao,referencia:t.documento,data:t.data_pagamento,forma:t.forma_pagamento,valorOriginal:Number(t.valor||0),valorMovimento:pago,saldo:Math.max(0,Number(t.valor||0)-pago)}
    return NextResponse.json({ok:true,recibo})
   }
-  const {data:rec,error}=await supabaseAdmin.from('financeiro_recebimentos').select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,cartao_parcelas,forma,referencia,observacoes,status').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle()
+  const {data:rec,error}=await supabaseAdmin.from('financeiro_recebimentos').select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,valor_juros,cartao_parcelas,forma,referencia,observacoes,status').eq('empresa_id',u.empresa_id).eq('id',id).maybeSingle()
   if(error)throw error
   if(!rec||['cancelado','estornado'].includes(rec.status||''))return bad('Recebimento inexistente ou cancelado.',404)
   const [cli,alocs]=await Promise.all([
@@ -142,7 +142,7 @@ export async function GET(req:NextRequest){
    }
   }
   const obra=obraId?await supabaseAdmin.from('obras').select('id,nome').eq('empresa_id',u.empresa_id).eq('id',obraId).eq('cliente_id',rec.cliente_id).maybeSingle():null
-  let contas=supabaseAdmin.from('financeiro_contas_receber').select('id,valor,valor_pago,valor_desconto,status').eq('empresa_id',u.empresa_id).eq('cliente_id',rec.cliente_id)
+  let contas=supabaseAdmin.from('financeiro_contas_receber').select('id,valor,valor_pago,valor_desconto,valor_juros,status').eq('empresa_id',u.empresa_id).eq('cliente_id',rec.cliente_id)
   if(filtroObra==='sem-obra')contas=contas.is('obra_id',null)
   else if(filtroObra&&obraId)contas=contas.eq('obra_id',obraId)
   else if(idsObras.length>1)contas=contas.in('obra_id',idsObras)
@@ -151,7 +151,7 @@ export async function GET(req:NextRequest){
   const {data:titulos,error:erroTitulos}=await contas.limit(1000)
   if(erroTitulos)throw erroTitulos
   const valorOriginal=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Number(c.valor||0),0)
-  const saldo=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
+  const saldo=(titulos||[]).filter(c=>c.status!=='cancelado').reduce((a,c)=>a+Math.max(0,Number(c.valor||0)+Number(c.valor_juros||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)),0)
   let formasDetalhadas:Array<{forma:string;valor:number;parcelas?:number|null}>=[]
   if(rec.forma==='multiplo'){
     const detalhes=await buscarFormas([id],u.empresa_id)
@@ -160,8 +160,10 @@ export async function GET(req:NextRequest){
     if(Math.abs(formasDetalhadas.reduce((a,f)=>a+f.valor,0)-Number(rec.valor||0))>0.009)return bad('Formas de pagamento não conferem com total recebido.',422)
   }
   const recebidoNaObra=filtroObra?(alocs.data||[]).filter(a=>a.tipo==='conta'&&(a.obra_id||'sem-obra')===filtroObra).reduce((v,a)=>v+Number(a.valor||0),0):Number(rec.valor)
-  const descontoAlocado=(alocs.data||[]).filter(a=>a.tipo==='desconto').reduce((v,a)=>v+Number(a.valor||0),0)
-  const recibo:ReciboInfo={tipo:'receber',id,itens:[{id,data:rec.data_recebimento,valor:Number(rec.valor),forma:rec.forma,desconto:Math.max(Number(rec.valor_desconto||0),descontoAlocado),cartaoParcelas:rec.cartao_parcelas,formas:formasDetalhadas,referencia:rec.referencia}],nome:cli.data.nome,documento:cli.data.cpf_cnpj,obra:obra?.data?.nome|| (idsObras.length>1&&!filtroObra?'Recebimento de múltiplas obras — consulte os extratos individualizados':'Sem obra vinculada'),descricao:rec.observacoes||null,referencia:rec.referencia,data:rec.data_recebimento,forma:rec.forma,valorOriginal:valorOriginal||Number(rec.valor),valorMovimento:recebidoNaObra,saldo,assinaturaDataUri:assinaturaReciboAutorizada()}
+  const alocacoesRecibo=filtroObra?(alocs.data||[]).filter(a=>(a.obra_id||'sem-obra')===filtroObra):(alocs.data||[])
+  const descontoAlocado=alocacoesRecibo.filter(a=>a.tipo==='desconto').reduce((v,a)=>v+Number(a.valor||0),0)
+  const jurosAlocado=alocacoesRecibo.filter(a=>a.tipo==='juros').reduce((v,a)=>v+Number(a.valor||0),0)
+  const recibo:ReciboInfo={tipo:'receber',id,itens:[{id,data:rec.data_recebimento,valor:recebidoNaObra,forma:rec.forma,desconto:filtroObra?descontoAlocado:Math.max(Number(rec.valor_desconto||0),descontoAlocado),juros:filtroObra?jurosAlocado:(jurosAlocado||Number(rec.valor_juros||0)),cartaoParcelas:rec.cartao_parcelas,formas:formasDetalhadas,referencia:rec.referencia}],nome:cli.data.nome,documento:cli.data.cpf_cnpj,obra:obra?.data?.nome|| (idsObras.length>1&&!filtroObra?'Recebimento de múltiplas obras — consulte os extratos individualizados':'Sem obra vinculada'),descricao:rec.observacoes||null,referencia:rec.referencia,data:rec.data_recebimento,forma:rec.forma,valorOriginal:valorOriginal||Number(rec.valor),valorMovimento:recebidoNaObra,saldo,assinaturaDataUri:assinaturaReciboAutorizada()}
   return NextResponse.json({ok:true,recibo})
  }catch(e){console.error('recibo financeiro',e);return bad('Não foi possível carregar os dados do recibo.',500)}
 }

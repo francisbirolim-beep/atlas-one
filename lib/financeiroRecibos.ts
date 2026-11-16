@@ -4,6 +4,7 @@ export type ItemReciboRecebimento = {
   valor: number
   forma: string | null
   desconto?: number
+  juros?: number
   referencia?: string | null
   obra?: string | null
   cartaoParcelas?: number | null

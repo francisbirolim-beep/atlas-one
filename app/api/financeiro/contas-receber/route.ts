@@ -14,10 +14,24 @@ export async function GET(req:NextRequest){
  // Aceita permissões já delegadas tanto ao Contas a Receber do Balcão quanto ao Financeiro legado.
  if(!caixa&&!financeiro)return NextResponse.json({error:'Sem permissão para consultar Contas a Receber.'},{status:403})
  try{
-  const [cr,receb]=await Promise.all([
-   supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500),
-   supabaseAdmin.from('financeiro_recebimentos').select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,forma,referencia,observacoes,status,criado_por_nome,created_at').eq('empresa_id',u.empresa_id).neq('status','cancelado').order('data_recebimento',{ascending:false}).order('created_at',{ascending:false}).limit(1000)
+  let [cr,receb]=await Promise.all([
+   supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,valor_juros,status,forma,data_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500),
+   supabaseAdmin.from('financeiro_recebimentos').select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,valor_juros,forma,referencia,observacoes,status,criado_por_nome,created_at').eq('empresa_id',u.empresa_id).neq('status','cancelado').order('data_recebimento',{ascending:false}).order('created_at',{ascending:false}).limit(1000)
   ])
+  // Se a migração de juros ainda não chegou à produção, a prévia continua somente leitura.
+  if(process.env.VERCEL_ENV==='preview' && cr.error && /valor_juros/i.test(cr.error.message)){
+    const antigo=await supabaseAdmin.from('financeiro_contas_receber')
+      .select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento,observacoes,created_at')
+      .eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500)
+    cr={data:(antigo.data||[]).map(item=>({...item,valor_juros:0})),error:antigo.error} as unknown as unknown as typeof cr
+  }
+  if(process.env.VERCEL_ENV==='preview' && receb.error && /valor_juros/i.test(receb.error.message)){
+    const antigo=await supabaseAdmin.from('financeiro_recebimentos')
+      .select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,forma,referencia,observacoes,status,criado_por_nome,created_at')
+      .eq('empresa_id',u.empresa_id).neq('status','cancelado')
+      .order('data_recebimento',{ascending:false}).order('created_at',{ascending:false}).limit(1000)
+    receb={data:(antigo.data||[]).map(item=>({...item,valor_juros:0})),error:antigo.error} as unknown as typeof receb
+  }
   if(cr.error||receb.error)throw cr.error||receb.error
   const clienteIds=[...new Set([...(cr.data||[]).map(c=>c.cliente_id),...(receb.data||[]).map(r=>r.cliente_id)].filter((v):v is string=>!!v))]
   const mapaClientes=new Map<string,{cpf_cnpj:string|null;cidade:string|null;telefone:string|null}>()

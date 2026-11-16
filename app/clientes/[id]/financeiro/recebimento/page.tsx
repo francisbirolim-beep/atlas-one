@@ -16,6 +16,16 @@ function moeda(valor: number) {
   return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function valorDigitado(valor?: string): number {
+  const texto=String(valor??'').trim()
+  if(!texto)return 0
+  const normalizado=texto.includes(',')?texto.replace(/\./g,'').replace(',','.'):texto
+  if(!/^\d+(?:\.\d{1,2})?$/.test(normalizado))return Number.NaN
+  return Number(normalizado)
+}
+
+function formatarCampo(valor:number){return Math.max(0,Math.round(valor*100)/100).toFixed(2).replace('.',',')}
+
 function dataBR(valor?: string | null) {
   if (!valor) return '—'
   const data = new Date(valor.length === 10 ? `${valor}T12:00:00` : valor)
@@ -33,6 +43,8 @@ export default function RecebimentoPorParcelasPage() {
   const [contas, setContas] = useState<ContaReceberCliente360[]>([])
   const [obras, setObras] = useState<ObraCliente360[]>([])
   const [selecionadas, setSelecionadas] = useState<Record<string, string>>({})
+  const [descontos, setDescontos] = useState<Record<string, string>>({})
+  const [juros, setJuros] = useState<Record<string, string>>({})
   const [forma, setForma] = useState('pix')
   const [data, setData] = useState(isoLocal(new Date()))
   const [referencia, setReferencia] = useState('')
@@ -77,12 +89,35 @@ export default function RecebimentoPorParcelasPage() {
   useEffect(() => { void carregar() }, [clienteId,origemCaixa,contaInicial])
 
   const obraPorId = useMemo(() => Object.fromEntries(obras.map(o => [o.id, o.nome])), [obras])
-  const total = useMemo(() => Object.values(selecionadas).reduce((s, valor) => s + (Number(String(valor).replace(',', '.')) || 0), 0), [selecionadas])
+  const total = useMemo(() => Object.values(selecionadas).reduce((s, valor) => s + (valorDigitado(valor) || 0), 0), [selecionadas])
+  const totalDesconto = useMemo(() => Object.keys(selecionadas).reduce((s,id)=>s+(valorDigitado(descontos[id])||0),0),[selecionadas,descontos])
+  const totalJuros = useMemo(() => Object.keys(selecionadas).reduce((s,id)=>s+(valorDigitado(juros[id])||0),0),[selecionadas,juros])
+  const totalBaixado = Math.round((total+totalDesconto-totalJuros)*100)/100
   const vencidas = contas.filter(c => c.vencimento && c.vencimento < isoLocal(new Date()))
   const saldoSelecionado = contas.filter(c=>c.id in selecionadas).reduce((v,c)=>v+saldoParcela(c),0)
-  const saldoApos = Math.max(0, Math.round((saldoSelecionado-total)*100)/100)
+  const saldoApos = Math.max(0, Math.round((saldoSelecionado-totalBaixado)*100)/100)
+
+  function alterarAjuste(conta:ContaReceberCliente360,tipo:'desconto'|'juros',texto:string){
+    const descontoAnterior=valorDigitado(descontos[conta.id])||0
+    const jurosAnterior=valorDigitado(juros[conta.id])||0
+    const novo=valorDigitado(texto)
+    if(tipo==='desconto')setDescontos(s=>({...s,[conta.id]:texto}))
+    else setJuros(s=>({...s,[conta.id]:texto}))
+    if(!Number.isFinite(novo))return
+    const integralAntes=saldoParcela(conta)-descontoAnterior+jurosAnterior
+    const integralDepois=saldoParcela(conta)-
+      (tipo==='desconto'?novo:descontoAnterior)+(tipo==='juros'?novo:jurosAnterior)
+    setSelecionadas(atual=>{
+      if(!(conta.id in atual)||Math.abs(valorDigitado(atual[conta.id])-integralAntes)>0.009||integralDepois<=0)return atual
+      return {...atual,[conta.id]:formatarCampo(integralDepois)}
+    })
+  }
 
   function alternar(conta: ContaReceberCliente360) {
+    if(conta.id in selecionadas){
+      setDescontos(a=>{const v={...a};delete v[conta.id];return v})
+      setJuros(a=>{const v={...a};delete v[conta.id];return v})
+    }
     setSelecionadas(atual => {
       const proximo = { ...atual }
       if (conta.id in proximo) delete proximo[conta.id]
@@ -101,6 +136,8 @@ export default function RecebimentoPorParcelasPage() {
     const valores: Record<string, string> = {}
     lista.forEach(c => { valores[c.id] = saldoParcela(c).toFixed(2).replace('.', ',') })
     setSelecionadas(valores)
+    setDescontos({})
+    setJuros({})
   }
 
   async function salvar() {
@@ -110,13 +147,18 @@ export default function RecebimentoPorParcelasPage() {
 
     const alocacoes = Object.entries(selecionadas).map(([conta_receber_id, valorTexto]) => ({
       conta_receber_id,
-      valor: Number(valorTexto.replace(',', '.')),
+      valor: valorDigitado(valorTexto),
+      desconto: valorDigitado(descontos[conta_receber_id]),
+      juros: valorDigitado(juros[conta_receber_id]),
     }))
 
     for (const item of alocacoes) {
       const conta = contas.find(c => c.id === item.conta_receber_id)
-      if (!conta || !Number.isFinite(item.valor) || item.valor <= 0 || item.valor > saldoParcela(conta) + 0.009) {
-        setErro('Revise os valores das parcelas selecionadas.')
+      if (!conta || ![item.valor,item.desconto,item.juros].every(Number.isFinite)
+          || item.valor <= 0 || item.desconto < 0 || item.juros < 0
+          || item.valor + item.desconto > saldoParcela(conta) + item.juros + 0.009
+) {
+        setErro('Revise o valor recebido, desconto e juros de cada parcela. A baixa não pode ultrapassar o saldo.')
         return
       }
     }
@@ -140,23 +182,28 @@ export default function RecebimentoPorParcelasPage() {
         setRecibosSimulados([...grupos].map(([obraId,alocacoesObra])=>{
           const contasObra=contas.filter(c=>(c.obra_id||'sem-obra')===obraId)
           const valorMovimento=alocacoesObra.reduce((v,a)=>v+a.valor,0)
+          const descontoObra=alocacoesObra.reduce((v,a)=>v+a.desconto,0)
+          const jurosObra=alocacoesObra.reduce((v,a)=>v+a.juros,0)
           const original=contasObra.reduce((v,c)=>v+Number(c.valor||0),0)
           const aberto=contasObra.reduce((v,c)=>v+saldoParcela(c),0)
           return {tipo:'receber',nome:cliente.nome,documento:(cliente as Cliente&{cpf_cnpj?:string|null}).cpf_cnpj||null,
             obra:obraId==='sem-obra'?'Não vinculada a obra':obraPorId[obraId]||'Obra cadastrada',
             referencia:referencia||'PRÉVIA (sem movimentação)',descricao:observacoes||'Simulação de recebimento parcial',
             forma,data,valorOriginal:original,valorMovimento,
-            saldo:Math.max(0,Math.round((aberto-valorMovimento)*100)/100),id:'SIMULACAO'} as ReciboInfo
+            itens:[{id:'SIMULACAO',data,valor:valorMovimento,desconto:descontoObra,juros:jurosObra,forma}],
+            saldo:Math.max(0,Math.round((aberto-valorMovimento-descontoObra+jurosObra)*100)/100),id:'SIMULACAO'} as ReciboInfo
         }))
         setSucesso(`Simulação: ${moeda(resultado.valor||total)} a receber. Nenhuma baixa foi gravada. Confira os recibos abaixo.`)
         setReciboRegistradoId(null)
         return
       }
-      setSucesso(`Recebimento de ${moeda(resultado.valor||total)} confirmado em ${resultado.parcelas||alocacoes.length} parcela(s). Saldo atualizado no Atlas.`)
+      setSucesso(`Recebimento de ${moeda(resultado.valor??total)} confirmado em ${resultado.parcelas||alocacoes.length} parcela(s). Desconto: ${moeda(totalDesconto)} · Juros: ${moeda(totalJuros)}. Saldo atualizado no Atlas.`)
       setReciboRegistradoId(resultado.recebimentoId||null)
       setObrasRecebidas([...new Set(alocacoes.map(a=>contas.find(c=>c.id===a.conta_receber_id)?.obra_id||'sem-obra'))])
       setRecibosSimulados([])
       setSelecionadas({})
+      setDescontos({})
+      setJuros({})
       setReferencia('')
       setObservacoes('')
       await carregar()
@@ -194,8 +241,8 @@ export default function RecebimentoPorParcelasPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div><h2 className="font-bold text-slate-900">Parcelas em aberto</h2><p className="text-xs text-slate-500">Escolha uma ou várias parcelas e informe quanto entrou em cada uma.</p></div>
-          <div className="flex flex-wrap gap-2"><button onClick={() => selecionar(vencidas)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Selecionar vencidas</button><button onClick={() => selecionar(contas)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Selecionar todas</button><button onClick={() => setSelecionadas({})} className="rounded-lg border px-3 py-2 text-xs font-semibold">Limpar</button></div>
+          <div><h2 className="font-bold text-slate-900">Parcelas em aberto</h2><p className="text-xs text-slate-500">Escolha as parcelas e informe valor recebido, desconto e juros. O valor e o saldo são conferidos antes de confirmar a baixa.</p></div>
+          <div className="flex flex-wrap gap-2"><button onClick={() => selecionar(vencidas)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Selecionar vencidas</button><button onClick={() => selecionar(contas)} className="rounded-lg border px-3 py-2 text-xs font-semibold">Selecionar todas</button><button onClick={() => {setSelecionadas({});setDescontos({});setJuros({})}} className="rounded-lg border px-3 py-2 text-xs font-semibold">Limpar</button></div>
         </div>
 
         <div className="divide-y divide-slate-100">
@@ -203,16 +250,29 @@ export default function RecebimentoPorParcelasPage() {
           {contas.map(conta => {
             const marcada = conta.id in selecionadas
             const valorSaldo = saldoParcela(conta)
-            return <div key={conta.id} className={`grid gap-3 p-4 md:grid-cols-[28px_1fr_170px] md:items-center ${marcada ? 'bg-blue-50/40' : ''}`}>
+            return <div key={conta.id} className={`grid gap-3 p-4 md:grid-cols-[28px_1fr_minmax(420px,1.2fr)] md:items-center ${marcada ? 'bg-blue-50/40' : ''}`}>
               <input type="checkbox" checked={marcada} onChange={() => alternar(conta)} className="h-4 w-4"/>
               <button type="button" onClick={() => alternar(conta)} className="text-left">
                 <p className="font-semibold text-slate-800">{conta.documento || `Parcela ${conta.parcela}/${conta.total_parcelas}`}</p>
                 <p className="mt-1 text-xs text-slate-500">Vence {dataBR(conta.vencimento)} · {conta.obra_id && obraPorId[conta.obra_id] ? obraPorId[conta.obra_id] : 'Sem obra'} · saldo {moeda(valorSaldo)}</p>
               </button>
-              <div><label htmlFor={`valor-recebido-${conta.id}`} className="text-[11px] font-bold uppercase text-slate-500">Valor recebido</label>
-                <input id={`valor-recebido-${conta.id}`} disabled={!marcada} value={selecionadas[conta.id] ?? ''} onChange={e => setSelecionadas(s => ({ ...s, [conta.id]: e.target.value }))} inputMode="decimal" aria-label={`Valor recebido da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-right font-semibold disabled:bg-slate-100"/>
-                <div className="mt-2 flex gap-1"><button type="button" disabled={salvando} onClick={()=>setSelecionadas(s=>({...s,[conta.id]:valorSaldo.toFixed(2).replace('.',',')}))} className="rounded-md border bg-white px-2 py-1 text-[11px] font-bold">Receber tudo</button><button type="button" disabled={salvando} onClick={()=>receberParcial(conta)} className="rounded-md border bg-white px-2 py-1 text-[11px] font-bold">Receber parcial</button></div>
-                {marcada && <p className="mt-1 text-[11px] font-semibold text-slate-600">Saldo após: {moeda(Math.max(0,valorSaldo-(Number(String(selecionadas[conta.id]||'0').replace(',','.'))||0)))}</p>}
+              <div>
+                <div className="grid grid-cols-3 gap-2">
+                  <label className="text-[11px] font-bold uppercase text-slate-500">Valor recebido
+                    <input id={`valor-recebido-${conta.id}`} disabled={!marcada} value={selecionadas[conta.id] ?? ''} onChange={e => setSelecionadas(s => ({ ...s, [conta.id]: e.target.value }))} inputMode="decimal" aria-label={`Valor recebido da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
+                  </label>
+                  <label className="text-[11px] font-bold uppercase text-amber-700">Desconto (R$)
+                    <input disabled={!marcada} value={descontos[conta.id]??''} onChange={e=>alterarAjuste(conta,'desconto',e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`Desconto da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-amber-200 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
+                  </label>
+                  <label className="text-[11px] font-bold uppercase text-blue-700">Juros (R$)
+                    <input disabled={!marcada} value={juros[conta.id]??''} onChange={e=>alterarAjuste(conta,'juros',e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`Juros da parcela ${conta.documento||conta.id}`} className="mt-1 w-full rounded-lg border border-blue-200 px-2 py-2 text-right font-semibold disabled:bg-slate-100"/>
+                  </label>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button type="button" disabled={salvando} onClick={()=>setSelecionadas(s=>({...s,[conta.id]:formatarCampo(valorSaldo-(valorDigitado(descontos[conta.id])||0)+(valorDigitado(juros[conta.id])||0))}))} className="rounded-md border bg-white px-2 py-1 text-[11px] font-bold">Receber tudo</button>
+                  <button type="button" disabled={salvando} onClick={()=>receberParcial(conta)} className="rounded-md border bg-white px-2 py-1 text-[11px] font-bold">Receber parcial</button>
+                </div>
+                {marcada && <p className="mt-1 text-[11px] font-semibold text-slate-600">Saldo após: {moeda(Math.max(0,valorSaldo+(valorDigitado(juros[conta.id])||0)-(valorDigitado(descontos[conta.id])||0)-(valorDigitado(selecionadas[conta.id])||0)))}</p>}
               </div>
             </div>
           })}
@@ -220,7 +280,9 @@ export default function RecebimentoPorParcelasPage() {
       </section>
 
       <section className="sticky bottom-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase text-slate-400">Total deste recebimento</p><p className="text-2xl font-bold text-emerald-700">{moeda(total)}</p><p className="text-xs text-slate-500">{Object.keys(selecionadas).length} parcela(s) selecionada(s) · saldo dessas parcelas após recebimento: <strong>{moeda(saldoApos)}</strong></p></div><button disabled={salvando || total <= 0 || !Object.keys(selecionadas).length || (origemCaixa&&!caixaAberto&&!modoPrevia)} onClick={salvar} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-5 py-3 font-bold text-white disabled:opacity-40"><Receipt size={18}/>{salvando ? 'Processando...' : modoPrevia ? 'Simular recebimento (sem gravar)' : 'Confirmar recebimento'}</button></div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase text-slate-400">Total deste recebimento</p><p className="text-2xl font-bold text-emerald-700">{moeda(total)}</p>
+          <p className="mt-1 text-xs text-slate-600">Desconto: <strong className="text-amber-700">{moeda(totalDesconto)}</strong> · Juros: <strong className="text-blue-700">{moeda(totalJuros)}</strong> · Total abatido do principal: <strong>{moeda(totalBaixado)}</strong></p>
+          <p className="text-xs text-slate-500">{Object.keys(selecionadas).length} parcela(s) selecionada(s) · saldo dessas parcelas após recebimento: <strong>{moeda(saldoApos)}</strong></p></div><button disabled={salvando || total <= 0 || !Object.keys(selecionadas).length || (origemCaixa&&!caixaAberto&&!modoPrevia)} onClick={salvar} className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-5 py-3 font-bold text-white disabled:opacity-40"><Receipt size={18}/>{salvando ? 'Processando...' : modoPrevia ? 'Simular recebimento (sem gravar)' : 'Confirmar recebimento'}</button></div>
       </section>
       {!!recibosSimulados.length && <section className="space-y-5" aria-label="Recibos simulados por obra">
         <style jsx global>{`@media print { body * {visibility:hidden!important} .recibo-simulado:not(.selecionado-impressao) {display:none!important} .recibo-simulado.selecionado-impressao, .recibo-simulado.selecionado-impressao * {visibility:visible!important} .recibo-simulado.selecionado-impressao {position:absolute;top:0;left:0;width:100%} }`}</style>

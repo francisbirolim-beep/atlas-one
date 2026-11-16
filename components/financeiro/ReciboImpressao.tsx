@@ -151,6 +151,7 @@ export default function ReciboImpressao({
               {item.formas?.length ? item.formas.map((forma, i) => <div key={i} className="flex justify-between gap-3"><span>{descricaoFormaRecibo(forma.forma, forma.parcelas)}</span><b>{moeda(forma.valor)}</b></div>) : <p>{descricaoFormaRecibo(item.forma, item.cartaoParcelas)}</p>}
             </div>
             {!!item.desconto && item.desconto > 0 && <p className="mt-2 flex justify-between gap-3 text-amber-800"><span>Desconto concedido</span><b>{moeda(item.desconto)}</b></p>}
+            {!!item.juros && item.juros > 0 && <p className="mt-2 flex justify-between gap-3 text-blue-800"><span>Juros acrescidos</span><b>{moeda(item.juros)}</b></p>}
           </div>)}
         </div>
       </section>}

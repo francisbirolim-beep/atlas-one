@@ -27,10 +27,17 @@ export async function GET(req:NextRequest){
   const {data:cliente,error:cErro}=await supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj').eq('empresa_id',u.empresa_id).eq('id',clienteId).maybeSingle()
   if(cErro)throw cErro
   if(!cliente)return bad('Cliente não encontrado nesta empresa.',404)
-  const [c,o]=await Promise.all([
-   supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento').eq('empresa_id',u.empresa_id).eq('cliente_id',clienteId).order('vencimento',{ascending:true,nullsFirst:false}).limit(2000),
+  let [c,o]=await Promise.all([
+   supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,vencimento,valor,valor_pago,valor_desconto,valor_juros,status,forma,data_pagamento').eq('empresa_id',u.empresa_id).eq('cliente_id',clienteId).order('vencimento',{ascending:true,nullsFirst:false}).limit(2000),
    supabaseAdmin.from('obras').select('id,cliente_id,nome,numero').eq('empresa_id',u.empresa_id).eq('cliente_id',clienteId).order('created_at',{ascending:false}).limit(1000)
   ])
+  // A prévia apenas lê o banco atual: simula juros sem exigir migração em produção.
+  if(c.error && process.env.VERCEL_ENV==='preview' && /valor_juros/i.test(c.error.message)){
+    const antigo=await supabaseAdmin.from('financeiro_contas_receber')
+      .select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento')
+      .eq('empresa_id',u.empresa_id).eq('cliente_id',clienteId).order('vencimento',{ascending:true,nullsFirst:false}).limit(2000)
+    c={data:(antigo.data||[]).map(item=>({...item,valor_juros:0})),error:antigo.error} as unknown as typeof c
+  }
   if(c.error||o.error)throw c.error||o.error
   let caixaAberto=true
   if(origemCaixa){
@@ -58,24 +65,36 @@ export async function POST(req:NextRequest){
   if(!['pix','dinheiro','boleto','cartao','cartao_debito','cartao_credito','transferencia','cheque','outro','outros'].includes(forma))return bad('Forma de pagamento inválida.')
   const aloc=Array.isArray(b.alocacoes)?b.alocacoes:[]
   if(aloc.length<1||aloc.length>100)return bad('Selecione de 1 a 100 parcelas.')
-  const mapa=new Map<string,number>()
+  const mapa=new Map<string,{valor:number;desconto:number;juros:number}>()
   for(const a of aloc){
-   const id=txt(a?.conta_receber_id,40),valor=centavos(a?.valor)
-   if(!uuid.test(id)||!Number.isInteger(valor)||valor<1||mapa.has(id))return bad('Parcela duplicada ou valor de recebimento inválido.')
-   mapa.set(id,valor)
+   const id=txt(a?.conta_receber_id,40)
+   const valor=centavos(a?.valor),desconto=centavos(a?.desconto??0),juros=centavos(a?.juros??0)
+   if(!uuid.test(id)||![valor,desconto,juros].every(Number.isInteger)||valor<1||desconto<0||juros<0||desconto>100_000_000_00||juros>100_000_000_00||mapa.has(id))return bad('Parcela duplicada ou valores de pagamento, desconto e juros inválidos.')
+   mapa.set(id,{valor,desconto,juros})
   }
-  const total=[...mapa.values()].reduce((s,v)=>s+v,0)
+  const total=[...mapa.values()].reduce((s,v)=>s+v.valor,0)
+  const totalDesconto=[...mapa.values()].reduce((s,v)=>s+v.desconto,0)
+  const totalJuros=[...mapa.values()].reduce((s,v)=>s+v.juros,0)
   if(total<=0||total>100_000_000_00)return bad('Valor recebido fora do limite permitido.')
   const {data:cliente,error:erroCliente}=await supabaseAdmin.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).eq('id',clienteId).maybeSingle()
   if(erroCliente)throw erroCliente
   if(!cliente)return bad('Cliente não encontrado nesta empresa.',404)
-  const {data:contas,error:erroContas}=await supabaseAdmin.from('financeiro_contas_receber').select('id,valor,valor_pago,valor_desconto,status,obra_id').eq('empresa_id',u.empresa_id).eq('cliente_id',clienteId).in('id',[...mapa.keys()])
+  let {data:contas,error:erroContas}=await supabaseAdmin.from('financeiro_contas_receber').select('id,valor,valor_pago,valor_desconto,valor_juros,status,obra_id').eq('empresa_id',u.empresa_id).eq('cliente_id',clienteId).in('id',[...mapa.keys()])
+  if(erroContas && process.env.VERCEL_ENV==='preview' && /valor_juros/i.test(erroContas.message)){
+    const antigo=await supabaseAdmin.from('financeiro_contas_receber')
+      .select('id,valor,valor_pago,valor_desconto,status,obra_id')
+      .eq('empresa_id',u.empresa_id).eq('cliente_id',clienteId).in('id',[...mapa.keys()])
+    contas=(antigo.data||[]).map(item=>({...item,valor_juros:0}))
+    erroContas=antigo.error
+  }
   if(erroContas)throw erroContas
   if(contas?.length!==mapa.size)return bad('Uma ou mais parcelas não pertencem a este cliente.',422)
   for(const conta of contas){
-   const saldo=Math.round((Number(conta.valor||0)-Number(conta.valor_pago||0)-Number(conta.valor_desconto||0))*100)
-   if(conta.status==='cancelado'||conta.status==='pago'||saldo<1||(mapa.get(conta.id)||0)>saldo)return bad('O saldo mudou ou o valor informado excede o disponível. Atualize antes de confirmar.',409)
+   const saldo=Math.round((Number(conta.valor||0)+Number(conta.valor_juros||0)-Number(conta.valor_pago||0)-Number(conta.valor_desconto||0))*100)
+   const ajuste=mapa.get(conta.id)!
+   if(conta.status==='cancelado'||conta.status==='pago'||saldo<1||ajuste.valor+ajuste.desconto>saldo+ajuste.juros)return bad('O saldo mudou ou o valor informado excede o disponível. Atualize antes de confirmar.',409)
   }
+  const possuiAjustes=totalDesconto>0||totalJuros>0||contas.some(c=>Number(c.valor_juros||0)>0)
   let caixaId:string|null=null
   if(origemCaixa && process.env.VERCEL_ENV!=='preview'){
    const caixa=await supabaseAdmin.from('balcao_caixas').select('id')
@@ -87,19 +106,26 @@ export async function POST(req:NextRequest){
    caixaId=caixa.data.id
   }
   // Em qualquer deploy de prévia não gravamos na base operacional.
-  if(process.env.VERCEL_ENV==='preview')return NextResponse.json({ok:true,simulado:true,valor:total/100,parcelas:contas.length,recebimentoId:null})
+  if(process.env.VERCEL_ENV==='preview')return NextResponse.json({ok:true,simulado:true,valor:total/100,desconto:totalDesconto/100,juros:totalJuros/100,parcelas:contas.length,recebimentoId:null})
   const argumentos={
    p_cliente_id:clienteId,p_cliente_nome:cliente.nome,p_data_recebimento:data,
    p_forma:forma,p_referencia:txt(b.referencia,140)||null,p_observacoes:txt(b.observacoes,800)||null,
-   p_alocacoes:[...mapa.entries()].map(([conta_receber_id,valor])=>({conta_receber_id,valor:valor/100})),
+   p_alocacoes:[...mapa.entries()].map(([conta_receber_id,item])=>({conta_receber_id,valor:item.valor/100})),
    p_usuario_id:u.id,p_usuario_nome:u.nome
   }
   // No Caixa, a RPC registra o recebimento e o movimento em UMA transação.
   // Pelo Cliente, mantém a mesma RPC de parcelas que já foi homologada.
-  const {data:resultado,error}=origemCaixa
-   ?await supabaseAdmin.rpc('registrar_recebimento_cliente_caixa_v1',{...argumentos,p_caixa_id:caixaId})
-   :await supabaseAdmin.rpc('registrar_recebimento_cliente_servidor_v1',argumentos)
+  const {data:resultado,error}=possuiAjustes
+   ?await supabaseAdmin.rpc('registrar_recebimento_cliente_ajustes_v1',{
+     p_cliente_id:clienteId,p_data_recebimento:data,p_forma:forma,
+     p_referencia:txt(b.referencia,140)||null,p_observacoes:txt(b.observacoes,800)||null,
+     p_alocacoes:[...mapa.entries()].map(([conta_receber_id,item])=>({conta_receber_id,valor:item.valor/100,desconto:item.desconto/100,juros:item.juros/100})),
+     p_usuario_id:u.id,p_usuario_nome:u.nome,p_caixa_id:caixaId
+    })
+   :origemCaixa
+    ?await supabaseAdmin.rpc('registrar_recebimento_cliente_caixa_v1',{...argumentos,p_caixa_id:caixaId})
+    :await supabaseAdmin.rpc('registrar_recebimento_cliente_servidor_v1',argumentos)
   if(error){console.error('registrar recebimento servidor',error);return bad('Falha na baixa financeira. Confira o histórico antes de tentar novamente.',500)}
-  return NextResponse.json({ok:true,simulado:false,recebimentoId:resultado?.recebimento_id||null,valor:Number(resultado?.valor||total/100),parcelas:Number(resultado?.parcelas||contas.length)})
+  return NextResponse.json({ok:true,simulado:false,recebimentoId:resultado?.recebimento_id||null,valor:Number(resultado?.valor||total/100),desconto:totalDesconto/100,juros:totalJuros/100,parcelas:Number(resultado?.parcelas||contas.length)})
  }catch(e){console.error('recebimento cliente post',e);return bad('Não foi possível processar o recebimento.',500)}
 }
