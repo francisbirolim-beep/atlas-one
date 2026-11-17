@@ -121,9 +121,23 @@ function textoOuNulo(valor?: string | null) {
 }
 
 export async function listarProspeccoes(): Promise<Prospeccao[]> {
-  const { data, error } = await supabase.from('prospeccoes').select('*').order('status_atualizado_em', { ascending: false })
-  if (error) { console.error('Erro ao listar prospecções', error); return [] }
-  return (data || []) as Prospeccao[]
+  const lista: Prospeccao[] = []
+  const pagina = 400
+  // API limita consultas grandes por padrão: percorrer todas as páginas evita
+  // totais subestimados de pinos, bairros e cidades.
+  for (let inicio = 0; inicio < 20000; inicio += pagina) {
+    const { data, error } = await supabase.from('prospeccoes')
+      .select('*')
+      .order('status_atualizado_em', { ascending: false })
+      .order('id', { ascending: true })
+      .range(inicio, inicio + pagina - 1)
+    if (error) { console.error('Erro ao listar prospecções', error); return [] }
+    const registros = (data || []) as Prospeccao[]
+    lista.push(...registros)
+    if (registros.length < pagina) return lista
+  }
+  console.error('Mais de 20.000 prospecções visíveis. Amplie a paginação antes de confiar nos totais.')
+  return []
 }
 
 export async function listarEquipeProspeccao(): Promise<Pick<Usuario, 'id' | 'nome'>[]> {
