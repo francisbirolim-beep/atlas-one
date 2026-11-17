@@ -73,10 +73,26 @@ export default function ProspeccaoPage() {
         if (!ativo) return
         setAvisoObrasGps(resultado.aviso)
         if (resultado.aviso) return
-        setObrasGps(resultado.obras)
+        // Uma atualização sem mudanças não remonta o Leaflet nem tira o
+        // zoom do usuário. As consultas continuam em segundo plano.
+        setObrasGps(anteriores => {
+          if (anteriores.length === resultado.obras.length && anteriores.every((a, i) => {
+            const b = resultado.obras[i]
+            return a.id === b.id && a.observacoes === b.observacoes
+              && a.nome === b.nome && a.bairro === b.bairro && a.cidade === b.cidade
+              && a.endereco === b.endereco && a.numero_endereco === b.numero_endereco
+              && a.cliente_id === b.cliente_id
+          })) return anteriores
+          return resultado.obras
+        })
         const situacao = await consultarEtapasComerciais(integrarObrasNoMapa(itens, resultado.obras))
         if (!ativo) return
-        setEtapasComerciais(situacao.etapas)
+        setEtapasComerciais(anteriores => {
+          const chaves = Object.keys(situacao.etapas)
+          if (Object.keys(anteriores).length === chaves.length &&
+            chaves.every(chave => anteriores[chave] === situacao.etapas[chave])) return anteriores
+          return situacao.etapas
+        })
         setAvisoEtapas(situacao.aviso)
       } catch {
         if (ativo) setAvisoObrasGps('Não foi possível atualizar os pinos dos pedidos de orçamento.')
