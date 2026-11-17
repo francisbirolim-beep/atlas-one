@@ -1,5 +1,6 @@
 import type { Prospeccao, StatusProspeccao } from '@/lib/prospeccao'
 import type { EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
+import { normalizarTextoEndereco } from '@/lib/geocodificacaoCep'
 
 export type ClassificacaoMapa = 'identificada' | 'sem_contato' | 'visitada' | 'andamento' | 'convertida' | 'orcamento' | 'venda' | 'sem_interesse'
 
@@ -58,7 +59,7 @@ export function agruparPontosPorBairro(pontos: PontoProspeccao[]): GrupoBairro[]
   for (const ponto of pontos) {
     const cidade = ponto.registro.cidade?.trim() || 'Cidade não informada'
     const nome = ponto.registro.bairro?.trim() || 'Bairro não informado'
-    const chave = `${cidade.toLocaleLowerCase('pt-BR')}::${nome.toLocaleLowerCase('pt-BR')}`
+    const chave = `${normalizarTextoEndereco(cidade)}::${normalizarTextoEndereco(nome)}`
     let grupo = grupos.get(chave)
     if (!grupo) {
       grupo = { chave, nome, cidade, latitude: 0, longitude: 0, pontos: [] }
