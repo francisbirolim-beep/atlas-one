@@ -400,6 +400,7 @@ const [modoHistorico, setModoHistorico] = useState<'atual' | 'mes' | 'periodo' |
 const [mesHistorico, setMesHistorico] = useState(mesLocalAtual)
 const [mesDoSistema, setMesDoSistema] = useState(mesLocalAtual)
 const [podeRetirarCard, setPodeRetirarCard] = useState(false)
+const [podeMesclarCards, setPodeMesclarCards] = useState(false)
 const [podeRestaurarCard, setPodeRestaurarCard] = useState(false)
 const [podeCorrigirDataVenda, setPodeCorrigirDataVenda] = useState(false)
 const [cardCorrigirVenda, setCardCorrigirVenda] = useState<OrcamentoRapido | null>(null)
@@ -525,7 +526,7 @@ useEffect(() => {
       const r = await fetch('/api/kanban/comercial/cards', {headers:{Authorization:`Bearer ${token}`}, cache:'no-store'})
       if (!r.ok) return
       const d = await r.json()
-      if (ativo) {setPodeRetirarCard(d.podeRetirar === true);setPodeRestaurarCard(d.podeRestaurar === true);setPodeCorrigirDataVenda(d.podeCorrigirDataVenda === true)}
+      if (ativo) {setPodeRetirarCard(d.podeRetirar === true);setPodeRestaurarCard(d.podeRestaurar === true);setPodeCorrigirDataVenda(d.podeCorrigirDataVenda === true);setPodeMesclarCards(d.podeMesclar === true)}
     } catch { /* sem permissão validada, ação fica desabilitada */ }
   })()
   return () => {ativo = false}
@@ -812,8 +813,8 @@ async function handleDropSobreCard(e: React.DragEvent, destino: OrcamentoRapido)
   if (!origemId || origemId === destino.id || mesclandoCards) return
   const origem = cards.find(card => card.id === origemId)
   if (!origem) return
-  if (usuario?.role !== 'master') {
-    window.alert('A união de cards é exclusiva do Master. O card não foi movido.')
+  if (!podeMesclarCards) {
+    window.alert('Seu usuário não possui permissão de edição comercial para unir cards. O card não foi movido.')
     return
   }
   if (origem.eh_assistencia || destino.eh_assistencia) {
@@ -2238,14 +2239,14 @@ onDragStart={e => {
 }}
 onDragEnd={() => { setCardAlvoMesclagem(null); setColunaArrastando(null) }}
 onDragOver={e => {
-  if (usuario?.role !== 'master' || card.eh_assistencia) return
+  if (!podeMesclarCards || card.eh_assistencia) return
   e.preventDefault()
   e.stopPropagation()
   e.dataTransfer.dropEffect = 'copy'
   if (cardAlvoMesclagem !== card.id) setCardAlvoMesclagem(card.id)
 }}
 onDragLeave={() => { if (cardAlvoMesclagem === card.id) setCardAlvoMesclagem(null) }}
-onDrop={e => { if (usuario?.role === 'master') void handleDropSobreCard(e, card) }}
+onDrop={e => { if (podeMesclarCards) void handleDropSobreCard(e, card) }}
 onClick={() => { if (!mesclandoCards) abrirCardOuAssistencia(card) }}
 style={est ? { backgroundColor: est.fundo, borderColor: est.fundo } : undefined}
 className={`rounded-xl border-2 p-3 cursor-pointer hover:shadow-md transition ${
