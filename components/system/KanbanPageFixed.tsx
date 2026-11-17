@@ -377,6 +377,8 @@ const [historico, setHistorico] = useState<HistoricoItem[]>([])
 const [salvando, setSalvando] = useState(false)
 const [validandoIA, setValidandoIA] = useState(false)
 const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
+const [cardAlvoMesclagem, setCardAlvoMesclagem] = useState<string | null>(null)
+const [mesclandoCards, setMesclandoCards] = useState(false)
 const [usuario, setUsuario] = useState<Usuario | null>(null)
 const [agora, setAgora] = useState(Date.now())
 const [novoAnexoTitulo, setNovoAnexoTitulo] = useState('')
@@ -795,6 +797,67 @@ if (coluna.cor_cards) {
 return { fundo: coluna.cor_cards, texto: corTextoParaFundo(coluna.cor_cards), alerta: false }
 }
 return null
+}
+
+
+const normalizarNomeMesclagem = (valor: string) => valor.normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toUpperCase()
+
+async function handleDropSobreCard(e: React.DragEvent, destino: OrcamentoRapido) {
+  e.preventDefault()
+  e.stopPropagation()
+  setCardAlvoMesclagem(null)
+  setColunaArrastando(null)
+  const origemId = e.dataTransfer.getData('text/plain')
+  if (!origemId || origemId === destino.id || mesclandoCards) return
+  const origem = cards.find(card => card.id === origemId)
+  if (!origem) return
+  if (usuario?.role !== 'master') {
+    window.alert('A união de cards é exclusiva do Master. O card não foi movido.')
+    return
+  }
+  if (origem.eh_assistencia || destino.eh_assistencia) {
+    window.alert('Cards de assistência não podem ser incorporados a orçamentos.')
+    return
+  }
+  if (normalizarNomeMesclagem(origem.cliente_nome) !== normalizarNomeMesclagem(destino.cliente_nome)) {
+    window.alert('Os cards têm nomes diferentes. Confira o cliente antes de unir. Nada foi alterado.')
+    return
+  }
+  const confirmar = window.confirm(
+    'Deseja copiar todas as informações de "' + origem.cliente_nome +
+    '" para o card "' + destino.cliente_nome + '" que está por baixo?\n\n' +
+    'Fotos, mídias do WhatsApp, anexos, observações e histórico serão incorporados. ' +
+    'O card de destino (incluindo seu W.Vetro, valores e etapa atual) será mantido.\n\n' +
+    'O card arrastado ficará arquivado, sem ser excluído. Deseja continuar?'
+  )
+  if (!confirmar) return
+  setMesclandoCards(true)
+  try {
+    const token = await tokenAtual()
+    if (!token) throw new Error('Sessão expirada. Entre novamente.')
+    const resposta = await fetch('/api/kanban/comercial/mesclar-cards', {
+      method: 'POST', headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      }, body: JSON.stringify({ origemId, destinoId: destino.id, confirmou: true }),
+    })
+    const dados = await resposta.json().catch(() => ({}))
+    if (!resposta.ok) throw new Error(dados.error || 'Não foi possível unir os cards.')
+    setCards(atuais => atuais.filter(c => c.id !== origemId).map(c =>
+      c.id === destino.id && dados.orcamento ? dados.orcamento as OrcamentoRapido : c))
+    setCardsBuscaHistorico(atuais => atuais.filter(c => c.id !== origemId).map(c =>
+      c.id === destino.id && dados.orcamento ? dados.orcamento as OrcamentoRapido : c))
+    if (cardSelecionado?.id === origemId) {
+      setCardSelecionado(null)
+      setEditando(null)
+    }
+    window.alert(dados.aviso || 'Cards reunidos com sucesso. O original foi preservado no histórico.')
+  } catch (erro) {
+    window.alert(erro instanceof Error ? erro.message : 'A união falhou. Confira os cards antes de tentar novamente.')
+  } finally {
+    setMesclandoCards(false)
+  }
 }
 
 async function handleDrop(e: React.DragEvent, colunaId: string) {
