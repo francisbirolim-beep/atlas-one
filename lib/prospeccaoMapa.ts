@@ -1,4 +1,5 @@
-import type { Prospeccao, StatusProspeccao } from '@/lib/prospeccao'
+import type { StatusProspeccao } from '@/lib/prospeccao'
+import type { RegistroMapaComercial } from '@/lib/prospeccaoMapaComercial'
 import type { EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
 import { normalizarTextoEndereco } from '@/lib/geocodificacaoCep'
 
@@ -25,7 +26,7 @@ export function classificacaoDoStatus(status: StatusProspeccao): ClassificacaoMa
 }
 
 export interface PontoProspeccao {
-  registro: Prospeccao
+  registro: RegistroMapaComercial
   latitude: number
   longitude: number
   classificacao: ClassificacaoMapa
@@ -40,7 +41,7 @@ export interface GrupoBairro {
   pontos: PontoProspeccao[]
 }
 
-export function pontosValidos(registros: Prospeccao[], etapas: Record<string, EtapaComercialProspeccao> = {}): PontoProspeccao[] {
+export function pontosValidos(registros: RegistroMapaComercial[], etapas: Record<string, EtapaComercialProspeccao> = {}): PontoProspeccao[] {
   return registros.flatMap(registro => {
     if (registro.latitude == null || registro.longitude == null) return []
     const latitude = Number(registro.latitude)
