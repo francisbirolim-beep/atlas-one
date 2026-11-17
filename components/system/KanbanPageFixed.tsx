@@ -377,6 +377,8 @@ const [historico, setHistorico] = useState<HistoricoItem[]>([])
 const [salvando, setSalvando] = useState(false)
 const [validandoIA, setValidandoIA] = useState(false)
 const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
+const [cardAlvoMesclagem, setCardAlvoMesclagem] = useState<string | null>(null)
+const [mesclandoCards, setMesclandoCards] = useState(false)
 const [usuario, setUsuario] = useState<Usuario | null>(null)
 const [agora, setAgora] = useState(Date.now())
 const [novoAnexoTitulo, setNovoAnexoTitulo] = useState('')
@@ -795,6 +797,67 @@ if (coluna.cor_cards) {
 return { fundo: coluna.cor_cards, texto: corTextoParaFundo(coluna.cor_cards), alerta: false }
 }
 return null
+}
+
+
+const normalizarNomeMesclagem = (valor: string) => valor.normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toUpperCase()
+
+async function handleDropSobreCard(e: React.DragEvent, destino: OrcamentoRapido) {
+  e.preventDefault()
+  e.stopPropagation()
+  setCardAlvoMesclagem(null)
+  setColunaArrastando(null)
+  const origemId = e.dataTransfer.getData('text/plain')
+  if (!origemId || origemId === destino.id || mesclandoCards) return
+  const origem = cards.find(card => card.id === origemId)
+  if (!origem) return
+  if (usuario?.role !== 'master') {
+    window.alert('A união de cards é exclusiva do Master. O card não foi movido.')
+    return
+  }
+  if (origem.eh_assistencia || destino.eh_assistencia) {
+    window.alert('Cards de assistência não podem ser incorporados a orçamentos.')
+    return
+  }
+  if (normalizarNomeMesclagem(origem.cliente_nome) !== normalizarNomeMesclagem(destino.cliente_nome)) {
+    window.alert('Os cards têm nomes diferentes. Confira o cliente antes de unir. Nada foi alterado.')
+    return
+  }
+  const confirmar = window.confirm(
+    'Deseja copiar todas as informações de "' + origem.cliente_nome +
+    '" para o card "' + destino.cliente_nome + '" que está por baixo?\n\n' +
+    'Fotos, mídias do WhatsApp, anexos, observações e histórico serão incorporados. ' +
+    'O card de destino (incluindo seu W.Vetro, valores e etapa atual) será mantido.\n\n' +
+    'O card arrastado ficará arquivado, sem ser excluído. Deseja continuar?'
+  )
+  if (!confirmar) return
+  setMesclandoCards(true)
+  try {
+    const token = await tokenAtual()
+    if (!token) throw new Error('Sessão expirada. Entre novamente.')
+    const resposta = await fetch('/api/kanban/comercial/mesclar-cards', {
+      method: 'POST', headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'application/json',
+      }, body: JSON.stringify({ origemId, destinoId: destino.id, confirmou: true }),
+    })
+    const dados = await resposta.json().catch(() => ({}))
+    if (!resposta.ok) throw new Error(dados.error || 'Não foi possível unir os cards.')
+    setCards(atuais => atuais.filter(c => c.id !== origemId).map(c =>
+      c.id === destino.id && dados.orcamento ? dados.orcamento as OrcamentoRapido : c))
+    setCardsBuscaHistorico(atuais => atuais.filter(c => c.id !== origemId).map(c =>
+      c.id === destino.id && dados.orcamento ? dados.orcamento as OrcamentoRapido : c))
+    if (cardSelecionado?.id === origemId) {
+      setCardSelecionado(null)
+      setEditando(null)
+    }
+    window.alert(dados.aviso || 'Cards reunidos com sucesso. O original foi preservado no histórico.')
+  } catch (erro) {
+    window.alert(erro instanceof Error ? erro.message : 'A união falhou. Confira os cards antes de tentar novamente.')
+  } finally {
+    setMesclandoCards(false)
+  }
 }
 
 async function handleDrop(e: React.DragEvent, colunaId: string) {
@@ -2169,12 +2232,25 @@ return (
 <div
 key={card.id}
 draggable={!card.eh_assistencia}
-onDragStart={e => e.dataTransfer.setData('text/plain', card.id)}
-onClick={() => abrirCardOuAssistencia(card)}
+onDragStart={e => {
+  e.dataTransfer.effectAllowed = 'copyMove'
+  e.dataTransfer.setData('text/plain', card.id)
+}}
+onDragEnd={() => { setCardAlvoMesclagem(null); setColunaArrastando(null) }}
+onDragOver={e => {
+  if (usuario?.role !== 'master' || card.eh_assistencia) return
+  e.preventDefault()
+  e.stopPropagation()
+  e.dataTransfer.dropEffect = 'copy'
+  if (cardAlvoMesclagem !== card.id) setCardAlvoMesclagem(card.id)
+}}
+onDragLeave={() => { if (cardAlvoMesclagem === card.id) setCardAlvoMesclagem(null) }}
+onDrop={e => { if (usuario?.role === 'master') void handleDropSobreCard(e, card) }}
+onClick={() => { if (!mesclandoCards) abrirCardOuAssistencia(card) }}
 style={est ? { backgroundColor: est.fundo, borderColor: est.fundo } : undefined}
 className={`rounded-xl border-2 p-3 cursor-pointer hover:shadow-md transition ${
 est ? (est.alerta ? 'shadow-md' : 'shadow-sm') : 'bg-white border-slate-200'
-}`}
+} ${cardAlvoMesclagem === card.id ? 'ring-4 ring-blue-500 ring-offset-2' : ''}`}
 >
 <div className="flex items-center gap-2 mb-1">
 <div
@@ -2204,7 +2280,7 @@ style={est ? { backgroundColor: 'rgba(255,255,255,0.3)' } : undefined}
 </div>
 )}
 {!card.eh_assistencia && !card.obra_id && card.cidade && <p className="mb-1 text-[11px]" style={{color:est ? est.texto : '#64748b'}}><MapPin size={11} className="mr-1 inline"/>{card.cidade}</p>}
-{!card.eh_assistencia && card.modo_entrada === 'whatsapp' && (
+{!card.eh_assistencia && (card.modo_entrada === 'whatsapp' || (Array.isArray(card.ia_fontes?.origem_cards) && card.ia_fontes.origem_cards.length > 0)) && (
 <div data-whatsapp-resumo-card="true" className="mb-2 rounded-lg border border-white/35 bg-white/15 p-2" style={{ color: est ? est.texto : '#334155' }}>
   <div className="mb-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
     <MessageCircle size={13} className="shrink-0" />
@@ -2367,11 +2443,11 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 
 {cardSelecionado && editando && (
 <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-<div className={"bg-white rounded-t-2xl sm:rounded-2xl w-full max-h-[92vh] sm:max-h-[85vh] overflow-y-auto " + (cardSelecionado.modo_entrada === "whatsapp" ? "max-w-4xl" : "max-w-md")}>
+<div className={"bg-white rounded-t-2xl sm:rounded-2xl w-full max-h-[92vh] sm:max-h-[85vh] overflow-y-auto " + ((cardSelecionado.modo_entrada === "whatsapp" || (Array.isArray(cardSelecionado.ia_fontes?.origem_cards) && cardSelecionado.ia_fontes.origem_cards.length > 0)) ? "max-w-4xl" : "max-w-md")}>
 <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
 <div>
 <h3 className="font-bold text-slate-800">Orçamento · detalhes e histórico</h3>
-{cardSelecionado.modo_entrada === "whatsapp" && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">Via WhatsApp · notas e mídias</span>}
+{(cardSelecionado.modo_entrada === "whatsapp" || (Array.isArray(cardSelecionado.ia_fontes?.origem_cards) && cardSelecionado.ia_fontes.origem_cards.length > 0)) && <span className="mt-1 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">Via WhatsApp · notas e mídias</span>}
 <p className="text-[11px] text-slate-400">Abertura, alterações e saídas ficam registradas.</p>
 </div>
 <button onClick={tentarFechar} className="p-1 text-slate-400 hover:text-slate-600">
@@ -2380,7 +2456,7 @@ className="flex-shrink-0 w-[86vw] max-w-72 snap-start h-12 flex items-center jus
 </div>
 
 <div className="p-5 space-y-4">
-{cardSelecionado.modo_entrada === "whatsapp" && <WhatsAppOrcamentoNotas key={cardSelecionado.id} card={cardSelecionado}/>}
+{(cardSelecionado.modo_entrada === "whatsapp" || (Array.isArray(cardSelecionado.ia_fontes?.origem_cards) && cardSelecionado.ia_fontes.origem_cards.length > 0)) && <WhatsAppOrcamentoNotas key={cardSelecionado.id} card={cardSelecionado}/>}
 <div id="atlas-campos-orcamento" />
 <section data-orcamento-localizacao="true" className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-sm">
   <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-blue-700">Cliente e local da obra</p>

@@ -6,20 +6,23 @@ import { tokenAtual } from '@/lib/auth'
 import type { OrcamentoRapido } from '@/lib/tipos'
 
 type Anexo = { id: string; tipo: string; nome: string; mimeType: string; tamanho: number; url: string | null }
-type Notas = { grupo: string; grupoConferido: boolean; origemStatus: 'correta' | 'outro_grupo' | 'nao_identificada'; historico: boolean;
+type CardIncorporado = { id: string; cliente_nome?: string; modo_entrada?: string; descricao?: string; observacoes?: string; itens?: any[] }
+type Notas = { origemCards?: CardIncorporado[]; grupo: string; grupoConferido: boolean; origemStatus: 'correta' | 'outro_grupo' | 'nao_identificada'; historico: boolean;
   conversaId: string | null; participanteNome: string | null;
   primeiraMensagemEm: string | null; ultimaMensagemEm: string | null; totalMensagens: number | null;
   gatilho: string | null; textoOriginal: string; resumoIA: string | null; anexos: Anexo[] }
 
 function instantaneoDoCard(card: OrcamentoRapido): Notas | null {
   const fontes = card.ia_fontes
-  if (card.modo_entrada !== 'whatsapp' || !fontes || typeof fontes !== 'object') return null
+  if (!fontes || typeof fontes !== 'object' ||
+    (card.modo_entrada !== 'whatsapp' && !Array.isArray(fontes.origem_cards))) return null
   const anexos = (Array.isArray(fontes.anexos) ? fontes.anexos : []).map((a: any, i: number) => ({
     id: String(a?.mensagem_id || a?.whatsapp_message_id || i),
     tipo: String(a?.tipo || ''), nome: String(a?.nome || 'Anexo do WhatsApp'),
     mimeType: String(a?.mime_type || ''), tamanho: Number(a?.tamanho || 0), url: null,
   }))
   return {
+    origemCards: Array.isArray(fontes.origem_cards) ? fontes.origem_cards as CardIncorporado[] : [],
     grupo: 'Consultando a origem...', grupoConferido: false, origemStatus: 'nao_identificada', historico: true,
     conversaId: null, participanteNome: null, primeiraMensagemEm: card.created_at || null,
     ultimaMensagemEm: card.created_at || null, totalMensagens: null, gatilho: null,
@@ -137,7 +140,24 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
         </div>
       </>}
     </section>
-    <section className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3 sm:p-4">
+    {(notas?.origemCards || []).length > 0 && <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-3 sm:p-4">
+      <h4 className="mb-2 text-sm font-bold text-slate-900">Informações dos cards incorporados</h4>
+      {(notas?.origemCards || []).map((origem, indice) => <div key={origem.id || indice} className="mt-2 rounded-lg bg-white p-3 text-xs text-slate-700">
+        <p className="font-semibold">{origem.cliente_nome || 'Card anterior'} · cópia preservada</p>
+        {origem.descricao && <p className="mt-2 whitespace-pre-wrap">{origem.descricao}</p>}
+        {origem.observacoes && <p className="mt-2 whitespace-pre-wrap">{origem.observacoes}</p>}
+        {Array.isArray(origem.itens) && origem.itens.length > 0 && <div className="mt-2 space-y-1">
+          <p className="font-semibold">Itens e medidas do card original (não alteram o W.Vetro):</p>
+          {origem.itens.map((item, i) => <p key={String(item.id || i)}>
+            {i + 1}. {String(item.ambiente || item.tipo_outro_texto || item.tipo_esquadria || 'Item recebido')}
+            {item.quantidade ? ' · Qtd. ' + item.quantidade : ''}
+            {item.largura_mm ? ' · ' + item.largura_mm + ' mm' : ''}
+            {item.altura_mm ? ' × ' + item.altura_mm + ' mm' : ''}
+          </p>)}
+        </div>}
+      </div>)}
+    </section>}
+    {card.modo_entrada === 'whatsapp' && <section className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3 sm:p-4">
       <div className="mb-3 flex items-start gap-2"><WandSparkles size={20} className="text-indigo-600"/>
         <div><h4 className="text-sm font-bold text-slate-900">Pré-preenchimento por IA</h4>
           <p className="text-[11px] text-slate-600">Sugestões, não informações confirmadas. O orçamentista valida ou corrige.</p></div></div>
@@ -149,6 +169,6 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
       </div>
       <p className="mt-3 text-xs text-indigo-800">Confira os campos editáveis abaixo e use <strong>“Está correto”</strong> ou <strong>“Corrigir e ensinar”</strong> para registrar sua conferência.</p>
       <a href="#atlas-campos-orcamento" className="mt-2 inline-block text-xs font-bold text-blue-700 underline">Revisar dados do orçamento</a>
-    </section>
+    </section>}
   </div>
 }
