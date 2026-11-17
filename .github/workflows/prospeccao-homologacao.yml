@@ -2,7 +2,9 @@ name: Prospecção — validação isolada
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - feat/prospeccao-endereco-funil-bairros-20261117
     paths:
       - 'app/prospeccao/**'
       - 'app/relatorios/prospeccao/**'
