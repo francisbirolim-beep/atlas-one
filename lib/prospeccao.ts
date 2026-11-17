@@ -210,6 +210,7 @@ export async function adicionarContato(prospeccaoId: string, contato: Omit<Conta
 
 export async function moverProspeccao(prospeccao: Prospeccao, novoStatus: StatusProspeccao) {
   if (prospeccao.status === novoStatus) return { ok: true }
+  if (novoStatus === 'convertido' && !prospeccao.cliente_id) return { ok: false, error: 'Use Converter em cliente para criar ou vincular um Cliente 360.' }
   const usuario = await usuarioAtual()
   if (!usuario) return { ok: false, error: 'Sessão expirada.' }
   const { error } = await supabase.from('prospeccoes').update({ status: novoStatus, status_atualizado_em: new Date().toISOString() }).eq('id', prospeccao.id)
@@ -222,6 +223,7 @@ export async function registrarInteracao(prospeccao: Prospeccao, dados: { tipo: 
   const usuario = await usuarioAtual()
   if (!usuario) return { ok: false, error: 'Sessão expirada.' }
   if (!dados.descricao.trim()) return { ok: false, error: 'Descreva o que aconteceu no contato.' }
+  if (dados.status_novo === 'convertido' && !prospeccao.cliente_id) return { ok: false, error: 'A conversão exige criar ou vincular um Cliente 360.' }
   const { error } = await supabase.from('prospeccao_interacoes').insert({
     prospeccao_id: prospeccao.id,
     tipo: dados.tipo,
