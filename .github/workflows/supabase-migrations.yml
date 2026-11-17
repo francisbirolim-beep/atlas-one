@@ -17,6 +17,7 @@ on:
         options:
           - audit
           - dry-run
+          - security-test
           - apply
       confirmation:
         description: "Para apply em producao, digite APPLY_PRODUCTION"
@@ -127,8 +128,8 @@ jobs:
         shell: bash
         run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run --include-all
 
-      - name: Test Supabase security suite
-        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply')) }}
+      - name: Conferir testes SQL sem executar na producao
+        if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'dry-run' || inputs.mode == 'apply' || inputs.mode == 'security-test')) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -139,8 +140,40 @@ jobs:
             exit 1
           fi
           for test_file in "${tests[@]}"; do
-            echo "Executando $test_file"
-            psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$test_file"
+            test -s "$test_file" || { echo "ERRO: teste SQL vazio: $test_file"; exit 1; }
+            echo "Encontrado (nao executado no banco principal): $test_file"
+          done
+          echo "::notice::Os testes SQL integrais exigem uma base isolada de homologacao."
+
+      - name: Testar seguranca SQL somente em homologacao separada
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'security-test' }}
+        shell: bash
+        env:
+          SUPABASE_HOMOLOG_PROJECT_ID: ${{ secrets.SUPABASE_HOMOLOG_PROJECT_ID }}
+          SUPABASE_HOMOLOG_DB_PASSWORD: ${{ secrets.SUPABASE_HOMOLOG_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "${SUPABASE_HOMOLOG_PROJECT_ID:-}" || { echo "ERRO: Configure SUPABASE_HOMOLOG_PROJECT_ID."; exit 1; }
+          test -n "${SUPABASE_HOMOLOG_DB_PASSWORD:-}" || { echo "ERRO: Configure SUPABASE_HOMOLOG_DB_PASSWORD."; exit 1; }
+          if [ "$SUPABASE_HOMOLOG_PROJECT_ID" = "$SUPABASE_PROJECT_ID" ]; then
+            echo "ERRO: A homologacao nao pode apontar para o banco principal."
+            exit 1
+          fi
+          [[ "$SUPABASE_HOMOLOG_PROJECT_ID" =~ ^[a-z0-9]{20}$ ]] || { echo "ERRO: Project ref de homologacao invalido."; exit 1; }
+          TEST_DB_URL=$(python - <<'PY'
+          import os
+          from urllib.parse import quote
+          p = os.environ['SUPABASE_HOMOLOG_PROJECT_ID']
+          passwd = quote(os.environ['SUPABASE_HOMOLOG_DB_PASSWORD'], safe='')
+          print(f"postgresql://postgres.{p}:{passwd}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres")
+          PY
+          )
+          shopt -s nullglob
+          tests=(supabase/tests/*.sql)
+          test ${#tests[@]} -gt 0 || { echo "ERRO: Suite SQL nao encontrada."; exit 1; }
+          for test_file in "${tests[@]}"; do
+            echo "Executando teste em banco isolado: $test_file"
+            psql "$TEST_DB_URL" -X -v ON_ERROR_STOP=1 -f "$test_file"
           done
 
       - name: Require explicit production confirmation
