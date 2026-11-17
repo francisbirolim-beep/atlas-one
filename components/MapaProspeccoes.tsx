@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Prospeccao } from '@/lib/prospeccao'
+import type { EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
 import { STATUS_PROSPECCAO } from '@/lib/prospeccao'
 import {
   GRUPOS_MAPA, agruparPontosPorBairro, pontosValidos,
@@ -30,7 +31,8 @@ function gerarPopupPonto(ponto: PontoProspeccao) {
   const fase = document.createElement('p')
   fase.style.margin = '7px 0'
   fase.textContent = 'Situação: ' +
-    (STATUS_PROSPECCAO.find(status => status.id === registro.status)?.label || registro.status)
+    (GRUPOS_MAPA.find(tipo => tipo.id === ponto.classificacao)?.titulo ||
+      STATUS_PROSPECCAO.find(status => status.id === registro.status)?.label || registro.status)
   caixa.append(fase)
   const vendedor = document.createElement('p')
   vendedor.style.margin = '7px 0'
@@ -85,14 +87,14 @@ function gerarPopupBairro(grupo: GrupoBairro) {
   return caixa
 }
 
-export default function MapaProspeccoes({ registros }: { registros: Prospeccao[] }) {
+export default function MapaProspeccoes({ registros, etapasComerciais }: { registros: Prospeccao[]; etapasComerciais: Record<string, EtapaComercialProspeccao> }) {
   const elemento = useRef<HTMLDivElement>(null)
   const mapaRef = useRef<import('leaflet').Map | null>(null)
   const [filtroSituacao, setFiltroSituacao] = useState<ClassificacaoMapa | ''>('')
   const [erroMapa, setErroMapa] = useState('')
   const [emTelaCheia, setEmTelaCheia] = useState(false)
 
-  const pontos = useMemo(() => pontosValidos(registros), [registros])
+  const pontos = useMemo(() => pontosValidos(registros, etapasComerciais), [registros, etapasComerciais])
   const pontosVisiveis = useMemo(() => pontos.filter(p => !filtroSituacao || p.classificacao === filtroSituacao), [pontos, filtroSituacao])
   const gruposBairro = useMemo(() => agruparPontosPorBairro(pontosVisiveis), [pontosVisiveis])
   const semGps = registros.length - pontos.length
