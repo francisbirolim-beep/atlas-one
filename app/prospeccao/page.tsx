@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { consultarEtapasComerciais, type EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
+import { nomesUnicosGeograficos } from '@/lib/prospeccaoRelatorio'
+import { normalizarTextoEndereco as normalizarLocal } from '@/lib/geocodificacaoCep'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
 
@@ -55,14 +57,14 @@ export default function ProspeccaoPage() {
 
   useEffect(() => { void carregar() }, [])
 
-  const cidades = useMemo(() => [...new Set(itens.map(i => i.cidade).filter(Boolean) as string[])].sort(), [itens])
-  const bairros = useMemo(() => [...new Set(itens.filter(i => !cidade || i.cidade === cidade).map(i => i.bairro).filter(Boolean) as string[])].sort(), [cidade, itens])
+  const cidades = useMemo(() => nomesUnicosGeograficos(itens.map(i => i.cidade)), [itens])
+  const bairros = useMemo(() => nomesUnicosGeograficos(itens.filter(i => !cidade || normalizarLocal(i.cidade||'') === normalizarLocal(cidade)).map(i => i.bairro)), [cidade, itens])
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase('pt-BR')
     return itens.filter(item => {
       if (vendedor && item.responsavel_id !== vendedor) return false
-      if (cidade && item.cidade !== cidade) return false
-      if (bairro && item.bairro !== bairro) return false
+      if (cidade && normalizarLocal(item.cidade||'') !== normalizarLocal(cidade)) return false
+      if (bairro && normalizarLocal(item.bairro||'') !== normalizarLocal(bairro)) return false
       if (!termo) return true
       return [item.nome_cliente, item.nome_obra, item.telefone, item.endereco, item.cidade, item.bairro, item.responsavel_nome]
         .some(v => (v || '').toLocaleLowerCase('pt-BR').includes(termo))
