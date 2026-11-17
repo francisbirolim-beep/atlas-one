@@ -4,6 +4,7 @@ import { idCardContramarco } from '@/lib/idCardMedicaoFinal'
 import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { perfilAprovadoContramarco } from '@/lib/contramarcoRegrasCorte'
 import { medicaoComprovada } from '@/lib/medicaoComprovacao'
+import { ehWVetroVendidoValidado } from '@/lib/medicaoVendaElegivel'
 import { avisarConferenciaParcial, validarDestinatariosParcial } from '@/lib/medicaoParcialNotificacoesServer'
 
 export const runtime = 'nodejs'
@@ -352,13 +353,24 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       if (!['em_medicao', 'com_pendencia'].includes(String(medicao.status_operacional || ''))) {
         return NextResponse.json({ error: 'A medição precisa estar em andamento ou pausada para enviar uma parcial.' }, { status: 409 })
       }
-      if (medicao.orcamento_id) {
-        const { data: venda } = await supabaseAdmin.from('vendas_obras')
+      if (!medicao.orcamento_id) {
+        return NextResponse.json({ error: 'A Medição Final precisa estar vinculada a um orçamento vendido.' }, { status: 409 })
+      }
+      const [{ data: venda, error: erroVenda }, { data: orcamento, error: erroOrcamento }] = await Promise.all([
+        supabaseAdmin.from('vendas_obras')
           .select('id').eq('orcamento_id', medicao.orcamento_id)
-          .eq('empresa_id', usuario.empresa_id).limit(1).maybeSingle()
-        if (!venda?.id) {
-          return NextResponse.json({ error: 'Confirme a venda antes de encaminhar a parcial.', code: 'VENDA_OPERACIONAL_AUSENTE' }, { status: 409 })
-        }
+          .eq('empresa_id', usuario.empresa_id).eq('status', 'ativa')
+          .limit(1).maybeSingle(),
+        supabaseAdmin.from('orcamentos')
+          .select('wvetro_fluxo,modo_entrada,origem')
+          .eq('id', medicao.orcamento_id).eq('empresa_id', usuario.empresa_id)
+          .maybeSingle(),
+      ])
+      if (erroVenda || erroOrcamento) {
+        return NextResponse.json({ error: 'Não foi possível conferir a venda. Tente novamente.' }, { status: 503 })
+      }
+      if (!venda?.id && !ehWVetroVendidoValidado(orcamento)) {
+        return NextResponse.json({ error: 'Confirme a venda antes de encaminhar a parcial.', code: 'VENDA_NAO_CONFIRMADA' }, { status: 409 })
       }
       const destinatarios = Array.isArray(body?.responsaveis) ? body.responsaveis : []
       const validados = await validarDestinatariosParcial(usuario.empresa_id, destinatarios)

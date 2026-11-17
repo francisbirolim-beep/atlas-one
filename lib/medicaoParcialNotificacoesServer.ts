@@ -1,9 +1,10 @@
 import { createHash } from 'crypto'
 import { supabaseAdmin as db } from './supabaseAdmin'
 
-// Usa a mesma identidade da tarefa de conferência final para não duplicar cartões.
+// Cartão específico da etapa parcial. O envio total cria outro cartão para
+// que a tarefa final seja visível mesmo após a conferência da parcial.
 function idDaTarefa(medicaoId: string, usuarioId: string) {
-  const bytes = createHash('sha256').update(`atlas:medicao:revisao:${medicaoId}:${usuarioId}`).digest()
+  const bytes = createHash('sha256').update(`atlas:medicao:revisao-parcial:${medicaoId}:${usuarioId}`).digest()
   bytes[6] = (bytes[6] & 0x0f) | 0x80
   bytes[8] = (bytes[8] & 0x3f) | 0x80
   const hex = bytes.toString('hex')
