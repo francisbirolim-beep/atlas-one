@@ -52,7 +52,7 @@ async function consultarCep(cep: string): Promise<CepEnderecoViaCep | null> {
 
 async function pesquisarEndereco(uf: string, cidade: string, rua: string, bairro: string) {
   if (!uf || cidade.trim().length < 3 || rua.trim().length < 3) {
-    return { cep: '', bairro: '', ambiguo: false }
+    return { cep: '', bairro: '', ambiguo: false, opcoes: [] as Array<{cep:string; bairro:string; trecho:string}> }
   }
   try {
     const url = 'https://viacep.com.br/ws/' +
@@ -62,11 +62,11 @@ async function pesquisarEndereco(uf: string, cidade: string, rua: string, bairro
       signal: AbortSignal.timeout(5500),
       next: { revalidate: 3600 },
     })
-    if (!response.ok) return { cep: '', bairro: '', ambiguo: false }
+    if (!response.ok) return { cep: '', bairro: '', ambiguo: false, opcoes: [] as Array<{cep:string; bairro:string; trecho:string}> }
     const data: unknown = await response.json()
-    if (!Array.isArray(data)) return { cep: '', bairro: '', ambiguo: false }
+    if (!Array.isArray(data)) return { cep: '', bairro: '', ambiguo: false, opcoes: [] as Array<{cep:string; bairro:string; trecho:string}> }
     return selecionarComplementoViaCep(data as CepEnderecoViaCep[], rua, bairro, cidade, uf)
-  } catch { return { cep: '', bairro: '', ambiguo: false } }
+  } catch { return { cep: '', bairro: '', ambiguo: false, opcoes: [] as Array<{cep:string; bairro:string; trecho:string}> } }
 }
 
 export async function GET(request: NextRequest) {
@@ -104,6 +104,7 @@ export async function GET(request: NextRequest) {
     let cep = ''
     let cepOrigem: 'viacep-validado' | 'viacep-endereco' | null = null
     let cepAmbiguo = false
+    let cepOpcoes: Array<{cep:string; bairro:string; trecho:string}> = []
 
     if (address.country_code === 'br' && cidade && rua && uf) {
       const registroCep = cepMapa ? await consultarCep(cepMapa) : null
@@ -117,15 +118,16 @@ export async function GET(request: NextRequest) {
         cep = encontrado.cep
         cepOrigem = cep ? 'viacep-endereco' : null
         cepAmbiguo = encontrado.ambiguo
+        cepOpcoes = encontrado.opcoes
         if (encontrado.bairro && (!bairro || cep)) bairro = encontrado.bairro
       }
     }
 
     return NextResponse.json({
-      cidade, bairro, rua, uf, cep, cepOrigem, cepAmbiguo,
+      cidade, bairro, rua, uf, cep, cepOrigem, cepAmbiguo, cepOpcoes,
       cepPrecisaConferencia: Boolean(cep),
       cepAviso: cep ? 'CEP sugerido pela base postal. Confira o número do imóvel.' :
-        cepAmbiguo ? 'Esta rua pode ter mais de um CEP. Confirme pelo número do imóvel.' :
+        cepAmbiguo ? 'Esta rua possui mais de um CEP na base postal. Selecione a opção correta conferindo o número e o trecho da rua.' :
           'CEP não confirmado. Digite o CEP conhecido e consulte a base postal.',
       // Nunca inferir o número a partir de um CEP ou do GPS.
       numero: address.house_number || '',
