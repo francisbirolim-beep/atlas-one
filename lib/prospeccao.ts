@@ -276,15 +276,56 @@ async function sincronizarAgenda(prospeccaoId: string, usuario: Usuario, nomeCli
 
 export async function buscarClientesSemelhantes(nome: string, telefone?: string | null): Promise<Cliente[]> {
   const digitos = (telefone || '').replace(/\D/g, '')
-  const { data } = await supabase.from('clientes').select('*').order('created_at', { ascending: false }).limit(500)
-  const termo = nome.trim().toLocaleLowerCase('pt-BR')
-  return ((data || []) as Cliente[]).filter(c => {
-    const mesmoTelefone = digitos.length >= 8 && `${c.whatsapp || ''}${c.telefone || ''}`.replace(/\D/g, '').includes(digitos)
-    const mesmoNome = termo.length >= 3 && c.nome.toLocaleLowerCase('pt-BR').includes(termo)
-    return mesmoTelefone || mesmoNome
-  }).slice(0, 8)
-}
+  const termo = nome.trim()
+  if (digitos.length < 8 && termo.length < 3) return []
 
+  // Filtra no servidor; percorrer somente os últimos 500 clientes podia ignorar
+  // um cadastro mais antigo e criar uma duplicidade na conversão da prospecção.
+  // O sufixo de telefone é pesquisado sem depender de espaços ou prefixos de DDD.
+  const consultas: PromiseLike<{ data: Cliente[] | null; error: {message: string} | null }>[] = []
+  if (termo.length >= 3) {
+    const padrao = termo.replace(/[\\%_]/g, '\\$&')
+    consultas.push(supabase.from('clientes').select('*')
+      .ilike('nome', `%${padrao}%`).order('created_at', {ascending:false}).limit(120))
+  }
+  if (digitos.length >= 8) {
+    const sufixo = digitos.slice(-4)
+    consultas.push(supabase.from('clientes').select('*')
+      .or(`whatsapp.ilike.%${sufixo}%,telefone.ilike.%${sufixo}%`)
+      .order('created_at', {ascending:false}).limit(120))
+  }
+
+  const resultados = await Promise.all(consultas)
+  for (const resposta of resultados) {
+    if (resposta.error) throw new Error('Falha ao verificar cadastros existentes: ' + resposta.error.message)
+  }
+  const encontrados = new Map<string, Cliente>()
+  for (const resposta of resultados) {
+    for (const c of resposta.data || []) encontrados.set(c.id, c)
+  }
+  const normalizarNome = (valor: string) => valor.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim()
+  const buscado = normalizarNome(termo)
+  const digitosCliente = (c: Cliente) => [
+    c.whatsapp || '', c.telefone || '',
+  ].map(t => t.replace(/\D/g, ''))
+  const compativel = (c: Cliente) => {
+    const telefones = digitosCliente(c)
+    const mesmoTelefone = digitos.length >= 8 && telefones.some(t =>
+      t.includes(digitos) || digitos.includes(t) && t.length >= 8)
+    const mesmoNome = termo.length >= 3 && normalizarNome(c.nome || '').includes(buscado)
+    return { mesmoTelefone, mesmoNome }
+  }
+  return [...encontrados.values()]
+    .filter(c => { const m = compativel(c); return m.mesmoTelefone || m.mesmoNome })
+    .sort((a,b) => {
+      const x = compativel(a), y = compativel(b)
+      return Number(y.mesmoTelefone) - Number(x.mesmoTelefone)
+        || Number(normalizarNome(b.nome||'') === buscado) - Number(normalizarNome(a.nome||'') === buscado)
+        || (b.created_at||'').localeCompare(a.created_at||'')
+    })
+    .slice(0, 12)
+}
 export async function converterProspeccao(id: string, clienteExistenteId: string | null, criarObra: boolean) {
   const { data, error } = await supabase.rpc('fn_converter_prospeccao_v2', { p_prospeccao_id: id, p_cliente_existente_id: clienteExistenteId, p_criar_obra: criarObra })
   if (error) return { ok: false, error: error.message }
