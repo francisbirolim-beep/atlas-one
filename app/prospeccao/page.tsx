@@ -78,6 +78,10 @@ export default function ProspeccaoPage() {
     const item = itens.find(i => i.id === arrastando)
     setArrastando(null)
     if (!item || item.status === status) return
+    if (status === 'convertido' && !item.cliente_id) {
+      alert('Para converter, abra a ficha e use o botão Converter em cliente. Assim o cadastro e o histórico ficam vinculados.')
+      return
+    }
     const origem=STATUS_PROSPECCAO.find(c=>c.id===item.status)
     const destino=STATUS_PROSPECCAO.find(c=>c.id===status)
     if (!confirmarMovimentoKanban({card:item.nome_cliente||'Prospecção',origem:origem?.label||item.status,destino:destino?.label||status,retrocesso:STATUS_PROSPECCAO.findIndex(c=>c.id===status)<STATUS_PROSPECCAO.findIndex(c=>c.id===item.status)})) return
