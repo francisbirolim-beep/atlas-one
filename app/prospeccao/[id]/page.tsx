@@ -53,37 +53,61 @@ export default function ProspeccaoDetalhePage(){
   async function salvarEdicao(){if(!p||!form.nome_cliente?.trim())return;setSalvando(true);const patch:any={...form};if(form.responsavel_id!==p.responsavel_id){patch.responsavel_nome=equipe.find(u=>u.id===form.responsavel_id)?.nome||form.responsavel_nome}const r=await atualizarProspeccao(id,patch);setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao atualizar.');return}setEditando(false);await carregar()}
   async function abrirConversao(){
     if(!p)return
-    // O título automático da visita pode ser o endereço, não o nome do cliente.
+    setErro('')
+    // Visita criada pelo endereço não equivale a conhecer o nome do cliente.
     const nome=p.nome_cliente===p.nome_obra?'':p.nome_cliente
     setCadastroConversao({nome_cliente:nome,telefone:p.telefone||'',cidade:p.cidade||'',bairro:p.bairro||'',endereco:p.endereco||'',cep:p.cep||'',complemento:p.complemento||''})
-    setSemelhantes(await buscarClientesSemelhantes(nome,p.telefone))
-    setClienteEscolhido('')
-    setConfirmarClienteNovo(false)
-    setModalConverter(true)
+    try {
+      const clientes = await buscarClientesSemelhantes(nome,p.telefone)
+      setSemelhantes(clientes)
+      setClienteEscolhido('')
+      setConfirmarClienteNovo(false)
+      setModalConverter(true)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao conferir se o cliente já existe.')
+    }
   }
   async function converter(){
     setErro('')
-    if(!clienteEscolhido&&!cadastroConversao.nome_cliente.trim()){setErro('Informe o nome do cliente antes de converter.');return}
-    if(!clienteEscolhido&&cadastroConversao.cep.trim()&&!formatarCep(cadastroConversao.cep)){setErro('O CEP precisa conter 8 números válidos.');return}
+    if(!clienteEscolhido&&!cadastroConversao.nome_cliente.trim()){
+      setErro('Informe o nome do cliente antes de converter.')
+      return
+    }
+    if(!clienteEscolhido&&cadastroConversao.cep.trim()&&!formatarCep(cadastroConversao.cep)){
+      setErro('O CEP precisa conter 8 números válidos.')
+      return
+    }
     setSalvando(true)
-    if(!clienteEscolhido){
-      // Nova pesquisa com os dados ATUAIS do formulário evita criar duplicados
-      // apenas porque o nome foi preenchido depois da abertura do modal.
-      const encontrados=await buscarClientesSemelhantes(cadastroConversao.nome_cliente,cadastroConversao.telefone)
-      setSemelhantes(encontrados)
-      if(encontrados.length&&!confirmarClienteNovo){
-        setErro('Encontramos possíveis clientes cadastrados. Selecione um existente ou confirme expressamente a criação de um novo.')
-        setSalvando(false)
+    try {
+      if(!clienteEscolhido){
+        // Conferir novamente com os campos ATUAIS antes de qualquer gravação.
+        const encontrados=await buscarClientesSemelhantes(cadastroConversao.nome_cliente,cadastroConversao.telefone)
+        setSemelhantes(encontrados)
+        if(encontrados.length&&!confirmarClienteNovo){
+          setErro('Encontramos possíveis clientes cadastrados. Selecione um existente ou confirme expressamente a criação de um novo.')
+          return
+        }
+        const atualizado=await atualizarProspeccao(id,{
+          ...cadastroConversao,cep:cadastroConversao.cep?formatarCep(cadastroConversao.cep):''
+        })
+        if(!atualizado.ok){
+          setErro(atualizado.error||'Não foi possível salvar os dados do cadastro.')
+          return
+        }
+      }
+      // A RPC transacional V2 só marca como convertido após criar/vincular cliente.
+      const resultado=await converterProspeccao(id,clienteEscolhido||null,criarObra)
+      if(!resultado.ok){
+        setErro(resultado.error||'Não foi possível converter.')
         return
       }
-      const atualizado=await atualizarProspeccao(id,{...cadastroConversao,cep:cadastroConversao.cep?formatarCep(cadastroConversao.cep):''})
-      if(!atualizado.ok){setErro(atualizado.error||'Não foi possível salvar os dados do cadastro.');setSalvando(false);return}
+      setModalConverter(false)
+      router.push(`/clientes/${resultado.clienteId}`)
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Falha ao verificar ou converter o cadastro.')
+    } finally {
+      setSalvando(false)
     }
-    const r=await converterProspeccao(id,clienteEscolhido||null,criarObra)
-    setSalvando(false)
-    if(!r.ok){setErro(r.error||'Não foi possível converter.');return}
-    setModalConverter(false)
-    router.push(`/clientes/${r.clienteId}`)
   }
 
   if(carregando)return <div className="min-h-screen grid place-items-center text-slate-400">Carregando prospecção...</div>
@@ -132,9 +156,10 @@ export default function ProspeccaoDetalhePage(){
         <label className="text-xs font-semibold">Bairro<input value={cadastroConversao.bairro} onChange={e=>setCadastroConversao({...cadastroConversao,bairro:e.target.value})} placeholder="Bairro" className="mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-2">Rua e número<input value={cadastroConversao.endereco} onChange={e=>setCadastroConversao({...cadastroConversao,endereco:e.target.value})} placeholder="Rua e número" className="mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-normal"/></label>
         <label className="text-xs font-semibold sm:col-span-2">Referência / trecho aproximado<input value={cadastroConversao.complemento} onChange={e=>setCadastroConversao({...cadastroConversao,complemento:e.target.value})} placeholder="Referência da obra" className="mt-1 w-full rounded-xl border px-3 py-2.5 text-sm font-normal"/></label>
-        <button type="button" onClick={async()=>{setSemelhantes(await buscarClientesSemelhantes(cadastroConversao.nome_cliente,cadastroConversao.telefone));setClienteEscolhido('');setConfirmarClienteNovo(false)}} className="rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 sm:col-span-2">Verificar se já existe cliente com este nome/telefone</button>
+        <button type="button" onClick={async()=>{try{setErro('');setSemelhantes(await buscarClientesSemelhantes(cadastroConversao.nome_cliente,cadastroConversao.telefone));setClienteEscolhido('');setConfirmarClienteNovo(false)}catch(e){setErro(e instanceof Error?e.message:'Não foi possível consultar clientes existentes.')}}} className="rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 sm:col-span-2">Verificar se já existe cliente com este nome/telefone</button>
       </div>}
       <label className="mt-4 flex items-start gap-3 rounded-xl border p-3"><input type="checkbox" checked={criarObra} onChange={e=>setCriarObra(e.target.checked)} className="mt-1"/><span><strong className="block text-sm">Criar também a obra</strong><small className="text-slate-500">A obra recebe os dados da prospecção e poderá ser vinculada ao orçamento futuro.</small></span></label>
+      {!criarObra&&<p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Sem criar uma obra, o pino ficará na etapa Cliente. Para mudar automaticamente para Orçamento ou Venda, será necessário vincular posteriormente uma obra à prospecção.</p>}
       {erro&&<p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-700">{erro}</p>}
       <button onClick={()=>void converter()} disabled={salvando||(!clienteEscolhido&&!cadastroConversao.nome_cliente.trim())} className="sticky bottom-0 mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 font-bold text-white disabled:opacity-50"><Building2 size={17}/>{salvando?'Convertendo...':'Confirmar cadastro e conversão'}</button></div></div>}
   </div>
