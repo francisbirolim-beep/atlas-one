@@ -84,7 +84,7 @@ export default function RelatorioProspeccao(){
  const porStatus=useMemo(()=>agrupar(filtrados,r=>nomeStatus(r.status)),[filtrados])
  const porVendedor=useMemo(()=>agrupar(filtrados,r=>r.responsavel_nome||''),[filtrados])
  const abertos=filtrados.filter(r=>!['convertido','sem_interesse'].includes(r.status)).length
- const convertidos=filtrados.filter(r=>r.status==='convertido').length
+ const convertidos=filtrados.filter(r=>Boolean(r.cliente_id)).length
  const semInteresse=filtrados.filter(r=>r.status==='sem_interesse').length
  const retornos=filtrados.filter(r=>r.proxima_acao_em&&!['convertido','sem_interesse'].includes(r.status)).length
  const semGps=filtrados.filter(r=>r.latitude==null||r.longitude==null).length
