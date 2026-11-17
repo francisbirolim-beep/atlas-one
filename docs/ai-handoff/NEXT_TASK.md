@@ -1,3 +1,11 @@
+## 2026-11-17 — HOMOLOGAR abertura de anexos de cards incorporados (SEM PUBLICAR ANTES)
+
+1. Validar `fix/kanban-anexos-renovar-acesso-20261117` em branch de teste: TypeScript, build, regressões de notas, histórico e mesclagem, mais `node scripts/test-kanban-anexos-renovacao-20261117.cjs`.
+2. Em sessão autenticada de homologação, abrir imagem incorporada imediatamente e após pelo menos 21 minutos com o card parado; verificar também que clicar recupera uma miniatura que deixou de carregar.
+3. Conferir PDF e demais anexos (incluindo arquivos sem visualizador), áudio, vídeo, falha de rede e logout; arquivo ausente deve gerar erro explícito, não exclusão.
+4. Confirmar bloqueio de usuário sem permissão e isolamento entre empresas, preservação dos snapshots de origem, arquivos, orçamento, preços, W.Vetro e histórico.
+5. Antes de qualquer publicação: revisão do diff, backup/rollback, aprovação do candidato e validação na interface real.
+
 ## 2026-11-03 — HOMOLOGAR unificacao de clientes, SEM PUBLICAR antes de concluir
 
 1. Aplicar a migration candidata apenas em banco de teste, com snapshot restauravel. Validar as permissões Master/delegado/sem permissão e RLS; consultar advisors de seguranca do Supabase.
