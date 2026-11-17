@@ -11,6 +11,7 @@ on:
       - 'lib/prospeccao*.ts'
       - 'components/MapaProspeccoes.tsx'
       - 'scripts/test-prospeccao-campo-20261117.cjs'
+      - 'scripts/test-prospeccao-orcamentos-gps-20261117.cjs'
       - 'supabase/migrations/20261117143000_prospeccao_fotos_privadas.sql'
       - '.github/workflows/prospeccao-homologacao.yml'
 
@@ -38,6 +39,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Testar regras de CEP, fotos, pinos e bairros
         run: node scripts/test-prospeccao-campo-20261117.cjs
+      - name: Testar integração do GPS confirmado do pedido ao mapa
+        run: node scripts/test-prospeccao-orcamentos-gps-20261117.cjs
       - name: Verificar TypeScript
         run: npm run typecheck
       - name: Build Next.js sem publicação
