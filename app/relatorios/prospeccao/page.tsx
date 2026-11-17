@@ -183,7 +183,7 @@ export default function RelatorioProspeccao(){
    <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3 xl:col-span-6">Pesquisar cliente ou endereço<input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Nome, rua, telefone..." className="mt-1 block w-full rounded-lg border p-2"/></label>
   </section>
   {erro&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
-  {avisoEtapas&&<p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{avisoEtapas}</p>
+  {avisoEtapas&&<p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{avisoEtapas}</p>}
   {carregando&&<p className="text-sm text-slate-500">Carregando prospecções...</p>}
   {inicio>fim&&<p className="text-sm text-red-700">A data inicial deve ser anterior ou igual à final.</p>}
   <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
