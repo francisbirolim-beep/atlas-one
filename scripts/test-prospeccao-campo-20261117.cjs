@@ -158,7 +158,7 @@ async function main(){
       const filtro={};consultas.push(filtro)
       return {
         ilike(col,pattern){filtro.nome=pattern.slice(1,-1).toLowerCase();return this},
-        or(fragmento){const match=fragmento.match(/ilike\\.%([0-9]{4})%/);filtro.sufixo=match?.[1];return this},
+        or(fragmento){const match=fragmento.match(/ilike\.%([0-9]{4})%/);filtro.sufixo=match?.[1];return this},
         order(){return this},
         async limit(max){
           const data=clientes.filter(c=>{
