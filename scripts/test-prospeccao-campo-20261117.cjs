@@ -43,17 +43,21 @@ async function main(){
     {id:'b2',obra_id:'OBRA-B',status:'recusado',data_venda:null},
     {id:'c1',obra_id:'OBRA-C',status:'recusado',data_venda:null},
     {id:'z1',obra_id:'OBRA-SEM-VENDA',status:'convertido',data_venda:'2026-11-17'},
+    {id:'pedido-novo',obra_id:'OBRA-NOVA',status:'rascunho',data_venda:null},
+    {id:'pedido-outra',obra_id:'OBRA-OUTRA',status:'enviado',data_venda:null},
   ]
   const vendas=[
     {id:'v1',obra_id:'OBRA-B',status:'ativa',excluida_em:null},
     {id:'v2',obra_id:'OBRA-C',status:'ativa',excluida_em:'2026-11-18'},
+    {id:'v3',obra_id:null,orcamento_id:'pedido-novo',status:'ativa',excluida_em:null},
+    {id:'v4',obra_id:null,orcamento_id:'pedido-outra',status:'ativa',excluida_em:'2026-11-18'},
   ]
   const supabase={
     from(nome){
       assert.ok(['orcamentos','vendas_obras'].includes(nome))
       return {select(campos){
         assert.ok(campos.includes('obra_id'))
-        return {in(_campo,ids){
+        return {in(campo,ids){
           const filtros={}
           const consulta={
             eq(campo,valor){filtros[campo]=valor;return this},
@@ -61,7 +65,7 @@ async function main(){
             order(){return this},
             async range(inicio,fim){
               const linhas=nome==='orcamentos'?orcamentos:vendas
-              const filtrados=linhas.filter(linha=>ids.includes(linha.obra_id)&&Object.entries(filtros).every(([campo,valor])=>linha[campo]===valor))
+              const filtrados=linhas.filter(linha=>ids.includes(linha[campo])&&Object.entries(filtros).every(([coluna,valor])=>linha[coluna]===valor))
               return {data:filtrados.sort((a,b)=>a.id.localeCompare(b.id)).slice(inicio,fim+1),error:null}
             },
           }
@@ -88,6 +92,60 @@ async function main(){
   const grupos=mapa.agruparPontosPorBairro(pontos)
   assert.equal(grupos.length,2,'Acentos/maiúsculas no bairro não podem criar contagens separadas')
   assert.equal(grupos.find(g=>g.nome.toLowerCase().includes('centro')).pontos.length,2)
+
+
+  // Pedidos de orçamento capturados com GPS devem aparecer no mapa mesmo sem
+  // registro anterior na tabela de prospecções; uma obra = um pino.
+  const enderecoObra=carregar('lib/enderecoObra.ts')
+  const mapaComercial=carregar('lib/prospeccaoMapaComercial.ts',{
+    '@/lib/supabase':{supabase:{from(nome){assert.equal(nome,'obras');return {select(campos){
+      assert.ok(campos.includes('observacoes'))
+      return {ilike(campo,padrao){assert.equal(campo,'observacoes');assert.ok(padrao.includes('Localização'));return this},
+        order(){return this},async range(inicio,fim){
+          return {data:obrasDaColeta.slice(inicio,fim+1),error:null}
+        }}
+    }}}}},
+    '@/lib/enderecoObra':enderecoObra,
+  })
+  const gpsDaColeta='Localização: -21.122000,-49.766000\\nLocalização conferida: Sim'
+  const obrasDaColeta=[
+    {id:'OBRA-A',cliente_id:'CLIENTE-1',nome:'Obra já prospectada',cidade:'José Bonifácio',bairro:'Centro',
+      endereco:'Rua Central',observacoes:gpsDaColeta,criado_por_id:'vendedor1',clientes:{nome:'Cliente A'}},
+    {id:'OBRA-NOVA',cliente_id:'CLIENTE-4',nome:'Pedido de orçamento com GPS',cidade:'José Bonifácio',bairro:'Centro',
+      endereco:'Rua da Venda',observacoes:'Localização: -21.123000,-49.767000\\nLocalização conferida: Sim',
+      criado_por_id:'vendedor2',clientes:{nome:'Cliente Novo'}},
+    {id:'OBRA-OUTRA',cliente_id:'CLIENTE-4',nome:'Outra obra do mesmo cliente',cidade:'José Bonifácio',bairro:'Centro',
+      endereco:'Rua Paralela',observacoes:'Localização: -21.124000,-49.768000\\nLocalização conferida: Sim',
+      criado_por_id:'vendedor2',clientes:{nome:'Cliente Novo'}},
+    {id:'OBRA-REJEITADA',cliente_id:'CLIENTE-5',nome:'GPS desconsiderado',observacoes:
+      'GPS rejeitado pelo usuário: -21.200000,-49.900000'},
+    {id:'OBRA-SEM-CONFIRMACAO',cliente_id:'CLIENTE-6',nome:'GPS não conferido',observacoes:
+      'Localização: -21.200000,-49.900000'},
+  ]
+  const obrasLidas=await mapaComercial.listarObrasGpsComerciais()
+  assert.equal(obrasLidas.aviso,null)
+  assert.equal(obrasLidas.obras.length,3,'GPS rejeitado ou sem confirmação não gera pino')
+  const registrosUnificados=mapaComercial.integrarObrasNoMapa(prospeccoes,obrasLidas.obras)
+  assert.equal(registrosUnificados.length,prospeccoes.length+2,'Mesmo obra_id não pode duplicar pino')
+  assert.equal(registrosUnificados.find(p=>p.id==='A').latitude,-21.122,'GPS confirmado da obra prevalece no ponto')
+  const pedidoNovo=registrosUnificados.find(p=>p.obra_id==='OBRA-NOVA')
+  assert.ok(pedidoNovo)
+  assert.equal(pedidoNovo.origem_mapa,'pedido_orcamento')
+  assert.equal(pedidoNovo.href_mapa,'/clientes/CLIENTE-4')
+  const situacaoComVenda=await etapasApi.consultarEtapasComerciais(registrosUnificados)
+  assert.equal(situacaoComVenda.etapas[pedidoNovo.id],'venda',
+    'Venda real vinculada por orcamento_id, sem obra_id, precisa mudar cor do pino')
+  const pedidoOutra=registrosUnificados.find(p=>p.obra_id==='OBRA-OUTRA')
+  assert.equal(situacaoComVenda.etapas[pedidoOutra.id],'orcamento',
+    'Venda cancelada ou excluída não altera outra obra do mesmo cliente')
+  const pontosNovos=mapa.pontosValidos(registrosUnificados,situacaoComVenda.etapas)
+  assert.equal(pontosNovos.find(p=>p.registro.id===pedidoNovo.id).classificacao,'venda')
+  const vendaSimulada=vendas.findIndex(v=>v.id==='v3')
+  vendas.splice(vendaSimulada,1)
+  const semVendaReal=await etapasApi.consultarEtapasComerciais(registrosUnificados)
+  assert.equal(semVendaReal.etapas[pedidoNovo.id],'orcamento','Sem venda ativa o pino retorna para orçamento')
+  assert.equal(mapa.pontosValidos(registrosUnificados,semVendaReal.etapas)
+    .find(p=>p.registro.id===pedidoNovo.id).classificacao,'orcamento')
 
   const rel=carregar('lib/prospeccaoRelatorio.ts',{
     '@/lib/geocodificacaoCep':cep,
@@ -195,6 +253,13 @@ async function main(){
   assert.ok(cliente360.includes('<VisitasOrigemProspeccao clienteId={cliente.id}/>'))
   assert.ok(origem.includes(".eq('cliente_id', clienteId)"))
   assert.match(origem, /createSignedUrl/)
+  const paginaMapa=fs.readFileSync('app/prospeccao/page.tsx','utf8')
+  assert.ok(paginaMapa.includes('listarObrasGpsComerciais()'))
+  assert.ok(paginaMapa.includes('consultarEtapasComerciais(integrarObrasNoMapa'))
+  assert.ok(paginaMapa.includes('90000'),'Pinos devem atualizar periodicamente sem travar o usuário')
+  const pedido=fs.readFileSync('lib/orcamentos.ts','utf8')
+  assert.ok(pedido.includes('registrarFeedbackLocalizacao(null, gpsConfirmado, gpsRejeitado)'))
+  assert.ok(pedido.includes('obra_id: obraIdEfetiva || null'))
   console.log('PASS: CEP, pinos, bairros, fotos privadas, Cliente 360, duplicidades e conversão controlada.')
 }
 main().catch(erro=>{console.error(erro);process.exitCode=1})
