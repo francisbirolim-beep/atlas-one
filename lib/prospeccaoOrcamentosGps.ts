@@ -90,11 +90,13 @@ export async function listarOrcamentosGpsParaMapa(): Promise<{
   if (!obras.length) return vazio(null)
 
   const porObra = new Map<string, OrcamentoDaObra>()
+  const obraPorOrcamento = new Map<string, string>()
   const vendasAtivas = new Set<string>()
   let aviso: string | null = null
 
   for (let posicao = 0; posicao < obras.length; posicao += 150) {
     const ids = obras.slice(posicao, posicao + 150).map(o => o.id)
+    const orcamentoIds: string[] = []
     for (let inicio = 0; inicio < LIMITE; inicio += PAGINA) {
       const { data, error } = await supabase.from('orcamentos')
         .select('id,obra_id,status,cliente_nome,criado_por_id,criado_por_nome,created_at')
@@ -105,8 +107,10 @@ export async function listarOrcamentosGpsParaMapa(): Promise<{
       if (error) return vazio('Não foi possível confirmar os pedidos de orçamento das obras com GPS.')
       const lote = (data || []) as OrcamentoDaObra[]
       for (const orcamento of lote) {
-        if (!orcamento.obra_id || orcamento.status === 'recusado' || porObra.has(orcamento.obra_id)) continue
-        porObra.set(orcamento.obra_id, orcamento)
+        if (!orcamento.obra_id || String(orcamento.status || '').toLowerCase() === 'recusado') continue
+        obraPorOrcamento.set(orcamento.id, orcamento.obra_id)
+        orcamentoIds.push(orcamento.id)
+        if (!porObra.has(orcamento.obra_id)) porObra.set(orcamento.obra_id, orcamento)
       }
       if (lote.length < PAGINA) break
       if (inicio + PAGINA >= LIMITE) return vazio('Muitos orçamentos vinculados; refine o período antes de conferir o mapa.')
@@ -129,6 +133,35 @@ export async function listarOrcamentosGpsParaMapa(): Promise<{
       if (inicio + PAGINA >= LIMITE) {
         aviso = 'Há mais vendas do que o limite de consulta; o estágio de alguns pinos pode estar incompleto.'
         break
+      }
+    }
+    // Algumas vendas antigas guardam o orcamento_id, mas não o obra_id.
+    // Consultar também o vínculo da proposta impede que uma venda ativa
+    // permaneça incorretamente com o pino de orçamento.
+    for (let posOrc = 0; posOrc < orcamentoIds.length; posOrc += 150) {
+      const loteIds = orcamentoIds.slice(posOrc, posOrc + 150)
+      for (let inicio = 0; inicio < LIMITE; inicio += PAGINA) {
+        const { data, error } = await supabase.from('vendas_obras')
+          .select('id,orcamento_id')
+          .in('orcamento_id', loteIds)
+          .eq('status', 'ativa')
+          .is('excluida_em', null)
+          .order('id')
+          .range(inicio, inicio + PAGINA - 1)
+        if (error) {
+          aviso = 'Não foi possível conferir todas as vendas vinculadas ao orçamento.'
+          break
+        }
+        const lote = data || []
+        for (const venda of lote) {
+          const obraId = obraPorOrcamento.get(venda.orcamento_id)
+          if (obraId) vendasAtivas.add(obraId)
+        }
+        if (lote.length < PAGINA) break
+        if (inicio + PAGINA >= LIMITE) {
+          aviso = 'Limite de vendas por orçamento atingido; alguns pinos podem estar incompletos.'
+          break
+        }
       }
     }
   }
