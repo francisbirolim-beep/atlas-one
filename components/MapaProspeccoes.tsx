@@ -38,9 +38,17 @@ function gerarPopupPonto(ponto: PontoProspeccao) {
   vendedor.style.margin = '7px 0'
   vendedor.textContent = 'Responsável: ' + (registro.responsavel_nome || 'Não informado')
   caixa.append(vendedor)
+  if (registro.origem_mapa === 'pedido_orcamento') {
+    const origem = document.createElement('p')
+    origem.style.margin = '7px 0'
+    origem.textContent = 'Origem: Pedido de Orçamento com GPS confirmado'
+    caixa.append(origem)
+  }
   const ficha = document.createElement('a')
-  ficha.href = '/prospeccao/' + encodeURIComponent(registro.id)
-  ficha.textContent = 'Abrir ficha da obra'
+  ficha.href = registro.origem_mapa === 'pedido_orcamento' && registro.orcamento_id_mapa
+    ? '/kanban?orcamento=' + encodeURIComponent(registro.orcamento_id_mapa)
+    : '/prospeccao/' + encodeURIComponent(registro.id)
+  ficha.textContent = registro.origem_mapa === 'pedido_orcamento' ? 'Abrir orçamento' : 'Abrir ficha da obra'
   ficha.style.display = 'block'
   ficha.style.margin = '8px 0'
   ficha.style.color = '#1d4ed8'
@@ -63,7 +71,7 @@ function gerarPopupBairro(grupo: GrupoBairro) {
   caixa.append(titulo)
   const total = document.createElement('p')
   total.style.margin = '6px 0'
-  total.textContent = grupo.pontos.length + ' obra(s) prospectada(s)'
+  total.textContent = grupo.pontos.length + ' obra(s) com GPS'
   caixa.append(total)
   for (const tipo of GRUPOS_MAPA) {
     const quantidade = grupo.pontos.filter(p => p.classificacao === tipo.id).length
@@ -258,9 +266,9 @@ export default function MapaProspeccoes({ registros, etapasComerciais }: { regis
     <section className="space-y-3 rounded-2xl border bg-white p-3 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3 px-1 pt-1">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Mapa real das obras prospectadas</h2>
+          <h2 className="text-base font-bold text-slate-900">Mapa das obras com GPS</h2>
           <p className="mt-1 max-w-2xl text-xs text-slate-500">
-            Na visão da cidade, os pinos são agrupados por bairro. Aproxime para ver cada obra na rua e abra a ficha pelo pino.
+            Prospeções e pedidos de orçamento com localização confirmada, agrupados por bairro. Aproxime para abrir a ficha ou o orçamento pelo pino.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
