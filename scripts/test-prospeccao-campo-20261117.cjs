@@ -107,15 +107,15 @@ async function main(){
     }}}}},
     '@/lib/enderecoObra':enderecoObra,
   })
-  const gpsDaColeta='Localização: -21.122000,-49.766000\\nLocalização conferida: Sim'
+  const gpsDaColeta='Localização: -21.122000,-49.766000\nLocalização conferida: Sim'
   const obrasDaColeta=[
     {id:'OBRA-A',cliente_id:'CLIENTE-1',nome:'Obra já prospectada',cidade:'José Bonifácio',bairro:'Centro',
       endereco:'Rua Central',observacoes:gpsDaColeta,criado_por_id:'vendedor1',clientes:{nome:'Cliente A'}},
     {id:'OBRA-NOVA',cliente_id:'CLIENTE-4',nome:'Pedido de orçamento com GPS',cidade:'José Bonifácio',bairro:'Centro',
-      endereco:'Rua da Venda',observacoes:'Localização: -21.123000,-49.767000\\nLocalização conferida: Sim',
+      endereco:'Rua da Venda',observacoes:'Localização: -21.123000,-49.767000\nLocalização conferida: Sim',
       criado_por_id:'vendedor2',clientes:{nome:'Cliente Novo'}},
     {id:'OBRA-OUTRA',cliente_id:'CLIENTE-4',nome:'Outra obra do mesmo cliente',cidade:'José Bonifácio',bairro:'Centro',
-      endereco:'Rua Paralela',observacoes:'Localização: -21.124000,-49.768000\\nLocalização conferida: Sim',
+      endereco:'Rua Paralela',observacoes:'Localização: -21.124000,-49.768000\nLocalização conferida: Sim',
       criado_por_id:'vendedor2',clientes:{nome:'Cliente Novo'}},
     {id:'OBRA-REJEITADA',cliente_id:'CLIENTE-5',nome:'GPS desconsiderado',observacoes:
       'GPS rejeitado pelo usuário: -21.200000,-49.900000'},
