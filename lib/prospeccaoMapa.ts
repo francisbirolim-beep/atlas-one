@@ -49,7 +49,8 @@ export function pontosValidos(registros: Prospeccao[], etapas: Record<string, Et
       Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return []
     const etapa = etapas[registro.id]
     const classificacao: ClassificacaoMapa = etapa === 'venda' ? 'venda'
-      : etapa === 'orcamento' ? 'orcamento' : classificacaoDoStatus(registro.status)
+      : etapa === 'orcamento' ? 'orcamento'
+        : registro.status === 'convertido' && !registro.cliente_id ? 'andamento' : classificacaoDoStatus(registro.status)
     return [{ registro, latitude, longitude, classificacao }]
   })
 }
