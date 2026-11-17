@@ -253,7 +253,7 @@ begin
     p_usuario,coalesce(v_origem.cliente_nome,''));
   return jsonb_build_object('ok',true,'origemId',p_origem,'destinoId',p_destino,
     'historicosCopiados',v_contagem_historico);
-end;$function$
+end;$function$;
 
 revoke all on function public.kanban_mesclar_cards_comerciais_v1(uuid,uuid,uuid,uuid) from public,anon,authenticated;
 grant execute on function public.kanban_mesclar_cards_comerciais_v1(uuid,uuid,uuid,uuid) to service_role;
