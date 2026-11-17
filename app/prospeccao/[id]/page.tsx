@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building2, CalendarDays, CheckCircle2, ExternalLink, MapPin, MessageCircle, Pencil, Phone, Plus, Save, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, Building2, CalendarDays, Camera, CheckCircle2, ExternalLink, MapPin, MessageCircle, Pencil, Phone, Plus, Save, UserRound, Users, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { adicionarContato, atualizarProspeccao, buscarClientesSemelhantes, buscarProspeccao, converterProspeccao, listarEquipeProspeccao, moverProspeccao, PAPEIS_CONTATO, registrarInteracao, STATUS_PROSPECCAO, type ContatoProspeccao, type InteracaoProspeccao, type PapelContatoProspeccao, type Prospeccao, type StatusProspeccao, type TipoInteracaoProspeccao } from '@/lib/prospeccao'
 import type { Cliente, Usuario } from '@/lib/tipos'
+import { enviarFotosProspeccao, listarFotosProspeccao, type FotoProspeccao } from '@/lib/prospeccaoFotos'
 
 function dataHora(valor?:string|null){return valor?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(valor)):'—'}
 const TIPOS:{id:TipoInteracaoProspeccao;label:string}[]=[{id:'ligacao',label:'Ligação'},{id:'whatsapp',label:'WhatsApp'},{id:'visita',label:'Visita'},{id:'nota',label:'Anotação'},{id:'outro',label:'Outro'}]
@@ -21,8 +22,26 @@ export default function ProspeccaoDetalhePage(){
   const [editando,setEditando]=useState(false);const [form,setForm]=useState<Record<string,string>>({});const [equipe,setEquipe]=useState<Pick<Usuario,'id'|'nome'>[]>([])
   const [modalConverter,setModalConverter]=useState(false);const [semelhantes,setSemelhantes]=useState<Cliente[]>([]);const [clienteEscolhido,setClienteEscolhido]=useState('');const [criarObra,setCriarObra]=useState(true)
   const [cadastroConversao,setCadastroConversao]=useState({nome_cliente:'',telefone:'',cidade:'',bairro:'',endereco:'',cep:'',complemento:''})
+  const [fotos,setFotos]=useState<FotoProspeccao[]>([])
+  const [erroFotos,setErroFotos]=useState('')
+  const [enviandoFotos,setEnviandoFotos]=useState(false)
 
-  async function carregar(){setCarregando(true);const me=await usuarioAtual();setUsuario(me);const d=await buscarProspeccao(id);setP(d.prospeccao);setContatos(d.contatos);setInteracoes(d.interacoes);if(me?.role==='master')setEquipe(await listarEquipeProspeccao());setCarregando(false)}
+  async function carregarFotos(){
+    const resultado=await listarFotosProspeccao(id)
+    setFotos(resultado.fotos)
+    setErroFotos(resultado.erro||'')
+  }
+  async function adicionarFotos(arquivos:File[]){
+    if(!arquivos.length)return
+    setEnviandoFotos(true);setErroFotos('')
+    try{
+      const resultado=await enviarFotosProspeccao(id,arquivos)
+      await carregarFotos()
+      if(resultado.falhas.length)setErroFotos(resultado.falhas.join(' · '))
+    }catch(e){setErroFotos(e instanceof Error?e.message:'Erro ao enviar fotos.')}
+    finally{setEnviandoFotos(false)}
+  }
+  async function carregar(){setCarregando(true);const me=await usuarioAtual();setUsuario(me);const d=await buscarProspeccao(id);setP(d.prospeccao);setContatos(d.contatos);setInteracoes(d.interacoes);if(me?.role==='master')setEquipe(await listarEquipeProspeccao());setCarregando(false);if(d.prospeccao)void carregarFotos()}
   useEffect(()=>{void carregar()},[id])
 
   async function mudarStatus(valor:StatusProspeccao){if(!p)return;const anterior=p;setP({...p,status:valor});const r=await moverProspeccao(anterior,valor);if(!r.ok){setErro(r.error||'Erro ao mover.');await carregar()}else await carregar()}
@@ -70,6 +89,17 @@ export default function ProspeccaoDetalhePage(){
         <aside className={`rounded-2xl border p-5 shadow-sm ${p.proxima_acao_em&&new Date(p.proxima_acao_em).getTime()<Date.now()?'border-red-200 bg-red-50':'bg-white'}`}><div className="flex items-center gap-2"><CalendarDays size={18} className="text-blue-600"/><h2 className="font-bold">Próxima ação</h2></div><p className="mt-4 text-sm font-semibold">{p.proxima_acao||'Nenhuma ação definida'}</p><p className="mt-1 text-xs text-slate-500">{dataHora(p.proxima_acao_em)}</p>{p.proxima_acao_em&&new Date(p.proxima_acao_em).getTime()<Date.now()&&<span className="mt-3 inline-block rounded-full bg-red-600 px-2 py-1 text-[10px] font-bold text-white">ATRASADA</span>}</aside>
       </section>
 
+      <section className="rounded-2xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 className="flex items-center gap-2 font-bold"><Camera size={17} className="text-blue-600"/>Fotos do local</h2><p className="text-xs text-slate-500">Imagens da visita vinculadas à obra prospectada. Acesso privado e temporário.</p></div>
+          <label className={`cursor-pointer rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 ${enviandoFotos?'pointer-events-none opacity-50':''}`}>
+            {enviandoFotos?'Enviando fotos...':'Adicionar fotos'}
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple disabled={enviandoFotos} className="sr-only" onChange={e=>{const arquivos=Array.from(e.target.files||[]);e.target.value='';void adicionarFotos(arquivos)}}/>
+          </label>
+        </div>
+        {erroFotos&&<p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">{erroFotos}</p>}
+        {fotos.length>0?<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{fotos.map(foto=><a key={foto.nome} href={foto.url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl border"><img loading="lazy" src={foto.url} alt={'Foto de '+(p.nome_obra||p.nome_cliente)} className="h-36 w-full object-cover"/><span className="block p-2 text-[11px] text-slate-500">{foto.criadoEm?dataHora(foto.criadoEm):'Foto da visita'}</span></a>)}</div>:<p className="mt-3 rounded-xl border border-dashed p-5 text-center text-xs text-slate-400">Nenhuma foto anexada.</p>}
+      </section>
       <section className="grid gap-4 lg:grid-cols-[340px_1fr]">
         <article className="rounded-2xl border bg-white p-5"><div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><Users size={17} className="text-violet-600"/><h2 className="font-bold">Pessoas da obra</h2></div><button onClick={()=>setModalContato(true)} className="rounded-lg border p-2 text-blue-600"><Plus size={15}/></button></div><div className="space-y-2">{contatos.map(c=><div key={c.id} className="rounded-xl border bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{PAPEIS_CONTATO.find(x=>x.id===c.papel)?.label}</p><p className="mt-1 text-sm font-bold">{c.nome}</p>{c.telefone&&<a href={`tel:${c.telefone}`} className="mt-1 block text-xs text-blue-600">{c.telefone}</a>}{c.empresa&&<p className="text-xs text-slate-500">{c.empresa}</p>}</div>)}{contatos.length===0&&<p className="rounded-xl border border-dashed p-5 text-center text-sm text-slate-400">Nenhum contato registrado.</p>}</div></article>
         <div className="space-y-4"><article className="rounded-2xl border bg-white p-5"><div className="flex items-center gap-2"><MessageCircle size={17} className="text-blue-600"/><h2 className="font-bold">Registrar contato</h2></div><div className="mt-4 grid gap-3"><select value={tipo} onChange={e=>setTipo(e.target.value as TipoInteracaoProspeccao)} className="rounded-xl border px-3 py-2.5 text-sm">{TIPOS.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}</select><textarea value={descricao} onChange={e=>setDescricao(e.target.value)} rows={4} placeholder="O que o cliente falou? O que ficou combinado?" className="rounded-xl border px-3 py-3 text-sm"/><div className="grid gap-3 sm:grid-cols-3"><input value={proximaAcao} onChange={e=>setProximaAcao(e.target.value)} placeholder="Próxima ação" className="rounded-xl border px-3 py-2.5 text-sm"/><input type="datetime-local" value={proximaEm} onChange={e=>setProximaEm(e.target.value)} className="rounded-xl border px-3 py-2.5 text-sm"/><select value={statusNovo} onChange={e=>setStatusNovo(e.target.value as StatusProspeccao|'')} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Manter etapa atual</option>{STATUS_PROSPECCAO.filter(s=>s.id!==p.status).map(s=><option key={s.id} value={s.id}>Mover para: {s.label}</option>)}</select></div><button onClick={()=>void salvarInteracao()} disabled={salvando||!descricao.trim()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white disabled:opacity-50"><Save size={16}/>{salvando?'Salvando...':'Salvar no diário'}</button></div></article>
