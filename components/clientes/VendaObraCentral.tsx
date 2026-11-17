@@ -235,6 +235,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   const [edicaoRecebimento,setEdicaoRecebimento]=useState<EdicaoRecebimento|null>(null)
   const [salvandoAjuste,setSalvandoAjuste]=useState(false)
   const [ehMaster,setEhMaster]=useState(false)
+  const [podeDescontoGeral,setPodeDescontoGeral]=useState(false)
   const [descontoGeral,setDescontoGeral]=useState('')
   const [motivoDesconto,setMotivoDesconto]=useState('')
   const [salvandoDesconto,setSalvandoDesconto]=useState(false)
@@ -285,7 +286,24 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
 
   useEffect(()=>{
     let ativo=true
-    void usuarioAtual().then(u=>{if(ativo)setEhMaster(u?.role==='master')})
+    void (async()=>{
+      try{
+        const u=await usuarioAtual()
+        if(!ativo)return
+        const master=u?.role==='master'
+        setEhMaster(master)
+        setPodeDescontoGeral(master)
+        if(master||!u)return
+        const token=await tokenAtual()
+        if(!token||!ativo)return
+        const resposta=await fetch('/api/vendas/financeiro/permissao-desconto-geral',{
+          headers:{Authorization:`Bearer ${token}`},cache:'no-store',
+        })
+        if(!resposta.ok||!ativo)return
+        const dados=await resposta.json()
+        if(ativo)setPodeDescontoGeral(dados.permitido===true)
+      }catch{if(ativo)setPodeDescontoGeral(false)}
+    })()
     return()=>{ativo=false}
   },[])
 
@@ -1171,7 +1189,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
   }
 
   async function aplicarDescontoGeral(){
-    if(salvandoDesconto||!venda)return
+    if(salvandoDesconto||!venda||!podeDescontoGeral)return
     const desconto=numeroEntrada(descontoGeral)
     const novoTotal=Math.round((valorVenda-desconto)*100)/100
     if(desconto<=0||Math.abs(desconto*100-Math.round(desconto*100))>0.00001||novoTotal<=0){
@@ -1590,12 +1608,12 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
               <div><p className="text-xs text-slate-500">Valor final negociado</p><b className="text-lg text-emerald-700">{moeda(valorVenda)}</b></div>
             </div>
             {revisoesDesconto.length>0&&<div className="mt-2 space-y-1 text-xs text-slate-700">{revisoesDesconto.slice(0,5).map(r=><p key={r.id}>Desconto registrado: {moeda(Math.max(0,Number(r.antes?.valor_venda||0)-Number(r.depois?.valor_venda||0)))} · {dataHoraBR(r.created_at)}{r.criado_por_nome?' · '+r.criado_por_nome:''} · {r.justificativa}</p>)}</div>}
-            {ehMaster?<div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1.3fr_auto] sm:items-end">
+            {podeDescontoGeral?<div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1.3fr_auto] sm:items-end">
               <label className="text-xs font-semibold text-slate-700">Novo desconto geral (R$)<input inputMode="decimal" value={descontoGeral} onChange={e=>setDescontoGeral(e.target.value)} placeholder="0,00" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm"/></label>
               <label className="text-xs font-semibold text-slate-700">Motivo da negociação<input value={motivoDesconto} onChange={e=>setMotivoDesconto(e.target.value)} placeholder="Ex.: desconto aprovado no fechamento" className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm"/></label>
               <button type="button" disabled={salvandoDesconto||numeroEntrada(descontoGeral)<=0||valorVenda-numeroEntrada(descontoGeral)<=0} onClick={aplicarDescontoGeral} className="rounded-lg bg-brand-navy px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{salvandoDesconto?'Aplicando...':'Aplicar desconto'}</button>
               <p className="text-xs font-semibold text-slate-700 sm:col-span-3">Novo valor negociado: {moeda(Math.max(0,valorVenda-numeroEntrada(descontoGeral)))}. O preço original e a justificativa permanecem no histórico. A parcela em aberto é ajustada junto com a venda.</p>
-            </div>:<p className="mt-2 text-xs text-slate-600">A concessão do desconto comercial geral exige autorização Master.</p>}
+            </div>:<p className="mt-2 text-xs text-slate-600">A concessão do desconto comercial geral exige permissão financeira de edição concedida pelo Master.</p>}
           </section>
           <div className="overflow-x-auto"><table className="w-full min-w-[820px] text-sm"><thead><tr className="border-b text-left text-xs text-slate-400"><th className="pb-2">Documento</th><th>Parcela</th><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Desconto</th><th>Saldo</th><th>Status</th></tr></thead><tbody>
             {contas.map(c=><tr key={c.id} className="border-b"><td className="py-3">{c.documento||'Venda sob medida'}</td><td>{c.parcela||1}/{c.total_parcelas||1}</td><td>{dataBR(c.vencimento)}</td><td>{moeda(c.valor)}</td><td>{moeda(c.valor_pago)}</td><td className="font-semibold text-amber-700">{moeda(c.valor_desconto)}</td><td className="font-bold">{moeda(Math.max(0,Number(c.valor||0)-Number(c.valor_pago||0)-Number(c.valor_desconto||0)))}</td><td>{status(c.status)}</td></tr>)}
@@ -2042,7 +2060,7 @@ export default function VendaObraCentral({clienteId,vendaId}:Props){
         <p className="mt-1 text-xs font-medium text-slate-600">Valor final negociado</p><p className="mt-1 text-xl font-black text-slate-900">{moeda(valorVenda)}</p>
         <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-slate-600"><span>Já recebido: <b>{moeda(recebido)}</b></span><span>Em aberto: <b>{moeda(aReceber)}</b></span></div>
         {revisoesDesconto.length>0&&<p className="mt-2 text-xs text-amber-700">Desconto(s) comercial(is) geral(is) registrado(s) no histórico desta venda.</p>}
-        {ehMaster&&<button type="button" className="mt-2 text-xs font-semibold text-blue-800 underline" onClick={()=>{setModalRecebimento(false);setAba('financeiro')}}>Negociar desconto geral antes do recebimento</button>}
+        {podeDescontoGeral&&<button type="button" className="mt-2 text-xs font-semibold text-blue-800 underline" onClick={()=>{setModalRecebimento(false);setAba('financeiro')}}>Negociar desconto geral antes do recebimento</button>}
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm">Valor recebido (total)<input readOnly value={totalRecebimentoFormas>0?totalRecebimentoFormas.toFixed(2).replace('.',','):'0,00'} className="mt-1 w-full rounded-lg border bg-slate-50 px-3 py-2 font-semibold" aria-label="Soma das formas de pagamento"/></label>
