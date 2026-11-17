@@ -190,6 +190,11 @@ async function main(){
   assert.match(sql,/numero_endereco,cep/)
   assert.match(sql,/v_p\.cep/)
   assert.doesNotMatch(sql,/create or replace function public\.fn_converter_prospeccao_v1/)
-  console.log('PASS: CEP ambíguo, faixa postal, cliente/obra/orçamento/venda, bairros, GPS, fotos privadas e conversão controlada.')
+  const cliente360=fs.readFileSync('components/clientes/Cliente360DashboardV2.tsx','utf8')
+  const origem=fs.readFileSync('components/clientes/VisitasOrigemProspeccao.tsx','utf8')
+  assert.match(cliente360, /VisitasOrigemProspeccao clienteId=\\{cliente\\.id\\}/)
+  assert.match(origem, /\\.eq\\('cliente_id', clienteId\\)/)
+  assert.match(origem, /createSignedUrl/)
+  console.log('PASS: CEP, pinos, bairros, fotos privadas, Cliente 360, duplicidades e conversão controlada.')
 }
 main().catch(erro=>{console.error(erro);process.exitCode=1})
