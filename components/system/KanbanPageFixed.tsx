@@ -378,6 +378,7 @@ const [salvando, setSalvando] = useState(false)
 const [validandoIA, setValidandoIA] = useState(false)
 const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
 const [cardAlvoMesclagem, setCardAlvoMesclagem] = useState<string | null>(null)
+const cardArrastadoId = useRef<string | null>(null)
 const [mesclandoCards, setMesclandoCards] = useState(false)
 const [usuario, setUsuario] = useState<Usuario | null>(null)
 const [agora, setAgora] = useState(Date.now())
@@ -804,6 +805,16 @@ return null
 const normalizarNomeMesclagem = (valor: string) => valor.normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toUpperCase()
 
+// Unir exige intenção clara: card sobre card na MESMA coluna e do mesmo cliente.
+// Para mover a outra etapa, inclusive sobre um card, o drop deve chegar à coluna.
+function podeReceberMesclagem(origem: OrcamentoRapido | undefined, destino: OrcamentoRapido): boolean {
+  if (!origem || origem.id === destino.id || origem.eh_assistencia || destino.eh_assistencia) return false
+  if ((origem.coluna_id || colunas[0]?.id) !== (destino.coluna_id || colunas[0]?.id)) return false
+  if (origem.cliente_id && destino.cliente_id) return origem.cliente_id === destino.cliente_id
+  const nome = normalizarNomeMesclagem(origem.cliente_nome || '')
+  return nome.length >= 3 && nome === normalizarNomeMesclagem(destino.cliente_nome || '')
+}
+
 async function handleDropSobreCard(e: React.DragEvent, destino: OrcamentoRapido) {
   e.preventDefault()
   e.stopPropagation()
@@ -879,6 +890,12 @@ if (!card || !colunaNova || colunaAnterior?.id===colunaNova.id) return
 // A posição operacional no Kanban é independente da conferência W.Vetro.
 // Cards pendentes podem mudar de coluna; a validação segue pendente no próprio card.
 if (!confirmarMovimentoKanban({card:card.cliente_nome||'Orçamento',origem:colunaAnterior?.nome||'Etapa anterior',destino:colunaNova.nome,retrocesso:colunas.findIndex(c=>c.id===colunaNova.id)<colunas.findIndex(c=>c.id===colunaAnterior?.id),aviso:'Automações anteriores precisam de revisão quando retornar de etapa.'})) return
+// Vendido tem confirmação e automações próprias. Não simular a venda antes da RPC oficial.
+if (colunaDeVenda(colunaNova)) {
+  const redirecionou = await moverCard(cardId, colunaId, undefined, undefined, false)
+  if (!redirecionou) alert('Não foi possível abrir a confirmação da venda. O card não foi movido.')
+  return
+}
 let motivoAndamento = ''
 if (ehEmAndamento(colunaNova.nome)) {
   const resposta = window.prompt('Por que o orçamento está em andamento? Informe o que falta (mínimo 8 caracteres):', card.kanban_motivo_andamento || (ehOrcamentoWVetro(card) ? 'Aguardando validação do W.Vetro.' : ''))
@@ -903,7 +920,7 @@ let decisoesAutomacao: Record<string, 'substituir' | 'duplicar'> | undefined
       decisoesAutomacao[d.setorId] = substituir ? 'substituir' : 'duplicar'
     }
   }
-  const movido = await moverCard(cardId, colunaId, decisoesAutomacao, motivoAndamento)
+  const movido = await moverCard(cardId, colunaId, decisoesAutomacao, motivoAndamento, false)
   if (!movido) {
     setCards(cardsAntesDoArrasto)
     alert('Não foi possível mover este card. A etapa anterior foi restaurada.')
@@ -2239,19 +2256,24 @@ return (
 key={card.id}
 draggable={!card.eh_assistencia}
 onDragStart={e => {
+  cardArrastadoId.current = card.id
   e.dataTransfer.effectAllowed = 'copyMove'
   e.dataTransfer.setData('text/plain', card.id)
 }}
-onDragEnd={() => { setCardAlvoMesclagem(null); setColunaArrastando(null) }}
+onDragEnd={() => { cardArrastadoId.current = null; setCardAlvoMesclagem(null); setColunaArrastando(null) }}
 onDragOver={e => {
-  if (!podeMesclarCards || card.eh_assistencia) return
+  const origem = cards.find(c => c.id === cardArrastadoId.current)
+  if (!podeMesclarCards || !podeReceberMesclagem(origem, card)) return
   e.preventDefault()
   e.stopPropagation()
   e.dataTransfer.dropEffect = 'copy'
   if (cardAlvoMesclagem !== card.id) setCardAlvoMesclagem(card.id)
 }}
 onDragLeave={() => { if (cardAlvoMesclagem === card.id) setCardAlvoMesclagem(null) }}
-onDrop={e => { if (podeMesclarCards) void handleDropSobreCard(e, card) }}
+onDrop={e => {
+  const origem = cards.find(c => c.id === cardArrastadoId.current)
+  if (podeMesclarCards && podeReceberMesclagem(origem, card)) void handleDropSobreCard(e, card)
+}}
 onClick={() => { if (!mesclandoCards) abrirCardOuAssistencia(card) }}
 style={est ? { backgroundColor: est.fundo, borderColor: est.fundo } : undefined}
 className={`rounded-xl border-2 p-3 cursor-pointer hover:shadow-md transition ${
