@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin as db } from '@/lib/supabaseAdmin'
+import { podeMesclarKanbanComercial } from '@/lib/kanbanMesclagemAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,8 +22,13 @@ const erro = (message: string, status = 400) =>
 export async function POST(req: NextRequest) {
   const usuario = await autenticarTenant(req)
   if (!usuario) return erro('Sessão inválida.', 401)
-  if (usuario.role !== 'master') {
-    return erro('Somente o Master pode unir dois cards do Kanban Comercial.', 403)
+  try {
+    if (!await podeMesclarKanbanComercial(usuario)) {
+      return erro('Sem permissão de edição comercial para unir cards.', 403)
+    }
+  } catch (e) {
+    console.error('[kanban mesclar] Falha ao validar permissão:', e)
+    return erro('Não foi possível validar sua permissão. Nenhum dado foi alterado.', 503)
   }
   const body = await req.json().catch(() => null)
   const origemId = body?.origemId, destinoId = body?.destinoId

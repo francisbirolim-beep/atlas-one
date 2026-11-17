@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin as db } from '@/lib/supabaseAdmin'
 import { usuarioTemDelegacaoExplicitaServer } from '@/lib/acessoUsuarioServer'
+import { podeMesclarKanbanComercial } from '@/lib/kanbanMesclagemAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -26,9 +27,9 @@ export async function GET(req: NextRequest) {
   const u = await autenticarTenant(req)
   if (!u) return erro('Sessão inválida.', 401)
   try {
-    const [podeRetirar, podeRestaurar, podeCorrigirDataVenda] = await Promise.all([permitido(u, 'retirar'), permitido(u, 'restaurar'), permitido(u, 'corrigirDataVenda')])
+    const [podeRetirar, podeRestaurar, podeCorrigirDataVenda, podeMesclar] = await Promise.all([permitido(u, 'retirar'), permitido(u, 'restaurar'), permitido(u, 'corrigirDataVenda'), podeMesclarKanbanComercial(u)])
     if (req.nextUrl.searchParams.get('retirados') !== '1') {
-      return NextResponse.json({ podeRetirar, podeRestaurar, podeCorrigirDataVenda }, { headers: { 'Cache-Control': 'no-store' } })
+      return NextResponse.json({ podeRetirar, podeRestaurar, podeCorrigirDataVenda, podeMesclar }, { headers: { 'Cache-Control': 'no-store' } })
     }
     if (!podeRestaurar) return erro('Sem permissão para consultar cards retirados.', 403)
     const { data, error } = await db.from('orcamentos')
