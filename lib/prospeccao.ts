@@ -46,6 +46,8 @@ export interface Prospeccao {
   cidade?: string | null
   bairro?: string | null
   cep?: string | null
+  numero_inicial?: number | null
+  numero_final?: number | null
   endereco?: string | null
   complemento?: string | null
   latitude?: number | null
@@ -102,6 +104,8 @@ export interface NovaProspeccao {
   cidade?: string
   bairro?: string
   cep?: string
+  numero_inicial?: number | null
+  numero_final?: number | null
   endereco?: string
   complemento?: string
   latitude?: number | null
@@ -143,6 +147,8 @@ export async function criarProspeccao(dados: NovaProspeccao): Promise<{ ok: bool
     cidade: textoOuNulo(dados.cidade),
     bairro: textoOuNulo(dados.bairro),
     cep: textoOuNulo(dados.cep),
+    numero_inicial: dados.numero_inicial ?? null,
+    numero_final: dados.numero_final ?? null,
     endereco: textoOuNulo(dados.endereco),
     complemento: textoOuNulo(dados.complemento),
     latitude: dados.latitude ?? null,
