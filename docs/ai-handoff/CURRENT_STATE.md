@@ -1,3 +1,10 @@
+## 2026-11-17 — Kanban Comercial: recuperar abertura de mídias após mesclagem (BRANCH ISOLADA, NÃO PUBLICADA)
+
+- Branch `fix/kanban-anexos-renovar-acesso-20261117` preserva a API já existente e adiciona renovação de URL assinada ao abrir imagens e outros arquivos do WhatsApp; o link de 20 minutos deixa de ser reutilizado no clique.
+- Imagens abrem no visualizador dentro do card, com tentativa de recuperação/atualização; PDFs e outros arquivos abrem em aba com URL assinada recém-obtida. Áudios e vídeos podem atualizar o acesso sem alterar a mídia original.
+- Investigação apenas de leitura identificou imagem JPEG e PDF não vazios no Storage para card incorporado. A hipótese de link expirado ainda requer teste gráfico autenticado.
+- Sem migração, sem alteração em dados originais, preços, W.Vetro, políticas de Storage ou produção. Executar testes automatizados e homologação antes de publicar.
+
 ## 2026-11-03 — Cadastros de clientes: busca contextual, inativacao e unificacao segura (BRANCH ISOLADA, NAO PUBLICADA)
 
 - Branch `feat/clientes-deduplicacao-20261103`, baseada em `origin/main` 9b0e8709. Nada implantado no dominio ou banco real.
