@@ -11,7 +11,7 @@ const TAMANHO_PAGINA = 400
 const LIMITE_POR_LOTE = 20000
 
 /**
- * Os pinos são vinculados por obra_id (nunca apenas por cliente_id).
+ * Os pinos são vinculados pela obra ou pelo orçamento dessa mesma obra (nunca só pelo cliente).
  * Orçamento existe quando há proposta não recusada.
  * Venda é confirmada exclusivamente por venda operacional ativa, tal como
  * o módulo de Medição Final; status de orçamento/posição no Kanban isolados
@@ -34,6 +34,7 @@ export async function consultarEtapasComerciais(registros: Prospeccao[]): Promis
 
   for (let inicio = 0; inicio < obras.length; inicio += 150) {
     const lote = obras.slice(inicio, inicio + 150)
+    const obraPorOrcamento = new Map<string, string>()
 
     for (let deslocamento = 0; deslocamento < LIMITE_POR_LOTE; deslocamento += TAMANHO_PAGINA) {
       const { data, error } = await supabase.from('orcamentos')
@@ -44,7 +45,9 @@ export async function consultarEtapasComerciais(registros: Prospeccao[]): Promis
       if (error) return { etapas,
         aviso: 'Não foi possível conferir os orçamentos; o mapa pode estar incompleto.' }
       for (const orcamento of data || []) {
-        if (!orcamento.obra_id || orcamento.status === 'recusado') continue
+        if (!orcamento.obra_id) continue
+        obraPorOrcamento.set(orcamento.id, orcamento.obra_id)
+        if (orcamento.status === 'recusado') continue
         for (const id of porObra.get(orcamento.obra_id) || []) {
           if (etapas[id] !== 'venda') etapas[id] = 'orcamento'
         }
@@ -70,6 +73,33 @@ export async function consultarEtapasComerciais(registros: Prospeccao[]): Promis
       if ((data || []).length < TAMANHO_PAGINA) break
       if (deslocamento + TAMANHO_PAGINA >= LIMITE_POR_LOTE) return { etapas,
         aviso: 'Limite de consulta de vendas atingido. Refine os filtros antes de confiar no total.' }
+    }
+
+    // Importações históricas podem confirmar a venda pelo orcamento_id mesmo
+    // sem preencher vendas_obras.obra_id. Não propagar a venda para todas as obras
+    // do cliente e não considerar status do orçamento isolado como venda.
+    const idsOrcamento = [...obraPorOrcamento.keys()]
+    for (let i = 0; i < idsOrcamento.length; i += 150) {
+      const orcamentosLote = idsOrcamento.slice(i, i + 150)
+      for (let deslocamento = 0; deslocamento < LIMITE_POR_LOTE; deslocamento += TAMANHO_PAGINA) {
+        const { data, error } = await supabase.from('vendas_obras')
+          .select('id,obra_id,orcamento_id')
+          .in('orcamento_id', orcamentosLote)
+          .eq('status', 'ativa')
+          .is('excluida_em', null)
+          .order('id')
+          .range(deslocamento, deslocamento + TAMANHO_PAGINA - 1)
+        if (error) return { etapas,
+          aviso: 'Não foi possível conferir vendas vinculadas aos orçamentos. Pinos podem estar incompletos.' }
+        for (const venda of data || []) {
+          const obraDoOrcamento = obraPorOrcamento.get(venda.orcamento_id)
+          if (!obraDoOrcamento || (venda.obra_id && venda.obra_id !== obraDoOrcamento)) continue
+          for (const id of porObra.get(obraDoOrcamento) || []) etapas[id] = 'venda'
+        }
+        if ((data || []).length < TAMANHO_PAGINA) break
+        if (deslocamento + TAMANHO_PAGINA >= LIMITE_POR_LOTE) return { etapas,
+          aviso: 'Limite de vendas por orçamento atingido. Refine o mapa antes de confiar nos totais.' }
+      }
     }
   }
   return { etapas, aviso: null }
