@@ -143,6 +143,44 @@ async function main(){
   assert.equal((await repoProspeccao.listarProspeccoes()).length,450,'Listagem deve incluir mais de 400 registros')
   assert.equal(paginas,2,'Listagem deve buscar segunda página sem duplicar registros')
 
+  // 700 clientes: um registro antigo continua localizado sem depender dos
+  // últimos 500 cadastrados, inclusive quando o nome atual é desconhecido.
+  const cadastroAntigo={id:'cliente-antigo',nome:'Construtora Horizonte',telefone:'(17) 99999-4321',
+    whatsapp:'',created_at:'2020-01-01T00:00:00Z'}
+  const clientes=[cadastroAntigo,...Array.from({length:700},(_,i)=>({
+    id:'c'+i,nome:'Outro cadastro '+i,telefone:'(17) 98888-0101',
+    whatsapp:'',created_at:'2026-01-01T00:00:00Z',
+  }))]
+  const consultas=[]
+  const suClientes={from(nome){
+    assert.equal(nome,'clientes')
+    return {select(){
+      const filtro={};consultas.push(filtro)
+      return {
+        ilike(col,pattern){filtro.nome=pattern.slice(1,-1).toLowerCase();return this},
+        or(fragmento){const match=fragmento.match(/ilike\\.%([0-9]{4})%/);filtro.sufixo=match?.[1];return this},
+        order(){return this},
+        async limit(max){
+          const data=clientes.filter(c=>{
+            if(filtro.nome)return c.nome.toLowerCase().includes(filtro.nome)
+            if(filtro.sufixo)return [c.whatsapp,c.telefone].some(v=>v?.includes(filtro.sufixo))
+            return false
+          }).slice(0,max)
+          return {data,error:null}
+        },
+      }
+    }}
+  }}
+  const cadastro=carregar('lib/prospeccao.ts',{
+    '@/lib/auth':{usuarioAtual:async()=>null},
+    '@/lib/supabase':{supabase:suClientes},
+  })
+  const antigos=await cadastro.buscarClientesSemelhantes('Construtora Horizonte','(17) 99999-4321')
+  assert.equal(antigos[0].id,'cliente-antigo','Cliente antigo precisa ser encontrado, sem corte dos últimos 500')
+  assert.equal(consultas.length,2,'Nome e telefone devem ser verificados no banco')
+  const soTelefone=await cadastro.buscarClientesSemelhantes('', '(17) 99999-4321')
+  assert.equal(soTelefone[0].id,'cliente-antigo','Localização por telefone sem conhecer o nome')
+
   const status=fs.readFileSync('lib/prospeccao.ts','utf8')
   assert.match(status,/novoStatus === 'convertido' && !prospeccao\.cliente_id/)
   assert.match(status,/dados\.status_novo === 'convertido' && !prospeccao\.cliente_id/)
