@@ -88,7 +88,8 @@ export async function moverCard(
   orcamentoId: string,
   colunaId: string,
   decisoesAutomacaoSetor?: Record<string, 'substituir' | 'duplicar'>,
-  motivoAndamento?: string
+  motivoAndamento?: string,
+  dispararAutomacoesIntermediarias = true
 ): Promise<boolean> {
   // A coluna marcada com gera_medicao_final é o gatilho visual de "Vendido".
   // Ela NÃO pode ser persistida antes da confirmação da venda, senão o card
@@ -129,11 +130,16 @@ export async function moverCard(
 
   if (error) return false
 
-  executarAutomacoesColuna(colunaId, {
-    cliente_nome: data?.cliente_nome || null,
-    criado_por_id: data?.criado_por_id || null,
-  }).catch(() => {})
-  executarAutomacoesSetor(colunaId, orcamentoId, decisoesAutomacaoSetor).catch(() => {})
+  // O arraste no Kanban Comercial muda apenas a etapa. Não gera tarefas/avisos
+  // intermediários; a confirmação de Vendido aciona seu workflow oficial.
+  // Mantemos o caminho legado disponível para outras chamadas explícitas.
+  if (dispararAutomacoesIntermediarias) {
+    executarAutomacoesColuna(colunaId, {
+      cliente_nome: data?.cliente_nome || null,
+      criado_por_id: data?.criado_por_id || null,
+    }).catch(() => {})
+    executarAutomacoesSetor(colunaId, orcamentoId, decisoesAutomacaoSetor).catch(() => {})
+  }
 
   return true
 }
