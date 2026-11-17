@@ -272,7 +272,7 @@ export async function buscarClientesSemelhantes(nome: string, telefone?: string 
 }
 
 export async function converterProspeccao(id: string, clienteExistenteId: string | null, criarObra: boolean) {
-  const { data, error } = await supabase.rpc('fn_converter_prospeccao_v1', { p_prospeccao_id: id, p_cliente_existente_id: clienteExistenteId, p_criar_obra: criarObra })
+  const { data, error } = await supabase.rpc('fn_converter_prospeccao_v2', { p_prospeccao_id: id, p_cliente_existente_id: clienteExistenteId, p_criar_obra: criarObra })
   if (error) return { ok: false, error: error.message }
   return { ok: true, clienteId: data?.cliente_id as string, obraId: (data?.obra_id as string | null) || null }
 }
