@@ -1,13 +1,16 @@
 import type { Prospeccao, StatusProspeccao } from '@/lib/prospeccao'
+import type { EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
 
-export type ClassificacaoMapa = 'identificada' | 'sem_contato' | 'visitada' | 'andamento' | 'convertida' | 'sem_interesse'
+export type ClassificacaoMapa = 'identificada' | 'sem_contato' | 'visitada' | 'andamento' | 'convertida' | 'orcamento' | 'venda' | 'sem_interesse'
 
 export const GRUPOS_MAPA: { id: ClassificacaoMapa; titulo: string; cor: string; explicacao: string }[] = [
   { id: 'identificada', titulo: 'Nova obra', cor: '#2563eb', explicacao: 'Obra identificada, ainda sem contato registrado.' },
   { id: 'sem_contato', titulo: 'Tentando contato', cor: '#e11d48', explicacao: 'Obra já identificada, mas ainda sem contato conseguido.' },
   { id: 'visitada', titulo: 'Visitada / contato feito', cor: '#0891b2', explicacao: 'Visita ou contato já realizado.' },
   { id: 'andamento', titulo: 'Em andamento', cor: '#d97706', explicacao: 'Aguardando retorno, projeto ou visita; oportunidade qualificada.' },
-  { id: 'convertida', titulo: 'Convertida em cliente', cor: '#15803d', explicacao: 'Prospecção convertida em cliente.' },
+  { id: 'convertida', titulo: 'Convertida em cliente', cor: '#15803d', explicacao: 'Cliente cadastrado, ainda sem orçamento confirmado nesta obra.' },
+  { id: 'orcamento', titulo: 'Com orçamento', cor: '#e6a500', explicacao: 'Existe orçamento vinculado à obra prospectada.' },
+  { id: 'venda', titulo: 'Venda confirmada', cor: '#7c3aed', explicacao: 'Orçamento da obra registrado como venda confirmada.' },
   { id: 'sem_interesse', titulo: 'Sem interesse', cor: '#64748b', explicacao: 'Registro marcado como sem interesse comercial.' },
 ]
 
@@ -36,14 +39,17 @@ export interface GrupoBairro {
   pontos: PontoProspeccao[]
 }
 
-export function pontosValidos(registros: Prospeccao[]): PontoProspeccao[] {
+export function pontosValidos(registros: Prospeccao[], etapas: Record<string, EtapaComercialProspeccao> = {}): PontoProspeccao[] {
   return registros.flatMap(registro => {
     if (registro.latitude == null || registro.longitude == null) return []
     const latitude = Number(registro.latitude)
     const longitude = Number(registro.longitude)
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
       Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return []
-    return [{ registro, latitude, longitude, classificacao: classificacaoDoStatus(registro.status) }]
+    const etapa = etapas[registro.id]
+    const classificacao: ClassificacaoMapa = etapa === 'venda' ? 'venda'
+      : etapa === 'orcamento' ? 'orcamento' : classificacaoDoStatus(registro.status)
+    return [{ registro, latitude, longitude, classificacao }]
   })
 }
 
