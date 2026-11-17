@@ -192,8 +192,8 @@ async function main(){
   assert.doesNotMatch(sql,/create or replace function public\.fn_converter_prospeccao_v1/)
   const cliente360=fs.readFileSync('components/clientes/Cliente360DashboardV2.tsx','utf8')
   const origem=fs.readFileSync('components/clientes/VisitasOrigemProspeccao.tsx','utf8')
-  assert.match(cliente360, /VisitasOrigemProspeccao clienteId=\\{cliente\\.id\\}/)
-  assert.match(origem, /\\.eq\\('cliente_id', clienteId\\)/)
+  assert.ok(cliente360.includes('<VisitasOrigemProspeccao clienteId={cliente.id}/>'))
+  assert.ok(origem.includes(".eq('cliente_id', clienteId)"))
   assert.match(origem, /createSignedUrl/)
   console.log('PASS: CEP, pinos, bairros, fotos privadas, Cliente 360, duplicidades e conversão controlada.')
 }
