@@ -95,6 +95,7 @@ export default function NovaProspeccaoPage(){
   async function salvar(e:React.FormEvent){
     e.preventDefault();setErro('')
     if(fotos.length>6){setErro('Selecione no máximo 6 fotos por registro.');return}
+    if(cep.trim()&&cep.replace(/\\D/g,'').length!==8){setErro('Confira o CEP: informe 8 números ou deixe em branco até confirmar.');return}
     const escolha=RESULTADOS.find(r=>r.id===resultado) || RESULTADOS[0]
     const identificacao=[endereco.trim(),numero.trim()].filter(Boolean).join(', ') || `Obra ${numero.trim()||'identificada em campo'}`
     setSalvando(true)
