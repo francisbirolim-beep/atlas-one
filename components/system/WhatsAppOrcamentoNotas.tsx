@@ -62,10 +62,18 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
   const [notas, setNotas] = useState<Notas | null>(() => instantaneoDoCard(card))
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const [abrindoArquivo, setAbrindoArquivo] = useState<string | null>(null)
+  const [imagemAberta, setImagemAberta] = useState<{ anexo: Anexo; indice: number; url: string } | null>(null)
+  const [imagemFalhou, setImagemFalhou] = useState(false)
+  const [miniaturasFalhas, setMiniaturasFalhas] = useState<Record<string, boolean>>({})
+  const [erroArquivo, setErroArquivo] = useState('')
   useEffect(() => {
     const abort = new AbortController()
     setNotas(instantaneoDoCard(card))
     setErro('')
+    setErroArquivo('')
+    setImagemAberta(null)
+    setMiniaturasFalhas({})
     setCarregando(true)
     void (async () => {
       try {
@@ -85,6 +93,77 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
     })()
     return () => abort.abort()
   }, [card.id])
+
+  // URLs do bucket privado expiram em 20 minutos. Renovar apenas após a ação
+  // explícita do usuário, sem copiar ou alterar o arquivo original no Storage.
+  async function renovarUrlAnexo(anexo: Anexo, indice: number): Promise<string> {
+    const token = await tokenAtual()
+    if (!token) throw new Error('Sessão expirada. Entre novamente no Atlas.')
+    const resposta = await fetch('/api/integracoes/whatsapp/orcamento-notas?orcamentoId=' + encodeURIComponent(card.id), {
+      headers: { Authorization: 'Bearer ' + token }, cache: 'no-store',
+    })
+    const dados = await resposta.json() as Notas & { error?: string }
+    if (!resposta.ok) throw new Error(dados.error || 'Não foi possível renovar o acesso ao arquivo.')
+    const anexosNovos = Array.isArray(dados.anexos) ? dados.anexos : []
+    const corresponde = (novo: Anexo) => novo.nome === anexo.nome &&
+      novo.mimeType === anexo.mimeType &&
+      (!anexo.id || !novo.id || novo.id === anexo.id)
+    const noIndice = anexosNovos[indice]
+    const atualizado = noIndice && corresponde(noIndice)
+      ? noIndice : anexosNovos.find(novo => !!anexo.id && novo.id === anexo.id && corresponde(novo))
+    if (!atualizado || !urlSegura(atualizado.url)) {
+      throw new Error('Arquivo não disponível para abertura. O registro foi preservado.')
+    }
+    setNotas(dados)
+    return atualizado.url!
+  }
+
+  async function ampliarImagem(anexo: Anexo, indice: number) {
+    setErroArquivo('')
+    setAbrindoArquivo('imagem-' + indice)
+    try {
+      const url = await renovarUrlAnexo(anexo, indice)
+      setImagemFalhou(false)
+      setImagemAberta({ anexo, indice, url })
+    } catch (e) {
+      setErroArquivo(e instanceof Error ? e.message : 'Falha ao abrir a imagem.')
+    } finally {
+      setAbrindoArquivo(null)
+    }
+  }
+
+  async function abrirEmOutraAba(anexo: Anexo, indice: number) {
+    // Abrir a aba no clique evita o bloqueio do navegador durante o fetch assíncrono.
+    const aba = window.open('about:blank', '_blank')
+    if (!aba) {
+      setErroArquivo('O navegador bloqueou a nova aba. Habilite pop-ups do Atlas para abrir este arquivo.')
+      return
+    }
+    aba.opener = null
+    setErroArquivo('')
+    setAbrindoArquivo('arquivo-' + indice)
+    try {
+      const url = await renovarUrlAnexo(anexo, indice)
+      aba.location.replace(url)
+    } catch (e) {
+      aba.close()
+      setErroArquivo(e instanceof Error ? e.message : 'Falha ao abrir o arquivo.')
+    } finally {
+      setAbrindoArquivo(null)
+    }
+  }
+
+  async function atualizarMidia(anexo: Anexo, indice: number) {
+    setErroArquivo('')
+    setAbrindoArquivo('midia-' + indice)
+    try {
+      await renovarUrlAnexo(anexo, indice)
+    } catch (e) {
+      setErroArquivo(e instanceof Error ? e.message : 'Falha ao atualizar a mídia.')
+    } finally {
+      setAbrindoArquivo(null)
+    }
+  }
 
   const grupos = {
     imagem: (notas?.anexos || []).filter(a => tipo(a) === 'imagem'),
@@ -135,33 +214,67 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
           <p className="max-h-56 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-5 text-slate-700">{notas.textoOriginal || 'Sem texto informado. Confira os anexos do WhatsApp.'}</p>
         </div>
         <div className="mt-3 space-y-3">
+          {erroArquivo && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">{erroArquivo}</div>}
           {grupos.imagem.length > 0 && <div><p className="mb-2 flex items-center gap-1 text-xs font-bold text-slate-800"><Camera size={15}/> Fotos ({grupos.imagem.length})</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {grupos.imagem.map((a, i) => <div key={a.id || i} className="min-w-0 rounded-lg border bg-white p-1">
-                {a.url ? <a href={a.url} target="_blank" rel="noopener noreferrer"><img src={a.url} alt={a.nome} className="h-24 w-full rounded object-cover"/></a>
-                  : <p className="flex h-24 items-center justify-center rounded bg-slate-100 text-xs text-amber-700">Foto indisponível</p>}
-                <p className="truncate px-1 py-1 text-[10px] text-slate-600">{a.nome}</p>
-              </div>)}
+              {grupos.imagem.map((a, i) => {
+                const indice = (notas?.anexos || []).indexOf(a)
+                return <div key={a.id || i} className="min-w-0 rounded-lg border bg-white p-1">
+                  <button type="button" onClick={() => void ampliarImagem(a, indice)} disabled={abrindoArquivo !== null}
+                    aria-label={'Abrir foto ' + a.nome} className="block w-full cursor-pointer text-left disabled:opacity-60">
+                    {a.url && !miniaturasFalhas[a.url] ? <img src={a.url} alt={a.nome}
+                      onError={() => setMiniaturasFalhas(antigas => ({ ...antigas, [a.url!]: true }))}
+                      className="h-24 w-full rounded object-cover"/>
+                      : <span className="flex h-24 items-center justify-center rounded bg-slate-100 text-xs text-blue-700">Recuperar foto</span>}
+                  </button>
+                  <p className="truncate px-1 py-1 text-[10px] text-slate-600">{a.nome}</p>
+                </div>
+              })}
             </div></div>}
           {grupos.audio.length > 0 && <div><p className="mb-2 flex items-center gap-1 text-xs font-bold text-slate-800"><Headphones size={15}/> Áudios ({grupos.audio.length})</p>
             {grupos.audio.map((a, i) => <div key={a.id || i} className="mb-1 rounded-lg border bg-white p-2">
               <p className="mb-1 truncate text-[11px] text-slate-600">{a.nome}</p>
               {a.url ? <audio src={a.url} controls preload="none" className="h-9 w-full"/> : <span className="text-xs text-amber-700">Áudio indisponível</span>}
+              <button type="button" onClick={() => void atualizarMidia(a, (notas?.anexos || []).indexOf(a))}
+                disabled={abrindoArquivo !== null} className="mt-1 block text-xs font-medium text-blue-700 disabled:opacity-60">Atualizar acesso ao áudio</button>
             </div>)}</div>}
           {grupos.video.length > 0 && <div><p className="mb-2 flex items-center gap-1 text-xs font-bold text-slate-800"><Video size={15}/> Vídeos ({grupos.video.length})</p>
             <div className="grid gap-2 sm:grid-cols-2">{grupos.video.map((a, i) => <div key={a.id || i} className="rounded-lg border bg-white p-2">
               <p className="mb-1 truncate text-[11px] text-slate-600">{a.nome}</p>
               {a.url ? <video src={a.url} controls preload="none" className="max-h-48 w-full rounded bg-black"/> : <span className="text-xs text-amber-700">Vídeo indisponível</span>}
+              <button type="button" onClick={() => void atualizarMidia(a, (notas?.anexos || []).indexOf(a))}
+                disabled={abrindoArquivo !== null} className="mt-1 block text-xs font-medium text-blue-700 disabled:opacity-60">Atualizar acesso ao vídeo</button>
             </div>)}</div></div>}
           {grupos.arquivo.length > 0 && <div><p className="mb-2 flex items-center gap-1 text-xs font-bold text-slate-800"><Paperclip size={15}/> Arquivos ({grupos.arquivo.length})</p>
-            <div className="flex flex-wrap gap-2">{grupos.arquivo.map((a, i) => a.url
-              ? <a key={a.id || i} href={a.url} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex max-w-full items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs text-blue-700"><FileText size={15}/><span className="max-w-60 truncate">{a.nome}</span></a>
-              : <span key={a.id || i} className="rounded-lg border bg-white px-3 py-2 text-xs text-amber-700">{a.nome}: indisponível</span>)}</div></div>}
+            <div className="flex flex-wrap gap-2">{grupos.arquivo.map((a, i) => <button type="button" key={a.id || i}
+              onClick={() => void abrirEmOutraAba(a, (notas?.anexos || []).indexOf(a))}
+              disabled={abrindoArquivo !== null}
+              className="inline-flex max-w-full items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs text-blue-700 disabled:opacity-60">
+                <FileText size={15}/><span className="max-w-60 truncate">{a.nome}</span>
+              </button>)}</div></div>}
           {notas.anexos.length === 0 && <p className="text-xs text-slate-500">Nenhuma foto, vídeo, áudio ou arquivo neste pacote.</p>}
         </div>
       </>}
     </section>
+    {imagemAberta && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-3" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label={'Foto: ' + imagemAberta.anexo.nome}
+        className="flex max-h-[95vh] w-full max-w-5xl flex-col gap-2 rounded-xl bg-white p-3 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="max-w-[75%] truncate text-sm font-semibold">{imagemAberta.anexo.nome}</p>
+          <button type="button" onClick={() => {setImagemAberta(null);setImagemFalhou(false)}}
+            className="rounded-lg border px-3 py-1 text-sm font-semibold">Fechar</button>
+        </div>
+        {imagemFalhou ? <p role="alert" className="p-4 text-sm text-amber-800">A imagem não carregou. Use Atualizar imagem para renovar o acesso.</p>
+          : <img src={imagemAberta.url} alt={imagemAberta.anexo.nome}
+              onError={() => setImagemFalhou(true)} className="max-h-[73vh] w-full object-contain"/>}
+        <div className="flex flex-wrap gap-3">
+          <button type="button" onClick={() => void ampliarImagem(imagemAberta.anexo, imagemAberta.indice)}
+            disabled={abrindoArquivo !== null} className="text-xs font-semibold text-blue-700 disabled:opacity-60">Atualizar imagem</button>
+          <button type="button" onClick={() => void abrirEmOutraAba(imagemAberta.anexo, imagemAberta.indice)}
+            disabled={abrindoArquivo !== null} className="text-xs font-semibold text-blue-700 disabled:opacity-60">Abrir original em nova aba</button>
+        </div>
+      </div>
+    </div>}
     {(notas?.origemCards || []).length > 0 && <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-3 sm:p-4">
       <h4 className="mb-2 text-sm font-bold text-slate-900">Informações consolidadas de {(notas?.origemCards || []).length} card(s)</h4>
       <p className="text-xs text-slate-600">Cada card arrastado foi incorporado ao principal. Dados complementares e medidas são preservados para consulta, sem modificar preço, itens técnicos e validações W.Vetro.</p>
