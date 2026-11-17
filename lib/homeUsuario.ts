@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { Usuario } from './tipos'
+import { normalizarAtalhosInicio } from './homeAtalhos'
 
 export const HOME_MODULOS = [
   { id: 'orcamentos', label: 'Orçamentos', descricao: 'Atalho para novo orçamento e bloco de últimos orçamentos.' },
@@ -35,6 +36,8 @@ export interface HomeUsuarioConfig {
   dashboards?: DashboardId[]
   dashboardPrincipal?: DashboardId
   paginaInicial?: PaginaInicialAtlas
+  /** Apenas atalhos de navegação escolhidos pelo próprio usuário; não concede permissões. */
+  atalhosInicio?: string[]
 }
 
 const MODULOS_VALIDOS = new Set<HomeModuloId>(HOME_MODULOS.map(m => m.id))
@@ -82,6 +85,7 @@ function normalizarConfig(valor: unknown, role: Usuario['role']): HomeUsuarioCon
     dashboards: role === 'master' ? DASHBOARDS.map(d => d.id) : dashboards,
     dashboardPrincipal: role === 'master' && !dashboardPrincipal ? 'geral' : dashboardPrincipal,
     paginaInicial: bruto.paginaInicial === 'visao-geral-projetos' || bruto.paginaInicial === 'relatorios-instalacoes' ? bruto.paginaInicial : 'padrao',
+    ...(Array.isArray(bruto.atalhosInicio) ? { atalhosInicio: normalizarAtalhosInicio(bruto.atalhosInicio) } : {}),
   }
 }
 
@@ -124,6 +128,7 @@ export async function salvarHomeUsuarioConfig(usuarioId: string, config: HomeUsu
     dashboards: config.dashboards || ['comercial', 'pessoal'],
     dashboardPrincipal: config.dashboardPrincipal || config.dashboards?.[0] || 'comercial',
     paginaInicial: config.paginaInicial === 'visao-geral-projetos' || config.paginaInicial === 'relatorios-instalacoes' ? config.paginaInicial : 'padrao',
+    ...(Array.isArray(config.atalhosInicio) ? { atalhosInicio: normalizarAtalhosInicio(config.atalhosInicio) } : {}),
   }
 
   const { error } = await supabase
@@ -140,4 +145,51 @@ export async function salvarHomeUsuarioConfig(usuarioId: string, config: HomeUsu
 
 export function temModulo(config: HomeUsuarioConfig, modulo: HomeModuloId) {
   return config.modulos.includes(modulo)
+}
+
+/**
+ * Salva somente a preferência visual na configuração já existente do usuário.
+ * Reconsulta o servidor antes de alterar para preservar módulos, dashboard e escopos
+ * que a administração possa ter ajustado depois da abertura da Home.
+ * Sem conexão ou sem empresa identificada, não afirma que a gravação foi concluída.
+ */
+export async function salvarAtalhosInicio(
+  usuario: Pick<Usuario, 'id' | 'role' | 'empresa_id'>,
+  atalhos: string[],
+): Promise<boolean> {
+  if (!usuario.empresa_id || (typeof navigator !== 'undefined' && !navigator.onLine)) return false
+
+  try {
+    const { data, error } = await supabase
+      .from('configuracoes_gerais')
+      .select('valor')
+      .eq('empresa_id', usuario.empresa_id)
+      .eq('chave', chave(usuario.id))
+      .maybeSingle()
+    if (error) return false
+
+    const atual = data?.valor
+      ? normalizarConfig(typeof data.valor === 'string' ? JSON.parse(data.valor) : data.valor, usuario.role)
+      : homeConfigPadrao(usuario.role)
+    const nova: HomeUsuarioConfig = {
+      ...atual,
+      atalhosInicio: normalizarAtalhosInicio(atalhos) || [],
+    }
+
+    const { error: erroSalvar } = await supabase.from('configuracoes_gerais').upsert({
+      empresa_id: usuario.empresa_id,
+      chave: chave(usuario.id),
+      valor: JSON.stringify(nova),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'empresa_id,chave' })
+    if (erroSalvar) {
+      console.error('Erro ao salvar atalhos da Home:', erroSalvar)
+      return false
+    }
+    try { window.localStorage.setItem(`atlas_home_config:${usuario.id}:v1`, JSON.stringify(nova)) } catch {}
+    return true
+  } catch (error) {
+    console.error('Erro ao atualizar atalhos da Home:', error)
+    return false
+  }
 }
