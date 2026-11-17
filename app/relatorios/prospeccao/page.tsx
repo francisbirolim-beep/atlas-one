@@ -5,6 +5,8 @@ import {ArrowLeft,Download,FileDown,MapPin,RefreshCw} from 'lucide-react'
 import {useRelatoriosAcesso,autorizarExportacaoRelatorio} from '@/components/relatorios/RelatoriosAcesso'
 import {usuarioAtual} from '@/lib/auth'
 import {listarProspeccoes,STATUS_PROSPECCAO,type Prospeccao} from '@/lib/prospeccao'
+import {consultarEtapasComerciais,type EtapaComercialProspeccao} from '@/lib/prospeccaoEtapas'
+import {resumoProspeccaoPorBairro} from '@/lib/prospeccaoRelatorio'
 import {baixarCsv} from '@/lib/relatorios'
 import type {Usuario} from '@/lib/tipos'
 import { LOGOTIPO_PDF_FUNDO_CLARO } from '@/lib/brandingRelatorios'
@@ -37,6 +39,8 @@ export default function RelatorioProspeccao(){
  const acesso=useRelatoriosAcesso().comercial
  const [usuario,setUsuario]=useState<Usuario|null>(null)
  const [registros,setRegistros]=useState<Prospeccao[]>([])
+ const [etapasComerciais,setEtapasComerciais]=useState<Record<string,EtapaComercialProspeccao>>({})
+ const [avisoEtapas,setAvisoEtapas]=useState<string|null>(null)
  const [carregando,setCarregando]=useState(true)
  const [exportando,setExportando]=useState(false)
  const [erro,setErro]=useState('')
@@ -51,7 +55,11 @@ export default function RelatorioProspeccao(){
   if(!acesso.consultar)return
   setCarregando(true);setErro('')
   try{const u=await usuarioAtual();if(!u)throw Error('Sessão expirada. Entre novamente.')
-   setUsuario(u);setRegistros(await listarProspeccoes())
+   const lista=await listarProspeccoes()
+   setUsuario(u);setRegistros(lista)
+   // Etapas são verificadas em segundo plano; relatório de visitas continua disponível.
+   void consultarEtapasComerciais(lista).then(r=>{setEtapasComerciais(r.etapas);setAvisoEtapas(r.aviso)})
+     .catch(()=>setAvisoEtapas('Etapas de orçamento e venda indisponíveis no momento.'))
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar prospecções.')}
   finally{setCarregando(false)}
  }
@@ -72,6 +80,7 @@ export default function RelatorioProspeccao(){
  }),[autorizados,inicio,fim,cidade,bairro,vendedor,status,busca])
  const porCidade=useMemo(()=>agrupar(filtrados,r=>r.cidade||''),[filtrados])
  const porBairro=useMemo(()=>agrupar(filtrados,r=>[r.cidade,r.bairro].filter(Boolean).join(' / ')),[filtrados])
+ const resumoBairros=useMemo(()=>resumoProspeccaoPorBairro(filtrados,etapasComerciais),[filtrados,etapasComerciais])
  const porStatus=useMemo(()=>agrupar(filtrados,r=>nomeStatus(r.status)),[filtrados])
  const porVendedor=useMemo(()=>agrupar(filtrados,r=>r.responsavel_nome||''),[filtrados])
  const abertos=filtrados.filter(r=>!['convertido','sem_interesse'].includes(r.status)).length
@@ -85,6 +94,17 @@ export default function RelatorioProspeccao(){
   setErro('');setExportando(true)
   try{await autorizarExportacaoRelatorio('comercial');baixarCsv('atlas-prospeccao-obras.csv',[colunas,...valores])}
   catch(e){setErro(e instanceof Error?e.message:'Exportação não autorizada')}
+  finally{setExportando(false)}
+ }
+ async function csvBairros(){
+  setErro('');setExportando(true)
+  try{
+   await autorizarExportacaoRelatorio('comercial')
+   baixarCsv('atlas-prospeccao-resumo-bairros.csv',[
+     ['Cidade','Bairro','Total de prospecções','Pinos com GPS','Sem GPS','Sem conversão','Clientes cadastrados','Com orçamento','Vendas confirmadas'],
+     ...resumoBairros.map(r=>[r.cidade,r.bairro,r.total,r.pinos,r.semGps,r.emProspecao,r.clientes,r.orcamentos,r.vendas]),
+   ])
+  }catch(e){setErro(e instanceof Error?e.message:'Exportação não autorizada')}
   finally{setExportando(false)}
  }
  async function pdf(){
@@ -126,8 +146,9 @@ export default function RelatorioProspeccao(){
    cabecalho()
    doc.setFontSize(9);doc.setFont('helvetica','bold')
    doc.text('Por cidade: '+porCidade.map(([k,n])=>k+' ('+n+')').join('; ').slice(0,140),12,41)
-   doc.text('Por situação: '+porStatus.map(([k,n])=>k+' ('+n+')').join('; ').slice(0,140),12,46)
-   y=55;titulos()
+   doc.text('Por bairro: '+porBairro.map(([k,n])=>k+' ('+n+')').join('; ').slice(0,140),12,46)
+   doc.text('Por situação: '+porStatus.map(([k,n])=>k+' ('+n+')').join('; ').slice(0,140),12,51)
+   y=60;titulos()
    for(const linha of valores){
     if(y>191){doc.addPage();pagina++;cabecalho();y=46;titulos()}
     doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(35,49,70)
@@ -148,7 +169,7 @@ export default function RelatorioProspeccao(){
     <p className="mt-1 text-sm text-slate-600">Análise por cidade, bairro, vendedor e etapa comercial.</p></div>
    <div className="flex flex-wrap gap-2">
     <button onClick={()=>void carregar()} disabled={carregando} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><RefreshCw size={15}/>Atualizar</button>
-    {acesso.exportar&&<><button onClick={()=>void csv()} disabled={exportando||carregando} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Download size={15}/>CSV</button>
+    {acesso.exportar&&<><button onClick={()=>void csv()} disabled={exportando||carregando} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Download size={15}/>CSV</button><button onClick={()=>void csvBairros()} disabled={exportando||carregando} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Download size={15}/>CSV por bairro</button>
      <button onClick={()=>void pdf()} disabled={exportando||carregando} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white"><FileDown size={15}/>PDF com logo</button></>}
    </div>
   </header>
@@ -162,6 +183,7 @@ export default function RelatorioProspeccao(){
    <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3 xl:col-span-6">Pesquisar cliente ou endereço<input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Nome, rua, telefone..." className="mt-1 block w-full rounded-lg border p-2"/></label>
   </section>
   {erro&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+  {avisoEtapas&&<p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{avisoEtapas}</p>
   {carregando&&<p className="text-sm text-slate-500">Carregando prospecções...</p>}
   {inicio>fim&&<p className="text-sm text-red-700">A data inicial deve ser anterior ou igual à final.</p>}
   <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -172,6 +194,14 @@ export default function RelatorioProspeccao(){
    <Grafico titulo="Prospecções por bairro" dados={porBairro} total={filtrados.length}/>
    <Grafico titulo="Etapas comerciais" dados={porStatus} total={filtrados.length}/>
    <Grafico titulo="Prospecções por vendedor" dados={porVendedor} total={filtrados.length}/>
+  </section>
+  <section className="rounded-2xl border bg-white p-4">
+   <h2 className="text-sm font-bold">Resumo por cidade e bairro — pinos e resultado comercial</h2>
+   <p className="mt-1 text-xs text-slate-500">Cada prospecção é contada uma vez por bairro. Pinos correspondem a registros com coordenadas GPS válidas; orçamento e venda são verificados pela obra vinculada.</p>
+   <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[980px] text-left text-xs"><thead className="bg-slate-100"><tr>{['Cidade','Bairro','Total','Pinos GPS','Sem GPS','Sem conversão','Clientes','Orçamentos','Vendas'].map(c=><th key={c} className="p-3">{c}</th>)}</tr></thead><tbody>
+    {resumoBairros.map(r=><tr key={r.cidade+'/'+r.bairro} className="border-t"><td className="p-3">{r.cidade}</td><td className="p-3 font-bold">{r.bairro}</td>{[r.total,r.pinos,r.semGps,r.emProspecao,r.clientes,r.orcamentos,r.vendas].map((v,i)=><td key={i} className="p-3">{v}</td>)}</tr>)}
+    {!resumoBairros.length&&<tr><td colSpan={9} className="p-5 text-center text-slate-400">Nenhuma prospecção encontrada nos filtros.</td></tr>}
+   </tbody></table></div>
   </section>
   <div className="flex flex-wrap justify-between gap-2"><h2 className="font-bold">Obras prospectadas ({filtrados.length})</h2><Link href="/prospeccao" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700"><MapPin size={15}/>Ver mapa de prospecção</Link></div>
   <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full min-w-[1060px] text-left text-xs"><thead className="bg-slate-100"><tr>{colunas.map(c=><th key={c} className="p-3">{c}</th>)}</tr></thead><tbody>
