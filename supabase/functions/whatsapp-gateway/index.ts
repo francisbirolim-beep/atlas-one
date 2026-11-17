@@ -1891,8 +1891,12 @@ async function processGroupBudgetIntake(
     tamanho: Number(body.mediaSize || 0) || null,
   } : null
 
+  // O provedor WhatsApp pode entregar timestamps antigos ou fora de ordem.
+  // O minuto é de silêncio medido pelo Atlas ao receber o webhook, nunca pelo
+  // timestamp histórico da mensagem (que permanece preservado na conversa).
+  const recebidoEm = new Date().toISOString()
   const windowMinutes = Math.max(1, Math.min(120, Number(automation.janela_agregacao_minutos || 1)))
-  const cutoff = new Date(new Date(now).getTime() - windowMinutes * 60_000).toISOString()
+  const cutoff = new Date(new Date(recebidoEm).getTime() - windowMinutes * 60_000).toISOString()
 
   // A chamada SQL serializa mensagens do mesmo remetente e acrescenta texto,
   // anexos e IDs atomicamente. Evita que webhooks simultâneos abram vários pacotes.
@@ -1909,7 +1913,7 @@ async function processGroupBudgetIntake(
       p_mensagem_id: body.whatsappMessageId || messageRowId,
       p_raw_line: rawLine,
       p_anexo: attachment,
-      p_now: now,
+      p_now: recebidoEm,
       p_cutoff: cutoff,
       p_criar_se_ausente: !comandoPronto,
     },
@@ -1924,11 +1928,11 @@ async function processGroupBudgetIntake(
   }
 
   if (comandoPronto) {
-    if (gatewayToken) executarEmBackground(estruturarIntakeComIA(intakeId, gatewayToken, "pronto", now))
+    if (gatewayToken) executarEmBackground(estruturarIntakeComIA(intakeId, gatewayToken, "pronto", recebidoEm))
     return { intakeId, appended: true, fechamento: "pronto" }
   }
 
-  if (gatewayToken) executarEmBackground(agendarFechamentoIntake(intakeId, gatewayToken, now, windowMinutes))
+  if (gatewayToken) executarEmBackground(agendarFechamentoIntake(intakeId, gatewayToken, recebidoEm, windowMinutes))
   return {
     intakeId,
     appended,
