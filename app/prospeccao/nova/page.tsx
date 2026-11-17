@@ -50,9 +50,9 @@ export default function NovaProspeccaoPage(){
       if(!resposta.ok) throw new Error(dados.error||'CEP não encontrado.')
       setCep(dados.cep||cep)
       setCepManual(true)
-      if(dados.rua) setEndereco(atual=>atual.trim()?atual:dados.rua||'')
-      if(dados.bairro) setBairro(atual=>atual.trim()?atual:dados.bairro||'')
-      if(dados.cidade) setCidade(atual=>atual.trim()?atual:dados.cidade||'')
+      if(dados.rua) setEndereco(dados.rua)
+      if(dados.bairro) setBairro(dados.bairro)
+      if(dados.cidade) setCidade(dados.cidade)
       setAvisoEndereco('CEP consultado na base postal. Confira o número e os dados da obra.')
     }catch(e){
       setAvisoEndereco(e instanceof Error?e.message:'Falha na consulta do CEP.')
@@ -65,9 +65,9 @@ export default function NovaProspeccaoPage(){
       const response=await fetch(`/api/geocodificacao/reversa?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`)
       if(!response.ok) throw new Error('geocodificacao')
       const dados=await response.json() as {cidade?:string;bairro?:string;rua?:string;numero?:string;cep?:string;cepOrigem?:string|null;cepAviso?:string;cepOpcoes?:Array<{cep:string;bairro:string;trecho:string}>}
-      if(dados.cidade) setCidade(dados.cidade)
-      if(dados.bairro) setBairro(dados.bairro)
-      if(dados.rua) setEndereco(dados.rua)
+      if(dados.cidade) setCidade(atual=>atual.trim()?atual:dados.cidade||'')
+      if(dados.bairro) setBairro(atual=>atual.trim()?atual:dados.bairro||'')
+      if(dados.rua) setEndereco(atual=>atual.trim()?atual:dados.rua||'')
       if(dados.numero) setNumero(atual=>atual.trim()?atual:dados.numero||'')
       // CEP não encontrado não pode apagar um CEP já preenchido manualmente.
       if(dados.cep&&!cepManual) setCep(dados.cep)
