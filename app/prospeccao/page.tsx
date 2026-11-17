@@ -63,23 +63,34 @@ export default function ProspeccaoPage() {
 
   useEffect(() => { void carregar() }, [])
 
-  // Os pedidos são consultados somente ao abrir o mapa, em segundo plano.
-  // Nenhuma escrita adicional é executada ao salvar ou atualizar o orçamento.
+  // O mapa consulta a situação comercial em segundo plano, sem bloquear o Kanban.
+  // Atualizar enquanto a aba estiver visível permite que a cor acompanhe a venda.
   useEffect(() => {
     if (aba !== 'mapa') return
     let ativo = true
-    setCarregandoOrcamentosGps(true)
-    void listarOrcamentosGpsParaMapa().then(resultado => {
-      if (!ativo) return
-      setOrcamentosGps(resultado.registros)
-      setEtapasOrcamentosGps(resultado.etapas)
-      setAvisoOrcamentosGps(resultado.aviso)
-    }).catch(() => {
-      if (ativo) setAvisoOrcamentosGps('Falha ao carregar os pedidos com GPS. As prospecções existentes continuam disponíveis.')
-    }).finally(() => {
-      if (ativo) setCarregandoOrcamentosGps(false)
-    })
-    return () => { ativo = false }
+    let emAndamento = false
+    const carregarPedidos = async () => {
+      if (!ativo || emAndamento) return
+      emAndamento = true
+      setCarregandoOrcamentosGps(true)
+      try {
+        const resultado = await listarOrcamentosGpsParaMapa()
+        if (!ativo) return
+        setOrcamentosGps(resultado.registros)
+        setEtapasOrcamentosGps(resultado.etapas)
+        setAvisoOrcamentosGps(resultado.aviso)
+      } catch {
+        if (ativo) setAvisoOrcamentosGps('Falha ao atualizar os pedidos com GPS. Os pontos anteriores permanecem disponíveis.')
+      } finally {
+        emAndamento = false
+        if (ativo) setCarregandoOrcamentosGps(false)
+      }
+    }
+    void carregarPedidos()
+    const intervalo = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void carregarPedidos()
+    }, 90_000)
+    return () => { ativo = false; window.clearInterval(intervalo) }
   }, [aba, revisaoMapa])
 
   const fonteFiltros = aba === 'mapa' ? [...itens, ...orcamentosGps] : itens
