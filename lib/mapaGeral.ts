@@ -70,6 +70,13 @@ type InteracaoDB = {
   tipo: string
   created_at?: string | null
 }
+type VendaConfirmadaDB = {
+  id: string
+  orcamento_id: string | null
+  status: string | null
+  excluida_em: string | null
+  confirmado_em: string | null
+}
 const DIA=/^\d{4}-\d{2}-\d{2}$/
 
 function diaValido(valor?: string | null): string | null {
@@ -116,11 +123,12 @@ function adicionarEvento(registro: RegistroMapaGeral, tipo: TipoEventoMapaGeral,
 /** Consulta somente dados visíveis à sessão via RLS. Não insere nem modifica registros. */
 export async function carregarMapaGeral(): Promise<RetornoMapaGeral> {
   const avisos: string[]=[]
-  const [obrasR,prosR,orcR,interR]=await Promise.allSettled([
+  const [obrasR,prosR,orcR,interR,vendasR]=await Promise.allSettled([
     lerTabela<ObraDB>('obras','id,cliente_id,nome,status,bairro,cidade,endereco,numero_endereco,observacoes,criado_por_nome,clientes(id,nome)'),
     lerTabela<ProspeccaoDB>('prospeccoes','id,obra_id,cliente_id,nome_cliente,nome_obra,cidade,bairro,endereco,latitude,longitude,responsavel_nome,status,created_at'),
     lerTabela<OrcamentoDB>('orcamentos','id,obra_id,cliente_id,cliente_nome,cidade,status,data_venda,numero,criado_por_nome,created_at'),
     lerTabela<InteracaoDB>('prospeccao_interacoes','id,prospeccao_id,tipo,created_at'),
+    lerTabela<VendaConfirmadaDB>('vendas_obras','id,orcamento_id,status,excluida_em,confirmado_em'),
   ])
   // Erro de uma fonte não faz as outras desaparecerem nem vira um falso zero.
   const obter=<T>(r:PromiseSettledResult<T[]>,nome:string):T[]=>{
@@ -129,7 +137,15 @@ export async function carregarMapaGeral(): Promise<RetornoMapaGeral> {
     return []
   }
   const obras=obter(obrasR,'obras'),prospeccoes=obter(prosR,'prospecções'),
-    orcamentos=obter(orcR,'orçamentos'),interacoes=obter(interR,'visitas')
+    orcamentos=obter(orcR,'orçamentos'),interacoes=obter(interR,'visitas'),
+    vendas=obter(vendasR,'vendas confirmadas')
+  // Uma etapa visual Vendido sem venda operacional ativa não altera o pino.
+  const vendasAtivas=new Map<string,VendaConfirmadaDB>()
+  for(const venda of vendas){
+    if(venda.orcamento_id && !venda.excluida_em && venda.status !== 'cancelada' && venda.status !== 'excluida'){
+      vendasAtivas.set(venda.orcamento_id,venda)
+    }
+  }
   const porObra=new Map<string,RegistroMapaGeral>()
   const porProspeccao=new Map<string,RegistroMapaGeral>()
   const registros:RegistroMapaGeral[]=[]
@@ -195,11 +211,11 @@ export async function carregarMapaGeral(): Promise<RetornoMapaGeral> {
       grupo.push(orc);orcamentosPorObra.set(orc.obra_id!,grupo)
     }else{
       if(orc.status==='recusado')r.etapa='perdida'
-      if(orc.status==='convertido'||orc.data_venda)r.etapa='venda'
+      if(vendasAtivas.has(orc.id)||orc.status==='convertido'||orc.data_venda)r.etapa='venda'
     }
     adicionarEvento(r,'orcamento',orc.created_at)
     // data_venda é a data confirmada, não a data de atualização do registro.
-    if(orc.data_venda)adicionarEvento(r,'venda',orc.data_venda)
+    if(orc.data_venda||vendasAtivas.has(orc.id))adicionarEvento(r,'venda',orc.data_venda||vendasAtivas.get(orc.id)?.confirmado_em)
   }
 
   for(const [obraId, grupo] of orcamentosPorObra){
@@ -209,7 +225,7 @@ export async function carregarMapaGeral(): Promise<RetornoMapaGeral> {
     const statusObra=obra?.status||''
     if(statusObra==='concluida'){r.etapa='concluida';continue}
     if(['producao','instalacao'].includes(statusObra)){r.etapa='producao';continue}
-    if(grupo.some(orc=>orc.status==='convertido'||!!orc.data_venda)){r.etapa='venda';continue}
+    if(grupo.some(orc=>vendasAtivas.has(orc.id)||orc.status==='convertido'||!!orc.data_venda)){r.etapa='venda';continue}
     if(grupo.every(orc=>orc.status==='recusado')){r.etapa='perdida';continue}
     r.etapa='orcamento'
   }
