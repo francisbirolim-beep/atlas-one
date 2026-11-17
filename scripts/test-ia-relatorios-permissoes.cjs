@@ -141,7 +141,8 @@ async function run(){
  ]
  const resumo=load('lib/relatoriosResumoServer.ts',{'./supabaseAdmin':{supabaseAdmin:db}})
  v=await resumo.carregarResumoComercial({inicio:'2026-10-01',fim:'2026-10-31'},user,true)
- check(v.totalOrcamentos===1&&v.valorOrcado===100&&v.ticketMedio===100)
+ // Ticket médio considera somente vendas confirmadas, nunca orçamentos sem venda vinculada.
+ check(v.totalOrcamentos===1&&v.valorOrcado===100&&v.ticketMedio===0,'Ticket médio exige venda confirmada')
  // Todos os endpoints de relatório bloqueiam antes de ler seus dados.
  for(const file of ['financeiro','obras-cmv','esquadrifacio','fornecedores','plano-contas','resumos']){
   let touched=false
