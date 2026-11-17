@@ -42,6 +42,7 @@ async function main(){
     {id:'b1',obra_id:'OBRA-B',status:'convertido',data_venda:'2026-11-17'},
     {id:'b2',obra_id:'OBRA-B',status:'recusado',data_venda:null},
     {id:'c1',obra_id:'OBRA-C',status:'recusado',data_venda:null},
+    {id:'z1',obra_id:'OBRA-SEM-VENDA',status:'convertido',data_venda:'2026-11-17'},
   ]
   const vendas=[
     {id:'v1',obra_id:'OBRA-B',status:'ativa',excluida_em:null},
@@ -79,7 +80,7 @@ async function main(){
   // A mesma obra pode ter orçamento marcado convertido sem venda operacional:
   // isso não deve transformar o pino em venda por engano.
   const semVenda=await etapasApi.consultarEtapasComerciais([{...prospeccoes[1],obra_id:'OBRA-SEM-VENDA'}])
-  assert.equal(semVenda.etapas.B,'cliente')
+  assert.equal(semVenda.etapas.B,'orcamento','Orçamento marcado convertido sem venda ativa não vira pino de venda')
   const pontos=mapa.pontosValidos(prospeccoes,dados.etapas)
   assert.equal(pontos.length,3,'Sem GPS não deve virar pino inventado')
   assert.equal(pontos.find(p=>p.registro.id==='B').classificacao,'venda')
