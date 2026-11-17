@@ -3,10 +3,13 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { idCardContramarco } from '@/lib/idCardMedicaoFinal'
 import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
 import { perfilAprovadoContramarco } from '@/lib/contramarcoRegrasCorte'
+import { medicaoComprovada } from '@/lib/medicaoComprovacao'
+import { ehWVetroVendidoValidado } from '@/lib/medicaoVendaElegivel'
+import { avisarConferenciaParcial, validarDestinatariosParcial } from '@/lib/medicaoParcialNotificacoesServer'
 
 export const runtime = 'nodejs'
 
-type Action = 'enviar' | 'aprovar' | 'remediar' | 'sincronizar_contramarco' | 'definir_perfil'
+type Action = 'enviar' | 'enviar_registro_parcial' | 'aprovar' | 'remediar' | 'sincronizar_contramarco' | 'definir_perfil'
 
 async function autenticar(req: NextRequest) {
   const authHeader = req.headers.get('authorization') || ''
@@ -37,7 +40,7 @@ async function proximaVersao(medicaoId: string) {
   return (data?.[0]?.versao || 0) + 1
 }
 
-async function criarSnapshot(medicaoId: string, usuario: any, motivo: string) {
+async function criarSnapshot(medicaoId: string, usuario: any, motivo: string, adicionais: Record<string, unknown> = {}) {
   const [{ data: medicao }, { data: itens }] = await Promise.all([
     supabaseAdmin.from('medicoes_finais').select('*').eq('id', medicaoId).maybeSingle(),
     supabaseAdmin.from('medicao_itens').select('*').eq('medicao_id', medicaoId).order('ordem', { ascending: true }),
@@ -52,7 +55,7 @@ async function criarSnapshot(medicaoId: string, usuario: any, motivo: string) {
       empresa_id: usuario.empresa_id,
       versao,
       motivo,
-      snapshot: { medicao, itens: itens || [] },
+      snapshot: { medicao, itens: itens || [], ...adicionais },
       criado_por_id: usuario.id,
       criado_por_nome: usuario.nome,
     })
@@ -324,7 +327,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     const { data: medicao } = await supabaseAdmin
       .from('medicoes_finais')
-      .select('id,empresa_id,orcamento_id,status_operacional,tipo_medicao')
+      .select('id,empresa_id,orcamento_id,status_operacional,tipo_medicao,cliente_id,cliente_nome,obra_id')
       .eq('id', id)
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
@@ -334,6 +337,95 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     if (action === 'sincronizar_contramarco') {
       const resultado = await sincronizarOrdensContramarco(medicao as any, usuario as any)
       return NextResponse.json(resultado, { status: resultado.ok ? 200 : resultado.code === 'PROJETO_NAO_CONFERIDO' ? 409 : 400 })
+    }
+
+
+    // Envio de medição parcial documentada, sem promover checklist incompleto a concluído.
+    // A conferência fica visível nas tarefas/notificações do responsável, e a peça em
+    // aberto continua impedida de ser aprovada ou liberada para fabricação.
+    if (action === 'enviar_registro_parcial') {
+      if (usuario.role !== 'master') {
+        return NextResponse.json({ error: 'Somente o Master pode encaminhar a parcial aos responsáveis.' }, { status: 403 })
+      }
+      if (medicao.tipo_medicao === 'contramarco') {
+        return NextResponse.json({ error: 'Use o fluxo específico de contramarco para esta medição.' }, { status: 409 })
+      }
+      if (!['em_medicao', 'com_pendencia'].includes(String(medicao.status_operacional || ''))) {
+        return NextResponse.json({ error: 'A medição precisa estar em andamento ou pausada para enviar uma parcial.' }, { status: 409 })
+      }
+      if (!medicao.orcamento_id) {
+        return NextResponse.json({ error: 'A Medição Final precisa estar vinculada a um orçamento vendido.' }, { status: 409 })
+      }
+      const [{ data: venda, error: erroVenda }, { data: orcamento, error: erroOrcamento }] = await Promise.all([
+        supabaseAdmin.from('vendas_obras')
+          .select('id').eq('orcamento_id', medicao.orcamento_id)
+          .eq('empresa_id', usuario.empresa_id).eq('status', 'ativa')
+          .limit(1).maybeSingle(),
+        supabaseAdmin.from('orcamentos')
+          .select('wvetro_fluxo,modo_entrada,origem')
+          .eq('id', medicao.orcamento_id).eq('empresa_id', usuario.empresa_id)
+          .maybeSingle(),
+      ])
+      if (erroVenda || erroOrcamento) {
+        return NextResponse.json({ error: 'Não foi possível conferir a venda. Tente novamente.' }, { status: 503 })
+      }
+      if (!venda?.id && !ehWVetroVendidoValidado(orcamento)) {
+        return NextResponse.json({ error: 'Confirme a venda antes de encaminhar a parcial.', code: 'VENDA_NAO_CONFIRMADA' }, { status: 409 })
+      }
+      const destinatarios = Array.isArray(body?.responsaveis) ? body.responsaveis : []
+      const validados = await validarDestinatariosParcial(usuario.empresa_id, destinatarios)
+      if (!validados.ok) return NextResponse.json({ error: validados.error }, { status: 400 })
+
+      const { data: itens, error: erroItens } = await supabaseAdmin.from('medicao_itens')
+        .select('*').eq('medicao_id', id).eq('empresa_id', usuario.empresa_id)
+      if (erroItens) throw erroItens
+      const lista = itens || []
+      const total = lista.reduce((soma, item) => soma + Math.max(1, Number(item.quantidade || 1)), 0)
+      const documentados = lista.filter(item => medicaoComprovada(item))
+      if (!documentados.length) {
+        return NextResponse.json({ error: 'Registre medidas ou fotos da trena antes de enviar uma parcial.' }, { status: 409 })
+      }
+      if (documentados.length >= total) {
+        return NextResponse.json({ error: 'Todas as posições estão documentadas; confira os checklists antes de concluir a medição.' }, { status: 409 })
+      }
+      const pendentes = total - documentados.length
+
+      // Uma prévia não pode criar revisões, tarefas nem notificações na base compartilhada.
+      if (process.env.VERCEL_ENV === 'preview') {
+        return NextResponse.json({
+          ok: true, simulado: true, parcial: true, enviados: documentados.length,
+          pendentes, notificados: validados.usuarios.length,
+          mensagem: 'Simulação de envio parcial. Nenhum registro ou aviso foi gravado.',
+        })
+      }
+
+      const revisao = await criarSnapshot(id, usuario, 'Envio parcial para conferencia', {
+        evento: 'envio_parcial_registrado',
+        pecas_medidas: documentados.length,
+        pecas_abertas: pendentes,
+        total_pecas: total,
+        itens_documentados_ids: documentados.map(item => item.id),
+        origem: 'medicao_documentada_sem_aprovacao',
+      })
+      if (!revisao) throw new Error('Não foi possível criar a revisão da medição parcial.')
+
+      // Não alterar medido, status_medicao ou status_operacional: os checklists
+      // técnicos pendentes permanecem bloqueados para aprovação/fabricação.
+      try {
+        const avisos = await avisarConferenciaParcial(usuario.empresa_id, medicao, usuario,
+          validados.usuarios, documentados.length, total)
+        return NextResponse.json({ ok: true, parcial: true,
+          enviados: documentados.length, pendentes,
+          ...avisos, versao: revisao.versao,
+          mensagem: 'Medição parcial enviada para conferência, sem finalizar as posições pendentes.',
+        })
+      } catch (erroNotificacao) {
+        console.error('A revisão parcial foi salva, mas há avisos pendentes:', erroNotificacao)
+        return NextResponse.json({ ok: true, parcial: true, avisosPendentes: true,
+          enviados: documentados.length, pendentes, versao: revisao.versao,
+          mensagem: 'Medição parcial registrada. As notificações não foram confirmadas; reenvie a parcial para avisar os responsáveis.',
+        })
+      }
     }
 
     if (action === 'enviar') {

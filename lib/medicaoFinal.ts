@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { tokenAtual } from './auth'
+import { ehWVetroVendidoValidado } from './medicaoVendaElegivel'
 import { descricaoItemMedicao, identificarItensMedicao } from './medicaoDescricao'
 import {
     MedicaoColuna, MedicaoFinal, MedicaoItem, TipologiaCampoExtra, TipoValorCampoExtra,
@@ -28,6 +29,7 @@ export async function verificarFluxoVendaOrcamento(orcamentoId: string): Promise
       .from('vendas_obras')
       .select('id,obra_id')
       .eq('orcamento_id', orcamentoId)
+      .eq('status', 'ativa')
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle(),
@@ -156,10 +158,30 @@ export async function listarMedicoes(): Promise<MedicaoFinal[]> {
       .order('created_at', { ascending: true })
 
   if (error || !data) {
-        console.error('Erro ao listar medicoes:', error)
-        return []
+    console.error('Erro ao listar medicoes:', error)
+    return []
   }
-    return data as MedicaoFinal[]
+
+  // Regra da Medida Final: mostrar apenas pedidos efetivamente vendidos.
+  // Os registros antigos sem venda continuam no banco, sem exclusão.
+  const ids = [...new Set((data as MedicaoFinal[])
+    .map(m => m.orcamento_id)
+    .filter((id): id is string => Boolean(id)))]
+  if (!ids.length) return []
+  const [{ data: vendas, error: erroVendas }, { data: orcamentos, error: erroOrcamentos }] = await Promise.all([
+    supabase.from('vendas_obras').select('orcamento_id')
+      .eq('status', 'ativa').in('orcamento_id', ids),
+    supabase.from('orcamentos').select('id,modo_entrada,origem,wvetro_fluxo').in('id', ids),
+  ])
+  if (erroVendas || erroOrcamentos) {
+    console.error('Não foi possível validar as vendas das medições:', erroVendas || erroOrcamentos)
+    return []
+  }
+  const vendidos = new Set((vendas || []).map(v => v.orcamento_id))
+  for (const orcamento of orcamentos || []) {
+    if (ehWVetroVendidoValidado(orcamento)) vendidos.add(orcamento.id)
+  }
+  return (data as MedicaoFinal[]).filter(m => m.orcamento_id && vendidos.has(m.orcamento_id))
 }
 
 // Orçamentos que estão numa coluna do Kanban Comercial marcada como "vendido"
@@ -195,11 +217,21 @@ export async function listarOrcamentosSemMedicao(tipoMedicao: TipoMedicaoFinal =
               supabase.from('medicoes_finais').select('orcamento_id').eq('tipo_medicao', tipoMedicao),
             ])
 
-  const jaTem = new Set((medicoes || []).map((m: any) => m.orcamento_id).filter(Boolean))
-    return (orcamentos || []).filter((o: any) => {
-      const ehApoioWVetro = String(o.descricao_livre || '').startsWith('Importado do W.Vetro |')
-      return !jaTem.has(o.id) && !ehApoioWVetro
-    })
+  // Coluna Vendido só é uma indicação visual; exigir também venda operacional ativa.
+  const idsOrcamentos = (orcamentos || []).map(o => o.id)
+  if (!idsOrcamentos.length) return []
+  const { data: vendas, error: erroVendas } = await supabase.from('vendas_obras')
+    .select('orcamento_id').eq('status', 'ativa').in('orcamento_id', idsOrcamentos)
+  if (erroVendas) {
+    console.error('Erro ao conferir vendas dos orçamentos:', erroVendas)
+    return []
+  }
+  const vendidos = new Set((vendas || []).map(v => v.orcamento_id))
+  const jaTem = new Set((medicoes || []).map(m => m.orcamento_id).filter(Boolean))
+  return (orcamentos || []).filter(o => {
+    const ehApoioWVetro = String(o.descricao_livre || '').startsWith('Importado do W.Vetro |')
+    return vendidos.has(o.id) && !jaTem.has(o.id) && !ehApoioWVetro
+  })
 }
 
 // Cria a medição a partir de um orçamento vendido: puxa cliente/endereço e

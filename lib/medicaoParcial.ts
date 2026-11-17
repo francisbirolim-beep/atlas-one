@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { medicaoComprovada } from './medicaoComprovacao'
 import type { Usuario } from './tipos'
 
 export type EventoHistoricoMedicao = {
@@ -21,14 +22,14 @@ export type EstadoParcialMedicao = {
 async function resumoPecas(medicaoId: string) {
   const { data, error } = await supabase
     .from('medicao_itens')
-    .select('id, quantidade, medido')
+    .select('id,quantidade,largura_baixo_mm,largura_meio_mm,largura_cima_mm,altura_direita_mm,altura_meio_mm,altura_esquerda_mm,foto_larguras_url,foto_alturas_url')
     .eq('medicao_id', medicaoId)
 
   if (error) throw error
 
   const itens = data || []
   const total = itens.reduce((soma, item) => soma + Math.max(1, item.quantidade || 1), 0)
-  const medidas = itens.reduce((soma, item) => soma + (item.medido ? 1 : 0), 0)
+  const medidas = itens.reduce((soma, item) => soma + (medicaoComprovada(item) ? 1 : 0), 0)
   return { total, medidas, abertas: Math.max(0, total - medidas) }
 }
 

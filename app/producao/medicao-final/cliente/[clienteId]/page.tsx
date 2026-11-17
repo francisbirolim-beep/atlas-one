@@ -176,7 +176,7 @@ export default function AbrirMedidaFinalCliente() {
       if (h.error) throw h.error
       const idsOrcamentos = (o.data || []).map(orcamento => orcamento.id)
       const vendas = idsOrcamentos.length > 0
-        ? await supabase.from('vendas_obras').select('orcamento_id').in('orcamento_id', idsOrcamentos)
+        ? await supabase.from('vendas_obras').select('orcamento_id').eq('status', 'ativa').in('orcamento_id', idsOrcamentos)
         : { data: [] as { orcamento_id: string | null }[], error: null }
       if (vendas.error) throw vendas.error
       setCliente(c.data as ClienteResumo)
