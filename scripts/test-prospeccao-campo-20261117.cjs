@@ -43,17 +43,28 @@ async function main(){
     {id:'b2',obra_id:'OBRA-B',status:'recusado',data_venda:null},
     {id:'c1',obra_id:'OBRA-C',status:'recusado',data_venda:null},
   ]
+  const vendas=[
+    {id:'v1',obra_id:'OBRA-B',status:'ativa',excluida_em:null},
+    {id:'v2',obra_id:'OBRA-C',status:'ativa',excluida_em:'2026-11-18'},
+  ]
   const supabase={
     from(nome){
-      assert.equal(nome,'orcamentos')
+      assert.ok(['orcamentos','vendas_obras'].includes(nome))
       return {select(campos){
         assert.ok(campos.includes('obra_id'))
         return {in(_campo,ids){
-          return {order(){
-            return {async range(inicio,fim){
-              return {data:orcamentos.filter(o=>ids.includes(o.obra_id)).sort((a,b)=>a.id.localeCompare(b.id)).slice(inicio,fim+1),error:null}
-            }}
-          }}
+          const filtros={}
+          const consulta={
+            eq(campo,valor){filtros[campo]=valor;return this},
+            is(campo,valor){filtros[campo]=valor;return this},
+            order(){return this},
+            async range(inicio,fim){
+              const linhas=nome==='orcamentos'?orcamentos:vendas
+              const filtrados=linhas.filter(linha=>ids.includes(linha.obra_id)&&Object.entries(filtros).every(([campo,valor])=>linha[campo]===valor))
+              return {data:filtrados.sort((a,b)=>a.id.localeCompare(b.id)).slice(inicio,fim+1),error:null}
+            },
+          }
+          return consulta
         }}
       }}
     },
@@ -65,6 +76,10 @@ async function main(){
   assert.equal(dados.etapas.B,'venda','Venda real tem precedência sobre outros orçamentos')
   assert.equal(dados.etapas.C,'cliente','Somente proposta recusada não é orçamento ativo')
   assert.equal(dados.etapas.D,'cliente','Conversão em cliente não significa venda')
+  // A mesma obra pode ter orçamento marcado convertido sem venda operacional:
+  // isso não deve transformar o pino em venda por engano.
+  const semVenda=await etapasApi.consultarEtapasComerciais([{...prospeccoes[1],obra_id:'OBRA-SEM-VENDA'}])
+  assert.equal(semVenda.etapas.B,'cliente')
   const pontos=mapa.pontosValidos(prospeccoes,dados.etapas)
   assert.equal(pontos.length,3,'Sem GPS não deve virar pino inventado')
   assert.equal(pontos.find(p=>p.registro.id==='B').classificacao,'venda')
