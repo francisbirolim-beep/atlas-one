@@ -6,7 +6,8 @@ import {useRelatoriosAcesso,autorizarExportacaoRelatorio} from '@/components/rel
 import {usuarioAtual} from '@/lib/auth'
 import {listarProspeccoes,STATUS_PROSPECCAO,type Prospeccao} from '@/lib/prospeccao'
 import {consultarEtapasComerciais,type EtapaComercialProspeccao} from '@/lib/prospeccaoEtapas'
-import {resumoProspeccaoPorBairro} from '@/lib/prospeccaoRelatorio'
+import {resumoProspeccaoPorBairro,nomesUnicosGeograficos} from '@/lib/prospeccaoRelatorio'
+import {normalizarTextoEndereco as normalizarLocal} from '@/lib/geocodificacaoCep'
 import {baixarCsv} from '@/lib/relatorios'
 import type {Usuario} from '@/lib/tipos'
 import { LOGOTIPO_PDF_FUNDO_CLARO } from '@/lib/brandingRelatorios'
@@ -65,22 +66,22 @@ export default function RelatorioProspeccao(){
  }
  useEffect(()=>{void carregar()},[acesso.consultar])
  const autorizados=useMemo(()=>acesso.proprios&&usuario?registros.filter(r=>r.responsavel_id===usuario.id):registros,[acesso.proprios,usuario,registros])
- const cidades=useMemo(()=>[...new Set(autorizados.map(r=>r.cidade||'').filter(Boolean))].sort(),[autorizados])
- const bairros=useMemo(()=>[...new Set(autorizados.filter(r=>!cidade||r.cidade===cidade).map(r=>r.bairro||'').filter(Boolean))].sort(),[autorizados,cidade])
+ const cidades=useMemo(()=>nomesUnicosGeograficos(autorizados.map(r=>r.cidade)),[autorizados])
+ const bairros=useMemo(()=>nomesUnicosGeograficos(autorizados.filter(r=>!cidade||normalizarLocal(r.cidade||'')===normalizarLocal(cidade)).map(r=>r.bairro)),[autorizados,cidade])
  const vendedores=useMemo(()=>[...new Set(autorizados.map(r=>r.responsavel_nome||'').filter(Boolean))].sort(),[autorizados])
  const filtrados=useMemo(()=>autorizados.filter(r=>{
   const data=dia(r.created_at)
   if(inicio>fim||data<inicio||data>fim)return false
-  if(cidade&&r.cidade!==cidade)return false
-  if(bairro&&r.bairro!==bairro)return false
+  if(cidade&&normalizarLocal(r.cidade||'')!==normalizarLocal(cidade))return false
+  if(bairro&&normalizarLocal(r.bairro||'')!==normalizarLocal(bairro))return false
   if(vendedor&&r.responsavel_nome!==vendedor)return false
   if(status&&r.status!==status)return false
   const termo=busca.trim().toLocaleLowerCase('pt-BR')
   return !termo||[r.nome_obra,r.nome_cliente,r.cidade,r.bairro,r.endereco,r.telefone].some(v=>(v||'').toLocaleLowerCase('pt-BR').includes(termo))
  }),[autorizados,inicio,fim,cidade,bairro,vendedor,status,busca])
  const porCidade=useMemo(()=>agrupar(filtrados,r=>r.cidade||''),[filtrados])
- const porBairro=useMemo(()=>agrupar(filtrados,r=>[r.cidade,r.bairro].filter(Boolean).join(' / ')),[filtrados])
  const resumoBairros=useMemo(()=>resumoProspeccaoPorBairro(filtrados,etapasComerciais),[filtrados,etapasComerciais])
+ const porBairro=useMemo<[string,number][]>(()=>resumoBairros.map(r=>[r.cidade+' / '+r.bairro,r.total]),[resumoBairros])
  const porStatus=useMemo(()=>agrupar(filtrados,r=>nomeStatus(r.status)),[filtrados])
  const porVendedor=useMemo(()=>agrupar(filtrados,r=>r.responsavel_nome||''),[filtrados])
  const abertos=filtrados.filter(r=>!['convertido','sem_interesse'].includes(r.status)).length
