@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokenAtual, usuarioAtual, usuarioCacheLocal } from '@/lib/auth'
-import { homeConfigPadrao, lerHomeUsuarioConfig, temModulo, type HomeUsuarioConfig } from '@/lib/homeUsuario'
-import HomeExecutiveHero from '@/components/system/HomeExecutiveHero'
+import { homeConfigPadrao, lerHomeUsuarioConfig, salvarAtalhosInicio, temModulo, type HomeUsuarioConfig } from '@/lib/homeUsuario'
+import HomeAtalhosPersonalizados from '@/components/system/HomeAtalhosPersonalizados'
 import HomeTasksBlock from '@/components/system/HomeTasksBlock'
 import HomeTarefasResumo from '@/components/system/HomeTarefasResumo'
 import HomeCalendarBlock from '@/components/system/HomeCalendarBlock'
@@ -16,14 +16,17 @@ export default function HomeDashboard() {
   const usuarioInicial = usuarioCacheLocal()
   const configInicial = homeConfigPadrao(usuarioInicial?.role || 'funcionario')
   const [config, setConfig] = useState<HomeUsuarioConfig>(configInicial)
+  const [usuario, setUsuario] = useState(usuarioInicial)
+  const [homePronta, setHomePronta] = useState(false)
 
   useEffect(() => {
     let ativo = true
     let timer: ReturnType<typeof setTimeout> | null = null
 
-    const aplicar = (carregada: HomeUsuarioConfig) => {
+    const aplicar = (carregada: HomeUsuarioConfig, pronta = false) => {
       if (!ativo) return
       setConfig(carregada)
+      setHomePronta(pronta)
     }
 
     void (async () => {
@@ -37,18 +40,19 @@ export default function HomeDashboard() {
         }),
       ])
       if (!ativo || !usuario) return
+      setUsuario(usuario)
 
       const padrao = homeConfigPadrao(usuario.role)
       aplicar(padrao)
 
       const promessaConfig = lerHomeUsuarioConfig(usuario)
-      promessaConfig.then(aplicar).catch(() => undefined)
+      promessaConfig.then(carregada => aplicar(carregada, true)).catch(() => undefined)
 
       const rapida = await Promise.race([
         promessaConfig,
         new Promise<null>(resolve => setTimeout(() => resolve(null), 1200)),
       ])
-      if (rapida) aplicar(rapida)
+      if (rapida) aplicar(rapida, true)
     })()
 
     return () => {
@@ -78,13 +82,20 @@ export default function HomeDashboard() {
     return () => { ativo = false }
   }, [config.paginaInicial, router])
 
+  async function salvarMeusAtalhos(atalhos: string[]): Promise<boolean> {
+    if (!usuario) return false
+    const ok = await salvarAtalhosInicio(usuario, atalhos)
+    if (ok) setConfig(atual => ({ ...atual, atalhosInicio: [...atalhos] }))
+    return ok
+  }
+
   const mostraTarefas = temModulo(config, 'tarefas')
   const mostraCalendario = temModulo(config, 'calendario')
   const temTrabalho = mostraTarefas || mostraCalendario
 
   return (
     <div className="atlas-home-dashboard w-full max-w-full overflow-x-hidden">
-      <HomeExecutiveHero modulos={config.modulos} />
+      <HomeAtalhosPersonalizados usuario={usuario} config={config} pronto={homePronta} onSalvar={salvarMeusAtalhos} />
 
       {temTrabalho && (
         <section className="atlas-home-mobile-full mx-auto w-full max-w-[1500px] px-3 pt-4 pb-6 sm:px-4 md:px-8">

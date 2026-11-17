@@ -33,7 +33,14 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Explicit TypeScript check
+        # O projeto inteiro excede o heap padrão de ~2 GiB do Node 20.
+        # Limite maior somente no job efêmero da branch, sem afetar o Atlas em produção.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm run typecheck
+
+      - name: Home personal favorites regression
+        run: node scripts/test-home-atalhos.cjs
 
       - name: W.Vetro technical regression
         run: npm run test:wvetro-comparador
