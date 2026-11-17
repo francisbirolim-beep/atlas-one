@@ -105,7 +105,15 @@ export default function MapaProspeccoes({ registros, etapasComerciais }: { regis
   const pontos = useMemo(() => pontosValidos(registros, etapasComerciais), [registros, etapasComerciais])
   const pontosVisiveis = useMemo(() => pontos.filter(p => !filtroSituacao || p.classificacao === filtroSituacao), [pontos, filtroSituacao])
   const gruposBairro = useMemo(() => agruparPontosPorBairro(pontosVisiveis), [pontosVisiveis])
-  const semGps = registros.length - pontos.length
+  // Uma prospecção sem GPS próprio não conta como ausente se a mesma obra
+  // já está no mapa graças ao GPS confirmado do Pedido de Orçamento.
+  const obrasComPino = new Set(pontos.map(p => p.registro.obra_id).filter(Boolean))
+  const semGps = registros.filter(r => {
+    const temGps = r.latitude != null && r.longitude != null &&
+      Number.isFinite(Number(r.latitude)) && Number.isFinite(Number(r.longitude)) &&
+      Math.abs(Number(r.latitude)) <= 90 && Math.abs(Number(r.longitude)) <= 180
+    return !temGps && (!r.obra_id || !obrasComPino.has(r.obra_id))
+  }).length
   const totalPorSituacao = useMemo(() => GRUPOS_MAPA.map(tipo => ({
     ...tipo,
     total: pontos.filter(p => p.classificacao === tipo.id).length,
@@ -268,7 +276,7 @@ export default function MapaProspeccoes({ registros, etapasComerciais }: { regis
         <div>
           <h2 className="text-base font-bold text-slate-900">Mapa das obras com GPS</h2>
           <p className="mt-1 max-w-2xl text-xs text-slate-500">
-            Prospeções e pedidos de orçamento com localização confirmada, agrupados por bairro. Aproxime para abrir a ficha ou o orçamento pelo pino.
+            Prospecções e pedidos de orçamento com localização confirmada, agrupados por bairro. Aproxime para abrir a ficha ou o orçamento pelo pino.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
