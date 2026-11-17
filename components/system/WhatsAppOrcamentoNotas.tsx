@@ -6,7 +6,7 @@ import { tokenAtual } from '@/lib/auth'
 import type { OrcamentoRapido } from '@/lib/tipos'
 
 type Anexo = { id: string; tipo: string; nome: string; mimeType: string; tamanho: number; url: string | null }
-type CardIncorporado = { id: string; cliente_nome?: string; modo_entrada?: string; descricao?: string; observacoes?: string; itens?: any[] }
+type CardIncorporado = { id: string; cliente_nome?: string; modo_entrada?: string; descricao?: string; observacoes?: string; itens?: any[]; dados?: Record<string, any> }
 type Notas = { origemCards?: CardIncorporado[]; grupo: string; grupoConferido: boolean; origemStatus: 'correta' | 'outro_grupo' | 'nao_identificada'; historico: boolean;
   conversaId: string | null; participanteNome: string | null;
   primeiraMensagemEm: string | null; ultimaMensagemEm: string | null; totalMensagens: number | null;
@@ -35,6 +35,28 @@ const tipo = (a: Anexo) => a.mimeType.startsWith('image/') || a.tipo === 'imagem
   a.mimeType.startsWith('video/') || a.tipo === 'video' ? 'video' : 'arquivo'
 const valor = (v: unknown) => v == null || v === '' ? 'A confirmar' : String(v)
 const metros = (v: unknown) => Number(v) > 0 ? (Number(v) / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + ' m' : 'A confirmar'
+const camposDeOrigem = (dados: Record<string, any> | undefined): Array<[string, string]> => {
+  if (!dados) return []
+  const campos: Array<[string, unknown]> = [
+    ['WhatsApp do cliente', dados.cliente_whatsapp], ['Cidade', dados.cidade],
+    ['Obra', dados.obra_nome], ['Endereço da obra', dados.obra_endereco],
+    ['Número', dados.obra_numero], ['Complemento', dados.obra_complemento],
+    ['Bairro', dados.obra_bairro], ['Cidade da obra', dados.obra_cidade],
+    ['UF', dados.obra_uf], ['CEP', dados.obra_cep],
+    ['Arquiteto', dados.arquiteto_nome], ['Contato do arquiteto', dados.arquiteto_contato],
+    ['Acabamento', dados.acabamento], ['Outro acabamento', dados.acabamento_outro_texto],
+    ['Contramarco', dados.contramarco], ['Tipo de medida', dados.tipo_medida],
+    ['Tipologia', dados.tipo_esquadria], ['Largura', dados.largura_mm ? metros(dados.largura_mm) : null],
+    ['Altura', dados.altura_mm ? metros(dados.altura_mm) : null],
+    ['Quantidade', dados.quantidade], ['Condições', dados.condicoes],
+    ['Forma de pagamento informada', dados.forma_pagamento],
+    ['Prazo informado', dados.prazo_entrega_dias ? String(dados.prazo_entrega_dias) + ' dias' : null],
+    ['Temperatura comercial', dados.temperatura], ['Motivo de perda', dados.motivo_perda],
+  ]
+  return campos.filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
+    .map(([titulo, v]) => [titulo, String(v)])
+}
+const urlSegura = (v: unknown) => typeof v === 'string' && /^https:\/\//i.test(v) ? v : null
 
 export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido }) {
   const [notas, setNotas] = useState<Notas | null>(() => instantaneoDoCard(card))
@@ -141,11 +163,43 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
       </>}
     </section>
     {(notas?.origemCards || []).length > 0 && <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-3 sm:p-4">
-      <h4 className="mb-2 text-sm font-bold text-slate-900">Informações dos cards incorporados</h4>
+      <h4 className="mb-2 text-sm font-bold text-slate-900">Informações consolidadas de {(notas?.origemCards || []).length} card(s)</h4>
+      <p className="text-xs text-slate-600">Cada card arrastado foi incorporado ao principal. Dados complementares e medidas são preservados para consulta, sem modificar preço, itens técnicos e validações W.Vetro.</p>
       {(notas?.origemCards || []).map((origem, indice) => <div key={origem.id || indice} className="mt-2 rounded-lg bg-white p-3 text-xs text-slate-700">
         <p className="font-semibold">{origem.cliente_nome || 'Card anterior'} · cópia preservada</p>
         {origem.descricao && <p className="mt-2 whitespace-pre-wrap">{origem.descricao}</p>}
         {origem.observacoes && <p className="mt-2 whitespace-pre-wrap">{origem.observacoes}</p>}
+        {camposDeOrigem(origem.dados).length > 0 && <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {camposDeOrigem(origem.dados).map(([titulo, dado]) => <p key={titulo} className="rounded border border-blue-100 bg-blue-50/40 p-2">
+            <span className="block text-[10px] font-semibold text-slate-500">{titulo}</span>
+            <span className="break-words">{dado}</span>
+          </p>)}
+        </div>}
+        {Array.isArray(origem.dados?.fotos_urls) && origem.dados.fotos_urls.length > 0 && <div className="mt-2">
+          <p className="mb-1 font-semibold">Fotos recebidas</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {origem.dados.fotos_urls.map((url: unknown, i: number) => urlSegura(url) &&
+              <a key={i} href={urlSegura(url)!} target="_blank" rel="noopener noreferrer">
+                <img src={urlSegura(url)!} alt={`Foto do card incorporado ${i + 1}`} className="h-24 w-full rounded object-cover"/>
+              </a>)}
+          </div>
+        </div>}
+        {Array.isArray(origem.dados?.medidas_trena) && origem.dados.medidas_trena.length > 0 && <div className="mt-2">
+          <p className="font-semibold">Medições com trena recebidas</p>
+          {origem.dados.medidas_trena.map((m: any, i: number) => <p key={i} className="py-0.5">
+            {String(m.label || `Medição ${i + 1}`)} · {valor(m.largura_mm)} × {valor(m.altura_mm)} mm
+            {urlSegura(m.foto_url) && <a href={urlSegura(m.foto_url)!} target="_blank" rel="noopener noreferrer" className="ml-2 font-semibold text-blue-700 underline">Ver foto</a>}
+          </p>)}
+        </div>}
+        {Array.isArray(origem.dados?.anexos) && origem.dados.anexos.length > 0 && <div className="mt-2">
+          <p className="font-semibold">Arquivos e anexos recebidos</p>
+          {origem.dados.anexos.map((a: any, i: number) => urlSegura(a?.url)
+            ? <a key={i} href={urlSegura(a.url)!} target="_blank" rel="noopener noreferrer" className="mr-2 inline-block text-blue-700 underline">{String(a.nome || a.titulo || `Anexo ${i + 1}`)}</a>
+            : <span key={i} className="mr-2">{String(a?.nome || a?.titulo || `Anexo ${i + 1}`)}</span>)}
+        </div>}
+        {urlSegura(origem.dados?.anexo_url) && <a href={urlSegura(origem.dados?.anexo_url)!} target="_blank" rel="noopener noreferrer" className="mt-2 block font-semibold text-blue-700 underline">
+          {String(origem.dados?.anexo_nome || 'Abrir arquivo original')}
+        </a>}
         {Array.isArray(origem.itens) && origem.itens.length > 0 && <div className="mt-2 space-y-1">
           <p className="font-semibold">Itens e medidas do card original (não alteram o W.Vetro):</p>
           {origem.itens.map((item, i) => <p key={String(item.id || i)}>
@@ -155,6 +209,10 @@ export default function WhatsAppOrcamentoNotas({ card }: { card: OrcamentoRapido
             {item.altura_mm ? ' × ' + item.altura_mm + ' mm' : ''}
           </p>)}
         </div>}
+        {origem.dados && <details className="mt-3 border-t pt-2">
+          <summary className="cursor-pointer font-semibold text-blue-700">Consultar registro completo deste card</summary>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-slate-100 p-2 text-[10px]">{JSON.stringify(origem.dados, null, 2)}</pre>
+        </details>}
       </div>)}
     </section>}
     {card.modo_entrada === 'whatsapp' && <section className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-3 sm:p-4">

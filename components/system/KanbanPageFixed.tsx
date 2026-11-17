@@ -821,14 +821,19 @@ async function handleDropSobreCard(e: React.DragEvent, destino: OrcamentoRapido)
     window.alert('Cards de assistência não podem ser incorporados a orçamentos.')
     return
   }
-  if (normalizarNomeMesclagem(origem.cliente_nome) !== normalizarNomeMesclagem(destino.cliente_nome)) {
-    window.alert('Os cards têm nomes diferentes. Confira o cliente antes de unir. Nada foi alterado.')
+  const mesmoCadastro = Boolean(origem.cliente_id && destino.cliente_id && origem.cliente_id === destino.cliente_id)
+  if (!mesmoCadastro && normalizarNomeMesclagem(origem.cliente_nome) !== normalizarNomeMesclagem(destino.cliente_nome)) {
+    window.alert('Os cards têm nomes ou cadastros diferentes. Confira o cliente antes de unir. Nada foi alterado.')
+    return
+  }
+  if (origem.cliente_id && destino.cliente_id && origem.cliente_id !== destino.cliente_id) {
+    window.alert('Os cards pertencem a cadastros diferentes. Nenhuma informação foi transferida.')
     return
   }
   const confirmar = window.confirm(
     'Deseja copiar todas as informações de "' + origem.cliente_nome +
     '" para o card "' + destino.cliente_nome + '" que está por baixo?\n\n' +
-    'Fotos, mídias do WhatsApp, anexos, observações e histórico serão incorporados. ' +
+    'Todos os dados, fotos, medidas, mensagens, anexos, observações e histórico serão incorporados, inclusive de cards já reunidos. ' +
     'O card de destino (incluindo seu W.Vetro, valores e etapa atual) será mantido.\n\n' +
     'O card arrastado ficará arquivado, sem ser excluído. Deseja continuar?'
   )
