@@ -60,7 +60,7 @@ begin
   if v_origem.status in ('aprovado','convertido')
      or v_origem.orcamento_finalizado_em is not null or v_origem.eh_assistencia = true
      or v_origem.assistencia_id is not null
-     or coalesce(v_origem.wvetro_fluxo->>'numero','',v_origem.wvetro_fluxo->>'numero_wvetro') <> ''
+     or coalesce(nullif(v_origem.wvetro_fluxo->>'numero',''),nullif(v_origem.wvetro_fluxo->>'numero_wvetro',''),'') <> ''
      or exists (select 1 from public.vendas_obras where empresa_id = p_empresa and orcamento_id = p_origem)
      or exists (select 1 from public.financeiro_contas_receber where empresa_id = p_empresa and orcamento_id = p_origem)
      or exists (select 1 from public.ordens_producao where empresa_id = p_empresa and orcamento_id = p_origem)
@@ -115,7 +115,7 @@ begin
   loop
     if not exists (select 1 from jsonb_array_elements(v_anexos) a where a.value->>'url'=v_url) then
       v_anexos := v_anexos || jsonb_build_array(jsonb_build_object(
-        'titulo','Foto do card incorporado','nome','Foto de '+v_origem.cliente_nome,'url',v_url
+        'titulo','Foto do card incorporado','nome','Foto de '||v_origem.cliente_nome,'url',v_url
       ));
     end if;
   end loop;
