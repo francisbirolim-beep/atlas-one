@@ -1,3 +1,9 @@
+## 2026-11-17 — Abertura renovável de anexos do Kanban Comercial (branch isolada)
+
+- `WhatsAppOrcamentoNotas` passa a consultar o endpoint autenticado das notas ao clicar em mídia do WhatsApp para obter URL assinada nova; a miniatura não é tomada como link permanente.
+- Visualizador de imagem com recurso de atualizar, abertura em nova aba para documentos e arquivos e atualização manual de links de áudio/vídeo; erros exibidos, sem ocultar anexos.
+- Testes de regressão em `scripts/test-kanban-anexos-renovacao-20261117.cjs`. Sem mudança de banco, arquivos originais, mesclagem, precificação ou produção. Homologação visual pendente.
+
 ## 2026-11-03 — Deduplicacao de clientes (isolada, nao publicada)
 - Busca remota contextual de clientes com estatisticas no orcamento rapido e balcao, gestao inline permitida, confirmacao e motivos.
 - Permissao `mesclar` explicita, RPC transacional candidata para homologacao com origem preservada inativa e atualizacao de vinculos operacionais por empresa, auditoria e comparacao de timestamps/CPF.
