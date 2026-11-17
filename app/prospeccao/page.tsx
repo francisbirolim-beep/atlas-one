@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
+import { consultarEtapasComerciais, type EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
 
@@ -27,6 +28,8 @@ export default function ProspeccaoPage() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [itens, setItens] = useState<Prospeccao[]>([])
   const [equipe, setEquipe] = useState<Pick<Usuario, 'id' | 'nome'>[]>([])
+  const [etapasComerciais, setEtapasComerciais] = useState<Record<string, EtapaComercialProspeccao>>({})
+  const [avisoEtapas, setAvisoEtapas] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [vendedor, setVendedor] = useState('')
@@ -43,6 +46,11 @@ export default function ProspeccaoPage() {
     setItens(lista)
     setEquipe(usuarios)
     setCarregando(false)
+    // A conferência de orçamentos e vendas é somente leitura, em segundo plano.
+    void consultarEtapasComerciais(lista).then(resultado => {
+      setEtapasComerciais(resultado.etapas)
+      setAvisoEtapas(resultado.aviso)
+    }).catch(() => setAvisoEtapas('Não foi possível verificar o estágio dos orçamentos neste momento.'))
   }
 
   useEffect(() => { void carregar() }, [])
@@ -117,7 +125,10 @@ export default function ProspeccaoPage() {
             })}
           </div>
         ) : aba === 'mapa' ? (
-          <MapaProspeccoes registros={filtrados} />
+          <>
+            {avisoEtapas && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{avisoEtapas}</p>}
+            <MapaProspeccoes registros={filtrados} etapasComerciais={etapasComerciais} />
+          </>
         ) : (
           <section className="overflow-hidden rounded-2xl border bg-white">
             <div className="border-b px-5 py-4"><h2 className="font-bold text-slate-900">Próximas ações</h2><p className="text-xs text-slate-500">Os compromissos também aparecem na agenda pessoal do vendedor.</p></div>
