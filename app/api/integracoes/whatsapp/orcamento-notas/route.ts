@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
     if (!grupo) grupo = 'Não foi possível identificar o grupo original'
     const textoOriginal = String((origemCards.length ? fontes.conteudo_bruto : dadosIntake?.conteudo_bruto)
       || fontes.conteudo_bruto || orcamento.descricao_livre || '')
-    if (!dadosIntake && !textoOriginal && !anexos.length)
+    if (!dadosIntake && !textoOriginal && !anexos.length && !origemCards.length)
       return NextResponse.json({ error: 'Este card antigo não possui conteúdo recuperável do WhatsApp.' }, { status: 404 })
     const paths = [...new Set(anexos.map((a: any) => String(a?.media_path || ''))
       .filter((v: string) => v.startsWith(usuario.empresa_id + '/') && !v.includes('..')))]
