@@ -10,7 +10,7 @@ export const GRUPOS_MAPA: { id: ClassificacaoMapa; titulo: string; cor: string; 
   { id: 'sem_contato', titulo: 'Tentando contato', cor: '#e11d48', explicacao: 'Obra já identificada, mas ainda sem contato conseguido.' },
   { id: 'visitada', titulo: 'Visitada / contato feito', cor: '#0891b2', explicacao: 'Visita ou contato já realizado.' },
   { id: 'andamento', titulo: 'Em andamento', cor: '#d97706', explicacao: 'Aguardando retorno, projeto ou visita; oportunidade qualificada.' },
-  { id: 'convertida', titulo: 'Cliente cadastrado', cor: '#15803d', explicacao: 'Prospecção convertida em cliente, ainda sem orçamento vinculado.' },
+  { id: 'convertida', titulo: 'Cliente cadastrado', cor: '#db2777', explicacao: 'Prospecção convertida em cliente, ainda sem orçamento vinculado.' },
   { id: 'orcamento', titulo: 'Orçamento criado', cor: '#7c3aed', explicacao: 'Existe orçamento real associado à obra ou ao cliente.' },
   { id: 'venda', titulo: 'Venda confirmada', cor: '#16a34a', explicacao: 'Existe orçamento com venda confirmada.' },
   { id: 'sem_interesse', titulo: 'Sem interesse', cor: '#64748b', explicacao: 'Registro marcado como sem interesse comercial.' },
@@ -59,7 +59,8 @@ export function agruparPontosPorBairro(pontos: PontoProspeccao[]): GrupoBairro[]
   for (const ponto of pontos) {
     const cidade = ponto.registro.cidade?.trim() || 'Cidade não informada'
     const nome = ponto.registro.bairro?.trim() || 'Bairro não informado'
-    const chave = `${cidade.toLocaleLowerCase('pt-BR')}::${nome.toLocaleLowerCase('pt-BR')}`
+    const normalizar = (valor: string) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ').trim()
+    const chave = `${normalizar(cidade)}::${normalizar(nome)}`
     let grupo = grupos.get(chave)
     if (!grupo) {
       grupo = { chave, nome, cidade, latitude: 0, longitude: 0, pontos: [] }
