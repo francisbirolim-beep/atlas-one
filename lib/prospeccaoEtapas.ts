@@ -18,7 +18,7 @@ export async function consultarEtapasComerciais(registros: Prospeccao[]): Promis
   const etapas: Record<string, EtapaComercialProspeccao> = {}
   const porObra = new Map<string, string[]>()
   for (const registro of registros) {
-    if (registro.status !== 'convertido' && !registro.cliente_id) continue
+    if (!registro.cliente_id) continue
     etapas[registro.id] = 'cliente'
     if (!registro.obra_id) continue
     const ids = porObra.get(registro.obra_id) || []
