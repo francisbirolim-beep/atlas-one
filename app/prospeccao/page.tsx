@@ -9,6 +9,7 @@ import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Searc
 import { usuarioAtual } from '@/lib/auth'
 import { consultarEtapasComerciais, type EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
 import { nomesUnicosGeograficos } from '@/lib/prospeccaoRelatorio'
+import { consolidarRegistrosMapa, listarOrcamentosGpsParaMapa, type RegistroMapaOrcamento } from '@/lib/prospeccaoOrcamentosGps'
 import { normalizarTextoEndereco as normalizarLocal } from '@/lib/geocodificacaoCep'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
@@ -32,6 +33,11 @@ export default function ProspeccaoPage() {
   const [equipe, setEquipe] = useState<Pick<Usuario, 'id' | 'nome'>[]>([])
   const [etapasComerciais, setEtapasComerciais] = useState<Record<string, EtapaComercialProspeccao>>({})
   const [avisoEtapas, setAvisoEtapas] = useState<string | null>(null)
+  const [orcamentosGps, setOrcamentosGps] = useState<RegistroMapaOrcamento[]>([])
+  const [etapasOrcamentosGps, setEtapasOrcamentosGps] = useState<Record<string, EtapaComercialProspeccao>>({})
+  const [avisoOrcamentosGps, setAvisoOrcamentosGps] = useState<string | null>(null)
+  const [carregandoOrcamentosGps, setCarregandoOrcamentosGps] = useState(false)
+  const [revisaoMapa, setRevisaoMapa] = useState(0)
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [vendedor, setVendedor] = useState('')
@@ -57,8 +63,28 @@ export default function ProspeccaoPage() {
 
   useEffect(() => { void carregar() }, [])
 
-  const cidades = useMemo(() => nomesUnicosGeograficos(itens.map(i => i.cidade)), [itens])
-  const bairros = useMemo(() => nomesUnicosGeograficos(itens.filter(i => !cidade || normalizarLocal(i.cidade||'') === normalizarLocal(cidade)).map(i => i.bairro)), [cidade, itens])
+  // Os pedidos são consultados somente ao abrir o mapa, em segundo plano.
+  // Nenhuma escrita adicional é executada ao salvar ou atualizar o orçamento.
+  useEffect(() => {
+    if (aba !== 'mapa') return
+    let ativo = true
+    setCarregandoOrcamentosGps(true)
+    void listarOrcamentosGpsParaMapa().then(resultado => {
+      if (!ativo) return
+      setOrcamentosGps(resultado.registros)
+      setEtapasOrcamentosGps(resultado.etapas)
+      setAvisoOrcamentosGps(resultado.aviso)
+    }).catch(() => {
+      if (ativo) setAvisoOrcamentosGps('Falha ao carregar os pedidos com GPS. As prospecções existentes continuam disponíveis.')
+    }).finally(() => {
+      if (ativo) setCarregandoOrcamentosGps(false)
+    })
+    return () => { ativo = false }
+  }, [aba, revisaoMapa])
+
+  const fonteFiltros = aba === 'mapa' ? [...itens, ...orcamentosGps] : itens
+  const cidades = useMemo(() => nomesUnicosGeograficos(fonteFiltros.map(i => i.cidade)), [itens, orcamentosGps, aba])
+  const bairros = useMemo(() => nomesUnicosGeograficos(fonteFiltros.filter(i => !cidade || normalizarLocal(i.cidade||'') === normalizarLocal(cidade)).map(i => i.bairro)), [cidade, itens, orcamentosGps, aba])
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase('pt-BR')
     return itens.filter(item => {
@@ -70,6 +96,20 @@ export default function ProspeccaoPage() {
         .some(v => (v || '').toLocaleLowerCase('pt-BR').includes(termo))
     })
   }, [bairro, busca, cidade, itens, vendedor])
+
+  const orcamentosFiltrados = useMemo(() => {
+    const termo = busca.trim().toLocaleLowerCase('pt-BR')
+    return orcamentosGps.filter(item => {
+      if (vendedor && item.responsavel_id !== vendedor) return false
+      if (cidade && normalizarLocal(item.cidade || '') !== normalizarLocal(cidade)) return false
+      if (bairro && normalizarLocal(item.bairro || '') !== normalizarLocal(bairro)) return false
+      if (!termo) return true
+      return [item.nome_cliente, item.nome_obra, item.endereco, item.cidade, item.bairro, item.responsavel_nome]
+        .some(valor => (valor || '').toLocaleLowerCase('pt-BR').includes(termo))
+    })
+  }, [orcamentosGps, vendedor, cidade, bairro, busca])
+  const registrosMapa = useMemo(() => consolidarRegistrosMapa(filtrados, orcamentosFiltrados), [filtrados, orcamentosFiltrados])
+  const etapasMapa = useMemo(() => ({ ...etapasComerciais, ...etapasOrcamentosGps }), [etapasComerciais, etapasOrcamentosGps])
 
   const agenda = useMemo(() => filtrados.filter(i => i.proxima_acao_em && !['convertido','sem_interesse'].includes(i.status)).sort((a,b) => new Date(a.proxima_acao_em!).getTime() - new Date(b.proxima_acao_em!).getTime()), [filtrados])
   const atrasados = agenda.filter(i => new Date(i.proxima_acao_em!).getTime() < Date.now()).length
@@ -133,7 +173,14 @@ export default function ProspeccaoPage() {
         ) : aba === 'mapa' ? (
           <>
             {avisoEtapas && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{avisoEtapas}</p>}
-            <MapaProspeccoes registros={filtrados} etapasComerciais={etapasComerciais} />
+            {avisoOrcamentosGps && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{avisoOrcamentosGps}</p>}
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setRevisaoMapa(atual => atual + 1)} disabled={carregandoOrcamentosGps}
+                className="rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-50">
+                {carregandoOrcamentosGps ? 'Atualizando pedidos com GPS…' : 'Atualizar pedidos com GPS'}
+              </button>
+            </div>
+            <MapaProspeccoes registros={registrosMapa} etapasComerciais={etapasMapa} />
           </>
         ) : (
           <section className="overflow-hidden rounded-2xl border bg-white">

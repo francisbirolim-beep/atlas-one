@@ -24,8 +24,10 @@ export function classificacaoDoStatus(status: StatusProspeccao): ClassificacaoMa
   return 'andamento'
 }
 
+export type RegistroPinoMapa = Prospeccao & { origem_mapa?: 'pedido_orcamento'; orcamento_id_mapa?: string }
+
 export interface PontoProspeccao {
-  registro: Prospeccao
+  registro: RegistroPinoMapa
   latitude: number
   longitude: number
   classificacao: ClassificacaoMapa
@@ -40,7 +42,7 @@ export interface GrupoBairro {
   pontos: PontoProspeccao[]
 }
 
-export function pontosValidos(registros: Prospeccao[], etapas: Record<string, EtapaComercialProspeccao> = {}): PontoProspeccao[] {
+export function pontosValidos(registros: RegistroPinoMapa[], etapas: Record<string, EtapaComercialProspeccao> = {}): PontoProspeccao[] {
   return registros.flatMap(registro => {
     if (registro.latitude == null || registro.longitude == null) return []
     const latitude = Number(registro.latitude)
