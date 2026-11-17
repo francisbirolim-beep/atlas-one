@@ -3,6 +3,18 @@ import type { EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
 import { normalizarTextoEndereco } from '@/lib/geocodificacaoCep'
 import { pontosValidos } from '@/lib/prospeccaoMapa'
 
+/** Exibe apenas um rótulo para nomes de bairros/cidades que diferem em acento ou caixa. */
+export function nomesUnicosGeograficos(nomes: Array<string | null | undefined>): string[] {
+  const unicos = new Map<string, string>()
+  for (const nomeBruto of nomes) {
+    const nome = nomeBruto?.trim()
+    if (!nome) continue
+    const chave = normalizarTextoEndereco(nome)
+    if (!unicos.has(chave)) unicos.set(chave, nome)
+  }
+  return [...unicos.values()].sort((a,b) => a.localeCompare(b, 'pt-BR'))
+}
+
 export interface ResumoBairroProspeccao {
   cidade: string
   bairro: string
