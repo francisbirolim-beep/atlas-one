@@ -34,7 +34,7 @@ export function resumoProspeccaoPorBairro(
     linha.total++
     if (comGps.has(registro.id)) linha.pinos++
     else linha.semGps++
-    const etapa = etapas[registro.id] || (registro.status === 'convertido' || registro.cliente_id ? 'cliente' : null)
+    const etapa = etapas[registro.id] || (registro.cliente_id ? 'cliente' : null)
     if (etapa === 'venda') linha.vendas++
     else if (etapa === 'orcamento') linha.orcamentos++
     else if (etapa === 'cliente') linha.clientes++
