@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { consultarEtapasComerciais, type EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
+import { integrarObrasNoMapa, listarObrasGpsComerciais, type ObraGpsComercial } from '@/lib/prospeccaoMapaComercial'
 import { nomesUnicosGeograficos } from '@/lib/prospeccaoRelatorio'
 import { normalizarTextoEndereco as normalizarLocal } from '@/lib/geocodificacaoCep'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
@@ -32,6 +33,10 @@ export default function ProspeccaoPage() {
   const [equipe, setEquipe] = useState<Pick<Usuario, 'id' | 'nome'>[]>([])
   const [etapasComerciais, setEtapasComerciais] = useState<Record<string, EtapaComercialProspeccao>>({})
   const [avisoEtapas, setAvisoEtapas] = useState<string | null>(null)
+  const [obrasGps, setObrasGps] = useState<ObraGpsComercial[]>([])
+  const [avisoObrasGps, setAvisoObrasGps] = useState<string | null>(null)
+  const [atualizandoMapa, setAtualizandoMapa] = useState(false)
+  const [revisaoMapa, setRevisaoMapa] = useState(0)
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [vendedor, setVendedor] = useState('')
@@ -48,20 +53,53 @@ export default function ProspeccaoPage() {
     setItens(lista)
     setEquipe(usuarios)
     setCarregando(false)
-    // A conferência de orçamentos e vendas é somente leitura, em segundo plano.
-    void consultarEtapasComerciais(lista).then(resultado => {
-      setEtapasComerciais(resultado.etapas)
-      setAvisoEtapas(resultado.aviso)
-    }).catch(() => setAvisoEtapas('Não foi possível verificar o estágio dos orçamentos neste momento.'))
+    // As etapas e o GPS das obras só são consultados quando o mapa é aberto.
   }
 
   useEffect(() => { void carregar() }, [])
 
-  const cidades = useMemo(() => nomesUnicosGeograficos(itens.map(i => i.cidade)), [itens])
-  const bairros = useMemo(() => nomesUnicosGeograficos(itens.filter(i => !cidade || normalizarLocal(i.cidade||'') === normalizarLocal(cidade)).map(i => i.bairro)), [cidade, itens])
+  // Atualização sem bloquear a tela. Dados da obra e vendas operacionais são
+  // consultados apenas com a sessão/RLS existente; nenhum cadastro é duplicado.
+  useEffect(() => {
+    if (aba !== 'mapa') return
+    let ativo = true
+    let consultando = false
+    async function atualizarMapa() {
+      if (!ativo || consultando) return
+      consultando = true
+      setAtualizandoMapa(true)
+      try {
+        const resultado = await listarObrasGpsComerciais()
+        if (!ativo) return
+        setAvisoObrasGps(resultado.aviso)
+        if (resultado.aviso) return
+        setObrasGps(resultado.obras)
+        const situacao = await consultarEtapasComerciais(integrarObrasNoMapa(itens, resultado.obras))
+        if (!ativo) return
+        setEtapasComerciais(situacao.etapas)
+        setAvisoEtapas(situacao.aviso)
+      } catch {
+        if (ativo) setAvisoObrasGps('Não foi possível atualizar os pinos dos pedidos de orçamento.')
+      } finally {
+        consultando = false
+        if (ativo) setAtualizandoMapa(false)
+      }
+    }
+    void atualizarMapa()
+    const intervalo = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void atualizarMapa()
+    }, 90000)
+    return () => { ativo = false; window.clearInterval(intervalo) }
+  }, [aba, itens, revisaoMapa])
+
+  const registrosMapa = useMemo(() => integrarObrasNoMapa(itens, obrasGps), [itens, obrasGps])
+  const registrosDaAba = aba === 'mapa' ? registrosMapa : itens
+
+  const cidades = useMemo(() => nomesUnicosGeograficos(registrosDaAba.map(i => i.cidade)), [registrosDaAba])
+  const bairros = useMemo(() => nomesUnicosGeograficos(registrosDaAba.filter(i => !cidade || normalizarLocal(i.cidade||'') === normalizarLocal(cidade)).map(i => i.bairro)), [cidade, registrosDaAba])
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase('pt-BR')
-    return itens.filter(item => {
+    return registrosDaAba.filter(item => {
       if (vendedor && item.responsavel_id !== vendedor) return false
       if (cidade && normalizarLocal(item.cidade||'') !== normalizarLocal(cidade)) return false
       if (bairro && normalizarLocal(item.bairro||'') !== normalizarLocal(bairro)) return false
@@ -69,7 +107,7 @@ export default function ProspeccaoPage() {
       return [item.nome_cliente, item.nome_obra, item.telefone, item.endereco, item.cidade, item.bairro, item.responsavel_nome]
         .some(v => (v || '').toLocaleLowerCase('pt-BR').includes(termo))
     })
-  }, [bairro, busca, cidade, itens, vendedor])
+  }, [bairro, busca, cidade, registrosDaAba, vendedor])
 
   const agenda = useMemo(() => filtrados.filter(i => i.proxima_acao_em && !['convertido','sem_interesse'].includes(i.status)).sort((a,b) => new Date(a.proxima_acao_em!).getTime() - new Date(b.proxima_acao_em!).getTime()), [filtrados])
   const atrasados = agenda.filter(i => new Date(i.proxima_acao_em!).getTime() < Date.now()).length
@@ -132,7 +170,14 @@ export default function ProspeccaoPage() {
           </div>
         ) : aba === 'mapa' ? (
           <>
-            {avisoEtapas && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{avisoEtapas}</p>}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3">
+              <p className="text-xs text-slate-600">O GPS confirmado no pedido de orçamento entra neste mapa após o envio. O pino acompanha o orçamento e a venda real da mesma obra.</p>
+              <button type="button" onClick={() => setRevisaoMapa(valor => valor + 1)} disabled={atualizandoMapa}
+                className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">
+                {atualizandoMapa ? 'Atualizando pinos…' : 'Atualizar pinos'}
+              </button>
+            </div>
+            {(avisoObrasGps || avisoEtapas) && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{[avisoObrasGps, avisoEtapas].filter(Boolean).join(' ')}</p>}
             <MapaProspeccoes registros={filtrados} etapasComerciais={etapasComerciais} />
           </>
         ) : (
