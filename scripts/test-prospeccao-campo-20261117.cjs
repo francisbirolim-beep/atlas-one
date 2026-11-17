@@ -127,6 +127,22 @@ async function main(){
   assert.equal(galeria.fotos.length,1)
   assert.equal(galeria.erro,null)
 
+  let paginas=0
+  const muitos=Array.from({length:450},(_,i)=>({id:String(i),status_atualizado_em:'2026-11-17'}))
+  const supabaseListagem={from(nome){
+    assert.equal(nome,'prospeccoes')
+    return {select(){return {order(){return this},async range(inicio,fim){
+      paginas++
+      return {data:muitos.slice(inicio,fim+1),error:null}
+    }}}}
+  }}
+  const repoProspeccao=carregar('lib/prospeccao.ts',{
+    '@/lib/auth':{usuarioAtual:async()=>null},
+    '@/lib/supabase':{supabase:supabaseListagem},
+  })
+  assert.equal((await repoProspeccao.listarProspeccoes()).length,450,'Listagem deve incluir mais de 400 registros')
+  assert.equal(paginas,2,'Listagem deve buscar segunda página sem duplicar registros')
+
   const status=fs.readFileSync('lib/prospeccao.ts','utf8')
   assert.match(status,/novoStatus === 'convertido' && !prospeccao\.cliente_id/)
   assert.match(status,/dados\.status_novo === 'convertido' && !prospeccao\.cliente_id/)
