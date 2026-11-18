@@ -10,6 +10,7 @@ import type { Tipologia } from '@/lib/tipos'
 import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
 import CadastroProdutoAvulso from '@/components/previews/CadastroProdutoAvulso'
+import ResumoCustoInternoPreview from '@/components/previews/ResumoCustoInternoPreview'
 import FotoTipologiaPreview from '@/components/previews/FotoTipologiaPreview'
 import IdentificacaoOrcamentoPreview, { identificacaoVazia, type IdentificacaoOrcamento } from '@/components/previews/IdentificacaoOrcamentoPreview'
 import CondicoesPagamentoOrcamentoPreview from '@/components/previews/CondicoesPagamentoOrcamentoPreview'
@@ -492,7 +493,8 @@ export default function ConfiguradorOrcamentoSobMedida(){
             <div className="mt-2 flex items-center gap-2"><label className="text-xs">Qtd.</label><input type="number" min="1" className="w-20 rounded-lg border p-1.5 text-center text-xs" value={i.quantidade} onChange={e=>alterarQtd(i.produto.id,Number(e.target.value))}/><button type="button" aria-label="Remover item" onClick={()=>removerProduto(i.produto.id)} className="ml-auto text-red-700"><Trash2 size={15}/></button></div>
           </div>)}
           <div className="mt-3 flex justify-between text-xs font-bold"><span>Subtotal conhecido</span><span>{moeda(subtotal)}</span></div>
-          <button type="button" onClick={()=>setMostrarProdutos(false)} className="mt-3 w-full rounded-lg border py-2 text-xs font-bold">Concluir inclusão de produtos</button>
+          <ResumoCustoInternoPreview itens={itens} totalVenda={totalProdutos} pendencias={temPendencias||descontoInvalido}/>
+          <button type="button" onClick={()=>setMostrarProdutos(false) className="mt-3 w-full rounded-lg border py-2 text-xs font-bold">Concluir inclusão de produtos</button>
         </aside>
       </div>}
       {!revisao&&<div className="flex justify-end"><button type="button" onClick={revisarOrcamento} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-6 py-3 text-sm font-bold text-white">Revisar orçamento <ArrowRight size={17}/></button></div>}
@@ -533,6 +535,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
           <div className="mt-2 flex justify-between"><span>Subtotal ajustado dos produtos</span><b>{moeda(totalProdutos)}</b></div>
           <p className="mt-2 font-bold text-amber-800">O total geral permanece pendente de fórmulas técnicas e preços necessários. {pendencias.length} pendência(s) identificadas; consulte os detalhes acima.</p>
         </div>
+        <ResumoCustoInternoPreview itens={itens} totalVenda={totalProdutos} pendencias={temPendencias||descontoInvalido}/>
         <div className="mt-4">
           <CondicoesPagamentoOrcamentoPreview
             condicoes={condicoes}
