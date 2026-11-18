@@ -4,6 +4,12 @@ import { montarBlocosPermissao } from './permissoesBlocos'
 import { resolverContextoPermissoes } from './permissoesContextuais'
 import { podeExecutarAcao } from './producaoPermissoes'
 
+const ROTAS_RH: Record<string,[string,string]> = {
+ '/rh/pessoas':['rh.colaboradores.consultar','rh.colaboradores.editar'],
+ '/rh/holerites':['rh.holerites.consultar','rh.holerites.gerenciar'],
+ '/rh/adiantamentos':['rh.adiantamentos.consultar','rh.adiantamentos.gerenciar'],
+}
+
 // null = página sem módulo catalogado: não altera os fluxos legados específicos.
 // false = setor, tela/módulo ou suas ações foram efetivamente negadas.
 // Master acessa todas as rotas, sem restrição.
@@ -12,6 +18,9 @@ export function podeAcessarRotaCatalogada(
  config:Pick<AcessoUsuarioConfig,'acoes'|'modulos'>, catalogo:Setor[],
 ):boolean|null {
  if(role==='master')return true
+ // RH só abre com ação nominalmente liberada.
+ const rotaRH=Object.keys(ROTAS_RH).find(prefixo=>pathname===prefixo || pathname.startsWith(prefixo+'/'))
+ if(rotaRH)return ROTAS_RH[rotaRH].some(acao=>podeExecutarAcao(role,setores,config,'rh',acao,'consulta'))
  // Configurações administrativas (incluindo ACL e integrações) são somente do Master.
  if(pathname==='/configuracoes'||pathname.startsWith('/configuracoes/'))return false
  if(pathname==='/setores')return true
