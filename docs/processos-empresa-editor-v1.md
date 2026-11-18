@@ -20,7 +20,7 @@
 - Imagens ficam embutidas no JSON/localStorage; limites e compressão não substituem armazenamento central e revisão de privacidade/quotas.
 - Não importar arquivos JSON desconhecidos sem validação e confirmação explícita de substituição.
 - O conteúdo do editor não contém listas de perfis e acessórios; futuras integrações com essas listas devem preservar imagens obrigatórias.
-- A rota não foi adicionada ao menu principal nesta etapa para não mudar a navegação em produção antes de homologação.
+- Link aditivo no menu principal, grupo Geral, visível somente para Master. Mudança ainda isolada na branch e sem publicação.
 
 ## Testes antes da publicação
 
