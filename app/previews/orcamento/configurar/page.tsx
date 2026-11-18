@@ -494,7 +494,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
           </div>)}
           <div className="mt-3 flex justify-between text-xs font-bold"><span>Subtotal conhecido</span><span>{moeda(subtotal)}</span></div>
           <ResumoCustoInternoPreview itens={itens} totalVenda={totalProdutos} pendencias={temPendencias||descontoInvalido}/>
-          <button type="button" onClick={()=>setMostrarProdutos(false) className="mt-3 w-full rounded-lg border py-2 text-xs font-bold">Concluir inclusão de produtos</button>
+          <button type="button" onClick={()=>setMostrarProdutos(false)} className="mt-3 w-full rounded-lg border py-2 text-xs font-bold">Concluir inclusão de produtos</button>
         </aside>
       </div>}
       {!revisao&&<div className="flex justify-end"><button type="button" onClick={revisarOrcamento} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-6 py-3 text-sm font-bold text-white">Revisar orçamento <ArrowRight size={17}/></button></div>}
