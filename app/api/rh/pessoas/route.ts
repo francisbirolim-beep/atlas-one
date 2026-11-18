@@ -44,6 +44,9 @@ export async function GET(req:NextRequest) {
  const {data,error}=await supabaseAdmin.from('rh_pessoas')
   .select('id,nome,tipo,cpf_cnpj,telefone,email,endereco,cargo,setor,data_admissao,salario_base,observacoes,ativo,created_at')
   .eq('empresa_id',u.empresa_id).order('nome',{ascending:true}).limit(2000)
+ if(error && preview() && ['42P01','PGRST205'].includes(error.code||'')){
+  return NextResponse.json({ok:true,pessoas:[],simulacao:true},{headers:{'Cache-Control':'private, no-store'}})
+ }
  if(error){console.error('RH GET',error);return erro('Não foi possível carregar o cadastro de RH.',500)}
  return NextResponse.json({ok:true,pessoas:data||[]},{headers:{'Cache-Control':'private, no-store'}})
 }
