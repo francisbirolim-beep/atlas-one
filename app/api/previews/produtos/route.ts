@@ -34,9 +34,30 @@ export async function GET(request: NextRequest) {
   const usuario = await usuarioComercial(request)
   if (!usuario) return respostaErro('Sem acesso ao setor comercial.', 403)
   try {
-    return NextResponse.json({ podeCriar: await autorizadoCriar(usuario) }, { headers: { 'Cache-Control': 'no-store' } })
+    const permitido = await autorizadoCriar(usuario)
+    const cabecalhos = { 'Cache-Control': 'no-store' }
+    // Esta consulta devolve custos somente ao Master ou ao usuário que pode criar produtos.
+    // Nunca adicionar custos ao catálogo público do orçamento ou aos documentos para clientes.
+    const idsInformados = new URL(request.url).searchParams.get('ids')
+    if (idsInformados === null || !permitido)
+      return NextResponse.json({ podeCriar: permitido }, { headers: cabecalhos })
+    if (idsInformados.length > 4000)
+      return respostaErro('Consulta de produtos acima do limite.', 400)
+    const ids = [...new Set(idsInformados.split(',').filter(Boolean))]
+    if (ids.length > 100 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)))
+      return respostaErro('IDs de produtos inválidos.', 400)
+    if (!ids.length)
+      return NextResponse.json({ podeCriar: true, custos: [] }, { headers: cabecalhos })
+    const { data, error } = await db.from('produtos').select('id,custo')
+      .eq('empresa_id', usuario.empresa_id).in('id', ids)
+    if (error) throw error
+    const custos = (data || []).map(produto => {
+      const custo = produto.custo == null ? null : Number(produto.custo)
+      return { id: produto.id, custo: custo !== null && Number.isFinite(custo) && custo >= 0 ? custo : null }
+    })
+    return NextResponse.json({ podeCriar: true, custos }, { headers: cabecalhos })
   } catch {
-    return respostaErro('Não foi possível validar a permissão.', 503)
+    return respostaErro('Não foi possível consultar os custos dos produtos.', 503)
   }
 }
 
