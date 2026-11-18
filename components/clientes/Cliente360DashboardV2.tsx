@@ -22,6 +22,7 @@ import { intervalosHistoricosClienteWVetro } from '@/lib/wvetroBuscaHistoricaCli
 import type { Usuario } from '@/lib/tipos'
 import VendasCliente360 from '@/components/clientes/VendasCliente360'
 import Cliente360KanbanObras from '@/components/clientes/Cliente360KanbanObras'
+import VisitasOrigemProspeccao from '@/components/clientes/VisitasOrigemProspeccao'
 import ComprasClienteCards from '@/components/compras/ComprasClienteCards'
 import ClienteRomaneios from '@/components/clientes/ClienteRomaneios'
 import CadastroCliente360 from '@/components/clientes/CadastroCliente360'
@@ -422,6 +423,7 @@ export default function Cliente360DashboardV2({clienteId}:Props){
             {pode('pedido_compra',true)&&<Link href={`/compras/solicitacoes?cliente=${encodeURIComponent(cliente.id)}`} className="group flex min-h-[64px] items-center gap-3 rounded-xl border bg-white px-3 py-2.5 shadow-sm transition hover:border-emerald-300 hover:shadow-md"><span className="shrink-0 rounded-lg bg-emerald-50 p-2 text-emerald-600"><Receipt size={19}/></span><span className="min-w-0 flex-1"><b className="block text-xs font-bold leading-tight text-slate-900">Pedido de compra</b><span className="mt-0.5 block text-[11px] leading-tight text-slate-500">Solicitar material para a obra</span></span><ArrowUpRight size={14} className="shrink-0 text-slate-400 transition group-hover:text-blue-600"/></Link>}
           </div>
           {pode('obras')&&<Cliente360KanbanObras clienteId={cliente.id} podeVerVendas={pode('vendas')} onAbrirObras={()=>setAba('obras')}/>}
+          <VisitasOrigemProspeccao clienteId={cliente.id}/>
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
             <Box titulo="Atividades recentes" acao={pode('historico')&&<button type="button" onClick={()=>setAba('historico')} className="text-xs font-bold text-blue-600">Ver histórico completo ↗</button>}>
               <div className="divide-y">

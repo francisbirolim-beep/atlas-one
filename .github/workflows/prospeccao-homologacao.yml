@@ -1,0 +1,44 @@
+name: Prospecção — validação isolada
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/prospeccao/**'
+      - 'app/relatorios/prospeccao/**'
+      - 'app/api/geocodificacao/reversa/**'
+      - 'lib/geocodificacaoCep.ts'
+      - 'lib/prospeccao*.ts'
+      - 'components/MapaProspeccoes.tsx'
+      - 'scripts/test-prospeccao-campo-20261117.cjs'
+      - 'supabase/migrations/20261117143000_prospeccao_fotos_privadas.sql'
+      - '.github/workflows/prospeccao-homologacao.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  valida:
+    name: Teste de Prospecção, TypeScript e build isolado
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: build-validation-placeholder
+      SUPABASE_SECRET_KEY: build-validation-placeholder
+      ANTHROPIC_API_KEY: build-validation-placeholder
+      OLLAMA_DEFAULT_MODEL: llama3.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+      - name: Testar regras de CEP, fotos, pinos e bairros
+        run: node scripts/test-prospeccao-campo-20261117.cjs
+      - name: Verificar TypeScript
+        run: npm run typecheck
+      - name: Build Next.js sem publicação
+        run: npm run build
