@@ -10,7 +10,7 @@ type ItemComercial = {
 }
 
 type RespostaCustos = {
-  podeCriar?: boolean
+  podeVerCusto?: boolean
   custos?: Array<{ id: string; custo: number | null }>
 }
 
@@ -46,7 +46,7 @@ export default function ResumoCustoInternoPreview({
         })
         const dados = await response.json() as RespostaCustos
         if (ctrl.signal.aborted) return
-        if (!response.ok || dados.podeCriar !== true) {
+        if (!response.ok || dados.podeVerCusto !== true) {
           setPodeConsultar(false)
           setCustos({})
           return
