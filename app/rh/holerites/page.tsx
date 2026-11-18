@@ -54,7 +54,7 @@ export default function HoleritesRH(){
  useEffect(()=>{void carregar()},[])
  function definirPessoa(id:string){
   const p=pessoas.find(x=>x.id===id)
-  setForm(v=>({...v,rh_pessoa_id:id,cargo_funcionario:p?.cargo||'',setor_funcionario:p?.setor||'',salario_base:p?.salario_base==null?'':String(p.salario_base),itens:v.itens.length===1&&v.itens[0].descricao==='Salário base'?[{...v.itens[0],valor:p?.salario_base||0}]:v.itens}))
+  setForm(v=>({...v,rh_pessoa_id:id,cargo_funcionario:p?.cargo||'',setor_funcionario:p?.setor||'',salario_base:p?.salario_base==null?'':String(p.salario_base),itens:v.itens.length===1&&(!v.itens[0].descricao.trim()||v.itens[0].descricao==='Salário base')?[{...v.itens[0],valor:p?.salario_base||0}]:v.itens}))
  }
  function iniciarNovo(p?:Funcionario){
   setErro('');setAviso('');setEdicao('');setNomePreview('')
