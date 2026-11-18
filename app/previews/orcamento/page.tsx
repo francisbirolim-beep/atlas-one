@@ -196,7 +196,7 @@ export default function OrcamentoPreview(){
   }
   function revisar(){
     if(precoInvalido){setAviso('Corrija o preço unitário. Para reduzir o valor cadastrado, utilize o desconto do orçamento.');return}
-    if(modo='sob_medida'&&!medidas.length){setAviso('Adicione pelo menos uma tipologia sob medida.');return}
+    if(modo==='sob_medida'&&!medidas.length){setAviso('Adicione pelo menos uma tipologia sob medida.');return}
     if(modo==='produtos'&&!itens.length){setAviso('Adicione pelo menos um produto.');return}
     setAviso('');setRevisao(true)
   }
