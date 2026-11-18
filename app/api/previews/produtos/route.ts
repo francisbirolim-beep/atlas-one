@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarBalcao, type UsuarioBalcao } from '@/lib/balcaoServer'
 import { supabaseAdmin as db } from '@/lib/supabaseAdmin'
+import { arredondarMoeda, margemRealPorPreco, precoPorAcrescimoSobreCusto } from '@/lib/precificacaoBalcao'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -52,7 +53,22 @@ export async function POST(request: NextRequest) {
     const categoria = String(dados.categoria || '').trim()
     const unidade = String(dados.unidade || '').trim()
     const descricao = String(dados.descricao || '').trim()
-    const preco = typeof dados.preco === 'number' ? dados.preco : Number(String(dados.preco ?? '').replace(',', '.'))
+    // Compatibilidade com telas antigas abertas antes do deploy: continuam podendo cadastrar.
+    // No novo formulário, custo e modo de precificação são validados sempre no servidor.
+    const legado = !Object.prototype.hasOwnProperty.call(dados, 'modoPreco')
+      && !Object.prototype.hasOwnProperty.call(dados, 'custo')
+    const modoPreco = dados.modoPreco == null && legado ? 'direto' : dados.modoPreco
+    if (modoPreco !== 'direto' && modoPreco !== 'percentual')
+      return respostaErro('Selecione uma forma válida de definir o preço.', 400)
+    const custo = typeof dados.custo === 'number' ? dados.custo : Number(String(dados.custo ?? '').trim().replace(',', '.'))
+    const acrescimo = typeof dados.acrescimo === 'number'
+      ? dados.acrescimo : Number(String(dados.acrescimo ?? '').trim().replace(',', '.'))
+    const precoDigitado = typeof dados.preco === 'number'
+      ? dados.preco : Number(String(dados.preco ?? '').trim().replace(',', '.'))
+    const preco = modoPreco === 'percentual'
+      ? arredondarMoeda(precoPorAcrescimoSobreCusto(custo, acrescimo))
+      : precoDigitado
+    const margemReal = !legado && preco !== null ? margemRealPorPreco(custo, preco) : null
     const fotoUrl = typeof dados.fotoUrl === 'string' ? dados.fotoUrl.trim() : ''
     const pesoKgM = dados.pesoKgM === '' || dados.pesoKgM == null ? null : Number(dados.pesoKgM)
     const tamanhoBarraMm = dados.tamanhoBarraMm === '' || dados.tamanhoBarraMm == null ? null : Number(dados.tamanhoBarraMm)
@@ -60,7 +76,13 @@ export async function POST(request: NextRequest) {
     if (!nome || nome.length > 200 || codigoDigitado.length > 60 || unidade.length < 1 || unidade.length > 40
       || descricao.length > 2000 || !categorias.has(categoria))
       return respostaErro('Informe nome, código, categoria e unidade válidos.', 400)
-    if (!Number.isFinite(preco) || preco <= 0 || preco > 100000000)
+    if (!legado && (dados.custo == null || String(dados.custo).trim() === ''
+      || !Number.isFinite(custo) || custo <= 0 || custo > 100000000))
+      return respostaErro('Informe um custo de produto válido e maior que zero.', 400)
+    if (modoPreco === 'percentual' && (dados.acrescimo == null || String(dados.acrescimo).trim() === ''
+      || !Number.isFinite(acrescimo) || acrescimo < 0))
+      return respostaErro('Informe um acréscimo válido, igual ou maior que zero.', 400)
+    if (preco === null || !Number.isFinite(preco) || preco <= 0 || preco > 100000000)
       return respostaErro('Informe um preço de venda válido e maior que zero.', 400)
     const urlFotos = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '') + '/storage/v1/object/public/fotos/produtos/'
     if (fotoUrl && (!fotoUrl.startsWith(urlFotos) || fotoUrl.length > 2000))
@@ -84,6 +106,13 @@ export async function POST(request: NextRequest) {
       id, empresa_id: usuario.empresa_id,
       codigo, nome, categoria, unidade, descricao: descricao || null,
       preco: Math.round(preco * 100) / 100, foto_url: fotoUrl || null,
+      ...(!legado ? {
+        custo: Math.round(custo * 100) / 100,
+        // A coluna margem_percentual armazena margem real, não acréscimo sobre custo.
+        // Negociação abaixo do custo não pode gravar margem negativa (restrição SQL).
+        margem_percentual: margemReal !== null && margemReal >= 0 && margemReal < 100
+          ? margemReal : null,
+      } : {}),
       ...(categoria === 'perfil' ? { peso_kg_m: pesoKgM, tamanho_barra_mm: tamanhoBarraMm } : {}),
       ativo: true, criado_por_id: usuario.id, criado_por_nome: usuario.nome,
     }).select('id,codigo,nome,descricao,categoria,unidade,preco,foto_url').single()
