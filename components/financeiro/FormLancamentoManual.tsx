@@ -35,7 +35,7 @@ export default function FormLancamentoManual({tipo,onSalvo}:{tipo:Tipo;onSalvo:(
  const[simulado,setSimulado]=useState(false)
  const[chaveLote,setChaveLote]=useState(()=>crypto.randomUUID())
  const dialogRef=useRef<HTMLDivElement>(null)
- const cadastrados=cadastroOrigem==='rh'?look.rhPessoas.filter(p=>filtroRh==='todos'||p.tipo===filtroRh):tipo==='pagar'?look.fornecedores:look.clientes
+ const cadastrados=useMemo(()=>cadastroOrigem==='rh'?look.rhPessoas.filter(p=>filtroRh==='todos'||p.tipo===filtroRh):tipo==='pagar'?look.fornecedores:look.clientes,[cadastroOrigem,filtroRh,tipo,look.rhPessoas,look.fornecedores,look.clientes])
  const cadastroSelecionado=cadastrados.find(c=>c.id===identificador)
  const cadastrosFiltrados=useMemo(()=>cadastrados.filter(c=>correspondeBuscaAtlas(buscaCadastro,c.nome,c.cnpj_cpf,c.cpf_cnpj,c.telefone,c.whatsapp,c.cidade,c.endereco,c.contato)),[cadastrados,buscaCadastro])
  const obrasCliente=useMemo(()=>look.obras.filter(o=>o.cliente_id===identificador),[look.obras,identificador])
