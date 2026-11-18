@@ -15,11 +15,17 @@ export async function GET(req:NextRequest){
  if(!caixa&&!financeiro)return NextResponse.json({error:'Sem permissão para consultar Contas a Receber.'},{status:403})
  try{
   const [cr,receb]=await Promise.all([
-   supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500),
+   supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,rh_pessoa_id,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500),
    supabaseAdmin.from('financeiro_recebimentos').select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,forma,referencia,observacoes,status,criado_por_nome,created_at').eq('empresa_id',u.empresa_id).neq('status','cancelado').order('data_recebimento',{ascending:false}).order('created_at',{ascending:false}).limit(1000)
   ])
-  if(cr.error||receb.error)throw cr.error||receb.error
-  const clienteIds=[...new Set([...(cr.data||[]).map(c=>c.cliente_id),...(receb.data||[]).map(r=>r.cliente_id)].filter((v):v is string=>!!v))]
+  let crData=cr.data,crErro=cr.error
+  if(crErro && process.env.VERCEL_ENV==='preview' && /rh_pessoa_id/i.test(crErro.message)){
+   const antiga=await supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500)
+   crData=(antiga.data||[]).map(c=>({...c,rh_pessoa_id:null})) as typeof cr.data
+   crErro=antiga.error
+  }
+  if(crErro||receb.error)throw crErro||receb.error
+  const clienteIds=[...new Set([...(crData||[]).map(c=>c.cliente_id),...(receb.data||[]).map(r=>r.cliente_id)].filter((v):v is string=>!!v))]
   const mapaClientes=new Map<string,{cpf_cnpj:string|null;cidade:string|null;telefone:string|null}>()
   for(let i=0;i<clienteIds.length;i+=80){
    const cadastros=await supabaseAdmin.from('clientes').select('id,cpf_cnpj,cidade,telefone').eq('empresa_id',u.empresa_id).in('id',clienteIds.slice(i,i+80))
@@ -27,8 +33,8 @@ export async function GET(req:NextRequest){
    for(const c of cadastros.data||[])mapaClientes.set(c.id,c)
   }
   const camposCadastro=(id:string|null|undefined)=>({cliente_cpf_cnpj:mapaClientes.get(id||'')?.cpf_cnpj||null,cliente_cidade:mapaClientes.get(id||'')?.cidade||null})
-  const contas=(cr.data||[]).map(c=>({...c,...camposCadastro(c.cliente_id)}))
-  const ids=[...new Set((cr.data||[]).map(c=>c.obra_id).filter((v):v is string=>!!v))]
+  const contas=(crData||[]).map(c=>({...c,...camposCadastro(c.cliente_id)}))
+  const ids=[...new Set((crData||[]).map(c=>c.obra_id).filter((v):v is string=>!!v))]
   const nomes:Record<string,string>={}
   for(let i=0;i<ids.length;i+=80){
    const r=await supabaseAdmin.from('obras').select('id,nome,numero').eq('empresa_id',u.empresa_id).in('id',ids.slice(i,i+80))
@@ -49,6 +55,8 @@ export async function GET(req:NextRequest){
     if(detalhes.error)throw detalhes.error
     for(const d of detalhes.data||[])(composicoes[d.recebimento_id] ||= []).push({forma:d.forma,valor:Number(d.valor)})
   }
-  return NextResponse.json({ok:true,contas,recebimentos:(receb.data||[]).map(r=>({...r,...camposCadastro(r.cliente_id),formas:composicoes[r.id]||[],composicaoInconsistente:r.forma==='multiplo'&&Math.abs((composicoes[r.id]||[]).reduce((a,f)=>a+f.valor,0)-Number(r.valor))>0.009,desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})),nomesObras:nomes},{headers:{'Cache-Control':'private, no-store'}})
+  const rh=await supabaseAdmin.from('rh_pessoas').select('id,nome,tipo').eq('empresa_id',u.empresa_id).order('nome').limit(2000)
+  if(rh.error && !(process.env.VERCEL_ENV==='preview' && ['42P01','PGRST205'].includes(rh.error.code||'')))throw rh.error
+  return NextResponse.json({ok:true,pessoasRH:rh.error?[]:rh.data||[],contas,recebimentos:(receb.data||[]).map(r=>({...r,...camposCadastro(r.cliente_id),formas:composicoes[r.id]||[],composicaoInconsistente:r.forma==='multiplo'&&Math.abs((composicoes[r.id]||[]).reduce((a,f)=>a+f.valor,0)-Number(r.valor))>0.009,desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})),nomesObras:nomes},{headers:{'Cache-Control':'private, no-store'}})
  }catch(e){console.error('contas a receber leitura',e);return NextResponse.json({error:'Falha ao consultar Contas a Receber.'},{status:500})}
 }
