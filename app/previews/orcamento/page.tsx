@@ -19,7 +19,7 @@ type Modo='escolher'|'sob_medida'|'produtos'
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
 type Produto={id:string;codigo:string;nome:string;descricao:string;categoria:string;unidade:string;linha:string|null;preco:number|null;precoPromocional:number|null;fotoUrl:string|null;fotoCandidataUrl?:string|null}
 type Linha={id:string;nome:string;ativa:boolean}
-type Item={produto:Produto;quantidade:number}
+type Item={produto:Produto;quantidade:number;precoUnitario:number|null}
 type Medida={id:number;tipologia:Tipologia;linha:string;largura:string;altura:string;folhas:string;cor:string;vidro:string;contramarco:string;quantidade:number}
 const categorias:{id:Categoria;label:string}[]=[
   {id:'todos',label:'Todos'},{id:'perfil',label:'Perfis'},{id:'acessorio',label:'Acessórios'},
@@ -59,6 +59,8 @@ export default function OrcamentoPreview(){
   const [linhas,setLinhas]=useState<Linha[]>([])
   const [produtos,setProdutos]=useState<Produto[]>([])
   const [itens,setItens]=useState<Item[]>([])
+  const [precoDigitado,setPrecoDigitado]=useState<Record<string,string>>({})
+  const [erroPreco,setErroPreco]=useState<Record<string,string>>({})
   const [carregando,setCarregando]=useState(false)
   const [erro,setErro]=useState('')
   const [aviso,setAviso]=useState('')
@@ -96,7 +98,8 @@ export default function OrcamentoPreview(){
   const tipologia=tipologias.find(t=>t.id===tipologiaId)
   const linhasDaTipologia=tipologia?linhasTecnicas.filter(l=>(l.tipologia_ids||[]).includes(tipologia.id)):[]
   const tipologiasFiltradas=tipologias.filter(t=>normaliza(t.label+' '+t.chave).includes(normaliza(buscaTipologia))).slice(0,70)
-  const valorConhecido=itens.reduce((s,i)=>s+(unitario(i.produto)||0)*i.quantidade,0)
+  const valorConhecido=itens.reduce((s,i)=>s+(i.precoUnitario||0)*i.quantidade,0)
+  const precoInvalido=Object.values(erroPreco).some(Boolean)||Object.keys(precoDigitado).length>0||itens.some(i=>{const base=unitario(i.produto);return base!=null&&i.precoUnitario!=null&&Math.round(i.precoUnitario*100)<Math.round(base*100)})
   const produtosSemPreco=itens.filter(i=>(unitario(i.produto)??0)<=0)
   const semPreco=produtosSemPreco.length
   const totalQtd=itens.reduce((s,i)=>s+i.quantidade,0)
@@ -125,6 +128,7 @@ export default function OrcamentoPreview(){
     setCondicoes(a=>[...a,{id:proximaCondicao.current,forma:'PIX',valor:''}])
   }
   function gerarOrcamento(rascunho=false){
+    if(precoInvalido){setAviso('Corrija os preços unitários. Para reduzir o preço cadastrado, utilize o desconto.');return}
     if(semPreco>0&&!rascunho){setMostrarPendencias(true);setAviso('Há produtos sem preço cadastrado. Consulte a relação antes de gerar o orçamento definitivo.');return}
     if(!itens.length&&!medidas.length){setAviso('Inclua produtos antes de gerar o orçamento.');return}
     if(descontoInvalido){setAviso('Corrija o desconto informado.');return}
@@ -138,9 +142,9 @@ export default function OrcamentoPreview(){
     if(destinoSaldo==='cliente'&&!identificacao.clienteId){
       setAviso('Para deixar saldo marcado, selecione primeiro um cliente cadastrado no Atlas One.');return
     }
-    const produtosDocumento:ProdutoDocumento[]=itens.map(({produto,quantidade})=>({
+    const produtosDocumento:ProdutoDocumento[]=itens.map(({produto,quantidade,precoUnitario})=>({
       id:produto.id,codigo:produto.codigo,nome:produto.nome,descricao:produto.descricao,
-      unidade:produto.unidade,quantidade,preco:unitario(produto),
+      unidade:produto.unidade,quantidade,preco:precoUnitario,
       // Fotos existentes vinculadas pelo produto_id, inclusive importadas pendentes; nenhuma imagem genérica.
       imagem:produto.fotoUrl||produto.fotoCandidataUrl||null
     }))
@@ -158,7 +162,30 @@ export default function OrcamentoPreview(){
       referencia:'PREV-'+String(Date.now()),observacoes:observacoes.trim()
     })
   }
-  function adicionarProduto(p:Produto){setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1}]});setAviso('')}
+  function adicionarProduto(p:Produto){setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1,precoUnitario:unitario(p)}]});setAviso('')}
+  function digitarPreco(id:string,valor:string){
+    if(!/^\d{0,8}([,.]\d{0,2})?$/.test(valor))return
+    setPrecoDigitado(a=>({...a,[id]:valor}))
+    setErroPreco(a=>({...a,[id]:''}))
+  }
+  function confirmarPreco(id:string){
+    const item=itens.find(i=>i.produto.id===id)
+    const digitado=precoDigitado[id]
+    if(!item||digitado===undefined)return
+    const base=unitario(item.produto),valor=decimal(digitado)
+    if(base==null||base<=0||!digitado.trim()||!Number.isFinite(valor)||Math.round(valor*100)<Math.round(base*100)){
+      setErroPreco(a=>({...a,[id]:'O preço não pode ser menor que o cadastrado. Para reduzir, use o Desconto do orçamento.'}))
+    }else{
+      setItens(a=>a.map(i=>i.produto.id===id?{...i,precoUnitario:Math.round(valor*100)/100}:i))
+      setErroPreco(a=>({...a,[id]:''}))
+    }
+    setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
+  }
+  function removerProduto(id:string){
+    setItens(a=>a.filter(x=>x.produto.id!==id))
+    setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
+    setErroPreco(a=>{const b={...a};delete b[id];return b})
+  }
   function qtdProduto(id:string,valor:number){if(!Number.isInteger(valor)||valor<1||valor>99999)return;setItens(a=>a.map(x=>x.produto.id===id?{...x,quantidade:valor}:x))}
   function adicionarSobMedida(){
     if(!tipologia){setAviso('Escolha uma tipologia cadastrada para continuar.');return}
@@ -168,7 +195,8 @@ export default function OrcamentoPreview(){
     setAviso('')
   }
   function revisar(){
-    if(modo==='sob_medida'&&!medidas.length){setAviso('Adicione pelo menos uma tipologia sob medida.');return}
+    if(precoInvalido){setAviso('Corrija o preço unitário. Para reduzir o valor cadastrado, utilize o desconto do orçamento.');return}
+    if(modo='sob_medida'&&!medidas.length){setAviso('Adicione pelo menos uma tipologia sob medida.');return}
     if(modo==='produtos'&&!itens.length){setAviso('Adicione pelo menos um produto.');return}
     setAviso('');setRevisao(true)
   }
@@ -261,10 +289,14 @@ export default function OrcamentoPreview(){
             <h3 className="flex items-center gap-2 font-black"><ClipboardList size={19} className="text-blue-700"/> Itens do orçamento <span className="ml-auto rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{totalQtd}</span></h3>
             {!itens.length&&<p className="mt-4 rounded-lg bg-slate-50 p-4 text-center text-xs text-slate-500">Nenhum produto adicional selecionado.</p>}
             <div className="mt-3 space-y-3">{itens.map(i=><div key={i.produto.id} className="border-b pb-3">
-              <b className="block text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] text-slate-500">{unitario(i.produto)!=null?moeda(unitario(i.produto)!):'Preço pendente'} / {i.produto.unidade}</p>
+              <b className="block text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] text-slate-500">Preço cadastrado: {unitario(i.produto)!=null?moeda(unitario(i.produto)!):'Preço pendente'} / {i.produto.unidade}</p>
+              {unitario(i.produto)!=null&&unitario(i.produto)!>0&&<label className="mt-2 block text-xs font-bold text-slate-700">Preço unitário neste orçamento (R$)
+                <input type="text" inputMode="decimal" autoComplete="off" aria-invalid={!!erroPreco[i.produto.id]} className={baseInput+' mt-1'} value={precoDigitado[i.produto.id]??(i.precoUnitario??0).toFixed(2).replace('.',',')} onChange={e=>digitarPreco(i.produto.id,e.target.value)} onBlur={()=>confirmarPreco(i.produto.id)}/>
+              </label>}
+              {erroPreco[i.produto.id]&&<p role="alert" className="mt-1 text-[11px] font-bold text-red-700">{erroPreco[i.produto.id]}</p>}
               <div className="mt-2 flex items-center gap-2"><label htmlFor={'qtd-orc-'+i.produto.id} className="text-xs font-semibold">Qtd.</label>
                 <input id={'qtd-orc-'+i.produto.id} className="w-20 rounded-lg border px-2 py-1.5 text-center text-sm font-bold" type="number" min="1" max="99999" value={i.quantidade} onChange={e=>qtdProduto(i.produto.id,Number(e.target.value))}/>
-                <button type="button" aria-label="Remover item" onClick={()=>setItens(a=>a.filter(x=>x.produto.id!==i.produto.id))} className="ml-auto p-1 text-red-600"><Trash2 size={16}/></button>
+                <button type="button" aria-label="Remover item" onClick={()=>removerProduto(i.produto.id)} className="ml-auto p-1 text-red-600"><Trash2 size={16}/></button>
               </div>
             </div>)}</div>
             <div className="mt-4 border-t pt-3">
@@ -287,7 +319,7 @@ export default function OrcamentoPreview(){
             <p><span className="block text-xs text-slate-500">Tipo de orçamento</span><b>{modo==='sob_medida'?'Sob medida + produtos':'Produtos prontos / avulsos'}</b></p>
           </div>
           {!!medidas.length&&<section className="mt-5"><h3 className="mb-2 font-black">Tipologias sob medida ({medidas.length})</h3>{medidas.map(m=><div key={m.id} className="mt-2 flex justify-between gap-4 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.folhas} folha(s) · {m.linha||'Linha pendente'} · {m.cor||'Cor a definir'} · {m.vidro||'Vidro a definir'} · Contramarco: {m.contramarco}</p></div><span className="shrink-0 font-bold text-amber-700">A precificar</span></div>)}</section>}
-          {!!itens.length&&<section className="mt-5"><h3 className="mb-2 font-black">Produtos ({itens.length})</h3>{itens.map(i=><div key={i.produto.id} className="mt-2 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{i.quantidade} × {i.produto.nome}</b><p className="text-slate-500">{i.produto.codigo} · {i.produto.unidade}</p></div><b>{unitario(i.produto)!=null?moeda(unitario(i.produto)!*i.quantidade):'Sem preço'}</b></div>)}</section>}
+          {!!itens.length&&<section className="mt-5"><h3 className="mb-2 font-black">Produtos ({itens.length})</h3>{itens.map(i=><div key={i.produto.id} className="mt-2 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{i.quantidade} × {i.produto.nome}</b><p className="text-slate-500">{i.produto.codigo} · {i.produto.unidade}</p></div><b>{i.precoUnitario!=null?moeda(i.precoUnitario*i.quantidade):'Sem preço'}</b></div>)}</section>}
           {semPreco>0&&<section className="mt-5 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
             <button type="button" onClick={()=>setMostrarPendencias(v=>!v)} className="flex w-full items-center justify-between gap-3 text-left">
               <span><b className="block text-sm text-amber-950">{semPreco} produto(s) sem preço no orçamento</b>
@@ -370,7 +402,7 @@ export default function OrcamentoPreview(){
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <button type="button" onClick={()=>{setRevisao(false);setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Voltar para editar</button>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setRevisao(false);setDocumento(null);setIdentificacao(identificacaoVazia);setTipoDesconto('sem');setValorDesconto('');setCondicoes([{id:1,forma:'PIX',valor:''}]);setDestinoSaldo('a_definir');setObservacoes('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
+              <button type="button" onClick={()=>{setModo('escolher');setMedidas([]);setItens([]);setPrecoDigitado({});setErroPreco({});setRevisao(false);setDocumento(null);setIdentificacao(identificacaoVazia);setTipoDesconto('sem');setValorDesconto('');setCondicoes([{id:1,forma:'PIX',valor:''}]);setDestinoSaldo('a_definir');setObservacoes('');setAviso('')}} className="rounded-xl border px-4 py-3 text-xs font-bold">Nova simulação</button>
               <button type="button" onClick={()=>gerarOrcamento()} disabled={descontoInvalido}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50">
                 <FileText size={17}/> Gerar orçamento / Imprimir PDF <ArrowRight size={17}/>
