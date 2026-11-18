@@ -7,6 +7,11 @@ export type FormaPagamento='pix'|'dinheiro'|'debito'|'credito'|'transferencia'
 export type LinhaPagamento={id:number;forma:FormaPagamento;valor:string}
 export type StatusPagamento='quitada'|'parcial'|'marcada'
 export type ItemVendaRecibo={
+  id?:string;
+  codigoItem?:string;
+  largura?:string;
+  altura?:string;
+  precoUnitario?:number|null;
   quantidade:number;
   produto:{nome:string;codigo:string;descricao:string;unidade:string;preco:number|null;precoPromocional:number|null}
 }
@@ -72,10 +77,14 @@ export default function ReciboVendaPreview(props:ReciboProps){
           </div>
           <table className="mt-2 w-full table-fixed border-collapse text-left text-[10px]">
             <thead className="border-y bg-slate-50"><tr><th className="w-[59%] px-1 py-1.5">Produto e descrição</th><th className="w-[9%] py-1.5 text-right">Qtd.</th><th className="w-[15%] py-1.5 text-right">Unitário</th><th className="w-[17%] py-1.5 text-right">Total</th></tr></thead>
-            <tbody>{pagina.map(({produto,quantidade},i)=><tr key={produto.codigo+'-'+i} className="border-b align-top">
-              <td className="break-words px-1 py-1.5"><b>{produto.nome}</b><span className="ml-1 text-slate-500">({produto.codigo||'Sem código'} · {produto.unidade})</span>{produto.descricao&&<div className="text-slate-600">{produto.descricao}</div>}</td>
-              <td className="py-1.5 text-right">{quantidade}</td><td className="py-1.5 text-right">{moeda(precoItem(produto)||0)}</td><td className="py-1.5 text-right font-bold">{moeda((precoItem(produto)||0)*quantidade)}</td>
-            </tr>)}</tbody>
+            <tbody>{pagina.map((item,i)=>{
+              const {produto,quantidade}=item
+              const unitario=item.precoUnitario??precoItem(produto)??0
+              return <tr key={item.id||produto.codigo+'-'+i} className="border-b align-top">
+                <td className="break-words px-1 py-1.5"><b>{produto.nome}</b><span className="ml-1 text-slate-500">({produto.codigo||'Sem código'} · {produto.unidade})</span>{item.codigoItem&&<div className="font-bold text-slate-600">Item {item.codigoItem}</div>}{(item.largura||item.altura)&&<div className="text-slate-600">Medidas: {item.largura||'—'} × {item.altura||'—'} mm</div>}{produto.descricao&&<div className="text-slate-600">{produto.descricao}</div>}</td>
+                <td className="py-1.5 text-right">{quantidade}</td><td className="py-1.5 text-right">{moeda(unitario)}</td><td className="py-1.5 text-right font-bold">{moeda(unitario*quantidade)}</td>
+              </tr>
+            })}</tbody>
           </table>
           {ultima&&<div className="mt-2 grid grid-cols-2 gap-3">
             <section className="rounded-md border px-3 py-2 text-[10px]">
