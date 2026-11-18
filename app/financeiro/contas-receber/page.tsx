@@ -104,6 +104,7 @@ export default function ContasReceberPage() {
     (!tipoPessoa||tipoPessoa==='cliente') && !pessoaRHFiltro && (!clienteFiltro||r.cliente_id===clienteFiltro) && (!obraFiltro||r.obra_id===obraFiltro) && noPeriodo(r.data_recebimento,periodo.inicio,periodo.fim) &&
     correspondeBuscaAtlas(busca, r.cliente_nome, r.cliente_cpf_cnpj, r.cliente_cidade, r.forma, r.referencia, r.observacoes, r.criado_por_nome, r.status)
   ), [busca, recebimentos,clienteFiltro,obraFiltro,periodo,tipoPessoa,pessoaRHFiltro])
+  const chaveAgrupamento=(c:ContaRH)=>c.rh_pessoa_id?`rh:${c.rh_pessoa_id}`:c.cliente_id?`cliente:${c.cliente_id}`:`sem-cliente:${c.id}`
   const exibidas=useMemo(()=>agrupar?[...filtradas].sort((a,b)=>(a.cliente_nome||'').localeCompare(b.cliente_nome||'','pt-BR')||(a.vencimento||'').localeCompare(b.vencimento||'')):filtradas,[filtradas,agrupar])
   const valorFiltrado=filtradas.reduce((s,c)=>s+Number(c.valor||0),0)
   const saldoFiltrado=filtradas.reduce((s,c)=>s+saldoParcela(c),0)
@@ -167,7 +168,7 @@ export default function ContasReceberPage() {
               <table className="w-full min-w-[900px] text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50 text-left text-xs text-slate-500">
-                    <th className="p-3">Cliente</th><th className="p-3">Documento</th><th className="p-3">Parcela</th><th className="p-3">Vencimento</th><th className="p-3">Forma</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Saldo</th><th className="p-3">Status</th><th className="p-3"></th>
+                    <th className="p-3">Cliente / pessoa</th><th className="p-3">Documento</th><th className="p-3">Parcela</th><th className="p-3">Vencimento</th><th className="p-3">Forma</th><th className="p-3 text-right">Valor</th><th className="p-3 text-right">Desconto</th><th className="p-3 text-right">Saldo</th><th className="p-3">Status</th><th className="p-3"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,7 +177,7 @@ export default function ContasReceberPage() {
                     const vencida = conta.status !== 'pago' && conta.status !== 'cancelado' && !!conta.vencimento && conta.vencimento < hoje
                     return (
                       <tr key={conta.id} className="border-b last:border-0">
-                        <td className="p-3 font-semibold text-slate-800">{conta.cliente_nome || 'Cliente'}{agrupar&&exibidas.findIndex(c=>c.cliente_id===conta.cliente_id)===i&&<span className="block text-[10px] font-semibold text-blue-700">Subtotal do cliente: {moeda(exibidas.filter(c=>c.cliente_id===conta.cliente_id).reduce((s,c)=>s+Number(c.valor||0),0))}</span>}{conta.obra_id&&<span className="block text-[10px] text-slate-500">{nomesObras[conta.obra_id]||`Obra ${conta.obra_id.slice(0,8)}`}</span>}</td>
+                        <td className="p-3 font-semibold text-slate-800">{conta.cliente_nome || 'Pessoa não identificada'}{agrupar&&exibidas.findIndex(c=>chaveAgrupamento(c)===chaveAgrupamento(conta))===i&&<span className="block text-[10px] font-semibold text-blue-700">Subtotal: {moeda(exibidas.filter(c=>chaveAgrupamento(c)===chaveAgrupamento(conta)).reduce((s,c)=>s+Number(c.valor||0),0))}</span>}{conta.obra_id&&<span className="block text-[10px] text-slate-500">{nomesObras[conta.obra_id]||`Obra ${conta.obra_id.slice(0,8)}`}</span>}</td>
                         <td className="p-3 text-slate-600">{conta.documento || '—'}</td>
                         <td className="p-3">{conta.parcela}/{conta.total_parcelas}</td>
                         <td className={`p-3 ${vencida ? 'font-semibold text-red-600' : ''}`}>{dataBR(conta.vencimento)}</td>
