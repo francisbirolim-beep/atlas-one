@@ -2,6 +2,7 @@ export type CepEnderecoViaCep = {
   cep?: string
   logradouro?: string
   bairro?: string
+  complemento?: string
   localidade?: string
   uf?: string
   erro?: boolean | string
@@ -57,11 +58,20 @@ export function selecionarComplementoViaCep(
   const selecionados = comBairro.length ? comBairro : candidatos
   const ceps = [...new Set(selecionados.map(item => formatarCep(item.cep || '')).filter(Boolean))]
   const bairros = [...new Set(selecionados.map(item => (item.bairro || '').trim()).filter(Boolean))]
+  // O complemento postal pode citar a faixa de numeração (ex.: "até 999").
+  // Trata-se de informação da base postal, não de intervalo inferido via GPS.
+  const opcoes = [...new Map(selecionados.map(item => {
+    const cep = formatarCep(item.cep || '')
+    const bairro = (item.bairro || '').trim()
+    const trecho = (item.complemento || '').trim()
+    return [cep, { cep, bairro, trecho }] as const
+  })).values()]
   return {
     cep: ceps.length === 1 ? ceps[0] : '',
     bairro: bairros.length === 1 ? bairros[0] : '',
     correspondencias: selecionados.length,
     ambiguo: ceps.length > 1,
+    opcoes,
   }
 }
 

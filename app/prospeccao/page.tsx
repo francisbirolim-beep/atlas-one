@@ -7,6 +7,10 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
+import { consultarEtapasComerciais, type EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
+import { integrarObrasNoMapa, listarObrasGpsComerciais, type ObraGpsComercial } from '@/lib/prospeccaoMapaComercial'
+import { nomesUnicosGeograficos } from '@/lib/prospeccaoRelatorio'
+import { normalizarTextoEndereco as normalizarLocal } from '@/lib/geocodificacaoCep'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
 
@@ -27,6 +31,12 @@ export default function ProspeccaoPage() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [itens, setItens] = useState<Prospeccao[]>([])
   const [equipe, setEquipe] = useState<Pick<Usuario, 'id' | 'nome'>[]>([])
+  const [etapasComerciais, setEtapasComerciais] = useState<Record<string, EtapaComercialProspeccao>>({})
+  const [avisoEtapas, setAvisoEtapas] = useState<string | null>(null)
+  const [obrasGps, setObrasGps] = useState<ObraGpsComercial[]>([])
+  const [avisoObrasGps, setAvisoObrasGps] = useState<string | null>(null)
+  const [atualizandoMapa, setAtualizandoMapa] = useState(false)
+  const [revisaoMapa, setRevisaoMapa] = useState(0)
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [vendedor, setVendedor] = useState('')
@@ -43,23 +53,77 @@ export default function ProspeccaoPage() {
     setItens(lista)
     setEquipe(usuarios)
     setCarregando(false)
+    // As etapas e o GPS das obras só são consultados quando o mapa é aberto.
   }
 
   useEffect(() => { void carregar() }, [])
 
-  const cidades = useMemo(() => [...new Set(itens.map(i => i.cidade).filter(Boolean) as string[])].sort(), [itens])
-  const bairros = useMemo(() => [...new Set(itens.filter(i => !cidade || i.cidade === cidade).map(i => i.bairro).filter(Boolean) as string[])].sort(), [cidade, itens])
+  // Atualização sem bloquear a tela. Dados da obra e vendas operacionais são
+  // consultados apenas com a sessão/RLS existente; nenhum cadastro é duplicado.
+  useEffect(() => {
+    if (aba !== 'mapa') return
+    let ativo = true
+    let consultando = false
+    async function atualizarMapa() {
+      if (!ativo || consultando) return
+      consultando = true
+      setAtualizandoMapa(true)
+      try {
+        const resultado = await listarObrasGpsComerciais()
+        if (!ativo) return
+        setAvisoObrasGps(resultado.aviso)
+        if (resultado.aviso) return
+        // Uma atualização sem mudanças não remonta o Leaflet nem tira o
+        // zoom do usuário. As consultas continuam em segundo plano.
+        setObrasGps(anteriores => {
+          if (anteriores.length === resultado.obras.length && anteriores.every((a, i) => {
+            const b = resultado.obras[i]
+            return a.id === b.id && a.observacoes === b.observacoes
+              && a.nome === b.nome && a.bairro === b.bairro && a.cidade === b.cidade
+              && a.endereco === b.endereco && a.numero_endereco === b.numero_endereco
+              && a.cliente_id === b.cliente_id
+          })) return anteriores
+          return resultado.obras
+        })
+        const situacao = await consultarEtapasComerciais(integrarObrasNoMapa(itens, resultado.obras))
+        if (!ativo) return
+        setEtapasComerciais(anteriores => {
+          const chaves = Object.keys(situacao.etapas)
+          if (Object.keys(anteriores).length === chaves.length &&
+            chaves.every(chave => anteriores[chave] === situacao.etapas[chave])) return anteriores
+          return situacao.etapas
+        })
+        setAvisoEtapas(situacao.aviso)
+      } catch {
+        if (ativo) setAvisoObrasGps('Não foi possível atualizar os pinos dos pedidos de orçamento.')
+      } finally {
+        consultando = false
+        if (ativo) setAtualizandoMapa(false)
+      }
+    }
+    void atualizarMapa()
+    const intervalo = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void atualizarMapa()
+    }, 90000)
+    return () => { ativo = false; window.clearInterval(intervalo) }
+  }, [aba, itens, revisaoMapa])
+
+  const registrosMapa = useMemo(() => integrarObrasNoMapa(itens, obrasGps), [itens, obrasGps])
+  const registrosDaAba = aba === 'mapa' ? registrosMapa : itens
+
+  const cidades = useMemo(() => nomesUnicosGeograficos(registrosDaAba.map(i => i.cidade)), [registrosDaAba])
+  const bairros = useMemo(() => nomesUnicosGeograficos(registrosDaAba.filter(i => !cidade || normalizarLocal(i.cidade||'') === normalizarLocal(cidade)).map(i => i.bairro)), [cidade, registrosDaAba])
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase('pt-BR')
-    return itens.filter(item => {
+    return registrosDaAba.filter(item => {
       if (vendedor && item.responsavel_id !== vendedor) return false
-      if (cidade && item.cidade !== cidade) return false
-      if (bairro && item.bairro !== bairro) return false
+      if (cidade && normalizarLocal(item.cidade||'') !== normalizarLocal(cidade)) return false
+      if (bairro && normalizarLocal(item.bairro||'') !== normalizarLocal(bairro)) return false
       if (!termo) return true
       return [item.nome_cliente, item.nome_obra, item.telefone, item.endereco, item.cidade, item.bairro, item.responsavel_nome]
         .some(v => (v || '').toLocaleLowerCase('pt-BR').includes(termo))
     })
-  }, [bairro, busca, cidade, itens, vendedor])
+  }, [bairro, busca, cidade, registrosDaAba, vendedor])
 
   const agenda = useMemo(() => filtrados.filter(i => i.proxima_acao_em && !['convertido','sem_interesse'].includes(i.status)).sort((a,b) => new Date(a.proxima_acao_em!).getTime() - new Date(b.proxima_acao_em!).getTime()), [filtrados])
   const atrasados = agenda.filter(i => new Date(i.proxima_acao_em!).getTime() < Date.now()).length
@@ -68,6 +132,10 @@ export default function ProspeccaoPage() {
     const item = itens.find(i => i.id === arrastando)
     setArrastando(null)
     if (!item || item.status === status) return
+    if (status === 'convertido' && !item.cliente_id) {
+      alert('Para converter, abra a ficha e use o botão Converter em cliente. Assim o cadastro e o histórico ficam vinculados.')
+      return
+    }
     const origem=STATUS_PROSPECCAO.find(c=>c.id===item.status)
     const destino=STATUS_PROSPECCAO.find(c=>c.id===status)
     if (!confirmarMovimentoKanban({card:item.nome_cliente||'Prospecção',origem:origem?.label||item.status,destino:destino?.label||status,retrocesso:STATUS_PROSPECCAO.findIndex(c=>c.id===status)<STATUS_PROSPECCAO.findIndex(c=>c.id===item.status)})) return
@@ -117,7 +185,17 @@ export default function ProspeccaoPage() {
             })}
           </div>
         ) : aba === 'mapa' ? (
-          <MapaProspeccoes registros={filtrados} />
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3">
+              <p className="text-xs text-slate-600">O GPS confirmado no pedido de orçamento entra neste mapa após o envio. O pino acompanha o orçamento e a venda real da mesma obra.</p>
+              <button type="button" onClick={() => setRevisaoMapa(valor => valor + 1)} disabled={atualizandoMapa}
+                className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">
+                {atualizandoMapa ? 'Atualizando pinos…' : 'Atualizar pinos'}
+              </button>
+            </div>
+            {(avisoObrasGps || avisoEtapas) && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{[avisoObrasGps, avisoEtapas].filter(Boolean).join(' ')}</p>}
+            <MapaProspeccoes registros={filtrados} etapasComerciais={etapasComerciais} />
+          </>
         ) : (
           <section className="overflow-hidden rounded-2xl border bg-white">
             <div className="border-b px-5 py-4"><h2 className="font-bold text-slate-900">Próximas ações</h2><p className="text-xs text-slate-500">Os compromissos também aparecem na agenda pessoal do vendedor.</p></div>
