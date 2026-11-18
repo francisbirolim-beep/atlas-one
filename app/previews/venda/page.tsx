@@ -12,7 +12,7 @@ type Cliente={id:string;nome:string;apelido?:string|null;cpf_cnpj?:string|null;t
 type Obra={id:string;nome:string;cidade?:string|null;bairro?:string|null;endereco?:string|null}
 type Produto={id:string;codigo:string;nome:string;descricao:string;categoria:string;unidade:string;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null}
 type Linha={id:string;nome:string;ativa:boolean}
-type Item={produto:Produto;quantidade:number}
+type Item={produto:Produto;quantidade:number;precoUnitario:number|null}
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
 type Etapa=1|2|3
 type Modo='busca'|'cadastro'|'consumidor'
@@ -54,6 +54,8 @@ export default function PreviaVenda(){
   const [erroProdutos,setErroProdutos]=useState('')
   const [itens,setItens]=useState<Item[]>([])
   const [quantidadeDigitada,setQuantidadeDigitada]=useState<Record<string,string>>({})
+  const [precoDigitado,setPrecoDigitado]=useState<Record<string,string>>({})
+  const [erroPreco,setErroPreco]=useState<Record<string,string>>({})
   const [tipoDesconto,setTipoDesconto]=useState<'sem'|'valor'|'percentual'>('sem')
   const [descontoEntrada,setDescontoEntrada]=useState('')
   const [tipoRecebimento,setTipoRecebimento]=useState<'agora'|'marcar'>('agora')
@@ -139,7 +141,7 @@ export default function PreviaVenda(){
   const nomeCliente=modo==='consumidor'?'Consumidor final':cliente?.nome||'Cliente não escolhido'
   const obra=obras.find(o=>o.id===obraId)
   // Valores em centavos para não somar frações de real com erro de arredondamento.
-  const subtotalCent=useMemo(()=>itens.reduce((s,i)=>s+cents(preco(i.produto)||0)*i.quantidade,0),[itens])
+  const subtotalCent=useMemo(()=>itens.reduce((s,i)=>s+cents(i.precoUnitario||0)*i.quantidade,0),[itens])
   const brutoDesconto=cents(tipoDesconto==='percentual'?subtotalCent/100*valorEntrada(descontoEntrada)/100:tipoDesconto==='valor'?valorEntrada(descontoEntrada):0)
   const descontoInvalido=tipoDesconto==='percentual'?valorEntrada(descontoEntrada)>100:brutoDesconto>subtotalCent
   const descontoCent=tipoDesconto==='percentual'?Math.round(subtotalCent*valorEntrada(descontoEntrada)/100):brutoDesconto
@@ -154,11 +156,13 @@ export default function PreviaVenda(){
   const statusFinanceiro:StatusPagamento=tipoRecebimento==='marcar'?'marcada':saldoCent>0?'parcial':'quitada'
   const formasRecibo=tipoRecebimento==='marcar'?[]:pagamentos.filter(p=>cents(valorEntrada(p.valor))>0).map(p=>({forma:p.forma,valor:cents(valorEntrada(p.valor))/100}))
 
-  const pendentes=itens.filter(i=>preco(i.produto)==null).length
+  const pendentes=itens.filter(i=>i.precoUnitario==null).length
   const unidades=itens.reduce((s,i)=>s+i.quantidade,0)
 
   function mudarModo(novo:Modo){
     setModo(novo);setCliente(null);setBuscaCliente('');setClientes([]);setObraId('');setAviso('')
+    setItens(a=>a.map(i=>({...i,precoUnitario:preco(i.produto)})))
+    setPrecoDigitado({});setErroPreco({})
   }
   function cadastrarEContinuar(){
     if(!nomeInteiro(cadastro.nome)){setAviso('Informe o nome e o sobrenome do cliente.');return}
@@ -176,7 +180,26 @@ export default function PreviaVenda(){
     setAviso('');setEtapa(2)
   }
   function adicionar(p:Produto){
-    setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1}]})
+    setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1,precoUnitario:preco(p)}]})
+  }
+  function digitarPrecoUnitario(id:string,valor:string){
+    if(!/^\d{0,8}([,.]\d{0,2})?$/.test(valor))return
+    setPrecoDigitado(a=>({...a,[id]:valor}))
+    setErroPreco(a=>({...a,[id]:''}))
+  }
+  function confirmarPrecoUnitario(id:string){
+    const item=itens.find(i=>i.produto.id===id)
+    const digitado=precoDigitado[id]
+    if(!item||digitado===undefined)return
+    const base=preco(item.produto)
+    const valor=valorEntrada(digitado)
+    if(base==null||!digitado.trim()||cents(valor)<cents(base)){
+      setErroPreco(a=>({...a,[id]:'O preço unitário não pode ser menor que o cadastrado. Para reduzir, use Desconto na venda.'}))
+    }else{
+      setItens(a=>a.map(i=>i.produto.id===id?{...i,precoUnitario:cents(valor)/100}:i))
+      setErroPreco(a=>({...a,[id]:''}))
+    }
+    setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
   }
   function digitarQuantidade(id:string,valor:string){
     // Permite escrever diretamente 10, 25, 100 etc., sem perder o texto durante a digitação.
@@ -192,6 +215,8 @@ export default function PreviaVenda(){
   function revisar(){
     if(!itens.length){setAviso('Adicione pelo menos um produto para continuar.');return}
     if(pendentes>0){setAviso('Há itens sem preço cadastrado. Informe os preços no catálogo antes de finalizar uma venda.');return}
+    if(modo==='consumidor'&&Object.values(erroPreco).some(Boolean)){setAviso('Corrija o preço unitário indicado: para vender abaixo do cadastrado, utilize o desconto.');return}
+    if(itens.some(i=>preco(i.produto)!=null&&cents(i.precoUnitario||0)<cents(preco(i.produto)!))){setAviso('Não é permitido vender produto abaixo do preço cadastrado sem usar desconto.');return}
     if(descontoInvalido){setAviso('O desconto não pode ultrapassar o subtotal nem 100%.');return}
     if(totalLiquidoCent<=0){setAviso('O valor final da venda deve ser maior que zero.');return}
     if(tipoRecebimento==='marcar'){
@@ -219,7 +244,7 @@ export default function PreviaVenda(){
     setDataRecibo(new Date().toISOString())
     setReciboAberto(true)
   }
-  function resetar(){setEtapa(1);setModo('busca');setCliente(null);setBuscaCliente('');setObraId('');setCadastro(vazio);setItens([]);setQuantidadeDigitada({});setAviso('');setTipoRecebimento('agora');setTipoDesconto('sem');setDescontoEntrada('');setPagamentos([{id:1,forma:'pix',valor:''}]);setNomeAssinatura('');setReciboAberto(false)}
+  function resetar(){setEtapa(1);setModo('busca');setCliente(null);setBuscaCliente('');setObraId('');setCadastro(vazio);setItens([]);setQuantidadeDigitada({});setPrecoDigitado({});setErroPreco({});setAviso('');setTipoRecebimento('agora');setTipoDesconto('sem');setDescontoEntrada('');setPagamentos([{id:1,forma:'pix',valor:''}]);setNomeAssinatura('');setReciboAberto(false)}
 
   return <main className="min-h-screen bg-[#f3f6fb] px-3 pb-16 pt-5 text-slate-900 sm:px-6 lg:px-8">
    <div className="mx-auto max-w-[1420px] space-y-5">
@@ -361,7 +386,7 @@ export default function PreviaVenda(){
           {!itens.length&&<div className="mt-4 grid min-h-32 place-items-center rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500">Escolha um item à esquerda para começar a venda.</div>}
           <div className="mt-3 space-y-3">{itens.map(i=><div key={i.produto.id} className="border-b pb-3 last:border-0">
             <div className="flex gap-2"><FotoProdutoPreview nome={i.produto.nome} fotoUrl={i.produto.fotoUrl} fotoCandidataUrl={i.produto.fotoCandidataUrl} oculta={!!fotosOcultas[i.produto.id]} onOcultarFoto={valor=>setFotosOcultas(a=>({...a,[i.produto.id]:valor}))} tamanho="pequeno" imagemLocal={fotosLocais[i.produto.id]} onSelecionarImagem={arquivo=>selecionarFoto(i.produto.id,arquivo)}/>
-              <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] text-slate-500">{preco(i.produto)!=null?moeda(preco(i.produto)!):'Preço pendente'} /{i.produto.unidade}</p>
+              <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] text-slate-500">{i.precoUnitario!=null?moeda(i.precoUnitario):'Preço pendente'} /{i.produto.unidade}</p>
                 <div className="mt-2 flex items-center gap-2">
                   <label className="text-[11px] font-semibold text-slate-600" htmlFor={'qtd-'+i.produto.id}>Qtd.</label>
                   <input id={'qtd-'+i.produto.id} className="w-20 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-sm font-bold tabular-nums focus:border-blue-600 focus:outline-none" inputMode="numeric" pattern="[0-9]*" aria-label={'Quantidade de '+i.produto.nome}
@@ -371,6 +396,16 @@ export default function PreviaVenda(){
                     onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur()}} />
                   <button type="button" onClick={()=>{setItens(a=>a.filter(x=>x.produto.id!==i.produto.id));confirmarQuantidade(i.produto.id)}} className="ml-auto rounded p-1.5 text-red-600 hover:bg-red-50" aria-label="Remover produto"><Trash2 size={15}/></button>
                 </div>
+                {modo==='consumidor'&&preco(i.produto)!=null&&<div className="mt-2">
+                  <label htmlFor={'preco-'+i.produto.id} className="block text-[11px] font-semibold text-slate-600">Preço unitário nesta venda (R$)</label>
+                  <input id={'preco-'+i.produto.id} aria-label={'Preço unitário de '+i.produto.nome} inputMode="decimal" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold tabular-nums focus:border-blue-600 focus:outline-none"
+                    value={precoDigitado[i.produto.id]??(i.precoUnitario??0).toFixed(2).replace('.',',')}
+                    onChange={e=>digitarPrecoUnitario(i.produto.id,e.target.value)}
+                    onBlur={()=>confirmarPrecoUnitario(i.produto.id)}
+                    onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur()}}/>
+                  <p className="mt-1 text-[11px] text-slate-500">Preço cadastrado: {moeda(preco(i.produto)!)}. Pode aumentar; para diminuir, use o desconto.</p>
+                  {erroPreco[i.produto.id]&&<p role="alert" className="mt-1 text-[11px] font-semibold text-red-700">{erroPreco[i.produto.id]}</p>}
+                </div>}
               </div>
             </div>
           </div>)}</div>
@@ -445,8 +480,8 @@ export default function PreviaVenda(){
       </div>
       <h3 className="mb-3 mt-6 text-sm font-black">Descrição dos itens</h3>
       <div className="space-y-3">{itens.map(i=><div key={i.produto.id} className="flex justify-between gap-3 border-b pb-3 text-sm">
-        <span><b>{i.quantidade} × {i.produto.nome}</b><span className="block text-xs text-slate-500">{i.produto.codigo||'Sem código'} · {i.produto.unidade}</span>{i.produto.descricao&&<span className="mt-1 block text-xs text-slate-500">{i.produto.descricao}</span>}</span>
-        <b className="shrink-0">{moeda((preco(i.produto)||0)*i.quantidade)}</b>
+        <span><b>{i.quantidade} × {i.produto.nome}</b><span className="block text-xs text-slate-500">{i.produto.codigo||'Sem código'} · {i.produto.unidade} · Unitário {moeda(i.precoUnitario||0)}</span>{i.produto.descricao&&<span className="mt-1 block text-xs text-slate-500">{i.produto.descricao}</span>}</span>
+        <b className="shrink-0">{moeda((i.precoUnitario||0)*i.quantidade)}</b>
       </div>)}</div>
       <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm">
         <div className="flex justify-between"><span>Subtotal</span><b>{moeda(total)}</b></div>
