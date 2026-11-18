@@ -60,6 +60,8 @@ export const GUIAS: Guia[] = [
   { href: '/estoque', label: 'Estoque', icon: PackageSearch, grupo: 'Compras' },
   { href: '/cadastro/fornecedores', label: 'Fornecedores', icon: Building2, grupo: 'Compras' },
 
+  { href: '/rh/pessoas', label: 'Cadastro de pessoas', icon: Users, grupo: 'RH', masterOnly: true },
+
   { href: '/balcao/caixa', label: 'Caixa', icon: WalletCards, grupo: 'Financeiro' },
   { href: '/financeiro/contas-pagar', label: 'Contas a pagar', icon: WalletCards, grupo: 'Financeiro' },
   { href: '/financeiro/contas-receber', label: 'Contas a receber', icon: WalletCards, grupo: 'Financeiro' },
@@ -77,6 +79,7 @@ export const GRUPOS_ORDEM_GUIAS = [
   'Engenharia',
   'Compras',
   'Financeiro',
+  'RH',
   'Assistência',
   'Cadastros',
 ]
