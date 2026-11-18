@@ -160,9 +160,13 @@ export default function CadastroProdutoAvulso({ onCriado }: { onCriado: (produto
         <label className="text-xs font-semibold text-slate-700">Unidade *
           <input className={campo+' mt-1'} maxLength={40} required value={form.unidade} onChange={e => alterar('unidade', e.target.value)}/>
         </label>
-        <label className="text-xs font-semibold text-slate-700">Custo do produto (R$) *
+        <label className="text-xs font-semibold text-slate-700">{form.categoria === 'perfil' ? 'Custo de referência para venda (R$) *' : 'Custo do produto (R$) *'}
           <input className={campo+' mt-1'} inputMode="decimal" required value={form.custo} onChange={e => alterar('custo', e.target.value)} placeholder="Ex.: 100,00"/>
         </label>
+        {form.categoria === 'perfil' && <p className="text-[11px] text-amber-800 sm:col-span-2">
+          Para perfis, este custo serve apenas de referência para calcular o preço de venda.
+          O custo técnico de fabricação continua calculado pelo peso e pelo alumínio, sem alteração.
+        </p>
         <label className="text-xs font-semibold text-slate-700">Definir preço por *
           <select className={campo+' mt-1'} value={form.modoPreco} onChange={e => alterar('modoPreco', e.target.value)}>
             <option value="direto">Informar preço de venda</option>
