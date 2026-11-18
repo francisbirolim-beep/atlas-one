@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarBalcao, type UsuarioBalcao } from '@/lib/balcaoServer'
 import { supabaseAdmin as db } from '@/lib/supabaseAdmin'
+import { arredondarMoeda, margemRealPorPreco, precoPorAcrescimoSobreCusto } from '@/lib/precificacaoBalcao'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,7 +14,7 @@ async function usuarioComercial(request: NextRequest) {
     || await autenticarBalcao(request, 'fazer-orcamento-msanfyvj', 'consulta')
 }
 
-async function autorizadoCriar(usuario: UsuarioBalcao) {
+async function autorizadoProduto(usuario: UsuarioBalcao, acoes: Array<'criar' | 'editar'>) {
   if (usuario.role === 'master') return true
   const [setor, permissoes] = await Promise.all([
     db.from('permissoes').select('nivel')
@@ -26,16 +27,40 @@ async function autorizadoCriar(usuario: UsuarioBalcao) {
   const config = permissoes.data?.config as
     | { visiveis?: unknown; acoes?: Record<string, unknown> } | null | undefined
   return !!config && Array.isArray(config.visiveis) && config.visiveis.includes('produtos')
-    && Array.isArray(config.acoes?.produtos) && config.acoes.produtos.includes('criar')
+    && Array.isArray(config.acoes?.produtos) && acoes.some(acao => (config.acoes?.produtos as unknown[]).includes(acao))
 }
+const autorizadoCriar = (usuario: UsuarioBalcao) => autorizadoProduto(usuario, ['criar'])
+const autorizadoConsultarCusto = (usuario: UsuarioBalcao) => autorizadoProduto(usuario, ['criar', 'editar'])
 
 export async function GET(request: NextRequest) {
   const usuario = await usuarioComercial(request)
   if (!usuario) return respostaErro('Sem acesso ao setor comercial.', 403)
   try {
-    return NextResponse.json({ podeCriar: await autorizadoCriar(usuario) }, { headers: { 'Cache-Control': 'no-store' } })
+    const permitido = await autorizadoCriar(usuario)
+    const cabecalhos = { 'Cache-Control': 'no-store' }
+    // Esta consulta devolve custos somente ao Master ou ao usuário que pode criar produtos.
+    // Nunca adicionar custos ao catálogo público do orçamento ou aos documentos para clientes.
+    const idsInformados = new URL(request.url).searchParams.get('ids')
+    const podeVerCusto = idsInformados !== null && await autorizadoConsultarCusto(usuario)
+    if (idsInformados === null || !podeVerCusto)
+      return NextResponse.json({ podeCriar: permitido, podeVerCusto: false }, { headers: cabecalhos })
+    if (idsInformados.length > 4000)
+      return respostaErro('Consulta de produtos acima do limite.', 400)
+    const ids = [...new Set(idsInformados.split(',').filter(Boolean))]
+    if (ids.length > 100 || ids.some(id => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)))
+      return respostaErro('IDs de produtos inválidos.', 400)
+    if (!ids.length)
+      return NextResponse.json({ podeCriar: permitido, podeVerCusto: true, custos: [] }, { headers: cabecalhos })
+    const { data, error } = await db.from('produtos').select('id,custo')
+      .eq('empresa_id', usuario.empresa_id).in('id', ids)
+    if (error) throw error
+    const custos = (data || []).map(produto => {
+      const custo = produto.custo == null ? null : Number(produto.custo)
+      return { id: produto.id, custo: custo !== null && Number.isFinite(custo) && custo >= 0 ? custo : null }
+    })
+    return NextResponse.json({ podeCriar: permitido, podeVerCusto: true, custos }, { headers: cabecalhos })
   } catch {
-    return respostaErro('Não foi possível validar a permissão.', 503)
+    return respostaErro('Não foi possível consultar os custos dos produtos.', 503)
   }
 }
 
@@ -52,7 +77,22 @@ export async function POST(request: NextRequest) {
     const categoria = String(dados.categoria || '').trim()
     const unidade = String(dados.unidade || '').trim()
     const descricao = String(dados.descricao || '').trim()
-    const preco = typeof dados.preco === 'number' ? dados.preco : Number(String(dados.preco ?? '').replace(',', '.'))
+    // Compatibilidade com telas antigas abertas antes do deploy: continuam podendo cadastrar.
+    // No novo formulário, custo e modo de precificação são validados sempre no servidor.
+    const legado = !Object.prototype.hasOwnProperty.call(dados, 'modoPreco')
+      && !Object.prototype.hasOwnProperty.call(dados, 'custo')
+    const modoPreco = dados.modoPreco == null && legado ? 'direto' : dados.modoPreco
+    if (modoPreco !== 'direto' && modoPreco !== 'percentual')
+      return respostaErro('Selecione uma forma válida de definir o preço.', 400)
+    const custo = typeof dados.custo === 'number' ? dados.custo : Number(String(dados.custo ?? '').trim().replace(',', '.'))
+    const acrescimo = typeof dados.acrescimo === 'number'
+      ? dados.acrescimo : Number(String(dados.acrescimo ?? '').trim().replace(',', '.'))
+    const precoDigitado = typeof dados.preco === 'number'
+      ? dados.preco : Number(String(dados.preco ?? '').trim().replace(',', '.'))
+    const preco = modoPreco === 'percentual'
+      ? arredondarMoeda(precoPorAcrescimoSobreCusto(custo, acrescimo))
+      : precoDigitado
+    const margemReal = !legado && preco !== null ? margemRealPorPreco(custo, preco) : null
     const fotoUrl = typeof dados.fotoUrl === 'string' ? dados.fotoUrl.trim() : ''
     const pesoKgM = dados.pesoKgM === '' || dados.pesoKgM == null ? null : Number(dados.pesoKgM)
     const tamanhoBarraMm = dados.tamanhoBarraMm === '' || dados.tamanhoBarraMm == null ? null : Number(dados.tamanhoBarraMm)
@@ -60,7 +100,13 @@ export async function POST(request: NextRequest) {
     if (!nome || nome.length > 200 || codigoDigitado.length > 60 || unidade.length < 1 || unidade.length > 40
       || descricao.length > 2000 || !categorias.has(categoria))
       return respostaErro('Informe nome, código, categoria e unidade válidos.', 400)
-    if (!Number.isFinite(preco) || preco <= 0 || preco > 100000000)
+    if (!legado && (dados.custo == null || String(dados.custo).trim() === ''
+      || !Number.isFinite(custo) || custo <= 0 || custo > 100000000))
+      return respostaErro('Informe um custo de produto válido e maior que zero.', 400)
+    if (modoPreco === 'percentual' && (dados.acrescimo == null || String(dados.acrescimo).trim() === ''
+      || !Number.isFinite(acrescimo) || acrescimo < 0))
+      return respostaErro('Informe um acréscimo válido, igual ou maior que zero.', 400)
+    if (preco === null || !Number.isFinite(preco) || preco <= 0 || preco > 100000000)
       return respostaErro('Informe um preço de venda válido e maior que zero.', 400)
     const urlFotos = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '') + '/storage/v1/object/public/fotos/produtos/'
     if (fotoUrl && (!fotoUrl.startsWith(urlFotos) || fotoUrl.length > 2000))
@@ -84,6 +130,15 @@ export async function POST(request: NextRequest) {
       id, empresa_id: usuario.empresa_id,
       codigo, nome, categoria, unidade, descricao: descricao || null,
       preco: Math.round(preco * 100) / 100, foto_url: fotoUrl || null,
+      // Não sobrescrever o custo técnico dos perfis, que segue a regra peso x comprimento x alumínio.
+      // O custo informado no cadastro de perfil orienta o preço comercial, sem interferir na engenharia.
+      ...(!legado && categoria !== 'perfil' ? {
+        custo: Math.round(custo * 100) / 100,
+        // A coluna margem_percentual armazena margem real, não acréscimo sobre custo.
+        // Negociação abaixo do custo não pode gravar margem negativa (restrição SQL).
+        margem_percentual: margemReal !== null && margemReal >= 0 && margemReal < 100
+          ? margemReal : null,
+      } : {}),
       ...(categoria === 'perfil' ? { peso_kg_m: pesoKgM, tamanho_barra_mm: tamanhoBarraMm } : {}),
       ativo: true, criado_por_id: usuario.id, criado_por_nome: usuario.nome,
     }).select('id,codigo,nome,descricao,categoria,unidade,preco,foto_url').single()

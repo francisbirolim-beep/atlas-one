@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { ImagePlus, Plus, X } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { uploadFotoProduto } from '@/lib/upload'
+import { acrescimoSobreCustoPorPreco, arredondarMoeda, margemRealPorPreco, precoPorAcrescimoSobreCusto } from '@/lib/precificacaoBalcao'
 
 export type ProdutoAvulsoCriado = {
   id: string; codigo: string; nome: string; descricao: string; categoria: string
@@ -11,11 +12,21 @@ export type ProdutoAvulsoCriado = {
   preco: number | null; precoPromocional: number | null
 }
 type Formulario = {
-  codigo: string; nome: string; categoria: string; unidade: string; preco: string
+  codigo: string; nome: string; categoria: string; unidade: string
+  custo: string; modoPreco: 'percentual' | 'direto'; acrescimo: string; preco: string
   descricao: string; pesoKgM: string; tamanhoBarraMm: string
 }
-const vazio: Formulario = { codigo: '', nome: '', categoria: 'produto', unidade: 'unidade', preco: '',
-  descricao: '', pesoKgM: '', tamanhoBarraMm: '6000' }
+const vazio: Formulario = {
+  codigo: '', nome: '', categoria: 'produto', unidade: 'unidade',
+  custo: '', modoPreco: 'direto', acrescimo: '', preco: '',
+  descricao: '', pesoKgM: '', tamanhoBarraMm: '6000',
+}
+function numeroTexto(valor: string): number | null {
+  if (!valor.trim()) return null
+  const numero = Number(valor.trim().replace(',', '.'))
+  return Number.isFinite(numero) ? numero : null
+}
+const moeda = (valor: number) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const categorias = [
   { valor: 'produto', nome: 'Produto' }, { valor: 'acessorio', nome: 'Acessório' },
   { valor: 'perfil', nome: 'Perfil' }, { valor: 'vidro', nome: 'Vidro' },
@@ -49,6 +60,15 @@ export default function CadastroProdutoAvulso({ onCriado }: { onCriado: (produto
     return () => { ativo = false }
   }, [])
 
+  const custo = numeroTexto(form.custo)
+  const acrescimo = numeroTexto(form.acrescimo)
+  const precoFinal = form.modoPreco === 'percentual'
+    ? arredondarMoeda(precoPorAcrescimoSobreCusto(custo, acrescimo))
+    : numeroTexto(form.preco)
+  const margemReal = custo !== null && precoFinal !== null ? margemRealPorPreco(custo, precoFinal) : null
+  const acrescimoEquivalente = custo !== null && precoFinal !== null
+    ? acrescimoSobreCustoPorPreco(custo, precoFinal) : null
+
   if (!permitido) return null
 
   const alterar = (key: keyof Formulario, valor: string) => {
@@ -66,9 +86,14 @@ export default function CadastroProdutoAvulso({ onCriado }: { onCriado: (produto
     if (salvando) return
     setErro('')
     setSucesso('')
-    const preco = Number(form.preco.trim().replace(',', '.'))
-    if (!form.nome.trim() || !form.unidade.trim() || !Number.isFinite(preco) || preco <= 0) {
-      setErro('Informe nome, unidade e preço de venda maior que zero.'); return
+    if (!form.nome.trim() || !form.unidade.trim() || custo === null || custo <= 0 || custo > 100000000) {
+      setErro('Informe nome, unidade e custo do produto maior que zero.'); return
+    }
+    if (form.modoPreco === 'percentual' && (acrescimo === null || acrescimo < 0)) {
+      setErro('Informe um acréscimo sobre o custo igual ou maior que zero.'); return
+    }
+    if (precoFinal === null || precoFinal <= 0 || precoFinal > 100000000) {
+      setErro('Informe um preço de venda válido e maior que zero.'); return
     }
     if (['perfil', 'acessorio'].includes(form.categoria) && !foto) {
       setErro('Cadastre a foto do perfil ou acessório.'); return
@@ -90,7 +115,8 @@ export default function CadastroProdutoAvulso({ onCriado }: { onCriado: (produto
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form, preco, fotoUrl,
+          ...form, custo, preco: precoFinal, fotoUrl,
+          acrescimo: form.modoPreco === 'percentual' ? acrescimo : null,
           pesoKgM: form.pesoKgM ? Number(form.pesoKgM.replace(',', '.')) : null,
           tamanhoBarraMm: form.tamanhoBarraMm ? Number(form.tamanhoBarraMm) : null,
         }),
@@ -134,9 +160,46 @@ export default function CadastroProdutoAvulso({ onCriado }: { onCriado: (produto
         <label className="text-xs font-semibold text-slate-700">Unidade *
           <input className={campo+' mt-1'} maxLength={40} required value={form.unidade} onChange={e => alterar('unidade', e.target.value)}/>
         </label>
-        <label className="text-xs font-semibold text-slate-700">Preço de venda (R$) *
-          <input className={campo+' mt-1'} inputMode="decimal" required value={form.preco} onChange={e => alterar('preco', e.target.value)} placeholder="Ex.: 150,00"/>
+        <label className="text-xs font-semibold text-slate-700">{form.categoria === 'perfil' ? 'Custo de referência para venda (R$) *' : 'Custo do produto (R$) *'}
+          <input className={campo+' mt-1'} inputMode="decimal" required value={form.custo} onChange={e => alterar('custo', e.target.value)} placeholder="Ex.: 100,00"/>
         </label>
+        {form.categoria === 'perfil' && <p className="text-[11px] text-amber-800 sm:col-span-2">
+          Para perfis, este custo serve apenas de referência para calcular o preço de venda.
+          O custo técnico de fabricação continua calculado pelo peso e pelo alumínio, sem alteração.
+        </p>}
+        <label className="text-xs font-semibold text-slate-700">Definir preço por *
+          <select className={campo+' mt-1'} value={form.modoPreco} onChange={e => alterar('modoPreco', e.target.value)}>
+            <option value="direto">Informar preço de venda</option>
+            <option value="percentual">Acréscimo sobre o custo (%)</option>
+          </select>
+        </label>
+        {form.modoPreco === 'percentual' ? (
+          <label className="text-xs font-semibold text-slate-700">Acréscimo sobre o custo (%) *
+            <input className={campo+' mt-1'} inputMode="decimal" required value={form.acrescimo} onChange={e => alterar('acrescimo', e.target.value)} placeholder="Ex.: 30"/>
+          </label>
+        ) : (
+          <label className="text-xs font-semibold text-slate-700">Preço de venda (R$) *
+            <input className={campo+' mt-1'} inputMode="decimal" required value={form.preco} onChange={e => alterar('preco', e.target.value)} placeholder="Ex.: 130,00"/>
+          </label>
+        )}
+        <div className="sm:col-span-2 rounded-lg border border-blue-200 bg-white p-3 text-xs text-slate-700">
+          <p className="text-sm font-bold text-slate-800">
+            Preço de venda calculado: {precoFinal !== null && precoFinal > 0 ? moeda(precoFinal) : '—'}
+          </p>
+          <p className="mt-1 text-slate-500">
+            {form.modoPreco === 'percentual'
+              ? 'Percentual aplicado sobre o custo. Ex.: R$ 100 + 30% = R$ 130.'
+              : 'O preço digitado será salvo no catálogo e utilizado nesta venda ou orçamento.'}
+          </p>
+          {acrescimoEquivalente !== null && (
+            <p className="mt-1">Acréscimo equivalente sobre custo: {acrescimoEquivalente.toFixed(2)}%</p>
+          )}
+          {margemReal !== null && (
+            <p className={margemReal < 0 ? 'mt-1 font-semibold text-amber-700' : 'mt-1'}>
+              {margemReal < 0 ? 'Atenção: preço de venda abaixo do custo.' : 'Margem real estimada: ' + margemReal.toFixed(2) + '%'}
+            </p>
+          )}
+        </div>
         <label className="text-xs font-semibold text-slate-700">Foto {['perfil','acessorio'].includes(form.categoria) ? '*' : '(opcional)'}
           <span className={campo+' mt-1 flex items-center gap-2 text-slate-600'}>
             <ImagePlus size={17}/>{foto ? foto.name : 'Escolher imagem'}
