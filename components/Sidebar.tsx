@@ -192,7 +192,7 @@ export default function Sidebar() {
     return !setor || nivelEfetivo(usuario, setor.id, permissoesAcesso) !== 'oculto'
   }
   const gruposVisiveis = useMemo(() => {
-    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master') && (guia.href !== '/cadastros' || podeVerCadastros) && (guia.href !== '/crm/comercial' || podeAcessarCRM) && (guia.href !== '/compras/entrada-manual' || podeReceberManual) && guiaLiberada(guia.href))
+    const permitidas = GUIAS.filter(guia => (!guia.masterOnly || usuario?.role === 'master' || guia.grupo === 'RH') && (guia.href !== '/cadastros' || podeVerCadastros) && (guia.href !== '/crm/comercial' || podeAcessarCRM) && (guia.href !== '/compras/entrada-manual' || podeReceberManual) && guiaLiberada(guia.href))
     const filtradas = (termo
       ? permitidas.filter(guia => correspondePesquisaAtlas(termo, guia.label, guia.grupo, guia.href))
       : permitidas
