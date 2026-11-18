@@ -20,7 +20,7 @@ const hoje = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/S
 const dataBr = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.split('-').reverse().join('/') : ''
 const numeroBr = (n: number) => new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n || 0)
 const moeda = (n: number) => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n || 0)
-const parseNumero = (s: string) => Number(String(s).replace(/\./g,'').replace(',','.')) || 0
+const parseNumero = (s: string) => { const t=String(s||'').trim(); return Number(t.includes(',')?t.replace(/\./g,'').replace(',','.'):t)||0 }
 const arredonda = (n: number) => Math.round(n * 100) / 100
 const campo = 'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-blue-600 focus:outline-none'
 const eventoInicial = (base = 0): Evento => ({
@@ -191,7 +191,7 @@ export default function AdiantamentosRH() {
   .rh-corpo-principal{min-width:0}
   .rh-tabela-recibo{width:100%;border-collapse:collapse;table-layout:fixed;border:.35mm solid black;font-size:6.6pt}
   .rh-tabela-recibo th{border-right:.2mm solid black;border-bottom:.35mm solid black;padding:.45mm .15mm;text-align:center;white-space:nowrap;font-weight:bold}
-  .rh-altura-lancamentos{height:70mm}
+  .rh-altura-lancamentos{height:65mm}
   .rh-altura-lancamentos>td{padding:0;vertical-align:top}
   .rh-tabela-interna{width:100%;border-collapse:collapse;table-layout:fixed}
   .rh-tabela-interna td{padding:.65mm .15mm;border-right:.2mm solid black;text-align:right;vertical-align:top;height:4.1mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -211,7 +211,7 @@ export default function AdiantamentosRH() {
   .rh-assinatura-area{display:flex;flex-direction:column;justify-content:space-around;align-items:center;writing-mode:vertical-rl;transform:rotate(180deg);text-align:center;font-size:5.8pt}
   .rh-assinatura-area span{border-top:.2mm solid #111;padding-top:2mm}
   .rh-rodape{font-size:6.4pt;margin-top:1mm;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
-  .rh-separacao{height:9mm;border-bottom:.2mm dashed #aaa;margin-bottom:5mm}
+  .rh-separacao{height:5mm;border-bottom:.2mm dashed #aaa;margin-bottom:3mm}
   @media screen{.rh-pagina-a4{box-shadow:0 4px 20px rgba(0,0,0,.16);transform-origin:top left}}
   @media print{
    @page{size:A4 portrait;margin:0}
@@ -258,7 +258,7 @@ export default function AdiantamentosRH() {
      </div>
      <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Lançamentos do recibo</h3><div className="flex flex-wrap gap-2"><button type="button" onClick={aplicarPercentual} className="rounded-lg border px-3 py-2 text-xs font-semibold">Recalcular percentual do adiantamento</button><button type="button" disabled={form.dados.itens.length>=12} onClick={()=>mudarDados('itens',[...form.dados.itens,{dia:hoje().slice(8,10),codigo:'',descricao:'',quantidade:'',referencia:'',base:'',vencimentos:0,descontos:0}])} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs"><Plus size={13}/>Linha</button></div></div>
-      <div className="space-y-2">{form.dados.itens.map((it,i)=><div key={i} className="grid grid-cols-2 gap-2 rounded-lg border bg-slate-50 p-3 sm:grid-cols-4 lg:grid-cols-9 lg:items-end">
+      <div className="space-y-2">{form.dados.itens.map((it,i)=><div key={i} className="grid grid-cols-2 gap-2 rounded-lg border bg-slate-50 p-3 sm:grid-cols-4 lg:grid-cols-10 lg:items-end">
        {([['dia','Dia'],['codigo','Código'],['descricao','Descrição'],['quantidade','Quant/%'],['referencia','Referência'],['base','Vr.Unit./Base']] as [keyof Evento,string][]).map(([key,label])=><label key={key} className={'text-xs '+(key==='descricao'?'col-span-2 lg:col-span-2':'')} >{label}<input value={String(it[key])} onChange={e=>evento(i,key,e.target.value)} className={campo}/></label>)}
        <label className="text-xs">Vencimentos<input type="number" min="0" step=".01" value={it.vencimentos} onChange={e=>evento(i,'vencimentos',Number(e.target.value)||0)} className={campo}/></label>
        <label className="text-xs">Descontos<input type="number" min="0" step=".01" value={it.descontos} onChange={e=>evento(i,'descontos',Number(e.target.value)||0)} className={campo}/></label>
