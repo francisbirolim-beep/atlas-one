@@ -67,6 +67,7 @@ export const GUIAS: Guia[] = [
   { href: '/rh/adiantamentos', label: 'Recibos de adiantamento', icon: ReceiptText, grupo: 'RH', masterOnly: true },
 
   { href: '/balcao/caixa', label: 'Caixa', icon: WalletCards, grupo: 'Financeiro' },
+  { href: '/financeiro/fluxo-caixa', label: 'Fluxo de Caixa', icon: BarChart3, grupo: 'Financeiro', masterOnly: true },
   { href: '/financeiro/contas-pagar', label: 'Contas a pagar', icon: WalletCards, grupo: 'Financeiro' },
   { href: '/financeiro/contas-receber', label: 'Contas a receber', icon: WalletCards, grupo: 'Financeiro' },
 
