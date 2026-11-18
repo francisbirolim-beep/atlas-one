@@ -19,7 +19,8 @@ const campos = {
  fgts_mes: 30, base_irrf: 30, observacoes: 600, rodape: 250,
 } as const
 const valorEmCentavos = (v: unknown): number | null => {
- const n = Number(v)
+ const normalized = typeof v === 'string' && v.includes(',') ? v.replace(/\./g, '').replace(',', '.') : v
+ const n = Number(normalized)
  if (v === '' || v == null || !Number.isFinite(n) || n < 0 || n > 100000000 || Math.abs(n * 100 - Math.round(n * 100)) > .001) return null
  return Math.round(n * 100)
 }
