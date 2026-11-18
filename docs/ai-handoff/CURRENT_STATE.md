@@ -2,7 +2,7 @@
 
 - Nova rota documental `/processos` disponível somente na branch `feat/processos-editor-20261118`; bloqueio inicial Master, sem API, migração, leitura ou escrita do banco.
 - Editor de organogramas e fluxogramas por setor e processo: criar e arrastar caixas, ligar setas, decisões Sim/Não, editar responsáveis, passo a passo e imagens, salvar rascunho local, exportar/importar JSON.
-- Exemplo Compras/Recebimento apenas ilustrativo; **não** altera condições oficiais de liberação da produção e instalação. Sem alteração de módulo operacional ou menu.
+- Exemplo Compras/Recebimento apenas ilustrativo; **não** altera condições oficiais de liberação da produção e instalação. Sem alteração de módulo operacional; link aditivo Master no menu da branch, não publicado.
 - Documentação e escopo em `docs/processos-empresa-editor-v1.md`. Pendente teste CI, revisão visual/mobile, revisão de permissões e aprovação para preview; nenhum deploy realizado.
 
 ## 2026-11-03 — Cadastros de clientes: busca contextual, inativacao e unificacao segura (BRANCH ISOLADA, NAO PUBLICADA)
