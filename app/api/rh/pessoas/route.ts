@@ -27,9 +27,12 @@ function campos(b:any) {
  if(cpf_cnpj && ![11,14].includes(cpf_cnpj.replace(/\D/g,'').length))return {error:'CPF/CNPJ deve conter 11 ou 14 dígitos quando informado.'}
  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return {error:'E-mail inválido.'}
  const salario=b.salario_base==null||String(b.salario_base).trim()===''?null:Number(b.salario_base)
- if(salario!==null && (!Number.isFinite(salario)||salario<0||Math.round(salario*100)!==salario*100))return {error:'Salário base inválido.'}
+ if(salario!==null && (!Number.isFinite(salario)||salario<0||Math.abs(Math.round(salario*100)-salario*100)>0.001))return {error:'Salário base inválido.'}
  const data=texto(b.data_admissao,10)
- if(data && (!/^\d{4}-\d{2}-\d{2}$/.test(data)||new Date(data+'T12:00:00Z').toISOString().slice(0,10)!==data))return {error:'Data de admissão inválida.'}
+ if(data){
+  const date=new Date(data+'T12:00:00Z')
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(data)||Number.isNaN(date.getTime())||date.toISOString().slice(0,10)!==data)return {error:'Data de admissão inválida.'}
+ }
  return {dados:{nome,tipo,cpf_cnpj:cpf_cnpj||null,telefone:texto(b.telefone,30)||null,
   email:email||null,endereco:texto(b.endereco,250)||null,cargo:texto(b.cargo,120)||null,
   setor:texto(b.setor,100)||null,data_admissao:data||null,salario_base:salario,
