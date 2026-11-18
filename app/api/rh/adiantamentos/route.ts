@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarCompras } from '@/lib/comprasServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { acessoRHServer } from '@/lib/rhAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -30,11 +31,14 @@ function dataValida(v: string) {
  const d = new Date(v + 'T12:00:00Z')
  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v
 }
-async function auth(req: NextRequest) {
+async function auth(req: NextRequest,modo:'consulta'|'edicao'='consulta') {
  const usuario = await autenticarCompras(req)
  if (!usuario) return { error: erro('Sessão inválida.', 401) }
- if (usuario.role !== 'master') return { error: erro('Recibos do RH restritos ao Master.', 403) }
- return { usuario }
+ try{
+  const acl=await acessoRHServer(usuario,'adiantamentos')
+  if(!acl.consultar || (modo==='edicao'&&!acl.editar))return {error:erro('Sem autorização para os recibos do RH.',403)}
+  return {usuario,podeEditar:acl.editar}
+ }catch(e){console.error('Permissão de recibos RH',e);return {error:erro('Não foi possível conferir a autorização de RH.',503)}}
 }
 function validar(body: any) {
  if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Dados inválidos.' }
@@ -98,7 +102,7 @@ export async function GET(req: NextRequest) {
    }
    throw recibos.error
   }
-  return NextResponse.json({ ok: true, pessoas: pessoas.data || [], recibos: recibos.data || [] },
+  return NextResponse.json({ ok: true, podeEditar:acesso.podeEditar, pessoas: pessoas.data || [], recibos: recibos.data || [] },
    { headers: { 'Cache-Control': 'private, no-store' } })
  } catch (e) {
   console.error('RH adiantamentos GET', e)
@@ -106,7 +110,7 @@ export async function GET(req: NextRequest) {
  }
 }
 export async function POST(req: NextRequest) {
- const acesso = await auth(req); if (acesso.error) return acesso.error
+ const acesso = await auth(req,'edicao'); if (acesso.error) return acesso.error
  if (preview()) return erro('Ambiente de prévia: gravação desabilitada.', 423)
  const u = acesso.usuario!
  try {
@@ -131,7 +135,7 @@ export async function POST(req: NextRequest) {
  }
 }
 export async function PATCH(req: NextRequest) {
- const acesso = await auth(req); if (acesso.error) return acesso.error
+ const acesso = await auth(req,'edicao'); if (acesso.error) return acesso.error
  if (preview()) return erro('Ambiente de prévia: gravação desabilitada.', 423)
  const u = acesso.usuario!
  try {
