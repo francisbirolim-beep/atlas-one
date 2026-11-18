@@ -18,15 +18,15 @@ export async function GET(req:NextRequest){
  try{
   const limite=limiteSeguro(req.nextUrl.searchParams.get('limit'),300,1000)
   const status=req.nextUrl.searchParams.get('status')
-  let q=supabaseAdmin.from('financeiro_contas_pagar').select('id,nf_id,fornecedor_id,fornecedor_nome,documento,parcela,descricao,data_emissao,vencimento,valor,status,data_pagamento,valor_pago,forma_pagamento,forma_pagamento_prevista,origem,observacoes,created_at,valor_desconto,valor_juros,valor_multa,valor_troco').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(limite)
+  let q=supabaseAdmin.from('financeiro_contas_pagar').select('id,nf_id,fornecedor_id,fornecedor_nome,documento,parcela,descricao,data_emissao,vencimento,valor,status,data_pagamento,valor_pago,forma_pagamento,forma_pagamento_prevista,origem,rh_pessoa_id,observacoes,created_at,valor_desconto,valor_juros,valor_multa,valor_troco').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(limite)
   if(status)q=q.eq('status',status)
   let {data,error}=await q
   // Prévia somente leitura enquanto as colunas novas aguardam migração de homologação.
-  if(error && process.env.VERCEL_ENV==='preview' && /valor_desconto|valor_juros|valor_multa|valor_troco/i.test(error.message)){
+  if(error && process.env.VERCEL_ENV==='preview' && /valor_desconto|valor_juros|valor_multa|valor_troco|rh_pessoa_id/i.test(error.message)){
     let antiga=supabaseAdmin.from('financeiro_contas_pagar').select('id,nf_id,fornecedor_id,fornecedor_nome,documento,parcela,descricao,data_emissao,vencimento,valor,status,data_pagamento,valor_pago,forma_pagamento,forma_pagamento_prevista,origem,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).order('created_at',{ascending:false}).limit(limite)
     if(status)antiga=antiga.eq('status',status)
     const resultado=await antiga
-    data=(resultado.data||[]).map(c=>({...c,valor_desconto:0,valor_juros:0,valor_multa:0,valor_troco:0})) as unknown as typeof data
+    data=(resultado.data||[]).map(c=>({...c,valor_desconto:0,valor_juros:0,valor_multa:0,valor_troco:0,rh_pessoa_id:null})) as unknown as typeof data
     error=resultado.error
   }
   if(error)throw error
@@ -46,7 +46,9 @@ export async function GET(req:NextRequest){
    ids.length?supabaseAdmin.from('financeiro_conta_classificacoes').select('conta_pagar_id,plano_conta_id').eq('empresa_id',u.empresa_id).in('conta_pagar_id',ids):Promise.resolve({data:[],error:null})
   ])
   if(categorias.error||alocacoes.error)throw categorias.error||alocacoes.error
-  return NextResponse.json({ok:true,fornecedoresCadastro:cadastroFornecedores.data||[],contas,categorias:categorias.data||[],classificacoes:alocacoes.data||[]})
+  const rh=await supabaseAdmin.from('rh_pessoas').select('id,nome,tipo').eq('empresa_id',u.empresa_id).order('nome').limit(2000)
+  if(rh.error && !(process.env.VERCEL_ENV==='preview' && ['42P01','PGRST205'].includes(rh.error.code||'')))throw rh.error
+  return NextResponse.json({ok:true,fornecedoresCadastro:cadastroFornecedores.data||[],pessoasRH:rh.error?[]:rh.data||[],contas,categorias:categorias.data||[],classificacoes:alocacoes.data||[]})
  }catch(e){console.error(e);return NextResponse.json({error:'Não foi possível carregar Contas a Pagar.'},{status:500})}
 }
 

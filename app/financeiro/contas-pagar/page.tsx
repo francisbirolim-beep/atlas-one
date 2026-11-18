@@ -10,16 +10,19 @@ import {baixarCSV,csvFinanceiro,dinheiro,formatarData,isoLocal,noPeriodo,periodo
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 import { calcularBaixaPagar, saldoContaPagar } from '@/lib/contasPagarAjustes'
 
-type Conta={id:string;nf_id:string|null;fornecedor_id?:string|null;fornecedor_nome:string|null;fornecedor_cnpj_cpf?:string|null;fornecedor_cidade?:string|null;documento:string|null;parcela:string;descricao:string|null;data_emissao:string|null;vencimento:string|null;valor:number;status:string;data_pagamento:string|null;valor_pago:number|null;valor_desconto?:number|null;valor_juros?:number|null;valor_multa?:number|null;valor_troco?:number|null;forma_pagamento:string|null;forma_pagamento_prevista?:string|null;origem?:string|null}
+type Conta={id:string;nf_id:string|null;rh_pessoa_id?:string|null;fornecedor_id?:string|null;fornecedor_nome:string|null;fornecedor_cnpj_cpf?:string|null;fornecedor_cidade?:string|null;documento:string|null;parcela:string;descricao:string|null;data_emissao:string|null;vencimento:string|null;valor:number;status:string;data_pagamento:string|null;valor_pago:number|null;valor_desconto?:number|null;valor_juros?:number|null;valor_multa?:number|null;valor_troco?:number|null;forma_pagamento:string|null;forma_pagamento_prevista?:string|null;origem?:string|null}
 type FormPagamento={dataPagamento:string;formaPagamento:string;valorEntregue:string;valorDesconto:string;valorJuros:string;valorMulta:string;valorTroco:string}
 const campoDinheiro='mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500'
 
 type FornecedorCadastro={id:string;nome:string;cnpj_cpf:string|null;cidade:string|null;telefone:string|null}
 type Situacao='todas'|'aberto'|'vencido'|'pago'|'cancelado'
 type Categoria={id:string;codigo:string;nome:string;grupo:string}
+type PessoaRH={id:string;nome:string;tipo:'funcionario'|'prestador'|'terceiro'|'fornecedor'}
 export default function ContasPagarPage(){
  const[contas,setContas]=useState<Conta[]>([]),[loading,setLoading]=useState(true),[erro,setErro]=useState(''),[acao,setAcao]=useState('')
  const[fornecedoresCadastro,setFornecedoresCadastro]=useState<FornecedorCadastro[]>([])
+ const[pessoasRH,setPessoasRH]=useState<PessoaRH[]>([])
+ const[tipoPessoa,setTipoPessoa]=useState(''),[pessoaRHFiltro,setPessoaRHFiltro]=useState('')
  const[modalPagamento,setModalPagamento]=useState<Conta|null>(null)
  const[aviso,setAviso]=useState('')
  const[formPagamento,setFormPagamento]=useState<FormPagamento>({dataPagamento:'',formaPagamento:'pix',valorEntregue:'0',valorDesconto:'0',valorJuros:'0',valorMulta:'0',valorTroco:'0'})
@@ -28,7 +31,7 @@ export default function ContasPagarPage(){
  const[categorias,setCategorias]=useState<Categoria[]>([]),[classificacoes,setClassificacoes]=useState<Record<string,string>>({})
  const[periodo,setPeriodo]=useState<PeriodoFinanceiro>(()=>periodoRapido('todos'))
  const[situacao,setSituacao]=useState<Situacao>('aberto'),[fornecedor,setFornecedor]=useState(''),[busca,setBusca]=useState(''),[dataBase,setDataBase]=useState<'vencimento'|'pagamento'>('vencimento'),[agrupar,setAgrupar]=useState(false)
- async function carregar(){setLoading(true);setErro('');try{const t=await tokenAtual();if(!t)throw new Error('Sessão expirada.');const r=await fetch('/api/financeiro/contas-pagar?limit=1000',{headers:{Authorization:`Bearer ${t}`},cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'Erro');setContas(j.contas||[]);setFornecedoresCadastro(j.fornecedoresCadastro||[]);setCategorias(j.categorias||[]);setClassificacoes(Object.fromEntries((j.classificacoes||[]).map((v:{conta_pagar_id:string;plano_conta_id:string})=>[v.conta_pagar_id,v.plano_conta_id])))}catch(e){setErro(e instanceof Error?e.message:'Erro ao carregar.')}finally{setLoading(false)}}
+ async function carregar(){setLoading(true);setErro('');try{const t=await tokenAtual();if(!t)throw new Error('Sessão expirada.');const r=await fetch('/api/financeiro/contas-pagar?limit=1000',{headers:{Authorization:`Bearer ${t}`},cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'Erro');setContas(j.contas||[]);setFornecedoresCadastro(j.fornecedoresCadastro||[]);setPessoasRH(j.pessoasRH||[]);setCategorias(j.categorias||[]);setClassificacoes(Object.fromEntries((j.classificacoes||[]).map((v:{conta_pagar_id:string;plano_conta_id:string})=>[v.conta_pagar_id,v.plano_conta_id])))}catch(e){setErro(e instanceof Error?e.message:'Erro ao carregar.')}finally{setLoading(false)}}
  useEffect(()=>{void carregar()},[])
  function abrirPagamento(conta:Conta){
   setErro('');setAviso('');setModalPagamento(conta)
@@ -82,14 +85,16 @@ export default function ContasPagarPage(){
   }catch(e){setErro(e instanceof Error?e.message:'Erro ao classificar.')}finally{setAcao('')}
  }
  const hoje=isoLocal(new Date())
- const fornecedores=useMemo(()=>[...new Set(contas.map(c=>c.fornecedor_nome||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[contas])
+ const fornecedores=useMemo(()=>[...new Set(contas.filter(c=>!c.rh_pessoa_id).map(c=>c.fornecedor_nome||'').filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')),[contas])
+ const mapaRH=useMemo(()=>new Map(pessoasRH.map(p=>[p.id,p])),[pessoasRH])
+ const tipoDoTitulo=(c:Conta)=>c.rh_pessoa_id?mapaRH.get(c.rh_pessoa_id)?.tipo||'':'fornecedor'
  const encontradosCadastro=useMemo(()=>busca.trim()?fornecedoresCadastro.filter(f=>correspondeBuscaAtlas(busca,f.nome,f.cnpj_cpf,f.cidade,f.telefone)):[],[fornecedoresCadastro,busca])
  const filtradas=useMemo(()=>contas.filter(c=>{
   const vencida=(c.status==='aberto'||c.status==='pendente_vencimento')&&!!c.vencimento&&c.vencimento<hoje
   const okSituacao=situacao==='todas'||(situacao==='vencido'&&vencida)||(situacao==='aberto'&&(c.status==='aberto'||c.status==='pendente_vencimento'))||c.status===situacao
   const campo=dataBase==='pagamento'?c.data_pagamento:c.vencimento
-  return okSituacao&&(!fornecedor||c.fornecedor_nome===fornecedor)&&noPeriodo(campo,periodo.inicio,periodo.fim)&&correspondeBuscaAtlas(busca,c.fornecedor_nome,c.fornecedor_cnpj_cpf,c.fornecedor_cidade,c.documento,c.descricao,c.parcela)
- }),[contas,situacao,fornecedor,periodo,dataBase,busca,hoje])
+  return okSituacao&&(!fornecedor||(!c.rh_pessoa_id&&c.fornecedor_nome===fornecedor))&&(!tipoPessoa||tipoDoTitulo(c)===tipoPessoa)&&(!pessoaRHFiltro||c.rh_pessoa_id===pessoaRHFiltro)&&noPeriodo(campo,periodo.inicio,periodo.fim)&&correspondeBuscaAtlas(busca,c.fornecedor_nome,c.fornecedor_cnpj_cpf,c.fornecedor_cidade,c.documento,c.descricao,c.parcela)
+ }),[contas,situacao,fornecedor,tipoPessoa,pessoaRHFiltro,mapaRH,periodo,dataBase,busca,hoje])
  const exibidas=useMemo(()=>agrupar?[...filtradas].sort((a,b)=>(a.fornecedor_nome||'').localeCompare(b.fornecedor_nome||'','pt-BR')||(a.vencimento||'').localeCompare(b.vencimento||'')):filtradas,[filtradas,agrupar])
  const resumo=useMemo(()=>({
   aberto:filtradas.filter(c=>['aberto','pendente_vencimento'].includes(c.status)).reduce((s,c)=>s+saldoContaPagar(c),0),
@@ -109,6 +114,8 @@ export default function ContasPagarPage(){
  {erro&&<div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
  {aviso&&<div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">{aviso}</div>}
  <BarraFiltrosPeriodo periodo={periodo} onPeriodo={setPeriodo} onExportar={csv} adicional={<>
+   <label className="text-xs font-semibold text-slate-600">Tipo de pessoa<select value={tipoPessoa} onChange={e=>{setTipoPessoa(e.target.value);setPessoaRHFiltro('');setFornecedor('')}} className="mt-1 block max-w-[180px] rounded-lg border p-2.5 text-sm"><option value="">Todos</option><option value="funcionario">Funcionário</option><option value="prestador">Prestador de serviço</option><option value="terceiro">Terceiro</option><option value="fornecedor">Fornecedor</option></select></label>
+   <label className="text-xs font-semibold text-slate-600">Pessoa do RH<select value={pessoaRHFiltro} onChange={e=>{setPessoaRHFiltro(e.target.value);setFornecedor('')}} className="mt-1 block max-w-[210px] rounded-lg border p-2.5 text-sm"><option value="">Todas as pessoas</option>{pessoasRH.filter(p=>!tipoPessoa||p.tipo===tipoPessoa).map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}</select></label>
    <label className="text-xs font-semibold text-slate-600">Fornecedor<select value={fornecedor} onChange={e=>setFornecedor(e.target.value)} className="mt-1 block max-w-[220px] rounded-lg border p-2.5 text-sm"><option value="">Todos os fornecedores</option>{fornecedores.map(n=><option key={n} value={n}>{n}</option>)}</select></label>
    <label className="text-xs font-semibold text-slate-600">Situação<select value={situacao} onChange={e=>setSituacao(e.target.value as Situacao)} className="mt-1 block rounded-lg border p-2.5 text-sm">{[['todas','Todas'],['aberto','Em aberto'],['vencido','Vencidas'],['pago','Pagas'],['cancelado','Canceladas']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
    <label className="text-xs font-semibold text-slate-600">Período pela data<select value={dataBase} onChange={e=>setDataBase(e.target.value as 'vencimento'|'pagamento')} className="mt-1 block rounded-lg border p-2.5 text-sm"><option value="vencimento">Vencimento</option><option value="pagamento">Pagamento efetivo</option></select></label>

@@ -68,7 +68,9 @@ export async function GET(req:NextRequest){
    pagar?supabaseAdmin.from('compras_nfs').select('id,numero,fornecedor_id,fornecedor_nome,data_emissao').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(250):Promise.resolve({data:[],error:null})
   ])
   const all=[forn,cli,plano,obras,compras];if(all.some(v=>v.error))return erro('Falha ao consultar cadastros do Financeiro.',500)
-  return NextResponse.json({ok:true,fornecedores:forn.data||[],clientes:cli.data||[],planoContas:plano.data||[],obras:obras.data||[],compras:compras.data||[],grupos:TITULOS_GRUPOS,modelosPlano:PLANO_CONTAS_PADRAO})
+  const rh=await supabaseAdmin.from('rh_pessoas').select('id,nome,tipo').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(1200)
+  if(rh.error && !(process.env.VERCEL_ENV==='preview' && ['42P01','PGRST205','42703'].includes(rh.error.code||'')))throw rh.error
+  return NextResponse.json({ok:true,fornecedores:forn.data||[],clientes:cli.data||[],rhPessoas:rh.error?[]:rh.data||[],planoContas:plano.data||[],obras:obras.data||[],compras:compras.data||[],grupos:TITULOS_GRUPOS,modelosPlano:PLANO_CONTAS_PADRAO})
  }catch(e){console.error('cadastros financeiro',e);return erro('Não foi possível carregar os cadastros.',500)}
 }
 
@@ -121,6 +123,23 @@ export async function POST(req:NextRequest){
    if(eUpdate){if(eUpdate.code==='23505')return erro('Código de categoria já utilizado.',409);throw eUpdate}
    if(!editada)return erro('Não foi possível atualizar a categoria.',409)
    return NextResponse.json({ok:true,categoria:editada})
+  }
+  if(operacao==='nova-pessoa'){
+   const nome=str(b.nome,170),vinculo=str(b.vinculo,20)
+   const documento=str(b.documento,35),telefone=str(b.telefone,30),email=str(b.email,160)
+   if(nome.length<3)return erro('Informe o nome completo ou razão social.')
+   if(!['funcionario','prestador','terceiro','fornecedor'].includes(vinculo))return erro('Selecione o tipo do cadastro.')
+   if(documento&&![11,14].includes(documento.replace(/\D/g,'').length))return erro('CPF/CNPJ deve ter 11 ou 14 dígitos, se informado.')
+   const semelhante=await supabaseAdmin.from('rh_pessoas').select('id,nome,tipo').eq('empresa_id',u.empresa_id).eq('tipo',vinculo).ilike('nome',nome).limit(5)
+   if(semelhante.error)throw semelhante.error
+   const existente=(semelhante.data||[]).find(p=>p.nome.toLocaleLowerCase('pt-BR')===nome.toLocaleLowerCase('pt-BR'))
+   if(existente)return NextResponse.json({ok:true,cadastro:existente,existente:true})
+   const {data,error}=await supabaseAdmin.from('rh_pessoas').insert({
+    empresa_id:u.empresa_id,nome,tipo:vinculo,cpf_cnpj:documento||null,telefone:telefone||null,email:email||null,
+    ativo:true,criado_por_id:u.id,criado_por_nome:u.nome
+   }).select('id,nome,tipo').single()
+   if(error){if(error.code==='23505')return erro('CPF/CNPJ já cadastrado. Localize a pessoa existente.',409);throw error}
+   return NextResponse.json({ok:true,cadastro:data})
   }
   if(operacao==='novo-cadastro'){
    const nome=str(b.nome,170)
@@ -182,7 +201,11 @@ export async function POST(req:NextRequest){
   const parcelas=validarParcelas(b)
   if('error' in parcelas)return erro(parcelas.error||'Parcelas inválidas.')
   const identificador=str(b.identificador,60)
-  if(!uuid.test(identificador))return erro('Selecione um fornecedor ou cliente cadastrado.')
+  const cadastroRH=str(b.cadastroOrigem,20)==='rh'
+  if(!uuid.test(identificador))return erro('Selecione um cadastro válido.')
+  const rhPessoa=cadastroRH?await supabaseAdmin.from('rh_pessoas').select('id,nome,tipo').eq('empresa_id',u.empresa_id).eq('id',identificador).eq('ativo',true).maybeSingle():null
+  if(rhPessoa?.error)throw rhPessoa.error
+  if(cadastroRH&&!rhPessoa?.data)return erro('Pessoa do RH não localizada nesta empresa ou inativa.',404)
   const obs=str(b.observacoes,600),documento=str(b.documento,100),forma=str(b.forma,45)
   const descricao=str(b.descricao,230)
   const ids=Array.from({length:parcelas.quantidade},(_,i)=>uuidParcela(u.empresa_id,str(b.chaveLote,60),i+1))
@@ -194,8 +217,9 @@ export async function POST(req:NextRequest){
     supabaseAdmin.from('financeiro_plano_contas').select('id,grupo').eq('empresa_id',u.empresa_id).eq('id',categoriaId).eq('ativo',true).maybeSingle()
    ])
    if(forn.error||cat.error)throw forn.error||cat.error
-   if(!forn.data||!cat.data)return erro('Fornecedor ou categoria não pertence à empresa.',404)
+   if((!cadastroRH&&!forn.data)||!cat.data)return erro('Cadastro ou categoria não pertence à empresa.',404)
    const notaId=str(b.compraId,60)
+   if(cadastroRH&&notaId)return erro('Uma pessoa cadastrada no RH não pode ser vinculada à NF de um fornecedor.',422)
    let compraDescricao=''
    if(notaId){
     if(!uuid.test(notaId))return erro('Compra inválida.')
@@ -210,11 +234,11 @@ export async function POST(req:NextRequest){
     // por parcela. A referência fica documentada sem duplicar vínculo fiscal automático.
    }
    if(documento){
-     const possiveis=await supabaseAdmin.from('financeiro_contas_pagar').select('id,vencimento,valor').eq('empresa_id',u.empresa_id).eq('fornecedor_id',identificador).eq('documento',documento).neq('status','cancelado').limit(100)
+     const possiveis=await supabaseAdmin.from('financeiro_contas_pagar').select('id,vencimento,valor').eq('empresa_id',u.empresa_id).eq(cadastroRH?'rh_pessoa_id':'fornecedor_id',identificador).eq('documento',documento).neq('status','cancelado').limit(100)
      if(possiveis.error)throw possiveis.error
      if((possiveis.data||[]).some(c=>parcelas.vencimentos!.includes(c.vencimento)))return erro('Já existe título deste fornecedor com o mesmo documento e vencimento. Confira antes de lançar novamente.',409)
    }
-   const registros=parcelas.parcelas!.map((valor,i)=>({id:ids[i],empresa_id:u.empresa_id,fornecedor_id:forn.data!.id,fornecedor_nome:forn.data!.nome,documento:documento||null,parcela:`${i+1}/${parcelas.quantidade}`,descricao:descricao||null,data_emissao:str(b.dataEmissao,10),vencimento:parcelas.vencimentos![i],valor,status:'aberto',forma_pagamento_prevista:forma||null,origem:'lancamento_manual',observacoes:[obs,compraDescricao].filter(Boolean).join(' | ')||null,criado_por_id:u.id,criado_por_nome:u.nome}))
+   const registros=parcelas.parcelas!.map((valor,i)=>({id:ids[i],empresa_id:u.empresa_id,fornecedor_id:cadastroRH?null:forn.data!.id,fornecedor_nome:cadastroRH?rhPessoa!.data!.nome:forn.data!.nome,...(cadastroRH?{rh_pessoa_id:identificador}:{}),documento:documento||null,parcela:`${i+1}/${parcelas.quantidade}`,descricao:descricao||null,data_emissao:str(b.dataEmissao,10),vencimento:parcelas.vencimentos![i],valor,status:'aberto',forma_pagamento_prevista:forma||null,origem:'lancamento_manual',observacoes:[obs,compraDescricao].filter(Boolean).join(' | ')||null,criado_por_id:u.id,criado_por_nome:u.nome}))
    const {data:novos,error}=await supabaseAdmin.from('financeiro_contas_pagar').upsert(registros,{onConflict:'id',ignoreDuplicates:true}).select('id')
    if(error)throw error
    const classificados=ids.map(id=>({empresa_id:u.empresa_id,conta_pagar_id:id,plano_conta_id:categoriaId,classificado_por_id:u.id,classificado_por_nome:u.nome}))
@@ -227,8 +251,9 @@ export async function POST(req:NextRequest){
   }
   const {data:cliente,error:ec}=await supabaseAdmin.from('clientes').select('id,nome').eq('empresa_id',u.empresa_id).eq('id',identificador).maybeSingle()
   if(ec)throw ec
-  if(!cliente)return erro('Cliente não encontrado nesta empresa.',404)
+  if(!cadastroRH&&!cliente)return erro('Cliente não encontrado nesta empresa.',404)
   const obraId=str(b.obraId,60)
+  if(cadastroRH&&obraId)return erro('Uma pessoa do RH não deve ser associada a uma obra do cliente.',422)
   if(obraId){
    if(!uuid.test(obraId))return erro('Obra inválida.')
    const {data:obra,error}=await supabaseAdmin.from('obras').select('id').eq('empresa_id',u.empresa_id).eq('id',obraId).eq('cliente_id',identificador).maybeSingle()
@@ -236,11 +261,11 @@ export async function POST(req:NextRequest){
    if(!obra)return erro('A obra não pertence a este cliente.',422)
   }
   if(documento){
-    const possiveis=await supabaseAdmin.from('financeiro_contas_receber').select('id,vencimento').eq('empresa_id',u.empresa_id).eq('cliente_id',identificador).eq('documento',documento).neq('status','cancelado').limit(100)
+    const possiveis=await supabaseAdmin.from('financeiro_contas_receber').select('id,vencimento').eq('empresa_id',u.empresa_id).eq(cadastroRH?'rh_pessoa_id':'cliente_id',identificador).eq('documento',documento).neq('status','cancelado').limit(100)
     if(possiveis.error)throw possiveis.error
     if((possiveis.data||[]).some(c=>parcelas.vencimentos!.includes(c.vencimento)))return erro('Já existe título do cliente com este documento e vencimento. Confira antes de lançar novamente.',409)
   }
-  const registros=parcelas.parcelas!.map((valor,i)=>({id:ids[i],empresa_id:u.empresa_id,cliente_id:cliente.id,cliente_nome:cliente.nome,obra_id:obraId||null,documento:documento||null,parcela:i+1,total_parcelas:parcelas.quantidade,data_emissao:str(b.dataEmissao,10),vencimento:parcelas.vencimentos![i],valor,status:'aberto',forma:forma||null,observacoes:['Lançamento manual Atlas',descricao,obs].filter(Boolean).join(' | '),criado_por_id:u.id,criado_por_nome:u.nome}))
+  const registros=parcelas.parcelas!.map((valor,i)=>({id:ids[i],empresa_id:u.empresa_id,cliente_id:cadastroRH?null:cliente!.id,cliente_nome:cadastroRH?rhPessoa!.data!.nome:cliente!.nome,...(cadastroRH?{rh_pessoa_id:identificador}:{}),obra_id:obraId||null,documento:documento||null,parcela:i+1,total_parcelas:parcelas.quantidade,data_emissao:str(b.dataEmissao,10),vencimento:parcelas.vencimentos![i],valor,status:'aberto',forma:forma||null,observacoes:['Lançamento manual Atlas',descricao,obs].filter(Boolean).join(' | '),criado_por_id:u.id,criado_por_nome:u.nome}))
   const {data:novos,error}=await supabaseAdmin.from('financeiro_contas_receber').upsert(registros,{onConflict:'id',ignoreDuplicates:true}).select('id')
   if(error)throw error
   return NextResponse.json({ok:true,quantidade:registros.length,duplicado:!novos?.length})
