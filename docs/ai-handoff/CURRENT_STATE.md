@@ -1,3 +1,10 @@
+## 2026-11-18 — Processos da Empresa (BRANCH ISOLADA, NÃO PUBLICADA)
+
+- Nova rota documental `/processos` disponível somente na branch `feat/processos-editor-20261118`; bloqueio inicial Master, sem API, migração, leitura ou escrita do banco.
+- Editor de organogramas e fluxogramas por setor e processo: criar e arrastar caixas, ligar setas, decisões Sim/Não, editar responsáveis, passo a passo e imagens, salvar rascunho local, exportar/importar JSON.
+- Exemplo Compras/Recebimento apenas ilustrativo; **não** altera condições oficiais de liberação da produção e instalação. Sem alteração de módulo operacional ou menu.
+- Documentação e escopo em `docs/processos-empresa-editor-v1.md`. Pendente teste CI, revisão visual/mobile, revisão de permissões e aprovação para preview; nenhum deploy realizado.
+
 ## 2026-11-03 — Cadastros de clientes: busca contextual, inativacao e unificacao segura (BRANCH ISOLADA, NAO PUBLICADA)
 
 - Branch `feat/clientes-deduplicacao-20261103`, baseada em `origin/main` 9b0e8709. Nada implantado no dominio ou banco real.
