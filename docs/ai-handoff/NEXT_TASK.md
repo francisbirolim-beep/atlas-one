@@ -1,3 +1,11 @@
+## 2026-11-18 — HOMOLOGAR editor documental de processos sem publicar
+
+1. Validar a branch `feat/processos-editor-20261118` no CI (TypeScript, build e regressões) e corrigir qualquer erro sem alterar os fluxos atuais.
+2. Testar desktop e celular: criar setores e processos, editar caixas, setas, rótulos Sim/Não, organograma, fotos, exportação/importação, limite de armazenamento e acessibilidade.
+3. Verificar com usuário Master e não Master. Antes de disponibilizar dados compartilhados: backend autorizado, segregação por empresa e RLS.
+4. Mostrar o editor a Francis e colher aprovação para um Preview manual. Publicação somente depois de homologação e aprovação expressa; não executar migração nem mudança de menu em produção agora.
+5. Projetar editor de POP com texto/fotos/vídeos, versionamento e trilha de auditoria, preservando os gates reais de produção/instalação.
+
 ## 2026-11-03 — HOMOLOGAR unificacao de clientes, SEM PUBLICAR antes de concluir
 
 1. Aplicar a migration candidata apenas em banco de teste, com snapshot restauravel. Validar as permissões Master/delegado/sem permissão e RLS; consultar advisors de seguranca do Supabase.

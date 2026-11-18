@@ -115,4 +115,7 @@ jobs:
         run: npm run test:permissoes-regra-master
 
       - name: Build
+        # Memória ampliada somente no runner de CI; não muda o Atlas em produção.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm run build
