@@ -68,7 +68,7 @@ export async function GET(req:NextRequest){
    pagar?supabaseAdmin.from('compras_nfs').select('id,numero,fornecedor_id,fornecedor_nome,data_emissao').eq('empresa_id',u.empresa_id).order('created_at',{ascending:false}).limit(250):Promise.resolve({data:[],error:null})
   ])
   const all=[forn,cli,plano,obras,compras];if(all.some(v=>v.error))return erro('Falha ao consultar cadastros do Financeiro.',500)
-  const rh=await supabaseAdmin.from('rh_pessoas').select('id,nome,tipo,cpf_cnpj,telefone,email').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(1200)
+  const rh=await supabaseAdmin.from('rh_pessoas').select('id,nome,tipo').eq('empresa_id',u.empresa_id).eq('ativo',true).order('nome').limit(1200)
   if(rh.error && !(process.env.VERCEL_ENV==='preview' && ['42P01','PGRST205','42703'].includes(rh.error.code||'')))throw rh.error
   return NextResponse.json({ok:true,fornecedores:forn.data||[],clientes:cli.data||[],rhPessoas:rh.error?[]:rh.data||[],planoContas:plano.data||[],obras:obras.data||[],compras:compras.data||[],grupos:TITULOS_GRUPOS,modelosPlano:PLANO_CONTAS_PADRAO})
  }catch(e){console.error('cadastros financeiro',e);return erro('Não foi possível carregar os cadastros.',500)}
