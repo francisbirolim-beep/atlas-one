@@ -8,6 +8,7 @@ export type LinhaPagamento={id:number;forma:FormaPagamento;valor:string}
 export type StatusPagamento='quitada'|'parcial'|'marcada'
 export type ItemVendaRecibo={
   quantidade:number;
+  precoUnitario?:number|null;
   produto:{nome:string;codigo:string;descricao:string;unidade:string;preco:number|null;precoPromocional:number|null}
 }
 export type EmpresaRecibo={nome?:string;nomeFantasia?:string;logoUrl?:string;cnpj?:string;ie?:string;endereco?:string;cidadeUf?:string;cep?:string;tel?:string;tel2?:string;email?:string}
@@ -72,9 +73,9 @@ export default function ReciboVendaPreview(props:ReciboProps){
           </div>
           <table className="mt-2 w-full table-fixed border-collapse text-left text-[10px]">
             <thead className="border-y bg-slate-50"><tr><th className="w-[59%] px-1 py-1.5">Produto e descrição</th><th className="w-[9%] py-1.5 text-right">Qtd.</th><th className="w-[15%] py-1.5 text-right">Unitário</th><th className="w-[17%] py-1.5 text-right">Total</th></tr></thead>
-            <tbody>{pagina.map(({produto,quantidade},i)=><tr key={produto.codigo+'-'+i} className="border-b align-top">
+            <tbody>{pagina.map(({produto,quantidade,precoUnitario},i)=><tr key={produto.codigo+'-'+i} className="border-b align-top">
               <td className="break-words px-1 py-1.5"><b>{produto.nome}</b><span className="ml-1 text-slate-500">({produto.codigo||'Sem código'} · {produto.unidade})</span>{produto.descricao&&<div className="text-slate-600">{produto.descricao}</div>}</td>
-              <td className="py-1.5 text-right">{quantidade}</td><td className="py-1.5 text-right">{moeda(precoItem(produto)||0)}</td><td className="py-1.5 text-right font-bold">{moeda((precoItem(produto)||0)*quantidade)}</td>
+              <td className="py-1.5 text-right">{quantidade}</td><td className="py-1.5 text-right">{moeda(precoUnitario??precoItem(produto)??0)}</td><td className="py-1.5 text-right font-bold">{moeda((precoUnitario??precoItem(produto)??0)*quantidade)}</td>
             </tr>)}</tbody>
           </table>
           {ultima&&<div className="mt-2 grid grid-cols-2 gap-3">
