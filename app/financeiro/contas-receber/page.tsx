@@ -12,6 +12,8 @@ import { saldoParcela } from '@/lib/cliente360Recebimentos'
 import { rotuloFormaRecebimento, type DetalheFormaRecebimento } from '@/lib/recebimentoFormas'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
 
+type ContaRH=ContaReceberCliente360 & {rh_pessoa_id?:string|null}
+type PessoaRH={id:string;nome:string;tipo:'funcionario'|'prestador'|'terceiro'|'fornecedor'}
 type RecebimentoGeral = { formas?:DetalheFormaRecebimento[]; composicaoInconsistente?:boolean; id:string; cliente_id?:string|null; cliente_nome?:string|null; cliente_cpf_cnpj?:string|null; cliente_cidade?:string|null; obra_id?:string|null; data_recebimento?:string|null; valor?:number|null; valor_desconto?:number|null; forma?:string|null; referencia?:string|null; observacoes?:string|null; status?:string|null; criado_por_nome?:string|null; created_at?:string|null; desconto?:number }
 
 function moeda(valor: number) {
@@ -32,7 +34,9 @@ function dataHoraBR(valor?: string | null) {
 }
 
 export default function ContasReceberPage() {
-  const [contas, setContas] = useState<ContaReceberCliente360[]>([])
+  const [contas, setContas] = useState<ContaRH[]>([])
+  const [pessoasRH,setPessoasRH]=useState<PessoaRH[]>([])
+  const [tipoPessoa,setTipoPessoa]=useState(''),[pessoaRHFiltro,setPessoaRHFiltro]=useState('')
   const [recebimentos, setRecebimentos] = useState<RecebimentoGeral[]>([])
   const [nomesObras,setNomesObras]=useState<Record<string,string>>({})
   const [busca, setBusca] = useState('')
@@ -54,7 +58,8 @@ export default function ContasReceberPage() {
       const r=await fetch('/api/financeiro/contas-receber',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
       const dados=await r.json()
       if(!r.ok)throw new Error(dados.error||'Erro ao consultar os títulos.')
-      setContas((dados.contas||[]) as ContaReceberCliente360[])
+      setContas((dados.contas||[]) as ContaRH[])
+      setPessoasRH(dados.pessoasRH||[])
       setRecebimentos((dados.recebimentos||[]) as RecebimentoGeral[])
       setNomesObras(dados.nomesObras||{})
     } catch(e){
@@ -67,11 +72,13 @@ export default function ContasReceberPage() {
   useEffect(() => { void carregar() }, [])
 
   const hoje = isoLocal(new Date())
+  const mapaRH=useMemo(()=>new Map(pessoasRH.map(p=>[p.id,p])),[pessoasRH])
+  const correspondePessoa=(c:ContaRH)=>(!tipoPessoa||(c.rh_pessoa_id?mapaRH.get(c.rh_pessoa_id)?.tipo===tipoPessoa:tipoPessoa==='cliente'))&&(!pessoaRHFiltro||c.rh_pessoa_id===pessoaRHFiltro)
   const clientesDisponiveis=[...new Map(contas.filter(c=>c.cliente_id).map(c=>[c.cliente_id!,c.cliente_nome||'Cliente'])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'pt-BR'))
   const obrasDisponiveis=[...new Set(contas.filter(c=>!clienteFiltro||c.cliente_id===clienteFiltro).map(c=>c.obra_id).filter((v):v is string=>!!v))]
 
   const resumo = useMemo(() => {
-    const base=contas.filter(c=>(!clienteFiltro||c.cliente_id===clienteFiltro)&&(!obraFiltro||c.obra_id===obraFiltro)&&noPeriodo(dataBase==='pagamento'?c.data_pagamento:c.vencimento,periodo.inicio,periodo.fim))
+    const base=contas.filter(c=>correspondePessoa(c)&&(!clienteFiltro||c.cliente_id===clienteFiltro)&&(!obraFiltro||c.obra_id===obraFiltro)&&noPeriodo(dataBase==='pagamento'?c.data_pagamento:c.vencimento,periodo.inicio,periodo.fim))
     const abertas = base.filter(c => c.status !== 'pago' && c.status !== 'cancelado')
     const recebido = base.reduce((s, c) => s + Number(c.valor_pago || 0), 0)
     const aberto = abertas.reduce((s, c) => s + saldoParcela(c), 0)
@@ -79,7 +86,7 @@ export default function ContasReceberPage() {
       .filter(c => c.vencimento && c.vencimento < hoje)
       .reduce((s, c) => s + saldoParcela(c), 0)
     return { aberto, vencido, recebido }
-  }, [contas, hoje,clienteFiltro,obraFiltro,periodo,dataBase])
+  }, [contas, hoje,clienteFiltro,obraFiltro,periodo,dataBase,tipoPessoa,pessoaRHFiltro,mapaRH])
 
   const filtradas = useMemo(() => contas.filter(conta => {
     const saldo = saldoParcela(conta)
@@ -90,13 +97,13 @@ export default function ContasReceberPage() {
       (filtro === 'vencido' && vencida) ||
       (filtro === 'aberto' && conta.status !== 'pago' && conta.status !== 'cancelado' && saldo > 0.009)
 
-    return bateFiltro && (!clienteFiltro||conta.cliente_id===clienteFiltro) && (!obraFiltro||conta.obra_id===obraFiltro) && noPeriodo(dataBase==='pagamento'?conta.data_pagamento:conta.vencimento,periodo.inicio,periodo.fim) && correspondeBuscaAtlas(busca, conta.cliente_nome, (conta as ContaReceberCliente360 & {cliente_cpf_cnpj?:string|null}).cliente_cpf_cnpj, (conta as ContaReceberCliente360 & {cliente_cidade?:string|null}).cliente_cidade, conta.documento, conta.forma, conta.observacoes, conta.status)
-  }), [busca, contas, filtro, hoje, clienteFiltro,obraFiltro,periodo,dataBase])
+    return bateFiltro && correspondePessoa(conta) && (!clienteFiltro||conta.cliente_id===clienteFiltro) && (!obraFiltro||conta.obra_id===obraFiltro) && noPeriodo(dataBase==='pagamento'?conta.data_pagamento:conta.vencimento,periodo.inicio,periodo.fim) && correspondeBuscaAtlas(busca, conta.cliente_nome, (conta as ContaReceberCliente360 & {cliente_cpf_cnpj?:string|null}).cliente_cpf_cnpj, (conta as ContaReceberCliente360 & {cliente_cidade?:string|null}).cliente_cidade, conta.documento, conta.forma, conta.observacoes, conta.status)
+  }), [busca, contas, filtro, hoje, clienteFiltro,obraFiltro,periodo,dataBase,tipoPessoa,pessoaRHFiltro,mapaRH])
 
   const recebimentosFiltrados = useMemo(() => recebimentos.filter(r =>
-    (!clienteFiltro||r.cliente_id===clienteFiltro) && (!obraFiltro||r.obra_id===obraFiltro) && noPeriodo(r.data_recebimento,periodo.inicio,periodo.fim) &&
+    (!tipoPessoa||tipoPessoa==='cliente') && !pessoaRHFiltro && (!clienteFiltro||r.cliente_id===clienteFiltro) && (!obraFiltro||r.obra_id===obraFiltro) && noPeriodo(r.data_recebimento,periodo.inicio,periodo.fim) &&
     correspondeBuscaAtlas(busca, r.cliente_nome, r.cliente_cpf_cnpj, r.cliente_cidade, r.forma, r.referencia, r.observacoes, r.criado_por_nome, r.status)
-  ), [busca, recebimentos,clienteFiltro,obraFiltro,periodo])
+  ), [busca, recebimentos,clienteFiltro,obraFiltro,periodo,tipoPessoa,pessoaRHFiltro])
   const exibidas=useMemo(()=>agrupar?[...filtradas].sort((a,b)=>(a.cliente_nome||'').localeCompare(b.cliente_nome||'','pt-BR')||(a.vencimento||'').localeCompare(b.vencimento||'')):filtradas,[filtradas,agrupar])
   const valorFiltrado=filtradas.reduce((s,c)=>s+Number(c.valor||0),0)
   const saldoFiltrado=filtradas.reduce((s,c)=>s+saldoParcela(c),0)
@@ -127,6 +134,8 @@ export default function ContasReceberPage() {
         {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
 
         <BarraFiltrosPeriodo periodo={periodo} onPeriodo={setPeriodo} onExportar={exportar} adicional={<>
+          <label className="text-xs font-semibold text-slate-600">Tipo de pessoa<select className="mt-1 block max-w-[180px] rounded-lg border p-2.5 text-sm" value={tipoPessoa} onChange={e=>{setTipoPessoa(e.target.value);setPessoaRHFiltro('');setClienteFiltro('');setObraFiltro('')}}><option value="">Todos</option><option value="cliente">Cliente</option><option value="funcionario">Funcionário</option><option value="prestador">Prestador de serviço</option><option value="terceiro">Terceiro</option><option value="fornecedor">Fornecedor</option></select></label>
+          <label className="text-xs font-semibold text-slate-600">Pessoa do RH<select className="mt-1 block max-w-[210px] rounded-lg border p-2.5 text-sm" value={pessoaRHFiltro} onChange={e=>{setPessoaRHFiltro(e.target.value);setClienteFiltro('');setObraFiltro('')}}><option value="">Todas as pessoas</option>{pessoasRH.filter(p=>!tipoPessoa||p.tipo===tipoPessoa).map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}</select></label>
           <label className="text-xs font-semibold text-slate-600">Cliente<select className="mt-1 block max-w-[220px] rounded-lg border p-2.5 text-sm" value={clienteFiltro} onChange={e=>{setClienteFiltro(e.target.value);setObraFiltro('')}}><option value="">Todos os clientes</option>{clientesDisponiveis.map(([id,nome])=><option key={id} value={id}>{nome}</option>)}</select></label>
           <label className="text-xs font-semibold text-slate-600">Obra<select className="mt-1 block max-w-[180px] rounded-lg border p-2.5 text-sm" value={obraFiltro} onChange={e=>setObraFiltro(e.target.value)}><option value="">Todas as obras</option>{obrasDisponiveis.map(id=><option key={id} value={id}>{nomesObras[id]||`Obra ${id.slice(0,8)}`}</option>)}</select></label>
           <label className="text-xs font-semibold text-slate-600">Data do período<select className="mt-1 block rounded-lg border p-2.5 text-sm" value={dataBase} onChange={e=>setDataBase(e.target.value as 'vencimento'|'pagamento')}><option value="vencimento">Vencimento</option><option value="pagamento">Pagamento efetivo</option></select></label>
