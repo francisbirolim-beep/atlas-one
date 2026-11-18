@@ -1,6 +1,6 @@
 ## 2026-11-18 — Módulo Processos da Empresa, primeiro editor documental isolado
 - Rota independente `/processos` com organogramas, fluxogramas, múltiplos processos por setor, quadrinhos arrastáveis, setas rotuladas, procedimentos escritos e imagens comprimidas.
-- Rascunho em `localStorage` por Master com cópia JSON; sem banco, sem automações de produção, sem mudanças na navegação existente. Branch de desenvolvimento não publicada; detalhes em `docs/processos-empresa-editor-v1.md`.
+- Rascunho em `localStorage` por Master com cópia JSON; sem banco, sem automações de produção, com nova entrada aditiva Master na navegação, somente na branch. Branch de desenvolvimento não publicada; detalhes em `docs/processos-empresa-editor-v1.md`.
 
 ## 2026-11-03 — Deduplicacao de clientes (isolada, nao publicada)
 - Busca remota contextual de clientes com estatisticas no orcamento rapido e balcao, gestao inline permitida, confirmacao e motivos.
