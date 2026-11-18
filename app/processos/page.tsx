@@ -54,6 +54,28 @@ function validate(raw:any):raw is Workspace{
   }
   return raw.sectors.some((s:Sector)=>s.id===raw.sectorId&&s.processes.some(p=>p.id===raw.processId))
 }
+/** Importa também o JSON gerado pelo primeiro protótipo HTML, sem perder quadrinhos e setas. */
+function importLegacy(raw:any):Workspace|null{
+  if(!raw||!Array.isArray(raw.sectors)||!raw.sectors.length||raw.sectors.length>80||!raw.diagrams||typeof raw.diagrams!=='object')return null
+  const sectors:Sector[]=[]
+  for(const oldName of raw.sectors){
+    if(typeof oldName!=='string'||!oldName.trim()||oldName.length>80)return null
+    const p=process('Processo principal')
+    for(const mode of ['fluxo','org'] as const){
+      const old=raw.diagrams[oldName+'::'+mode]
+      if(!old)continue
+      if(!Array.isArray(old.nodes)||!Array.isArray(old.edges))return null
+      p[mode]={boxes:old.nodes.map((n:any)=>({
+        id:n.id,kind:n.kind,title:n.name||'',owner:n.owner||'',description:n.desc||'',
+        criteria:'',images:n.images||[],x:n.x,y:n.y,
+      })),arrows:old.edges.map((a:any)=>({id:a.id,from:a.from,to:a.to,label:a.label||''}))}
+    }
+    sectors.push({id:id(),name:oldName,processes:[p]})
+  }
+  const active=sectors.find(s=>s.name===raw.activeSector)||sectors[0]
+  const transformed:Workspace={version:2,sectors,sectorId:active.id,processId:active.processes[0].id,mode:raw.mode==='org'?'org':'fluxo'}
+  return validate(transformed)?transformed:null
+}
 async function imageToData(file:File):Promise<string>{
   if(file.size>8_000_000||!['image/jpeg','image/png','image/webp'].includes(file.type))throw Error('Imagem inválida ou acima de 8 MB.')
   const url=URL.createObjectURL(file)
@@ -106,7 +128,7 @@ export default function ProcessosEmpresa(){
   function remove(){if(!selected||!confirm('Excluir elemento do rascunho?'))return;update(d=>{const graph=d.sectors.find(s=>s.id===d.sectorId)?.processes.find(p=>p.id===d.processId)?.[d.mode];if(!graph)return;if(selected.type==='box'){graph.boxes=graph.boxes.filter(b=>b.id!==selected.id);graph.arrows=graph.arrows.filter(a=>a.from!==selected.id&&a.to!==selected.id)}else graph.arrows=graph.arrows.filter(a=>a.id!==selected.id)});setSelected(null)}
   async function addImages(ev:React.ChangeEvent<HTMLInputElement>){if(!selBox)return;const files=Array.from(ev.target.files||[]).slice(0,5-selBox.images.length);ev.target.value='';const images:string[]=[];for(const file of files)try{images.push(await imageToData(file))}catch(error){setStatus(error instanceof Error?error.message:'Imagem inválida.')}if(images.length)update(d=>{const b=d.sectors.find(s=>s.id===d.sectorId)?.processes.find(p=>p.id===d.processId)?.[d.mode].boxes.find(b=>b.id===selBox.id);if(b)b.images.push(...images)})}
   function exportJson(){const url=URL.createObjectURL(new Blob([JSON.stringify(ws,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='atlas-processos-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-  async function importJson(e:React.ChangeEvent<HTMLInputElement>){const file=e.target.files?.[0];e.target.value='';if(!file)return;try{if(file.size>15_000_000)throw Error('Arquivo acima de 15 MB');const content=JSON.parse(await file.text());if(!validate(content))throw Error('Arquivo incompatível ou inválido');if(!confirm('Substituir o rascunho deste navegador?'))return;setHistory(h=>[...h.slice(-25),ws]);setWs(content);setSelected(null);setStatus('Importação concluída.')}catch(error){setStatus(error instanceof Error?error.message:'Falha na importação.')}}
+  async function importJson(e:React.ChangeEvent<HTMLInputElement>){const file=e.target.files?.[0];e.target.value='';if(!file)return;try{if(file.size>15_000_000)throw Error('Arquivo acima de 15 MB');const content=JSON.parse(await file.text());const normalized=validate(content)?content:importLegacy(content);if(!normalized)throw Error('Arquivo incompatível ou inválido');if(!confirm('Substituir o rascunho deste navegador?'))return;setHistory(h=>[...h.slice(-25),ws]);setWs(normalized);setSelected(null);setStatus('Importação concluída.')}catch(error){setStatus(error instanceof Error?error.message:'Falha na importação.')}}
   function path(a:Arrow){const n=boxes.find(n=>n.id===a.from),m=boxes.find(n=>n.id===a.to);if(!n||!m)return '';if(m.x>n.x+50)return 'M'+(n.x+210)+' '+(n.y+55)+' C'+(n.x+275)+' '+(n.y+55)+' '+(m.x-65)+' '+(m.y+55)+' '+m.x+' '+(m.y+55);return 'M'+(n.x+105)+' '+(n.y+110)+' C'+(n.x+105)+' '+(n.y+205)+' '+(m.x+105)+' '+(m.y-90)+' '+(m.x+105)+' '+m.y}
   if(blocked)return <div className="rounded-xl bg-white p-8 text-center"><b>Acesso restrito</b><p>Durante a homologação, o editor é exclusivo do usuário Master.</p></div>
   if(!ready)return <p className="p-8 text-center text-slate-500">Carregando editor...</p>
