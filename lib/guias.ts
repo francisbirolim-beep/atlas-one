@@ -66,6 +66,17 @@ export const GUIAS: Guia[] = [
   { href: '/financeiro/contas-pagar', label: 'Contas a pagar', icon: WalletCards, grupo: 'Financeiro' },
   { href: '/financeiro/contas-receber', label: 'Contas a receber', icon: WalletCards, grupo: 'Financeiro' },
 
+  // Atalhos documentais no menu lateral. O editor continua isolado e exclusivo do Master.
+  { href: '/processos?area=organograma-geral', label: 'Organograma Geral', icon: Building2, grupo: 'Processos', masterOnly: true },
+  { href: '/processos?area=producao', label: 'Produção', icon: Factory, grupo: 'Processos', masterOnly: true },
+  { href: '/processos?area=rh', label: 'RH', icon: Users, grupo: 'Processos', masterOnly: true },
+  { href: '/processos?area=financeiro', label: 'Financeiro', icon: WalletCards, grupo: 'Processos', masterOnly: true },
+  { href: '/processos?area=comercial', label: 'Comercial', icon: Store, grupo: 'Processos', masterOnly: true },
+  { href: '/processos?area=compras', label: 'Compras', icon: ShoppingCart, grupo: 'Processos', masterOnly: true },
+  { href: '/processos?area=estoque', label: 'Estoque', icon: PackageSearch, grupo: 'Processos', masterOnly: true },
+  { href: '/processos?area=instalacao', label: 'Instalação', icon: Wrench, grupo: 'Processos', masterOnly: true },
+  { href: '/processos?area=orcamentos', label: 'Orçamentos', icon: FileText, grupo: 'Processos', masterOnly: true },
+
   { href: '/assistencias', label: 'Assistências', icon: Wrench, grupo: 'Assistência' },
 
   { href: '/cadastros', label: 'Cadastros 360', icon: PackageSearch, grupo: 'Cadastros' },
@@ -79,6 +90,7 @@ export const GRUPOS_ORDEM_GUIAS = [
   'Engenharia',
   'Compras',
   'Financeiro',
+  'Processos',
   'Assistência',
   'Cadastros',
 ]
