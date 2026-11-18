@@ -233,6 +233,7 @@ export default function AdiantamentosRH() {
    #rh-impressao-adiantamento,#rh-impressao-adiantamento *{visibility:visible!important}
    #rh-impressao-adiantamento{display:block!important;position:absolute!important;left:0!important;top:0!important;margin:0!important;padding:0!important}
    .rh-pagina-a4{box-shadow:none!important;page-break-after:always;break-after:page}
+   #rh-impressao-adiantamento .rh-pagina-a4:last-child{page-break-after:auto;break-after:auto}
   }
   `}</style>
   <div className="mx-auto max-w-6xl space-y-5">
