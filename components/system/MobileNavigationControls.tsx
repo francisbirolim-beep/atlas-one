@@ -163,7 +163,7 @@ export default function MobileNavigationControls() {
     if (usuario.role === 'master') return GUIAS
 
     return GUIAS.filter(guia => {
-      if (guia.masterOnly || (guia.href === '/cadastros' && !podeVerCadastros)) return false
+      if ((guia.masterOnly && guia.grupo !== 'RH') || (guia.href === '/cadastros' && !podeVerCadastros)) return false
       if (guia.href === '/') return true
       const producao = permissaoDaRotaProducao(guia.href)
       if (producao) return acessoProducao !== null &&
