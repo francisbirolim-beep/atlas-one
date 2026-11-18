@@ -7,6 +7,7 @@ import { tokenAtual } from '@/lib/auth'
 import { lerDadosEmpresa } from '@/lib/configGeral'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
 import CadastroProdutoAvulso from '@/components/previews/CadastroProdutoAvulso'
+import ResumoCustoInternoPreview from '@/components/previews/ResumoCustoInternoPreview'
 import ReciboVendaPreview, { cents, valorEntrada, rotuloPagamento, type LinhaPagamento, type FormaPagamento, type StatusPagamento, type EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 
 type Cliente={id:string;nome:string;apelido?:string|null;cpf_cnpj?:string|null;telefone?:string|null;whatsapp?:string|null;cidade?:string|null}
@@ -431,6 +432,7 @@ export default function PreviaVenda(){
               <div className="mt-3 flex justify-between text-xs text-slate-600"><span>Desconto aplicado</span><b>- {moeda(Math.max(0,descontoCent)/100)}</b></div>
               <div className="mt-2 flex justify-between border-t pt-2 text-sm font-black text-blue-800"><span>Total final</span><span>{moeda(totalLiquido)}</span></div>
             </div>
+            <ResumoCustoInternoPreview itens={itens} totalVenda={totalLiquido} pendencias={pendentes>0||descontoInvalido||Object.values(erroPreco).some(Boolean)||Object.keys(precoDigitado).length>0}/>
             <div className="rounded-xl border border-slate-200 p-3">
               <h4 className="text-sm font-black">Recebimento da venda</h4>
               <p className="mt-1 text-[11px] text-slate-500">É possível receber em várias formas ou deixar marcado no cliente/obra.</p>
@@ -490,6 +492,7 @@ export default function PreviaVenda(){
         <div className="mt-2 flex justify-between"><span>Desconto {tipoDesconto==='percentual'?'('+valorEntrada(descontoEntrada)+'%)':tipoDesconto==='valor'?'(R$)':''}</span><b>- {moeda(descontoCent/100)}</b></div>
         <div className="mt-3 flex justify-between border-t border-blue-200 pt-3 text-lg font-black text-blue-900"><span>Total da venda</span><span>{moeda(totalLiquido)}</span></div>
       </div>
+      <ResumoCustoInternoPreview itens={itens} totalVenda={totalLiquido} pendencias={pendentes>0||descontoInvalido||Object.values(erroPreco).some(Boolean)||Object.keys(precoDigitado).length>0}/>
       <div className="mt-5 rounded-xl border border-slate-200 p-4 text-sm">
         <h3 className="font-black">Pagamento e saldo</h3>
         {formasRecibo.length?formasRecibo.map((f,i)=><div key={i} className="mt-2 flex justify-between text-xs"><span>{rotuloPagamento[f.forma]}</span><b>{moeda(f.valor)}</b></div>):<p className="mt-2 text-xs text-slate-500">Sem recebimento: venda marcada para o cliente/obra.</p>}
