@@ -48,7 +48,8 @@ function itemAltura(item:ItemDocumento,precos:Precos){
   }
   return Math.max(item.p.imagem?10.6:7.5,6.3+
     Math.max(1,Math.ceil(item.p.nome.length/caracteres))*2.1+
-    (item.p.descricao?Math.ceil(item.p.descricao.length/140)*1.85:0))
+    (item.p.descricao?Math.ceil(item.p.descricao.length/140)*1.85:0)+
+    ((item.p.largura||item.p.altura)?1.85:0))
 }
 function fechamentoAltura(d:OrcamentoDocumento){
   const cond=d.condicoes.filter(c=>c.forma)
