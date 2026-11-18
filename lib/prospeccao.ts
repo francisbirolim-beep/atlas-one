@@ -121,9 +121,23 @@ function textoOuNulo(valor?: string | null) {
 }
 
 export async function listarProspeccoes(): Promise<Prospeccao[]> {
-  const { data, error } = await supabase.from('prospeccoes').select('*').order('status_atualizado_em', { ascending: false })
-  if (error) { console.error('Erro ao listar prospecções', error); return [] }
-  return (data || []) as Prospeccao[]
+  const lista: Prospeccao[] = []
+  const pagina = 400
+  // API limita consultas grandes por padrão: percorrer todas as páginas evita
+  // totais subestimados de pinos, bairros e cidades.
+  for (let inicio = 0; inicio < 20000; inicio += pagina) {
+    const { data, error } = await supabase.from('prospeccoes')
+      .select('*')
+      .order('status_atualizado_em', { ascending: false })
+      .order('id', { ascending: true })
+      .range(inicio, inicio + pagina - 1)
+    if (error) { console.error('Erro ao listar prospecções', error); return [] }
+    const registros = (data || []) as Prospeccao[]
+    lista.push(...registros)
+    if (registros.length < pagina) return lista
+  }
+  console.error('Mais de 20.000 prospecções visíveis. Amplie a paginação antes de confiar nos totais.')
+  return []
 }
 
 export async function listarEquipeProspeccao(): Promise<Pick<Usuario, 'id' | 'nome'>[]> {
@@ -210,6 +224,7 @@ export async function adicionarContato(prospeccaoId: string, contato: Omit<Conta
 
 export async function moverProspeccao(prospeccao: Prospeccao, novoStatus: StatusProspeccao) {
   if (prospeccao.status === novoStatus) return { ok: true }
+  if (novoStatus === 'convertido' && !prospeccao.cliente_id) return { ok: false, error: 'Use Converter em cliente para criar ou vincular um Cliente 360.' }
   const usuario = await usuarioAtual()
   if (!usuario) return { ok: false, error: 'Sessão expirada.' }
   const { error } = await supabase.from('prospeccoes').update({ status: novoStatus, status_atualizado_em: new Date().toISOString() }).eq('id', prospeccao.id)
@@ -222,6 +237,7 @@ export async function registrarInteracao(prospeccao: Prospeccao, dados: { tipo: 
   const usuario = await usuarioAtual()
   if (!usuario) return { ok: false, error: 'Sessão expirada.' }
   if (!dados.descricao.trim()) return { ok: false, error: 'Descreva o que aconteceu no contato.' }
+  if (dados.status_novo === 'convertido' && !prospeccao.cliente_id) return { ok: false, error: 'A conversão exige criar ou vincular um Cliente 360.' }
   const { error } = await supabase.from('prospeccao_interacoes').insert({
     prospeccao_id: prospeccao.id,
     tipo: dados.tipo,
@@ -260,17 +276,58 @@ async function sincronizarAgenda(prospeccaoId: string, usuario: Usuario, nomeCli
 
 export async function buscarClientesSemelhantes(nome: string, telefone?: string | null): Promise<Cliente[]> {
   const digitos = (telefone || '').replace(/\D/g, '')
-  const { data } = await supabase.from('clientes').select('*').order('created_at', { ascending: false }).limit(500)
-  const termo = nome.trim().toLocaleLowerCase('pt-BR')
-  return ((data || []) as Cliente[]).filter(c => {
-    const mesmoTelefone = digitos.length >= 8 && `${c.whatsapp || ''}${c.telefone || ''}`.replace(/\D/g, '').includes(digitos)
-    const mesmoNome = termo.length >= 3 && c.nome.toLocaleLowerCase('pt-BR').includes(termo)
-    return mesmoTelefone || mesmoNome
-  }).slice(0, 8)
-}
+  const termo = nome.trim()
+  if (digitos.length < 8 && termo.length < 3) return []
 
+  // Filtra no servidor; percorrer somente os últimos 500 clientes podia ignorar
+  // um cadastro mais antigo e criar uma duplicidade na conversão da prospecção.
+  // O sufixo de telefone é pesquisado sem depender de espaços ou prefixos de DDD.
+  const consultas: PromiseLike<{ data: Cliente[] | null; error: {message: string} | null }>[] = []
+  if (termo.length >= 3) {
+    const padrao = termo.replace(/[\\%_]/g, '\\$&')
+    consultas.push(supabase.from('clientes').select('*')
+      .ilike('nome', `%${padrao}%`).order('created_at', {ascending:false}).limit(120))
+  }
+  if (digitos.length >= 8) {
+    const sufixo = digitos.slice(-4)
+    consultas.push(supabase.from('clientes').select('*')
+      .or(`whatsapp.ilike.%${sufixo}%,telefone.ilike.%${sufixo}%`)
+      .order('created_at', {ascending:false}).limit(120))
+  }
+
+  const resultados = await Promise.all(consultas)
+  for (const resposta of resultados) {
+    if (resposta.error) throw new Error('Falha ao verificar cadastros existentes: ' + resposta.error.message)
+  }
+  const encontrados = new Map<string, Cliente>()
+  for (const resposta of resultados) {
+    for (const c of resposta.data || []) encontrados.set(c.id, c)
+  }
+  const normalizarNome = (valor: string) => valor.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').trim()
+  const buscado = normalizarNome(termo)
+  const digitosCliente = (c: Cliente) => [
+    c.whatsapp || '', c.telefone || '',
+  ].map(t => t.replace(/\D/g, ''))
+  const compativel = (c: Cliente) => {
+    const telefones = digitosCliente(c)
+    const mesmoTelefone = digitos.length >= 8 && telefones.some(t =>
+      t.includes(digitos) || digitos.includes(t) && t.length >= 8)
+    const mesmoNome = termo.length >= 3 && normalizarNome(c.nome || '').includes(buscado)
+    return { mesmoTelefone, mesmoNome }
+  }
+  return [...encontrados.values()]
+    .filter(c => { const m = compativel(c); return m.mesmoTelefone || m.mesmoNome })
+    .sort((a,b) => {
+      const x = compativel(a), y = compativel(b)
+      return Number(y.mesmoTelefone) - Number(x.mesmoTelefone)
+        || Number(normalizarNome(b.nome||'') === buscado) - Number(normalizarNome(a.nome||'') === buscado)
+        || (b.created_at||'').localeCompare(a.created_at||'')
+    })
+    .slice(0, 12)
+}
 export async function converterProspeccao(id: string, clienteExistenteId: string | null, criarObra: boolean) {
-  const { data, error } = await supabase.rpc('fn_converter_prospeccao_v1', { p_prospeccao_id: id, p_cliente_existente_id: clienteExistenteId, p_criar_obra: criarObra })
+  const { data, error } = await supabase.rpc('fn_converter_prospeccao_v2', { p_prospeccao_id: id, p_cliente_existente_id: clienteExistenteId, p_criar_obra: criarObra })
   if (error) return { ok: false, error: error.message }
   return { ok: true, clienteId: data?.cliente_id as string, obraId: (data?.obra_id as string | null) || null }
 }
