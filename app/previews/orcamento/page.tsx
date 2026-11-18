@@ -305,8 +305,8 @@ export default function OrcamentoPreview(){
             <div className="mt-4 border-t pt-3">
               <div className="flex justify-between text-sm"><span>Subtotal dos produtos com preço</span><b>{moeda(valorConhecido)}</b></div>
               {semPreco>0&&<p className="mt-2 text-[11px] font-semibold text-amber-800">{semPreco} produto(s) sem preço cadastrado. O total não é definitivo.</p>}
-              {modo==='sob_medida'&&<p className="mt-2 text-[11px] font-semibold text-amber-800">As {medidas.length} tipologia(s) sob medida serão precificadas pelo cálculo próprio, separadamente.</p>
-              <ResumoCustoInternoPreview itens={itens} totalVenda={valorFinalConhecido} pendencias={totalPendente||descontoInvalido}/>}
+              {modo==='sob_medida'&&<p className="mt-2 text-[11px] font-semibold text-amber-800">As {medidas.length} tipologia(s) sob medida serão precificadas pelo cálculo próprio, separadamente.</p>}
+              <ResumoCustoInternoPreview itens={itens} totalVenda={valorFinalConhecido} pendencias={totalPendente||descontoInvalido}/>
             </div>
             <button type="button" onClick={revisar} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-extrabold text-white">Revisar orçamento <ArrowRight size={17}/></button>
           </aside>
