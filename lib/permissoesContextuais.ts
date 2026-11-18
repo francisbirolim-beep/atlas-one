@@ -3,6 +3,9 @@ import { CLIENTE_360_RECURSOS, type RecursoCliente360 } from './cliente360Permis
 // Mapeamento de rotas para os módulos de permissão já usados em Configurações > Usuários.
 // Ordem importa: rotas específicas vêm antes das gerais.
 const ROTAS: Array<{ prefixo: string; titulo: string; modulos: string[] }> = [
+  { prefixo: '/rh/pessoas', titulo: 'Cadastro RH', modulos: ['rh'] },
+  { prefixo: '/rh/holerites', titulo: 'Holerites RH', modulos: ['rh'] },
+  { prefixo: '/rh/adiantamentos', titulo: 'Recibos de adiantamento RH', modulos: ['rh'] },
   { prefixo: '/financeiro/contas-pagar', titulo: 'Contas a pagar', modulos: ['contas-pagar'] },
   { prefixo: '/financeiro/contas-receber', titulo: 'Contas a receber', modulos: ['contas-receber'] },
   { prefixo: '/financeiro/caixa', titulo: 'Caixa', modulos: ['caixa'] },

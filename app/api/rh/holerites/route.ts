@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarCompras } from '@/lib/comprasServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { acessoRHServer } from '@/lib/rhAcessoServer'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -10,11 +11,14 @@ const texto=(valor:unknown,limite=170)=>String(valor??'').trim().slice(0,limite)
 const erro=(mensagem:string,status=400)=>NextResponse.json({error:mensagem},{status})
 const preview=()=>process.env.VERCEL_ENV==='preview'
 
-async function autenticar(req:NextRequest){
+async function autenticar(req:NextRequest,modo:'consulta'|'edicao'='consulta'){
  const usuario=await autenticarCompras(req)
  if(!usuario)return {error:erro('Sessão inválida.',401)}
- if(usuario.role!=='master')return {error:erro('Holerites restritos ao Master/RH autorizado.',403)}
- return {usuario}
+ try{
+  const acl=await acessoRHServer(usuario,'holerites')
+  if(!acl.consultar||(modo==='edicao'&&!acl.editar))return {error:erro('Sem autorização para os holerites do RH.',403)}
+  return {usuario,podeEditar:acl.editar}
+ }catch(e){console.error('Permissão de holerites',e);return {error:erro('Não foi possível conferir a autorização de RH.',503)}}
 }
 function centavos(valor:unknown):number|null{
  if(valor===null||valor===undefined||valor==='')return null
@@ -82,11 +86,11 @@ export async function GET(req:NextRequest){
    }
    throw pessoas.error||holerites.error
   }
-  return NextResponse.json({ok:true,pessoas:pessoas.data||[],holerites:holerites.data||[]},{headers:{'Cache-Control':'private, no-store'}})
+  return NextResponse.json({ok:true,podeEditar:auth.podeEditar,pessoas:pessoas.data||[],holerites:holerites.data||[]},{headers:{'Cache-Control':'private, no-store'}})
  }catch(e){console.error('RH holerites GET',e);return erro('Não foi possível consultar os holerites.',500)}
 }
 export async function POST(req:NextRequest){
- const auth=await autenticar(req);if(auth.error)return auth.error
+ const auth=await autenticar(req,'edicao');if(auth.error)return auth.error
  if(preview())return erro('Prévia sem gravação: use banco isolado para homologar.',423)
  const u=auth.usuario!
  try{
@@ -105,7 +109,7 @@ export async function POST(req:NextRequest){
  }catch(e){console.error('RH holerites POST',e);return erro('Falha ao salvar holerite.',500)}
 }
 export async function PATCH(req:NextRequest){
- const auth=await autenticar(req);if(auth.error)return auth.error
+ const auth=await autenticar(req,'edicao');if(auth.error)return auth.error
  if(preview())return erro('Prévia sem gravação: use banco isolado para homologar.',423)
  const u=auth.usuario!
  try{

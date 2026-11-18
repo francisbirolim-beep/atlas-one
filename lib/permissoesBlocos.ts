@@ -28,6 +28,13 @@ export const ACOES_CMV_DELEGACAO_EXPLICITA = [
  'clientes.portal.tipologias_substituir',
  'clientes.portal.tipologias_aprovar',
  'clientes.portal.vincular_obra',
+ // RH sensível exige liberação explícita por ação.
+ 'rh.colaboradores.consultar',
+ 'rh.colaboradores.editar',
+ 'rh.holerites.consultar',
+ 'rh.holerites.gerenciar',
+ 'rh.adiantamentos.consultar',
+ 'rh.adiantamentos.gerenciar',
 ] as const
 const DELEGACOES_EXPLICITAS = new Set<string>(ACOES_CMV_DELEGACAO_EXPLICITA)
 export function fallbackAcaoPermissao(id:string,setor:NivelPermissao):NivelPermissao {
@@ -394,6 +401,8 @@ const MODULOS:ItemPermissaoBloco[] = [
     a('rh.colaboradores.editar','Cadastrar/editar colaboradores','Alterar cadastro funcional.'),
     a('rh.holerites.consultar','Consultar holerites','Ver holerites autorizados.'),
     a('rh.holerites.gerenciar','Gerenciar holerites','Enviar/organizar holerites.'),
+    a('rh.adiantamentos.consultar','Consultar recibos de adiantamento','Ver recibos de adiantamento autorizados.'),
+    a('rh.adiantamentos.gerenciar','Gerenciar recibos de adiantamento','Criar, editar e emitir recibos de adiantamento.'),
     a('rh.ponto.consultar','Consultar cartão de ponto','Ver registros de ponto.'),
     a('rh.ponto.editar','Ajustar cartão de ponto','Corrigir/validar marcações.'),
     a('rh.banco_horas.consultar','Consultar banco de horas','Ver saldo e movimentações.'),

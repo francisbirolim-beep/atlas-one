@@ -23,6 +23,7 @@ const dataBR=(s:string)=>s?new Date(s+'T12:00:00').toLocaleDateString('pt-BR'):'
 
 export default function HoleritesRH(){
  const [pessoas,setPessoas]=useState<Funcionario[]>([])
+ const [podeEditar,setPodeEditar]=useState(false)
  const [registros,setRegistros]=useState<Registro[]>([])
  const [carregando,setCarregando]=useState(true)
  const [salvando,setSalvando]=useState(false)
@@ -47,7 +48,7 @@ export default function HoleritesRH(){
    const res=await fetch('/api/rh/holerites',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
    const data=await res.json()
    if(!res.ok)throw new Error(data.error||'Erro ao carregar holerites.')
-   setPessoas(data.pessoas||[]);setRegistros(data.holerites||[]);setSimulacao(!!data.simulacao)
+   setPessoas(data.pessoas||[]);setRegistros(data.holerites||[]);setSimulacao(!!data.simulacao);setPodeEditar(data.podeEditar===true)
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar holerites.')}
   finally{setCarregando(false)}
  }
@@ -97,18 +98,18 @@ export default function HoleritesRH(){
    #holerite-impressao{display:block!important;position:absolute!important;left:0;top:0;width:100%;margin:0!important;padding:0!important;color:#111!important;background:white!important}
   }`}</style>
   <div className="mx-auto max-w-6xl space-y-5">
-   <header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-slate-500">Recursos Humanos</p><h1 className="text-2xl font-bold">Holerites manuais</h1><p className="mt-1 text-sm text-slate-600">Preencha rubricas e valores livremente, confira os totais e imprima ou salve em PDF.</p></div><div className="flex flex-wrap gap-2"><Link href="/rh/pessoas" className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold">Cadastro RH</Link><button onClick={()=>void carregar()} className="rounded-lg border bg-white p-2" title="Atualizar"><RefreshCw size={18}/></button><button onClick={()=>iniciarNovo()} className="flex items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-sm font-bold text-white"><Plus size={16}/>Novo holerite</button></div></header>
+   <header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-slate-500">Recursos Humanos</p><h1 className="text-2xl font-bold">Holerites manuais</h1><p className="mt-1 text-sm text-slate-600">Preencha rubricas e valores livremente, confira os totais e imprima ou salve em PDF.</p></div><div className="flex flex-wrap gap-2"><Link href="/rh/pessoas" className="rounded-lg border bg-white px-3 py-2 text-sm font-semibold">Cadastro RH</Link><button onClick={()=>void carregar()} className="rounded-lg border bg-white p-2" title="Atualizar"><RefreshCw size={18}/></button>{podeEditar&&<button onClick={()=>iniciarNovo()} className="flex items-center gap-2 rounded-lg bg-blue-900 px-3 py-2 text-sm font-bold text-white"><Plus size={16}/>Novo holerite</button>}</div></header>
    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">O preenchimento é manual. INSS, IRRF, FGTS e demais encargos não são calculados automaticamente. A impressão não comprova pagamento, não gera contas a pagar e não substitui a escrituração da folha/eSocial.</div>
    {simulacao&&<p className="rounded-xl bg-blue-50 p-3 text-sm text-blue-900">Prévia de homologação: edição e impressão disponíveis, mas salvar exige a migração em um banco de testes isolado.</p>}
    {erro&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{erro}</p>}
    {aviso&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{aviso}</p>}
    <section className="rounded-xl border bg-white p-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-bold">Holerites salvos ({registros.length})</h2><button className="text-sm font-semibold text-blue-800 underline" onClick={()=>setMostrarHistorico(!mostrarHistorico)}>{mostrarHistorico?'Recolher':'Mostrar'} histórico</button></div>
-    {mostrarHistorico&&<div className="mt-3 space-y-2"><input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Pesquisar funcionário ou competência" className={campo}/>{carregando?<p className="text-sm"><Loader2 className="inline animate-spin" size={16}/> Carregando...</p>:filtrados.length?filtrados.map(r=><div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"><div><b>{r.nome_funcionario}</b><p className="text-xs text-slate-600">{r.competencia} · {r.situacao==='emitido'?'Emitido':'Rascunho'} · Líquido: {dinheiro(r.valor_liquido)}</p></div><div className="flex gap-2"><button onClick={()=>abrir(r)} className="rounded-lg border px-3 py-2 text-xs font-bold">{r.situacao==='emitido'?'Visualizar':'Editar'}</button><button onClick={()=>abrir(r,true)} className="rounded-lg border px-3 py-2 text-xs">Duplicar</button></div></div>):<p className="py-3 text-sm text-slate-500">Nenhum holerite salvo nesta busca.</p>}</div>}
+    {mostrarHistorico&&<div className="mt-3 space-y-2"><input value={filtro} onChange={e=>setFiltro(e.target.value)} placeholder="Pesquisar funcionário ou competência" className={campo}/>{carregando?<p className="text-sm"><Loader2 className="inline animate-spin" size={16}/> Carregando...</p>:filtrados.length?filtrados.map(r=><div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"><div><b>{r.nome_funcionario}</b><p className="text-xs text-slate-600">{r.competencia} · {r.situacao==='emitido'?'Emitido':'Rascunho'} · Líquido: {dinheiro(r.valor_liquido)}</p></div><div className="flex gap-2"><button onClick={()=>abrir(r)} className="rounded-lg border px-3 py-2 text-xs font-bold">{r.situacao==='emitido'||!podeEditar?'Visualizar':'Editar'}</button>{podeEditar&&<button onClick={()=>abrir(r,true)} className="rounded-lg border px-3 py-2 text-xs">Duplicar</button>}</div></div>):<p className="py-3 text-sm text-slate-500">Nenhum holerite salvo nesta busca.</p>}</div>}
    </section>
    <section className="rounded-xl border bg-white p-4 sm:p-5">
     <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-bold">{edicao?(emitido?'Holerite emitido (somente leitura)':'Editar rascunho'):'Novo holerite manual'}</h2><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-600">{form.situacao}</span></div>
-    <fieldset disabled={emitido} className="space-y-5 disabled:opacity-80">
+    <fieldset disabled={emitido||!podeEditar} className="space-y-5 disabled:opacity-80">
      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <label className="text-xs font-semibold">Funcionário *<select value={form.rh_pessoa_id} onChange={e=>definirPessoa(e.target.value)} className={campo}><option value="">Selecione</option>{pessoas.filter(p=>p.ativo||p.id===form.rh_pessoa_id).map(p=><option key={p.id} value={p.id}>{p.nome}</option>)}</select></label>
       {!pessoas.length&&<label className="text-xs font-semibold">Nome para prévia (não salva)<input value={nomePreview} onChange={e=>setNomePreview(e.target.value)} className={campo} placeholder="Nome do funcionário"/></label>}
@@ -127,7 +128,7 @@ export default function HoleritesRH(){
      </div>
      <label className="block text-xs font-semibold">Observações opcionais<textarea rows={3} value={form.observacoes} onChange={e=>campoForm('observacoes',e.target.value)} className={campo}/></label>
     </fieldset>
-    <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={()=>window.print()} className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold"><Printer size={16}/>Imprimir / PDF</button>{!emitido&&<><button type="button" onClick={()=>void salvar('rascunho')} disabled={salvando||simulacao} className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-40"><Save size={16}/>Salvar rascunho</button><button type="button" onClick={()=>void salvar('emitido')} disabled={salvando||simulacao||totais.liquido<0} className="flex items-center gap-2 rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"><FileText size={16}/>{salvando?'Salvando...':'Conferir e emitir'}</button></>}</div>
+    <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={()=>window.print()} className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold"><Printer size={16}/>Imprimir / PDF</button>{podeEditar&&!emitido&&<><button type="button" onClick={()=>void salvar('rascunho')} disabled={salvando||simulacao} className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-40"><Save size={16}/>Salvar rascunho</button><button type="button" onClick={()=>void salvar('emitido')} disabled={salvando||simulacao||totais.liquido<0} className="flex items-center gap-2 rounded-lg bg-blue-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-40"><FileText size={16}/>{salvando?'Salvando...':'Conferir e emitir'}</button></>}</div>
    </section>
   </div>
   <section id="holerite-impressao" className="hidden bg-white text-black">
