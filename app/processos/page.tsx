@@ -102,6 +102,10 @@ export default function ProcessosEmpresa(){
   const [history,setHistory]=useState<Workspace[]>([])
   const [storageError,setStorageError]=useState(false)
   const [search,setSearch]=useState('')
+  const [helperOpen,setHelperOpen]=useState(false)
+  const [helperName,setHelperName]=useState('')
+  const [helperOwner,setHelperOwner]=useState('')
+  const [helperSteps,setHelperSteps]=useState('')
   const scroll=useRef<HTMLDivElement>(null),importRef=useRef<HTMLInputElement>(null)
   const drag=useRef<{id:string;x:number;y:number;px:number;py:number;moved:boolean}|null>(null)
   const skipClick=useRef(false)
@@ -114,6 +118,46 @@ export default function ProcessosEmpresa(){
   function update(fn:(d:Workspace)=>void,remember=true){const next=clone(ws);fn(next);if(remember)setHistory(h=>[...h.slice(-25),ws]);setWs(next)}
   function editBox(field:'title'|'owner'|'description'|'criteria',value:string){if(!selBox)return;update(d=>{const b=d.sectors.find(s=>s.id===d.sectorId)?.processes.find(p=>p.id===d.processId)?.[d.mode].boxes.find(b=>b.id===selBox.id);if(b)b[field]=value},false)}
   function editArrow(value:string){if(!selArrow)return;update(d=>{const a=d.sectors.find(s=>s.id===d.sectorId)?.processes.find(p=>p.id===d.processId)?.[d.mode].arrows.find(a=>a.id===selArrow.id);if(a)a.label=value},false)}
+
+  // Assistente guiado: cria somente documentos locais. Não consulta ou modifica ordens, estoque ou compras.
+  function loadHelperTemplate(template:'compras'|'comercial'|'producao'|'livre'){
+    const models={
+      compras:{name:'Compra e recebimento de materiais',owner:'Compras',steps:'Registrar compra\nVidro recebido e conferido?\nPerfil recebido e conferido?\nConferir materiais e documentos\nEncaminhar à conferência técnica oficial'},
+      comercial:{name:'Atendimento e venda',owner:'Comercial',steps:'Receber contato do cliente\nCadastrar cliente e necessidade\nElaborar orçamento\nCliente aprovou a proposta?\nRegistrar venda conforme regras do Atlas\nEncaminhar pedido ao setor responsável'},
+      producao:{name:'Preparação para produção',owner:'Produção',steps:'Receber solicitação aprovada\nMedição final validada?\nMateriais e acessórios conferidos?\nConferir liberações técnicas oficiais\nProgramar produção\nInspecionar qualidade'},
+      livre:{name:'',owner:'',steps:''},
+    }
+    const m=models[template];setHelperName(m.name);setHelperOwner(m.owner);setHelperSteps(m.steps);setHelperOpen(true)
+  }
+  function createGuidedProcess(){
+    const name=helperName.trim().slice(0,120)
+    const lines=helperSteps.split(/\r?\n/).map(line=>line.trim()).filter(Boolean)
+    if(!name)return setStatus('Dê um nome para o processo.')
+    if(lines.length<2||lines.length>12)return setStatus('Informe de 2 a 12 etapas, uma por linha.')
+    if(lines.some(line=>line.length>160))return setStatus('Cada etapa deve ter no máximo 160 caracteres.')
+    if(!sector)return setStatus('Selecione um setor.')
+    if(sector.processes.length>=100)return setStatus('Limite de processos deste setor atingido.')
+    const next=process(name)
+    next.description='Rascunho criado pelo assistente guiado; revise responsáveis, critérios e conexões antes de aprovar qualquer procedimento.'
+    const nodes:Box[]=lines.map((line,i)=>({
+      id:id(),kind:line.endsWith('?')?'decisao':i===0?'inicio':i===lines.length-1?'fim':'tarefa',
+      title:line,owner:helperOwner.trim().slice(0,160),description:'',criteria:'',images:[],
+      x:70+(i%4)*520,y:100+Math.floor(i/4)*380,
+    }))
+    const links:Arrow[]=[]
+    nodes.forEach((node,i)=>{
+      if(i+1<nodes.length)links.push({id:id(),from:node.id,to:nodes[i+1].id,label:node.kind==='decisao'?'Sim':''})
+      if(node.kind==='decisao'){
+        const pending:Box={id:id(),kind:'nota',title:'Aguardar / resolver pendência',owner:helperOwner.trim().slice(0,160),description:'Descreva aqui o que fazer se a condição não for atendida.',criteria:'',images:[],x:node.x,y:node.y+155}
+        next.fluxo.boxes.push(pending)
+        links.push({id:id(),from:node.id,to:pending.id,label:'Não'})
+      }
+    })
+    next.fluxo.boxes.unshift(...nodes)
+    next.fluxo.arrows=links
+    update(d=>{const s=d.sectors.find(item=>item.id===d.sectorId);if(s){s.processes.push(next);d.processId=next.id;d.mode='fluxo'}})
+    setSelected(null);setHelperOpen(false);setStatus('Processo gerado como novo rascunho. Revise as decisões, descreva as pendências e exporte uma cópia JSON.')
+  }
   function newSector(){const name=prompt('Nome do setor:')?.trim().slice(0,80);if(!name)return;if(ws.sectors.some(s=>s.name.toLowerCase()===name.toLowerCase()))return setStatus('Setor já existe.');const p=process('Processo principal'),sid=id();update(d=>{d.sectors.push({id:sid,name,processes:[p]});d.sectorId=sid;d.processId=p.id});setSelected(null)}
   function newProcess(){const name=prompt('Nome do processo:')?.trim().slice(0,120);if(!name)return;const p=process(name);update(d=>{const s=d.sectors.find(s=>s.id===d.sectorId);if(s){s.processes.push(p);d.processId=p.id}});setSelected(null)}
   function renameSector(){if(!sector)return;const name=prompt('Novo nome do setor:',sector.name)?.trim().slice(0,80);if(!name)return;if(ws.sectors.some(s=>s.id!==sector.id&&s.name.toLowerCase()===name.toLowerCase()))return setStatus('Já existe setor com este nome.');update(d=>{const s=d.sectors.find(s=>s.id===d.sectorId);if(s)s.name=name})}
@@ -133,8 +177,29 @@ export default function ProcessosEmpresa(){
   if(blocked)return <div className="rounded-xl bg-white p-8 text-center"><b>Acesso restrito</b><p>Durante a homologação, o editor é exclusivo do usuário Master.</p></div>
   if(!ready)return <p className="p-8 text-center text-slate-500">Carregando editor...</p>
   return <main className="min-h-screen space-y-3 bg-slate-50 p-3 md:p-5">
-    <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-bold text-slate-900">Processos da Empresa</h1><p className="text-xs text-slate-500">Organogramas, fluxogramas e procedimentos • Esquadrifácio</p></div><div className="flex flex-wrap gap-2"><span className="rounded-md bg-amber-100 px-2 py-2 text-xs font-semibold text-amber-800">RASCUNHO ISOLADO</span><button className={style} disabled={!history.length} onClick={()=>{if(history.length){setWs(history[history.length-1]);setHistory(h=>h.slice(0,-1));setSelected(null)}}}>Desfazer</button><button className={style} onClick={exportJson}>Exportar JSON</button><button className={style} onClick={()=>importRef.current?.click()}>Importar JSON</button><input hidden type="file" ref={importRef} accept=".json,application/json" onChange={importJson}/></div></header>
+    <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-bold text-slate-900">Processos da Empresa</h1><p className="text-xs text-slate-500">Organogramas, fluxogramas e procedimentos • Esquadrifácio</p></div><div className="flex flex-wrap gap-2"><span className="rounded-md bg-amber-100 px-2 py-2 text-xs font-semibold text-amber-800">RASCUNHO ISOLADO</span><button className={style} disabled={!history.length} onClick={()=>{if(history.length){setWs(history[history.length-1]);setHistory(h=>h.slice(0,-1));setSelected(null)}}}>Desfazer</button><button className={style} onClick={()=>setHelperOpen(v=>!v)}>{helperOpen?"Fechar assistente":"+ Assistente de processos"}</button><button className={style} onClick={exportJson}>Exportar JSON</button><button className={style} onClick={()=>importRef.current?.click()}>Importar JSON</button><input hidden type="file" ref={importRef} accept=".json,application/json" onChange={importJson}/></div></header>
     <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">Editor documental de teste: não altera pedidos, estoque, compras, RH nem as regras oficiais de produção. Os dados ficam no navegador deste Master. {storageError?'⚠ Falha no salvamento; exporte JSON.':'Faça exportações JSON como cópia de segurança.'}</div>
+
+    {helperOpen&&<section className="rounded-xl border border-indigo-200 bg-white p-4" aria-label="Assistente guiado de processos">
+      <h2 className="text-base font-bold text-indigo-900">Assistente para montar o processo</h2>
+      <p className="mb-3 text-xs text-slate-600">Escolha um modelo ou escreva de 2 a 12 etapas, uma por linha. Termine uma linha com ? para criar uma decisão com caminhos Sim e Não. O assistente cria um processo NOVO; não altera o desenho atual nem executa operações reais.</p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <button className={style} onClick={()=>loadHelperTemplate('compras')}>Modelo Compras</button>
+        <button className={style} onClick={()=>loadHelperTemplate('comercial')}>Modelo Comercial</button>
+        <button className={style} onClick={()=>loadHelperTemplate('producao')}>Modelo Produção</button>
+        <button className={style} onClick={()=>loadHelperTemplate('livre')}>Começar do zero</button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="block text-xs font-semibold">Nome do novo processo<input className="mt-1 w-full rounded-lg border p-2 text-sm" maxLength={120} value={helperName} onChange={e=>setHelperName(e.target.value)} placeholder="Ex.: Recebimento de materiais"/></label>
+        <label className="block text-xs font-semibold">Responsável inicial<input className="mt-1 w-full rounded-lg border p-2 text-sm" maxLength={160} value={helperOwner} onChange={e=>setHelperOwner(e.target.value)} placeholder="Ex.: Compras"/></label>
+      </div>
+      <label className="mt-3 block text-xs font-semibold">Etapas do processo<textarea className="mt-1 min-h-44 w-full rounded-lg border p-3 font-mono text-sm" value={helperSteps} onChange={e=>setHelperSteps(e.target.value)} placeholder={'Compra feita\nVidro chegou?\nPerfil chegou?\nConferir materiais\nEncaminhar para conferência técnica'}/></label>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs text-slate-500">Setor escolhido: {sector?.name||'nenhum'} • {helperSteps.split(/\r?\n/).filter(s=>s.trim()).length} etapas</span>
+        <button className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-800" onClick={createGuidedProcess}>Criar novo fluxograma editável</button>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">Ajuda guiada, sem inteligência artificial conectada nesta versão. Você pode editar quadrinhos, setas, fotos e instruções depois. Os rascunhos ficam neste navegador; use Exportar JSON para cópia de segurança.</p>
+    </section>}
     {status&&<div className="flex justify-between rounded-lg border bg-white px-3 py-2 text-xs"><span>{status}</span><button onClick={()=>setStatus('')}>×</button></div>}
     <div className="grid min-h-[630px] grid-cols-1 gap-3 xl:grid-cols-[180px_minmax(0,1fr)_280px]">
       <aside className="rounded-xl border bg-white p-3"><h2 className="mb-2 text-sm font-semibold">Setores</h2><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar setor" className="mb-2 w-full rounded-lg border px-2 py-2 text-xs"/><div className="max-h-80 space-y-1 overflow-auto xl:max-h-[470px]">{ws.sectors.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())).map(s=><button key={s.id} onClick={()=>{setWs(d=>({...d,sectorId:s.id,processId:s.processes[0]?.id||''}));setSelected(null)}} className={'w-full rounded-lg px-3 py-2 text-left text-sm '+(s.id===ws.sectorId?'bg-blue-700 text-white':'hover:bg-slate-100')}>{s.name}</button>)}</div><button className={style+' mt-3 w-full'} onClick={newSector}>+ Setor</button><div className="mt-2 flex gap-2"><button className={style+' flex-1'} onClick={renameSector}>Renomear setor</button><button className={style+' text-rose-700'} onClick={removeSector}>Excluir</button></div><hr className="my-4"/><h3 className="mb-2 text-xs font-semibold">Processos do setor</h3><select value={ws.processId} onChange={e=>{setWs({...ws,processId:e.target.value});setSelected(null)}} className="mb-2 w-full rounded-lg border px-2 py-2 text-xs">{sector?.processes.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><button className={style+' w-full'} onClick={newProcess}>+ Processo</button><div className="mt-2 flex gap-2"><button className={style+' flex-1'} onClick={renameProcess}>Renomear</button><button className={style+' text-rose-700'} onClick={removeProcess}>Excluir</button></div></aside>
