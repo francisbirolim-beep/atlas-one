@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Loader2, Plus, RefreshCw, UsersRound, X } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
+import { formatarTextoMonetarioBR, lerMoedaDigitada } from '@/lib/rhMoeda'
 
 type Tipo='funcionario'|'prestador'|'terceiro'|'fornecedor'
 type Pessoa={id:string;nome:string;tipo:Tipo;cpf_cnpj:string|null;telefone:string|null;email:string|null;endereco:string|null;cargo:string|null;setor:string|null;data_admissao:string|null;salario_base:number|null;observacoes:string|null;ativo:boolean;created_at?:string}
@@ -72,7 +73,7 @@ export default function PessoasRH(){
    <label className="text-xs font-semibold">Cargo / função<input value={form.cargo} onChange={e=>mudar('cargo',e.target.value)} className={campo}/></label>
    <label className="text-xs font-semibold">Setor<input value={form.setor} onChange={e=>mudar('setor',e.target.value)} className={campo}/></label>
    <label className="text-xs font-semibold">Data de admissão (se aplicável)<input type="date" value={form.data_admissao} onChange={e=>mudar('data_admissao',e.target.value)} className={campo}/></label>
-   <label className="text-xs font-semibold">Salário base em R$ (se aplicável)<input type="number" min="0" step=".01" value={form.salario_base} onChange={e=>mudar('salario_base',e.target.value)} className={campo}/></label>
+   <label className="text-xs font-semibold">Salário base em R$ (se aplicável)<input type="text" inputMode="decimal" aria-label="Salário base em reais" placeholder="0,00" value={formatarTextoMonetarioBR(form.salario_base)} onChange={e=>mudar('salario_base',e.target.value?String(lerMoedaDigitada(e.target.value)):'')} className={campo}/></label>
    <label className="text-xs font-semibold sm:col-span-2">Observações<textarea rows={3} value={form.observacoes} onChange={e=>mudar('observacoes',e.target.value)} className={campo}/></label>
    <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={form.ativo} onChange={e=>mudar('ativo',e.target.checked)}/>Cadastro ativo</label>
    <div className="sm:col-span-2 flex justify-end gap-2"><button type="button" onClick={()=>setAberto(false)} className="rounded-lg border px-4 py-2 text-sm">Cancelar</button><button disabled={salvando} className="rounded-lg bg-blue-900 px-5 py-2 text-sm font-bold text-white">{salvando?'Salvando...':'Salvar cadastro'}</button></div>
