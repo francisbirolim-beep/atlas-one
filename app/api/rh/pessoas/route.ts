@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarCompras } from '@/lib/comprasServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { acessoRHServer } from '@/lib/rhAcessoServer'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -10,11 +11,14 @@ const texto = (v:unknown,max=200) => String(v??'').trim().slice(0,max)
 const erro = (m:string,status=400) => NextResponse.json({error:m},{status})
 const preview = () => process.env.VERCEL_ENV === 'preview'
 
-async function master(req:NextRequest) {
+async function master(req:NextRequest,modo:'consulta'|'edicao'='consulta') {
  const u=await autenticarCompras(req)
  if(!u)return {error:erro('Sessão inválida.',401)}
- if(u.role!=='master')return {error:erro('Cadastro completo de RH restrito ao Master.',403)}
- return {u}
+ try{
+  const acl=await acessoRHServer(u,'pessoas')
+  if(!acl.consultar || (modo==='edicao'&&!acl.editar))return {error:erro('Sem autorização para o cadastro de RH.',403)}
+  return {u,podeEditar:acl.editar}
+ }catch(e){console.error('Permissão RH',e);return {error:erro('Não foi possível conferir o acesso de RH.',503)}}
 }
 
 function campos(b:any) {
@@ -48,10 +52,10 @@ export async function GET(req:NextRequest) {
   return NextResponse.json({ok:true,pessoas:[],simulacao:true},{headers:{'Cache-Control':'private, no-store'}})
  }
  if(error){console.error('RH GET',error);return erro('Não foi possível carregar o cadastro de RH.',500)}
- return NextResponse.json({ok:true,pessoas:data||[]},{headers:{'Cache-Control':'private, no-store'}})
+ return NextResponse.json({ok:true,podeEditar:auth.podeEditar,pessoas:data||[]},{headers:{'Cache-Control':'private, no-store'}})
 }
 export async function POST(req:NextRequest) {
- const auth=await master(req);if(auth.error)return auth.error
+ const auth=await master(req,'edicao');if(auth.error)return auth.error
  if(preview())return erro('Homologação somente leitura: nada foi gravado.',423)
  const u=auth.u!
  try {
@@ -71,7 +75,7 @@ export async function POST(req:NextRequest) {
  }catch(e){console.error('RH POST',e);return erro('Falha ao cadastrar pessoa no RH.',500)}
 }
 export async function PATCH(req:NextRequest) {
- const auth=await master(req);if(auth.error)return auth.error
+ const auth=await master(req,'edicao');if(auth.error)return auth.error
  if(preview())return erro('Homologação somente leitura: nada foi gravado.',423)
  const u=auth.u!
  try {
