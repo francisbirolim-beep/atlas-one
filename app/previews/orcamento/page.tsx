@@ -12,6 +12,7 @@ import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
 import CadastroProdutoAvulso from '@/components/previews/CadastroProdutoAvulso'
+import ResumoCustoInternoPreview from '@/components/previews/ResumoCustoInternoPreview'
 import IdentificacaoOrcamentoPreview, { identificacaoVazia, type IdentificacaoOrcamento } from '@/components/previews/IdentificacaoOrcamentoPreview'
 import CondicoesPagamentoOrcamentoPreview from '@/components/previews/CondicoesPagamentoOrcamentoPreview'
 import { resumoPagamentoOrcamento, type DestinoSaldoOrcamento } from '@/lib/previews/pagamentoOrcamento'
@@ -304,7 +305,8 @@ export default function OrcamentoPreview(){
             <div className="mt-4 border-t pt-3">
               <div className="flex justify-between text-sm"><span>Subtotal dos produtos com preço</span><b>{moeda(valorConhecido)}</b></div>
               {semPreco>0&&<p className="mt-2 text-[11px] font-semibold text-amber-800">{semPreco} produto(s) sem preço cadastrado. O total não é definitivo.</p>}
-              {modo==='sob_medida'&&<p className="mt-2 text-[11px] font-semibold text-amber-800">As {medidas.length} tipologia(s) sob medida serão precificadas pelo cálculo próprio, separadamente.</p>}
+              {modo==='sob_medida'&&<p className="mt-2 text-[11px] font-semibold text-amber-800">As {medidas.length} tipologia(s) sob medida serão precificadas pelo cálculo próprio, separadamente.</p>
+              <ResumoCustoInternoPreview itens={itens} totalVenda={valorFinalConhecido} pendencias={totalPendente||descontoInvalido}/>}
             </div>
             <button type="button" onClick={revisar} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-extrabold text-white">Revisar orçamento <ArrowRight size={17}/></button>
           </aside>
@@ -370,6 +372,7 @@ export default function OrcamentoPreview(){
               Orçamento com {semPreco} produto(s) sem preço e {medidas.length} tipologia(s) a precificar. O valor geral é pendente e não será apresentado como total definitivo.
             </p>}
           </section>
+          <ResumoCustoInternoPreview itens={itens} totalVenda={valorFinalConhecido} pendencias={totalPendente||descontoInvalido}/>
           <CondicoesPagamentoOrcamentoPreview
             condicoes={condicoes}
             total={valorFinalConhecido}
