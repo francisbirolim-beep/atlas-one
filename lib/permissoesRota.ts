@@ -20,7 +20,10 @@ export function podeAcessarRotaCatalogada(
  if(role==='master')return true
  // RH só abre com ação nominalmente liberada.
  const rotaRH=Object.keys(ROTAS_RH).find(prefixo=>pathname===prefixo || pathname.startsWith(prefixo+'/'))
- if(rotaRH)return ROTAS_RH[rotaRH].some(acao=>podeExecutarAcao(role,setores,config,'rh',acao,'consulta'))
+ if(rotaRH){
+  const [ler,editar]=ROTAS_RH[rotaRH]
+  return podeExecutarAcao(role,setores,config,'rh',ler,'consulta') || podeExecutarAcao(role,setores,config,'rh',editar,'edicao')
+ }
  // Configurações administrativas (incluindo ACL e integrações) são somente do Master.
  if(pathname==='/configuracoes'||pathname.startsWith('/configuracoes/'))return false
  if(pathname==='/setores')return true
