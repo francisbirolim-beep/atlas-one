@@ -61,6 +61,7 @@ export const GUIAS: Guia[] = [
   { href: '/cadastro/fornecedores', label: 'Fornecedores', icon: Building2, grupo: 'Compras' },
 
   { href: '/rh/pessoas', label: 'Cadastro de pessoas', icon: Users, grupo: 'RH', masterOnly: true },
+  { href: '/rh/holerites', label: 'Holerites manuais', icon: FileText, grupo: 'RH', masterOnly: true },
 
   { href: '/balcao/caixa', label: 'Caixa', icon: WalletCards, grupo: 'Financeiro' },
   { href: '/financeiro/contas-pagar', label: 'Contas a pagar', icon: WalletCards, grupo: 'Financeiro' },
