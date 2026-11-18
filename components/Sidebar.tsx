@@ -148,6 +148,7 @@ export default function Sidebar() {
     if (pathname === '/kanban' || pathname.startsWith('/kanban/') || pathname === '/visao-geral-projetos') setGruposAbertos(prev => ({...prev, Kanban:true}))
     if (pathname === '/relatorios' || pathname.startsWith('/relatorios/')) setGruposAbertos(prev => ({...prev, 'Relatórios':true}))
     if (pathname === '/atlas-ia' || pathname.startsWith('/atlas-ia/')) setGruposAbertos(prev => ({...prev, 'IA Atlas':true}))
+    if (pathname === '/processos') setGruposAbertos(prev => ({...prev, Processos:true}))
   }, [pathname])
 
   async function sair() {
