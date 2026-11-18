@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Prospeccao } from '@/lib/prospeccao'
+import type { RegistroMapaComercial } from '@/lib/prospeccaoMapaComercial'
+import type { EtapaComercialProspeccao } from '@/lib/prospeccaoEtapas'
 import { STATUS_PROSPECCAO } from '@/lib/prospeccao'
 import {
   GRUPOS_MAPA, agruparPontosPorBairro, pontosValidos,
@@ -30,19 +31,26 @@ function gerarPopupPonto(ponto: PontoProspeccao) {
   const fase = document.createElement('p')
   fase.style.margin = '7px 0'
   fase.textContent = 'Situação: ' +
-    (STATUS_PROSPECCAO.find(status => status.id === registro.status)?.label || registro.status)
+    (GRUPOS_MAPA.find(tipo => tipo.id === ponto.classificacao)?.titulo ||
+      STATUS_PROSPECCAO.find(status => status.id === registro.status)?.label || registro.status)
   caixa.append(fase)
   const vendedor = document.createElement('p')
   vendedor.style.margin = '7px 0'
   vendedor.textContent = 'Responsável: ' + (registro.responsavel_nome || 'Não informado')
   caixa.append(vendedor)
+  if (registro.origem_mapa === 'pedido_orcamento') {
+    const origem = document.createElement('p')
+    origem.style.margin = '7px 0'
+    origem.textContent = 'GPS confirmado no pedido de orçamento / obra'
+    caixa.append(origem)
+  }
   const ficha = document.createElement('a')
-  ficha.href = '/prospeccao/' + encodeURIComponent(registro.id)
-  ficha.textContent = 'Abrir ficha da obra'
+  ficha.href = registro.href_mapa || '/prospeccao/' + encodeURIComponent(registro.id)
+  ficha.textContent = registro.origem_mapa === 'pedido_orcamento' ? 'Abrir Cliente 360 / orçamentos' : 'Abrir ficha da obra'
   ficha.style.display = 'block'
   ficha.style.margin = '8px 0'
   ficha.style.color = '#1d4ed8'
-  caixa.append(ficha)
+  if (registro.origem_mapa !== 'pedido_orcamento' || registro.href_mapa) caixa.append(ficha)
   const mapa = document.createElement('a')
   mapa.href = `https://www.google.com/maps/search/?api=1&query=${ponto.latitude},${ponto.longitude}`
   mapa.target = '_blank'
@@ -61,7 +69,7 @@ function gerarPopupBairro(grupo: GrupoBairro) {
   caixa.append(titulo)
   const total = document.createElement('p')
   total.style.margin = '6px 0'
-  total.textContent = grupo.pontos.length + ' obra(s) prospectada(s)'
+  total.textContent = grupo.pontos.length + ' obra(s) no mapa'
   caixa.append(total)
   for (const tipo of GRUPOS_MAPA) {
     const quantidade = grupo.pontos.filter(p => p.classificacao === tipo.id).length
@@ -85,14 +93,14 @@ function gerarPopupBairro(grupo: GrupoBairro) {
   return caixa
 }
 
-export default function MapaProspeccoes({ registros }: { registros: Prospeccao[] }) {
+export default function MapaProspeccoes({ registros, etapasComerciais }: { registros: RegistroMapaComercial[]; etapasComerciais: Record<string, EtapaComercialProspeccao> }) {
   const elemento = useRef<HTMLDivElement>(null)
   const mapaRef = useRef<import('leaflet').Map | null>(null)
   const [filtroSituacao, setFiltroSituacao] = useState<ClassificacaoMapa | ''>('')
   const [erroMapa, setErroMapa] = useState('')
   const [emTelaCheia, setEmTelaCheia] = useState(false)
 
-  const pontos = useMemo(() => pontosValidos(registros), [registros])
+  const pontos = useMemo(() => pontosValidos(registros, etapasComerciais), [registros, etapasComerciais])
   const pontosVisiveis = useMemo(() => pontos.filter(p => !filtroSituacao || p.classificacao === filtroSituacao), [pontos, filtroSituacao])
   const gruposBairro = useMemo(() => agruparPontosPorBairro(pontosVisiveis), [pontosVisiveis])
   const semGps = registros.length - pontos.length
@@ -256,9 +264,9 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
     <section className="space-y-3 rounded-2xl border bg-white p-3 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3 px-1 pt-1">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Mapa real das obras prospectadas</h2>
+          <h2 className="text-base font-bold text-slate-900">Mapa comercial · prospecções, orçamentos e vendas</h2>
           <p className="mt-1 max-w-2xl text-xs text-slate-500">
-            Na visão da cidade, os pinos são agrupados por bairro. Aproxime para ver cada obra na rua e abra a ficha pelo pino.
+            GPS confirmado na visita ou no pedido de orçamento aparece automaticamente. Quando há orçamento e depois venda efetivada, o pino muda de cor. Aproxime para abrir cada obra.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
