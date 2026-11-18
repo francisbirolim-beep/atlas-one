@@ -166,7 +166,7 @@ export default function CadastroProdutoAvulso({ onCriado }: { onCriado: (produto
         {form.categoria === 'perfil' && <p className="text-[11px] text-amber-800 sm:col-span-2">
           Para perfis, este custo serve apenas de referência para calcular o preço de venda.
           O custo técnico de fabricação continua calculado pelo peso e pelo alumínio, sem alteração.
-        </p>
+        </p>}
         <label className="text-xs font-semibold text-slate-700">Definir preço por *
           <select className={campo+' mt-1'} value={form.modoPreco} onChange={e => alterar('modoPreco', e.target.value)}>
             <option value="direto">Informar preço de venda</option>
