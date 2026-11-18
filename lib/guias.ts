@@ -36,6 +36,8 @@ export const GUIAS: Guia[] = [
   { href: '/balcao', label: 'Venda Balcão', icon: Store, grupo: 'Geral' },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3, grupo: 'Geral' },
   { href: '/relatorios/esquadrifacio', label: 'Esquadrifácio', icon: BookOpen, grupo: 'Geral', masterOnly: true },
+  // Nova rota documental isolada. Somente Master enquanto não existir autorização no backend.
+  { href: '/processos', label: 'Processos da Empresa', icon: ClipboardList, grupo: 'Geral', masterOnly: true },
 
   { href: '/clientes', label: 'Clientes', icon: Users, grupo: 'Comercial' },
   { href: '/obras', label: 'Obras', icon: Building2, grupo: 'Comercial' },
