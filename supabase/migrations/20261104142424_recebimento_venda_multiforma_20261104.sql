@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+SET LOCAL statement_timeout = '45s';
 -- Recebimento único com composição por forma: o financeiro segue com um cabeçalho
 -- e uma única distribuição entre parcelas. Os detalhes NÃO geram nova receita.
 CREATE TABLE IF NOT EXISTS public.financeiro_recebimento_formas (

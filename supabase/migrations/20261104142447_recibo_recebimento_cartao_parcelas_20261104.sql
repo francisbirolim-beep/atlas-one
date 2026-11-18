@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+SET LOCAL statement_timeout = '45s';
 -- Modalidade do cartão permanece no campo forma; as parcelas são metadado
 -- financeiro, não lançamentos adicionais em caixa nem parcelas a receber.
 -- NULL preserva integralmente os recebimentos anteriores.
