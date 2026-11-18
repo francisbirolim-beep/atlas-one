@@ -11,6 +11,7 @@ import { listarTipologias } from '@/lib/tipologias'
 import { listarLinhasTecnicas, type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
+import CadastroProdutoAvulso from '@/components/previews/CadastroProdutoAvulso'
 import IdentificacaoOrcamentoPreview, { identificacaoVazia, type IdentificacaoOrcamento } from '@/components/previews/IdentificacaoOrcamentoPreview'
 import CondicoesPagamentoOrcamentoPreview from '@/components/previews/CondicoesPagamentoOrcamentoPreview'
 import { resumoPagamentoOrcamento, type DestinoSaldoOrcamento } from '@/lib/previews/pagamentoOrcamento'
@@ -270,6 +271,7 @@ export default function OrcamentoPreview(){
             <h2 className="flex items-center gap-2 text-lg font-black"><Search size={19} className="text-blue-700"/> {modo==='sob_medida'?'2. Adicionar produtos ao orçamento':'Selecionar produtos para orçamento'}</h2>
             <p className="mt-1 text-xs text-slate-500">Pesquise perfis, acessórios, vidros ou produtos prontos por nome, código ou descrição. Fotos reais do catálogo.</p>
             <div className="relative mt-4"><Search size={17} className="absolute left-3 top-3 text-slate-400"/><input className={baseInput+' pl-10'} value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Pesquisar código, descrição ou nome..."/></div>
+            <CadastroProdutoAvulso onCriado={produto=>{adicionarProduto(produto);setBusca(produto.nome);setCategoria('todos');setLinha('');setPrecoFiltro('todos')}}/>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">{categorias.map(x=><button type="button" key={x.id} onClick={()=>{setCategoria(x.id);setLinha('')}} className={'rounded-lg border px-2 py-2.5 text-xs font-bold '+(categoria===x.id?'border-blue-700 bg-blue-700 text-white':'border-slate-200 bg-slate-50')}>{x.label}</button>)}</div>
             <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
               <label className="text-xs font-bold text-slate-600">Linha técnica<select className={baseInput+' mt-1'} value={linha} onChange={e=>setLinha(e.target.value)}><option value="">Todas as linhas</option>{linhas.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select></label>
