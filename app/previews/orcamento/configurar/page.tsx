@@ -20,7 +20,7 @@ import { type DadosPrecosAluminio, type SimulacaoPrecoAluminio, lerSimulacaoPrec
 type TipologiaCatalogo=Tipologia & {foto_url?:string|null;linhaIds:string[]}
 type Vidro={id:string;descricao:string;produtoAtlasId:string|null;referenciaNaoPrecificada:boolean}
 type Produto={id:string;codigo:string;nome:string;descricao:string;unidade:string;categoria:string;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null}
-type Item={produto:Produto;quantidade:number}
+type Item={produto:Produto;quantidade:number;precoUnitario:number|null}
 type Medida={id:string;tipologia:TipologiaCatalogo;largura:number;altura:number;cor:string;corId:string;linha:string;vidro:string;vidroId:string;contramarco:string;quantidade:number;variaveis:{nome:string;valor:string}[];pendentes:number}
 const input='w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
 const moeda=(v:number)=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
@@ -65,6 +65,8 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const [filtroPreco,setFiltroPreco]=useState('todos')
   const [produtos,setProdutos]=useState<Produto[]>([])
   const [itens,setItens]=useState<Item[]>([])
+  const [precoDigitado,setPrecoDigitado]=useState<Record<string,string>>({})
+  const [erroPreco,setErroPreco]=useState<Record<string,string>>({})
   const [erroProdutos,setErroProdutos]=useState('')
   const [aviso,setAviso]=useState('')
   const [revisao,setRevisao]=useState(false)
@@ -179,8 +181,9 @@ export default function ConfiguradorOrcamentoSobMedida(){
   const linhaSelecionada=linhasTecnicas.find(l=>l.id===filtroLinhaTipologia)
   const vidroSelecionado=vidros.find(v=>v.id===vidroId)
   const folhas=tipologia?.label.match(/\b0?(\d{1,2})\s*folhas?\b/i)?.[1]||null
-  const subtotal=itens.reduce((s,i)=>s+(valorUnitario(i.produto)||0)*i.quantidade,0)
-  const pendentesPreco=itens.filter(i=>valorUnitario(i.produto)==null).length
+  const subtotal=itens.reduce((s,i)=>s+(i.precoUnitario||0)*i.quantidade,0)
+  const pendentesPreco=itens.filter(i=>(valorUnitario(i.produto)??0)<=0).length
+  const precoInvalido=Object.values(erroPreco).some(Boolean)||Object.keys(precoDigitado).length>0||itens.some(i=>{const base=valorUnitario(i.produto);return base!=null&&i.precoUnitario!=null&&Math.round(i.precoUnitario*100)<Math.round(base*100)})
   const descontoBruto=descontoTipo==='percentual'?subtotal*numero(desconto)/100:descontoTipo==='valor'?numero(desconto):0
   const descontoInvalido=descontoTipo==='percentual'?numero(desconto)>100:descontoBruto>subtotal
   const descontoValor=Math.max(0,Math.min(subtotal,descontoBruto))
@@ -258,10 +261,39 @@ export default function ConfiguradorOrcamentoSobMedida(){
     setAviso('Tipologia adicionada. Configure outra ou revise o orçamento.')
   }
   function adicionarProduto(p:Produto){
-    setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1}]})
+    setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1,precoUnitario:valorUnitario(p)}]})
+  }
+  function digitarPreco(id:string,valor:string){
+    if(!/^\d{0,8}([,.]\d{0,2})?$/.test(valor))return
+    setPrecoDigitado(a=>({...a,[id]:valor}))
+    setErroPreco(a=>({...a,[id]:''}))
+  }
+  function confirmarPreco(id:string){
+    const item=itens.find(i=>i.produto.id===id)
+    const digitado=precoDigitado[id]
+    if(!item||digitado===undefined)return
+    const base=valorUnitario(item.produto),valor=numero(digitado)
+    if(base==null||base<=0||!digitado.trim()||!Number.isFinite(valor)||Math.round(valor*100)<Math.round(base*100)){
+      setErroPreco(a=>({...a,[id]:'O preço não pode ser menor que o cadastrado. Para reduzir, use o Desconto do orçamento.'}))
+    }else{
+      setItens(a=>a.map(i=>i.produto.id===id?{...i,precoUnitario:Math.round(valor*100)/100}:i))
+      setErroPreco(a=>({...a,[id]:''}))
+    }
+    setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
+  }
+  function removerProduto(id:string){
+    setItens(a=>a.filter(x=>x.produto.id!==id))
+    setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
+    setErroPreco(a=>{const b={...a};delete b[id];return b})
+  }
+  function revisarOrcamento(){
+    if(!medidas.length){setAviso('Adicione pelo menos uma tipologia sob medida.');return}
+    if(precoInvalido){setAviso('Corrija os preços unitários. Para reduzir o valor cadastrado, utilize o desconto do orçamento.');return}
+    setRevisao(true);setAviso('')
   }
   function alterarQtd(id:string,n:number){if(!Number.isInteger(n)||n<1||n>99999)return;setItens(a=>a.map(x=>x.produto.id===id?{...x,quantidade:n}:x))}
   function gerar(rascunho=false){
+    if(precoInvalido){setAviso('Corrija os preços unitários. Para reduzir o valor cadastrado, utilize o desconto do orçamento.');return}
     if(temPendencias&&!rascunho){setMostrarPendencias(true);setAviso('Existem preços ou fórmulas técnicas pendentes. Confira a relação antes de finalizar o orçamento.');return}
     if(descontoInvalido){setAviso('Corrija o desconto.');return}
     if(resumoPagamento.possuiValorInvalido){
@@ -282,7 +314,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
     }))
     const ps:ProdutoDocumento[]=itens.map(i=>({
       id:i.produto.id,codigo:i.produto.codigo,nome:i.produto.nome,descricao:i.produto.descricao,unidade:i.produto.unidade,
-      quantidade:i.quantidade,preco:valorUnitario(i.produto),imagem:i.produto.fotoUrl||i.produto.fotoCandidataUrl||null
+      quantidade:i.quantidade,preco:i.precoUnitario,imagem:i.produto.fotoUrl||i.produto.fotoCandidataUrl||null
     }))
     setDocumento({
       cliente:identificacao.clienteNome,
@@ -448,17 +480,25 @@ export default function ConfiguradorOrcamentoSobMedida(){
           {!erroProdutos&&!produtos.length&&<p className="mt-3 text-xs text-slate-500">Nenhum produto cadastrado encontrado com estes filtros.</p>}
         </section>
         <aside className="rounded-2xl border bg-white p-4 shadow-sm"><h3 className="text-sm font-black">Itens avulsos adicionados</h3>
-          {itens.map(i=><div key={i.produto.id} className="mt-3 border-b pb-3"><b className="text-xs">{i.produto.nome}</b><p className="text-xs text-slate-600">{valorUnitario(i.produto)!=null?moeda(valorUnitario(i.produto)!):'Preço pendente'}</p><div className="mt-2 flex items-center gap-2"><label className="text-xs">Qtd.</label><input type="number" min="1" className="w-20 rounded-lg border p-1.5 text-center text-xs" value={i.quantidade} onChange={e=>alterarQtd(i.produto.id,Number(e.target.value))}/><button type="button" aria-label="Remover item" onClick={()=>setItens(a=>a.filter(x=>x.produto.id!==i.produto.id))} className="ml-auto text-red-700"><Trash2 size={15}/></button></div></div>)}
+          {itens.map(i=><div key={i.produto.id} className="mt-3 border-b pb-3">
+            <b className="text-xs">{i.produto.nome}</b>
+            <p className="text-xs text-slate-600">Preço cadastrado: {valorUnitario(i.produto)!=null?moeda(valorUnitario(i.produto)!):'Preço pendente'}</p>
+            {valorUnitario(i.produto)!=null&&valorUnitario(i.produto)!>0&&<label className="mt-2 block text-xs font-bold text-slate-700">Preço unitário neste orçamento (R$)
+              <input type="text" inputMode="decimal" autoComplete="off" aria-invalid={!!erroPreco[i.produto.id]} className={input+' mt-1'} value={precoDigitado[i.produto.id]??(i.precoUnitario??0).toFixed(2).replace('.',',')} onChange={e=>digitarPreco(i.produto.id,e.target.value)} onBlur={()=>confirmarPreco(i.produto.id)}/>
+            </label>}
+            {erroPreco[i.produto.id]&&<p role="alert" className="mt-1 text-[11px] font-bold text-red-700">{erroPreco[i.produto.id]}</p>}
+            <div className="mt-2 flex items-center gap-2"><label className="text-xs">Qtd.</label><input type="number" min="1" className="w-20 rounded-lg border p-1.5 text-center text-xs" value={i.quantidade} onChange={e=>alterarQtd(i.produto.id,Number(e.target.value))}/><button type="button" aria-label="Remover item" onClick={()=>removerProduto(i.produto.id)} className="ml-auto text-red-700"><Trash2 size={15}/></button></div>
+          </div>)}
           <div className="mt-3 flex justify-between text-xs font-bold"><span>Subtotal conhecido</span><span>{moeda(subtotal)}</span></div>
           <button type="button" onClick={()=>setMostrarProdutos(false)} className="mt-3 w-full rounded-lg border py-2 text-xs font-bold">Concluir inclusão de produtos</button>
         </aside>
       </div>}
-      {!revisao&&<div className="flex justify-end"><button type="button" onClick={()=>{if(!medidas.length){setAviso('Adicione pelo menos uma tipologia sob medida.');return}setRevisao(true);setAviso('')}} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-6 py-3 text-sm font-bold text-white">Revisar orçamento <ArrowRight size={17}/></button></div>}
+      {!revisao&&<div className="flex justify-end"><button type="button" onClick={revisarOrcamento} className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-6 py-3 text-sm font-bold text-white">Revisar orçamento <ArrowRight size={17}/></button></div>}
       {revisao&&<section className="mx-auto max-w-4xl rounded-2xl border bg-white p-5 shadow-sm sm:p-8">
         <h2 className="flex items-center justify-center gap-2 text-xl font-black"><Check size={22} className="text-emerald-700"/> Revisão da proposta — Simulação</h2>
         <p className="mt-2 text-center text-xs text-slate-500">Cliente: {identificacao.clienteNome||'A identificar'} · Vendedor: {identificacao.vendedorNome||'A definir'}. Nenhum orçamento, pedido, pagamento ou custo técnico será gravado.</p>
         {medidas.map(m=><div key={m.id} className="mt-4 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.linha||'Linha pendente'} · {m.vidro||'Vidro pendente'}</p><p className="text-slate-500">{m.variaveis.map(v=>v.nome+': '+v.valor).join(' · ')||'Variáveis ainda não escolhidas'}</p></div><b className="text-amber-800">A precificar</b></div>)}
-        {itens.map(i=><div key={i.produto.id} className="mt-3 flex justify-between border-b pb-2 text-xs"><span>{i.quantidade} × {i.produto.nome}</span><b>{valorUnitario(i.produto)!=null?moeda(valorUnitario(i.produto)!*i.quantidade):'A precificar'}</b></div>)}
+        {itens.map(i=><div key={i.produto.id} className="mt-3 flex justify-between border-b pb-2 text-xs"><span>{i.quantidade} × {i.produto.nome}</span><b>{i.precoUnitario!=null?moeda(i.precoUnitario*i.quantidade):'A precificar'}</b></div>)}
         {temPendencias&&<section className="mt-5 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
           <button type="button" onClick={()=>setMostrarPendencias(v=>!v)}
             className="flex w-full items-center justify-between gap-3 text-left">
