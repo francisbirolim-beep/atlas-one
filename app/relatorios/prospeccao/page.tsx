@@ -6,6 +6,8 @@ import {useRelatoriosAcesso,autorizarExportacaoRelatorio} from '@/components/rel
 import {usuarioAtual} from '@/lib/auth'
 import {listarProspeccoes,STATUS_PROSPECCAO,type Prospeccao} from '@/lib/prospeccao'
 import {baixarCsv} from '@/lib/relatorios'
+import {consultarEtapasComerciaisProspeccoes} from '@/lib/prospeccaoEtapas'
+import type {EtapasComerciaisProspeccao} from '@/lib/prospeccaoMapa'
 import type {Usuario} from '@/lib/tipos'
 import { LOGOTIPO_PDF_FUNDO_CLARO } from '@/lib/brandingRelatorios'
 
@@ -37,6 +39,8 @@ export default function RelatorioProspeccao(){
  const acesso=useRelatoriosAcesso().comercial
  const [usuario,setUsuario]=useState<Usuario|null>(null)
  const [registros,setRegistros]=useState<Prospeccao[]>([])
+ const [etapas,setEtapas]=useState<EtapasComerciaisProspeccao>({})
+ const [avisoEtapas,setAvisoEtapas]=useState('')
  const [carregando,setCarregando]=useState(true)
  const [exportando,setExportando]=useState(false)
  const [erro,setErro]=useState('')
@@ -51,7 +55,9 @@ export default function RelatorioProspeccao(){
   if(!acesso.consultar)return
   setCarregando(true);setErro('')
   try{const u=await usuarioAtual();if(!u)throw Error('Sessão expirada. Entre novamente.')
-   setUsuario(u);setRegistros(await listarProspeccoes())
+   setUsuario(u);const lista=await listarProspeccoes();setRegistros(lista)
+   try{setEtapas(await consultarEtapasComerciaisProspeccoes(lista));setAvisoEtapas('')}
+   catch{setEtapas({});setAvisoEtapas('Não foi possível verificar os orçamentos. Indicadores de orçamento e venda podem estar incompletos.')}
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao consultar prospecções.')}
   finally{setCarregando(false)}
  }
@@ -73,6 +79,21 @@ export default function RelatorioProspeccao(){
  const porCidade=useMemo(()=>agrupar(filtrados,r=>r.cidade||''),[filtrados])
  const porBairro=useMemo(()=>agrupar(filtrados,r=>[r.cidade,r.bairro].filter(Boolean).join(' / ')),[filtrados])
  const porStatus=useMemo(()=>agrupar(filtrados,r=>nomeStatus(r.status)),[filtrados])
+ const resumoBairros=useMemo(()=>{
+  const mapa=new Map<string,{cidade:string;bairro:string;total:number;clientes:number;orcamentos:number;vendas:number}>()
+  const normalizar=(v:string)=>v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR').replace(/\s+/g,' ').trim()
+  for(const r of filtrados){
+   const cidade=r.cidade?.trim()||'Não informada',bairro=r.bairro?.trim()||'Não informado'
+   const chave=normalizar(cidade)+'::'+normalizar(bairro)
+   const linha=mapa.get(chave)||{cidade,bairro,total:0,clientes:0,orcamentos:0,vendas:0}
+   linha.total++
+   if(r.cliente_id||r.status==='convertido')linha.clientes++
+   if(etapas[r.id]==='orcamento')linha.orcamentos++
+   if(etapas[r.id]==='venda')linha.vendas++
+   mapa.set(chave,linha)
+  }
+  return [...mapa.values()].sort((a,b)=>b.total-a.total||a.cidade.localeCompare(b.cidade,'pt-BR')||a.bairro.localeCompare(b.bairro,'pt-BR'))
+ },[filtrados,etapas])
  const porVendedor=useMemo(()=>agrupar(filtrados,r=>r.responsavel_nome||''),[filtrados])
  const abertos=filtrados.filter(r=>!['convertido','sem_interesse'].includes(r.status)).length
  const convertidos=filtrados.filter(r=>r.status==='convertido').length
@@ -81,6 +102,15 @@ export default function RelatorioProspeccao(){
  const semGps=filtrados.filter(r=>r.latitude==null||r.longitude==null).length
  const colunas=['Data','Obra / Cliente','Cidade','Bairro','Rua','CEP','Vendedor','Situação','Próxima ação']
  const valores=filtrados.map(r=>[dataBR(r.created_at),r.nome_obra||r.nome_cliente,r.cidade||'',r.bairro||'',r.endereco||'',r.cep||'',r.responsavel_nome||'',nomeStatus(r.status),r.proxima_acao_em?dataBR(r.proxima_acao_em)+' '+(r.proxima_acao||''):(r.proxima_acao||'')])
+ async function csvBairros(){
+  setErro('');setExportando(true)
+  try{await autorizarExportacaoRelatorio('comercial');baixarCsv('atlas-prospeccao-por-bairro.csv',[
+   ['Cidade','Bairro','Prospecções','Clientes cadastrados','Com orçamento','Vendas confirmadas'],
+   ...resumoBairros.map(r=>[r.cidade,r.bairro,r.total,r.clientes,r.orcamentos,r.vendas])
+  ])}
+  catch(e){setErro(e instanceof Error?e.message:'Exportação não autorizada')}
+  finally{setExportando(false)}
+ }
  async function csv(){
   setErro('');setExportando(true)
   try{await autorizarExportacaoRelatorio('comercial');baixarCsv('atlas-prospeccao-obras.csv',[colunas,...valores])}
@@ -149,6 +179,7 @@ export default function RelatorioProspeccao(){
    <div className="flex flex-wrap gap-2">
     <button onClick={()=>void carregar()} disabled={carregando} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><RefreshCw size={15}/>Atualizar</button>
     {acesso.exportar&&<><button onClick={()=>void csv()} disabled={exportando||carregando} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Download size={15}/>CSV</button>
+     <button onClick={()=>void csvBairros()} disabled={exportando||carregando} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><Download size={15}/>CSV por bairro</button>
      <button onClick={()=>void pdf()} disabled={exportando||carregando} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white"><FileDown size={15}/>PDF com logo</button></>}
    </div>
   </header>
@@ -162,6 +193,7 @@ export default function RelatorioProspeccao(){
    <label className="text-xs font-semibold sm:col-span-2 lg:col-span-3 xl:col-span-6">Pesquisar cliente ou endereço<input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Nome, rua, telefone..." className="mt-1 block w-full rounded-lg border p-2"/></label>
   </section>
   {erro&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{erro}</p>}
+  {avisoEtapas&&<p role="status" className="rounded-xl bg-amber-50 p-3 text-xs text-amber-800">{avisoEtapas}</p>}
   {carregando&&<p className="text-sm text-slate-500">Carregando prospecções...</p>}
   {inicio>fim&&<p className="text-sm text-red-700">A data inicial deve ser anterior ou igual à final.</p>}
   <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -172,6 +204,14 @@ export default function RelatorioProspeccao(){
    <Grafico titulo="Prospecções por bairro" dados={porBairro} total={filtrados.length}/>
    <Grafico titulo="Etapas comerciais" dados={porStatus} total={filtrados.length}/>
    <Grafico titulo="Prospecções por vendedor" dados={porVendedor} total={filtrados.length}/>
+  </section>
+  <section className="rounded-2xl border bg-white p-4">
+   <h2 className="font-bold">Resultado por cidade e bairro</h2>
+   <p className="mb-3 text-xs text-slate-500">Resumo das visitas da área, incluindo registros sem GPS. Orçamento e venda só contam quando vinculados e confirmados nos registros comerciais visíveis.</p>
+   <div className="overflow-x-auto"><table className="w-full min-w-[660px] text-left text-xs"><thead className="bg-slate-100"><tr>{['Cidade','Bairro','Prospecções','Clientes','Orçamentos','Vendas'].map(x=><th key={x} className="p-3">{x}</th>)}</tr></thead><tbody>
+    {resumoBairros.map(r=><tr key={r.cidade+'::'+r.bairro} className="border-t"><td className="p-3">{r.cidade}</td><td className="p-3 font-bold">{r.bairro}</td><td className="p-3">{r.total}</td><td className="p-3">{r.clientes}</td><td className="p-3">{r.orcamentos}</td><td className="p-3">{r.vendas}</td></tr>)}
+    {!resumoBairros.length&&<tr><td colSpan={6} className="p-4 text-center text-slate-500">Nenhum bairro no período.</td></tr>}
+   </tbody></table></div>
   </section>
   <div className="flex flex-wrap justify-between gap-2"><h2 className="font-bold">Obras prospectadas ({filtrados.length})</h2><Link href="/prospeccao" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700"><MapPin size={15}/>Ver mapa de prospecção</Link></div>
   <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full min-w-[1060px] text-left text-xs"><thead className="bg-slate-100"><tr>{colunas.map(c=><th key={c} className="p-3">{c}</th>)}</tr></thead><tbody>

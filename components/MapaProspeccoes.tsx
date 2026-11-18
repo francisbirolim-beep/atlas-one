@@ -5,7 +5,7 @@ import type { Prospeccao } from '@/lib/prospeccao'
 import { STATUS_PROSPECCAO } from '@/lib/prospeccao'
 import {
   GRUPOS_MAPA, agruparPontosPorBairro, pontosValidos,
-  type ClassificacaoMapa, type GrupoBairro, type PontoProspeccao,
+  type ClassificacaoMapa, type EtapasComerciaisProspeccao, type GrupoBairro, type PontoProspeccao,
 } from '@/lib/prospeccaoMapa'
 import 'leaflet/dist/leaflet.css'
 
@@ -30,7 +30,8 @@ function gerarPopupPonto(ponto: PontoProspeccao) {
   const fase = document.createElement('p')
   fase.style.margin = '7px 0'
   fase.textContent = 'Situação: ' +
-    (STATUS_PROSPECCAO.find(status => status.id === registro.status)?.label || registro.status)
+    (GRUPOS_MAPA.find(status => status.id === ponto.classificacao)?.titulo ||
+      STATUS_PROSPECCAO.find(status => status.id === registro.status)?.label || registro.status)
   caixa.append(fase)
   const vendedor = document.createElement('p')
   vendedor.style.margin = '7px 0'
@@ -85,14 +86,14 @@ function gerarPopupBairro(grupo: GrupoBairro) {
   return caixa
 }
 
-export default function MapaProspeccoes({ registros }: { registros: Prospeccao[] }) {
+export default function MapaProspeccoes({ registros, etapas = {}, avisoEtapas = '' }: { registros: Prospeccao[]; etapas?: EtapasComerciaisProspeccao; avisoEtapas?: string }) {
   const elemento = useRef<HTMLDivElement>(null)
   const mapaRef = useRef<import('leaflet').Map | null>(null)
   const [filtroSituacao, setFiltroSituacao] = useState<ClassificacaoMapa | ''>('')
   const [erroMapa, setErroMapa] = useState('')
   const [emTelaCheia, setEmTelaCheia] = useState(false)
 
-  const pontos = useMemo(() => pontosValidos(registros), [registros])
+  const pontos = useMemo(() => pontosValidos(registros, etapas), [registros, etapas])
   const pontosVisiveis = useMemo(() => pontos.filter(p => !filtroSituacao || p.classificacao === filtroSituacao), [pontos, filtroSituacao])
   const gruposBairro = useMemo(() => agruparPontosPorBairro(pontosVisiveis), [pontosVisiveis])
   const semGps = registros.length - pontos.length
@@ -306,6 +307,7 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
         </div>
       )}
       {erroMapa && <p role="alert" className="px-2 text-xs text-amber-800">{erroMapa}</p>}
+      {avisoEtapas && <p role="status" className="px-2 text-xs text-amber-800">{avisoEtapas}</p>}
 
       <div className="flex flex-wrap gap-x-5 gap-y-3 border-t px-1 pt-3">
         {totalPorSituacao.map(tipo => (

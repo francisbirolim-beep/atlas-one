@@ -1,6 +1,7 @@
 export type CepEnderecoViaCep = {
   cep?: string
   logradouro?: string
+  complemento?: string
   bairro?: string
   localidade?: string
   uf?: string
@@ -12,7 +13,7 @@ export function normalizarTextoEndereco(valor: string) {
     .toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-function normalizarRua(valor: string) {
+export function normalizarRua(valor: string) {
   return normalizarTextoEndereco(valor).replace(/^(rua|avenida|av|travessa|alameda|praca|estrada|rodovia|r) /, '')
 }
 
