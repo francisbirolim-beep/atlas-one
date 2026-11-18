@@ -76,6 +76,7 @@ function Via({form,via}:{form:Form;via:'empregador'|'empregado'}) {
      <colgroup><col style={{width:'6%'}}/><col style={{width:'6%'}}/><col style={{width:'27%'}}/><col style={{width:'11%'}}/><col style={{width:'18%'}}/><col style={{width:'12%'}}/><col style={{width:'10%'}}/><col style={{width:'10%'}}/></colgroup>
      <thead><tr>{['Data','Código','Descrição','Quant/ %','Referência','Vr.Unit./Base','Vencimentos','Descontos'].map(h=><th key={h}>{h}</th>)}</tr></thead>
      <tbody><tr className="rh-altura-lancamentos"><td colSpan={8}>
+      <div className="rh-linhas-grade" aria-hidden="true">{[6,12,39,50,68,80,90].map(p=><span key={p} style={{left:p+'%'}}/>)}</div>
       <table className="rh-tabela-interna"><colgroup><col style={{width:'6%'}}/><col style={{width:'6%'}}/><col style={{width:'27%'}}/><col style={{width:'11%'}}/><col style={{width:'18%'}}/><col style={{width:'12%'}}/><col style={{width:'10%'}}/><col style={{width:'10%'}}/></colgroup>
       <tbody>{d.itens.map((it,i)=><tr key={i}>
        <td>{it.dia}</td><td>{it.codigo}</td><td className="rh-descricao">{it.descricao}</td>
@@ -194,7 +195,7 @@ export default function AdiantamentosRH() {
   .rh-tabela-recibo{width:100%;border-collapse:collapse;table-layout:fixed;border:.35mm solid black;font-size:6.6pt}
   .rh-tabela-recibo th{border-right:.2mm solid black;border-bottom:.35mm solid black;padding:.45mm .15mm;text-align:center;white-space:nowrap;font-weight:bold}
   .rh-altura-lancamentos{height:65mm}
-  .rh-altura-lancamentos>td{padding:0;vertical-align:top;
+  .rh-altura-lancamentos>td{padding:0;vertical-align:top;position:relative;
    background-image:
    linear-gradient(to right, transparent calc(6% - .1mm), #222 calc(6% - .1mm), #222 calc(6% + .1mm), transparent calc(6% + .1mm)),
    linear-gradient(to right, transparent calc(12% - .1mm), #222 calc(12% - .1mm), #222 calc(12% + .1mm), transparent calc(12% + .1mm)),
@@ -203,7 +204,9 @@ export default function AdiantamentosRH() {
    linear-gradient(to right, transparent calc(68% - .1mm), #222 calc(68% - .1mm), #222 calc(68% + .1mm), transparent calc(68% + .1mm)),
    linear-gradient(to right, transparent calc(80% - .1mm), #222 calc(80% - .1mm), #222 calc(80% + .1mm), transparent calc(80% + .1mm)),
    linear-gradient(to right, transparent calc(90% - .1mm), #222 calc(90% - .1mm), #222 calc(90% + .1mm), transparent calc(90% + .1mm));}
-  .rh-tabela-interna{width:100%;border-collapse:collapse;table-layout:fixed}
+  .rh-linhas-grade{position:absolute;inset:0;pointer-events:none}
+  .rh-linhas-grade span{position:absolute;top:0;bottom:0;border-left:.2mm solid #111}
+  .rh-tabela-interna{width:100%;border-collapse:collapse;table-layout:fixed;position:relative}
   .rh-tabela-interna td{padding:.65mm .15mm;border-right:.2mm solid black;text-align:right;vertical-align:top;height:4.1mm;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .rh-tabela-interna td.rh-descricao{text-align:left}
   .rh-inferior{height:20.5mm;display:grid;grid-template-columns:minmax(0,1fr) 48mm;border-left:.35mm solid black;border-bottom:.35mm solid black}
