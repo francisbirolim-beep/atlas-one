@@ -27,7 +27,7 @@ export default function ResumoCustoInternoPreview({
   totalVenda: number
   pendencias?: boolean
 }) {
-  const idsKey = itens.map(i => i.produto.id).sort().join(',')
+  const idsKey = [...new Set(itens.map(i => i.produto.id))].sort().join(',')
   const [podeConsultar, setPodeConsultar] = useState(false)
   const [custos, setCustos] = useState<Record<string, number | null>>({})
   const [carregadoPara, setCarregadoPara] = useState('')
