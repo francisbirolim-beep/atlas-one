@@ -125,9 +125,9 @@ export default function AdiantamentosRH() {
   finally {setCarregando(false)}
  }
  useEffect(()=>{void carregar()},[])
- function novo(){setEdicao('');setForm(vazio());setErro('');setAviso('')}
+ function novo(){setEdicao('');setSelecionados([]);setForm(vazio());setErro('');setAviso('')}
  function abrir(r:Recibo,duplicar=false){
-  setEdicao(duplicar?'':r.id)
+  setEdicao(duplicar?'':r.id);setSelecionados([])
   setForm({rh_pessoa_id:r.rh_pessoa_id||'',funcionario_nome:r.funcionario_nome,competencia:r.competencia,situacao:duplicar?'rascunho':r.situacao,dados:JSON.parse(JSON.stringify(r.dados))})
   setErro('');setAviso('')
  }
