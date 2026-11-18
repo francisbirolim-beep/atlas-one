@@ -9,6 +9,7 @@ import { type LinhaTecnica } from '@/lib/linhasTecnicas'
 import type { Tipologia } from '@/lib/tipos'
 import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
+import CadastroProdutoAvulso from '@/components/previews/CadastroProdutoAvulso'
 import FotoTipologiaPreview from '@/components/previews/FotoTipologiaPreview'
 import IdentificacaoOrcamentoPreview, { identificacaoVazia, type IdentificacaoOrcamento } from '@/components/previews/IdentificacaoOrcamentoPreview'
 import CondicoesPagamentoOrcamentoPreview from '@/components/previews/CondicoesPagamentoOrcamentoPreview'
@@ -468,6 +469,7 @@ export default function ConfiguradorOrcamentoSobMedida(){
         <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <h2 className="flex items-center gap-2 text-base font-black"><Search size={18}/> Pesquisar produtos adicionais</h2>
           <input className={input+' mt-3'} placeholder="Código, nome ou descrição..." value={buscaProduto} onChange={e=>setBuscaProduto(e.target.value)}/>
+          <CadastroProdutoAvulso onCriado={produto=>{adicionarProduto(produto);setBuscaProduto(produto.nome);setCategoria('todos');setLinhaProduto('');setFiltroPreco('todos')}}/>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">{categorias.map(c=><button type="button" key={c[0]} onClick={()=>{setCategoria(c[0]);setLinhaProduto('')}} className={'rounded-lg border p-2 text-xs font-bold '+(categoria===c[0]?'bg-blue-700 text-white':'bg-slate-50')}>{c[1]}</button>)}</div>
           <div className="mt-3 grid gap-2 sm:grid-cols-2"><label className="text-xs font-bold">Linha técnica<select className={input+' mt-1'} value={linhaProduto} onChange={e=>setLinhaProduto(e.target.value)}><option value="">Todas as linhas</option>{linhasProdutos.map(l=><option key={l.id} value={l.id}>{l.nome}</option>)}</select></label>
             <label className="text-xs font-bold">Preço<select className={input+' mt-1'} value={filtroPreco} onChange={e=>setFiltroPreco(e.target.value)}><option value="todos">Todos</option><option value="com">Com preço</option><option value="sem">Sem preço</option></select></label></div>
