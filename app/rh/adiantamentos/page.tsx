@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Copy, FileText, Loader2, Plus, Printer, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import { formatarNumeroMoedaBR, formatarTextoMonetarioBR, lerMoedaDigitada, mascaraMoedaBR } from '@/lib/rhMoeda'
 
 type Evento = { dia: string; codigo: string; descricao: string; quantidade: string; referencia: string; base: string; vencimentos: number; descontos: number }
 type Dados = {
@@ -16,6 +17,7 @@ type Dados = {
 type Form = { id?: string; rh_pessoa_id: string; funcionario_nome: string; competencia: string; situacao: 'rascunho'|'emitido'; dados: Dados }
 type Pessoa = { id: string; nome: string; cargo: string|null; setor: string|null; data_admissao: string|null; salario_base: number|null; ativo: boolean }
 type Recibo = Form & { id: string; total_vencimentos: number; total_descontos: number; valor_liquido: number; created_at: string; emitido_em: string|null }
+const camposMonetarios = new Set<keyof Dados>(['salario_base','salario_contrib_inss','base_fgts','fgts_mes','base_irrf'])
 const hoje = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' })
 const dataBr = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.split('-').reverse().join('/') : ''
 const numeroBr = (n: number) => new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n || 0)
@@ -270,14 +272,14 @@ export default function AdiantamentosRH() {
        ['cargo','Cargo'],['banco','Banco'],['agencia','Agência'],['conta','Conta corrente'],
        ['salario_base','Salário base (R$)'],['salario_contrib_inss','Sal. contribuição INSS'],
        ['base_fgts','Base FGTS'],['fgts_mes','FGTS do mês'],['base_irrf','Base IRRF'],
-      ] as [keyof Dados,string][]).map(([key,label])=><label key={key} className={'text-xs font-semibold '+(key==='empresa_nome'||key==='empresa_endereco'?'sm:col-span-2':'')} >{label}<input type={key==='data_pagamento'||key==='data_admissao'?'date':'text'} className={campo} value={String(form.dados[key])} onChange={e=>mudarDados(key,e.target.value as never)}/></label>)}
+      ] as [keyof Dados,string][]).map(([key,label])=><label key={key} className={'text-xs font-semibold '+(key==='empresa_nome'||key==='empresa_endereco'?'sm:col-span-2':'')} >{label}<input type={key==='data_pagamento'||key==='data_admissao'?'date':'text'} className={campo} inputMode={camposMonetarios.has(key)?'decimal':undefined} placeholder={camposMonetarios.has(key)?'0,00':undefined} value={camposMonetarios.has(key)?formatarTextoMonetarioBR(String(form.dados[key])):String(form.dados[key])} onChange={e=>mudarDados(key,(camposMonetarios.has(key)?mascaraMoedaBR(e.target.value):e.target.value) as never)}/></label>)}
      </div>
      <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">Lançamentos do recibo</h3><div className="flex flex-wrap gap-2"><button type="button" onClick={aplicarPercentual} className="rounded-lg border px-3 py-2 text-xs font-semibold">Recalcular percentual do adiantamento</button><button type="button" disabled={form.dados.itens.length>=12} onClick={()=>mudarDados('itens',[...form.dados.itens,{dia:hoje().slice(8,10),codigo:'',descricao:'',quantidade:'',referencia:'',base:'',vencimentos:0,descontos:0}])} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs"><Plus size={13}/>Linha</button></div></div>
       <div className="space-y-2">{form.dados.itens.map((it,i)=><div key={i} className="grid grid-cols-2 gap-2 rounded-lg border bg-slate-50 p-3 sm:grid-cols-4 lg:grid-cols-10 lg:items-end">
-       {([['dia','Dia'],['codigo','Código'],['descricao','Descrição'],['quantidade','Quant/%'],['referencia','Referência'],['base','Vr.Unit./Base']] as [keyof Evento,string][]).map(([key,label])=><label key={key} className={'text-xs '+(key==='descricao'?'col-span-2 lg:col-span-2':'')} >{label}<input value={String(it[key])} onChange={e=>evento(i,key,e.target.value)} className={campo}/></label>)}
-       <label className="text-xs">Vencimentos<input type="number" min="0" step=".01" value={it.vencimentos} onChange={e=>evento(i,'vencimentos',Number(e.target.value)||0)} className={campo}/></label>
-       <label className="text-xs">Descontos<input type="number" min="0" step=".01" value={it.descontos} onChange={e=>evento(i,'descontos',Number(e.target.value)||0)} className={campo}/></label>
+       {([['dia','Dia'],['codigo','Código'],['descricao','Descrição'],['quantidade','Quant/%'],['referencia','Referência'],['base','Vr.Unit./Base']] as [keyof Evento,string][]).map(([key,label])=><label key={key} className={'text-xs '+(key==='descricao'?'col-span-2 lg:col-span-2':'')} >{label}<input inputMode={key==='base'?'decimal':undefined} value={key==='base'?formatarTextoMonetarioBR(String(it[key])):String(it[key])} onChange={e=>evento(i,key,key==='base'?mascaraMoedaBR(e.target.value):e.target.value)} className={campo}/></label>)}
+       <label className="text-xs">Vencimentos<input type="text" inputMode="decimal" value={formatarNumeroMoedaBR(it.vencimentos)} onChange={e=>evento(i,'vencimentos',lerMoedaDigitada(e.target.value))} className={campo}/></label>
+       <label className="text-xs">Descontos<input type="text" inputMode="decimal" value={formatarNumeroMoedaBR(it.descontos)} onChange={e=>evento(i,'descontos',lerMoedaDigitada(e.target.value))} className={campo}/></label>
        <button type="button" aria-label="Remover linha" onClick={()=>mudarDados('itens',form.dados.itens.filter((_,n)=>i!==n))} className="rounded-lg border p-2 text-red-700"><Trash2 size={16}/></button>
       </div>)}</div>
       <div className="grid gap-3 rounded-lg bg-slate-100 p-3 sm:grid-cols-3"><div className="text-sm">Total vencimentos <b className="block text-lg">{moeda(totais.vencimentos)}</b></div><div className="text-sm">Total descontos <b className="block text-lg">{moeda(totais.descontos)}</b></div><div className="text-sm">Valor líquido <b className="block text-lg">{moeda(totais.liquido)}</b></div></div>
