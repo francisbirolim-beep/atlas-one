@@ -7,7 +7,7 @@ import { LOGOTIPO_PDF_FUNDO_CLARO } from '@/lib/brandingRelatorios'
 import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
 import { resumoPagamentoOrcamento, valorEmCentavos, reais, type DestinoSaldoOrcamento } from '@/lib/previews/pagamentoOrcamento'
 
-export type ProdutoDocumento={id:string;codigo:string;nome:string;descricao:string;unidade:string;quantidade:number;preco:number|null;imagem:string|null}
+export type ProdutoDocumento={id:string;codigo:string;codigoItem?:string;nome:string;descricao:string;unidade:string;quantidade:number;preco:number|null;imagem:string|null;largura?:string;altura?:string}
 export type TipologiaDocumento={
   id:string;nome:string;linha:string;largura:string;altura:string;quantidade:number;cor:string;vidro:string;
   contramarco:string;variaveis:{nome:string;valor:string}[];imagem?:string|null
@@ -48,7 +48,8 @@ function itemAltura(item:ItemDocumento,precos:Precos){
   }
   return Math.max(item.p.imagem?10.6:7.5,6.3+
     Math.max(1,Math.ceil(item.p.nome.length/caracteres))*2.1+
-    (item.p.descricao?Math.ceil(item.p.descricao.length/140)*1.85:0))
+    (item.p.descricao?Math.ceil(item.p.descricao.length/140)*1.85:0)+
+    ((item.p.largura||item.p.altura)?1.85:0))
 }
 function fechamentoAltura(d:OrcamentoDocumento){
   const cond=d.condicoes.filter(c=>c.forma)
@@ -246,7 +247,8 @@ export default function OrcamentoDocumentoPreview({dados,fechar}:{dados:Orcament
                   <td className="oc-direita font-bold text-amber-700">{unit?'A calcular':moeda(0)}</td>
                 </>:<>
                   <td><div className="oc-item"><Foto url={item.p.imagem} nome={'Imagem cadastrada de '+item.p.nome}/><div className="oc-item-texto">
-                    <b>{item.p.nome}</b><p>{item.p.codigo||'Sem código'} · {item.p.unidade}</p>
+                    <b>{item.p.nome}</b><p>{item.p.codigoItem?item.p.codigoItem+' · Produto ':''}{item.p.codigo||'Sem código'} · {item.p.unidade}</p>
+                    {(item.p.largura||item.p.altura)&&<p>Medidas: {item.p.largura||'—'} × {item.p.altura||'—'} mm</p>}
                     {item.p.descricao&&<p>{item.p.descricao}</p>}
                   </div></div></td>
                   <td className="oc-direita">{item.p.quantidade}</td>

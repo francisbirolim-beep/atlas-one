@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Check, ClipboardList, DraftingCompass, FileText, ImageOff, Minus, Package, Plus, Search, ShoppingBag, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ClipboardList, Copy, DraftingCompass, FileText, ImageOff, Minus, Package, Plus, Search, ShoppingBag, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { lerDadosEmpresa } from '@/lib/configGeral'
 import type { EmpresaRecibo } from '@/components/previews/ReciboVendaPreview'
@@ -21,7 +21,7 @@ type Modo='escolher'|'sob_medida'|'produtos'
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
 type Produto={id:string;codigo:string;nome:string;descricao:string;categoria:string;unidade:string;linha:string|null;preco:number|null;precoPromocional:number|null;fotoUrl:string|null;fotoCandidataUrl?:string|null}
 type Linha={id:string;nome:string;ativa:boolean}
-type Item={produto:Produto;quantidade:number;precoUnitario:number|null}
+type Item={id:string;codigoItem:string;produto:Produto;quantidade:number;precoUnitario:number|null;largura:string;altura:string}
 type Medida={id:number;tipologia:Tipologia;linha:string;largura:string;altura:string;folhas:string;cor:string;vidro:string;contramarco:string;quantidade:number}
 const categorias:{id:Categoria;label:string}[]=[
   {id:'todos',label:'Todos'},{id:'perfil',label:'Perfis'},{id:'acessorio',label:'Acessórios'},
@@ -61,6 +61,7 @@ export default function OrcamentoPreview(){
   const [linhas,setLinhas]=useState<Linha[]>([])
   const [produtos,setProdutos]=useState<Produto[]>([])
   const [itens,setItens]=useState<Item[]>([])
+  const sequenciaItens=useRef(0)
   const [precoDigitado,setPrecoDigitado]=useState<Record<string,string>>({})
   const [erroPreco,setErroPreco]=useState<Record<string,string>>({})
   const [carregando,setCarregando]=useState(false)
@@ -144,9 +145,9 @@ export default function OrcamentoPreview(){
     if(destinoSaldo==='cliente'&&!identificacao.clienteId){
       setAviso('Para deixar saldo marcado, selecione primeiro um cliente cadastrado no Atlas One.');return
     }
-    const produtosDocumento:ProdutoDocumento[]=itens.map(({produto,quantidade,precoUnitario})=>({
-      id:produto.id,codigo:produto.codigo,nome:produto.nome,descricao:produto.descricao,
-      unidade:produto.unidade,quantidade,preco:precoUnitario,
+    const produtosDocumento:ProdutoDocumento[]=itens.map(({id,codigoItem,produto,quantidade,precoUnitario,largura,altura})=>({
+      id,codigoItem,codigo:produto.codigo,nome:produto.nome,descricao:produto.descricao,
+      largura,altura,unidade:produto.unidade,quantidade,preco:precoUnitario,
       // Fotos existentes vinculadas pelo produto_id, inclusive importadas pendentes; nenhuma imagem genérica.
       imagem:produto.fotoUrl||produto.fotoCandidataUrl||null
     }))
@@ -164,31 +165,56 @@ export default function OrcamentoPreview(){
       referencia:'PREV-'+String(Date.now()),observacoes:observacoes.trim()
     })
   }
-  function adicionarProduto(p:Produto){setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1,precoUnitario:unitario(p)}]});setAviso('')}
+  function criarLinha(p:Produto):Item{
+    sequenciaItens.current+=1
+    const n=sequenciaItens.current
+    return {id:'linha-'+n,codigoItem:'AV-'+String(n).padStart(3,'0'),produto:p,quantidade:1,precoUnitario:unitario(p),largura:'',altura:''}
+  }
+  function adicionarProduto(p:Produto){
+    const existente=itens.find(i=>i.produto.id===p.id)
+    if(existente)setItens(a=>a.map(i=>i.id===existente.id?{...i,quantidade:i.quantidade+1}:i))
+    else {const nova=criarLinha(p);setItens(a=>[...a,nova])}
+    setAviso('')
+  }
+  function duplicarLinha(id:string){
+    const original=itens.find(i=>i.id===id)
+    if(!original)return
+    const nova=criarLinha(original.produto)
+    setItens(a=>{
+      const indice=a.findIndex(i=>i.id===id)
+      if(indice<0)return a
+      const copia={...a[indice],id:nova.id,codigoItem:nova.codigoItem}
+      return [...a.slice(0,indice+1),copia,...a.slice(indice+1)]
+    })
+  }
+  function alterarMedida(id:string,campo:'largura'|'altura',valor:string){
+    if(!/^\d{0,5}$/.test(valor))return
+    setItens(a=>a.map(i=>i.id===id?{...i,[campo]:valor}:i))
+  }
   function digitarPreco(id:string,valor:string){
     if(!/^\d{0,8}([,.]\d{0,2})?$/.test(valor))return
     setPrecoDigitado(a=>({...a,[id]:valor}))
     setErroPreco(a=>({...a,[id]:''}))
   }
   function confirmarPreco(id:string){
-    const item=itens.find(i=>i.produto.id===id)
+    const item=itens.find(i=>i.id===id)
     const digitado=precoDigitado[id]
     if(!item||digitado===undefined)return
     const base=unitario(item.produto),valor=decimal(digitado)
     if(base==null||base<=0||!digitado.trim()||!Number.isFinite(valor)||Math.round(valor*100)<Math.round(base*100)){
       setErroPreco(a=>({...a,[id]:'O preço não pode ser menor que o cadastrado. Para reduzir, use o Desconto do orçamento.'}))
     }else{
-      setItens(a=>a.map(i=>i.produto.id===id?{...i,precoUnitario:Math.round(valor*100)/100}:i))
+      setItens(a=>a.map(i=>i.id===id?{...i,precoUnitario:Math.round(valor*100)/100}:i))
       setErroPreco(a=>({...a,[id]:''}))
     }
     setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
   }
   function removerProduto(id:string){
-    setItens(a=>a.filter(x=>x.produto.id!==id))
+    setItens(a=>a.filter(x=>x.id!==id))
     setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
     setErroPreco(a=>{const b={...a};delete b[id];return b})
   }
-  function qtdProduto(id:string,valor:number){if(!Number.isInteger(valor)||valor<1||valor>99999)return;setItens(a=>a.map(x=>x.produto.id===id?{...x,quantidade:valor}:x))}
+  function qtdProduto(id:string,valor:number){if(!Number.isInteger(valor)||valor<1||valor>99999)return;setItens(a=>a.map(x=>x.id===id?{...x,quantidade:valor}:x))}
   function adicionarSobMedida(){
     if(!tipologia){setAviso('Escolha uma tipologia cadastrada para continuar.');return}
     if(!Number(largura)||!Number(altura)||Number(largura)<=0||Number(altura)<=0){setAviso('Informe largura e altura válidas em milímetros.');return}
@@ -291,16 +317,22 @@ export default function OrcamentoPreview(){
           <aside className="rounded-2xl border bg-white p-4 shadow-sm lg:sticky lg:top-4">
             <h3 className="flex items-center gap-2 font-black"><ClipboardList size={19} className="text-blue-700"/> Itens do orçamento <span className="ml-auto rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{totalQtd}</span></h3>
             {!itens.length&&<p className="mt-4 rounded-lg bg-slate-50 p-4 text-center text-xs text-slate-500">Nenhum produto adicional selecionado.</p>}
-            <div className="mt-3 space-y-3">{itens.map(i=><div key={i.produto.id} className="border-b pb-3">
-              <b className="block text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] text-slate-500">Preço cadastrado: {unitario(i.produto)!=null?moeda(unitario(i.produto)!):'Preço pendente'} / {i.produto.unidade}</p>
+            <div className="mt-3 space-y-3">{itens.map(i=><div key={i.id} className="border-b pb-3">
+              <div className="mb-2 flex items-center gap-2"><FotoProdutoPreview nome={i.produto.nome} fotoUrl={i.produto.fotoUrl} fotoCandidataUrl={i.produto.fotoCandidataUrl} tamanho="pequeno"/><div className="min-w-0"><b className="block text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] font-bold text-blue-700">{i.codigoItem} · Produto {i.produto.codigo||'Sem código'}</p></div></div><p className="mt-1 text-[11px] text-slate-500">Preço cadastrado: {unitario(i.produto)!=null?moeda(unitario(i.produto)!):'Preço pendente'} / {i.produto.unidade}</p>
               {unitario(i.produto)!=null&&unitario(i.produto)!>0&&<label className="mt-2 block text-xs font-bold text-slate-700">Preço unitário neste orçamento (R$)
-                <input type="text" inputMode="decimal" autoComplete="off" aria-invalid={!!erroPreco[i.produto.id]} className={baseInput+' mt-1'} value={precoDigitado[i.produto.id]??(i.precoUnitario??0).toFixed(2).replace('.',',')} onChange={e=>digitarPreco(i.produto.id,e.target.value)} onBlur={()=>confirmarPreco(i.produto.id)}/>
+                <input type="text" inputMode="decimal" autoComplete="off" aria-invalid={!!erroPreco[i.id]} className={baseInput+' mt-1'} value={precoDigitado[i.id]??(i.precoUnitario??0).toFixed(2).replace('.',',')} onChange={e=>digitarPreco(i.id,e.target.value)} onBlur={()=>confirmarPreco(i.id)}/>
               </label>}
-              {erroPreco[i.produto.id]&&<p role="alert" className="mt-1 text-[11px] font-bold text-red-700">{erroPreco[i.produto.id]}</p>}
-              <div className="mt-2 flex items-center gap-2"><label htmlFor={'qtd-orc-'+i.produto.id} className="text-xs font-semibold">Qtd.</label>
-                <input id={'qtd-orc-'+i.produto.id} className="w-20 rounded-lg border px-2 py-1.5 text-center text-sm font-bold" type="number" min="1" max="99999" value={i.quantidade} onChange={e=>qtdProduto(i.produto.id,Number(e.target.value))}/>
-                <button type="button" aria-label="Remover item" onClick={()=>removerProduto(i.produto.id)} className="ml-auto p-1 text-red-600"><Trash2 size={16}/></button>
+              {erroPreco[i.id]&&<p role="alert" className="mt-1 text-[11px] font-bold text-red-700">{erroPreco[i.id]}</p>}
+              <div className="mt-2 flex items-center gap-2"><label htmlFor={'qtd-orc-'+i.id} className="text-xs font-semibold">Qtd.</label>
+                <input id={'qtd-orc-'+i.id} className="w-20 rounded-lg border px-2 py-1.5 text-center text-sm font-bold" type="number" min="1" max="99999" value={i.quantidade} onChange={e=>qtdProduto(i.id,Number(e.target.value))}/>
+                <button type="button" onClick={()=>duplicarLinha(i.id)} aria-label={'Duplicar item '+i.codigoItem} className="ml-auto inline-flex items-center gap-1 rounded-lg border border-blue-200 px-2 py-1.5 text-[11px] font-bold text-blue-700"><Copy size={14}/> Duplicar</button>
+                <button type="button" aria-label={'Remover item '+i.codigoItem} onClick={()=>removerProduto(i.id)} className="p-1 text-red-600"><Trash2 size={16}/></button>
               </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <label className="text-[11px] font-semibold text-slate-600">Largura (mm)<input className="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs" inputMode="numeric" value={i.largura} onChange={e=>alterarMedida(i.id,'largura',e.target.value)} placeholder="Opcional" aria-label={'Largura do item '+i.codigoItem}/></label>
+                <label className="text-[11px] font-semibold text-slate-600">Altura (mm)<input className="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs" inputMode="numeric" value={i.altura} onChange={e=>alterarMedida(i.id,'altura',e.target.value)} placeholder="Opcional" aria-label={'Altura do item '+i.codigoItem}/></label>
+              </div>
+              <p className="mt-1 text-[10px] text-slate-500">Medidas da linha para referência; alterar medidas não recalcula o preço cadastrado.</p>
             </div>)}</div>
             <div className="mt-4 border-t pt-3">
               <div className="flex justify-between text-sm"><span>Subtotal dos produtos com preço</span><b>{moeda(valorConhecido)}</b></div>
@@ -323,7 +355,7 @@ export default function OrcamentoPreview(){
             <p><span className="block text-xs text-slate-500">Tipo de orçamento</span><b>{modo==='sob_medida'?'Sob medida + produtos':'Produtos prontos / avulsos'}</b></p>
           </div>
           {!!medidas.length&&<section className="mt-5"><h3 className="mb-2 font-black">Tipologias sob medida ({medidas.length})</h3>{medidas.map(m=><div key={m.id} className="mt-2 flex justify-between gap-4 border-b pb-3 text-xs"><div><b>{m.quantidade} × {m.tipologia.label}</b><p className="mt-1 text-slate-500">{m.largura} × {m.altura} mm · {m.folhas} folha(s) · {m.linha||'Linha pendente'} · {m.cor||'Cor a definir'} · {m.vidro||'Vidro a definir'} · Contramarco: {m.contramarco}</p></div><span className="shrink-0 font-bold text-amber-700">A precificar</span></div>)}</section>}
-          {!!itens.length&&<section className="mt-5"><h3 className="mb-2 font-black">Produtos ({itens.length})</h3>{itens.map(i=><div key={i.produto.id} className="mt-2 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{i.quantidade} × {i.produto.nome}</b><p className="text-slate-500">{i.produto.codigo} · {i.produto.unidade}</p></div><b>{i.precoUnitario!=null?moeda(i.precoUnitario*i.quantidade):'Sem preço'}</b></div>)}</section>}
+          {!!itens.length&&<section className="mt-5"><h3 className="mb-2 font-black">Produtos ({itens.length})</h3>{itens.map(i=><div key={i.id} className="mt-2 flex justify-between gap-3 border-b pb-3 text-xs"><div><b>{i.quantidade} × {i.produto.nome}</b><p className="text-slate-500">{i.codigoItem} · Produto {i.produto.codigo} · {i.produto.unidade}</p>{(i.largura||i.altura)&&<p className="text-slate-500">Medidas: {i.largura||'—'} × {i.altura||'—'} mm</p>}</div><b>{i.precoUnitario!=null?moeda(i.precoUnitario*i.quantidade):'Sem preço'}</b></div>)}</section>}
           {semPreco>0&&<section className="mt-5 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
             <button type="button" onClick={()=>setMostrarPendencias(v=>!v)} className="flex w-full items-center justify-between gap-3 text-left">
               <span><b className="block text-sm text-amber-950">{semPreco} produto(s) sem preço no orçamento</b>
@@ -331,8 +363,8 @@ export default function OrcamentoPreview(){
               <span className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-amber-900">{mostrarPendencias?'Ocultar':'Ver pendências'}</span>
             </button>
             {mostrarPendencias&&<div className="mt-3 space-y-2 border-t border-amber-200 pt-3">
-              {produtosSemPreco.map(i=><div key={i.produto.id} className="rounded-lg border bg-white p-3">
-                <b className="text-sm">{i.produto.codigo} · {i.produto.nome}</b>
+              {produtosSemPreco.map(i=><div key={i.id} className="rounded-lg border bg-white p-3">
+                <b className="text-sm">{i.codigoItem} · {i.produto.codigo} · {i.produto.nome}</b>
                 <p className="mt-1 text-xs text-slate-600">Quantidade: {i.quantidade} · {i.produto.unidade} · Preço unitário não cadastrado.</p>
               </div>)}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2">

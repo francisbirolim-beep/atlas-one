@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, ArrowRight, Check, ChevronRight, ClipboardCheck, MapPin, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, UserPlus, UsersRound } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronRight, ClipboardCheck, Copy, MapPin, Minus, Plus, Search, ShoppingBag, ShoppingCart, Trash2, UserPlus, UsersRound } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
 import { lerDadosEmpresa } from '@/lib/configGeral'
 import FotoProdutoPreview from '@/components/previews/FotoProdutoPreview'
@@ -14,7 +14,7 @@ type Cliente={id:string;nome:string;apelido?:string|null;cpf_cnpj?:string|null;t
 type Obra={id:string;nome:string;cidade?:string|null;bairro?:string|null;endereco?:string|null}
 type Produto={id:string;codigo:string;nome:string;descricao:string;categoria:string;unidade:string;linha:string|null;fotoUrl:string|null;fotoCandidataUrl?:string|null;preco:number|null;precoPromocional:number|null}
 type Linha={id:string;nome:string;ativa:boolean}
-type Item={produto:Produto;quantidade:number;precoUnitario:number|null}
+type Item={id:string;codigoItem:string;produto:Produto;quantidade:number;precoUnitario:number|null;largura:string;altura:string}
 type Categoria='todos'|'perfil'|'acessorio'|'vidro'|'pronto'|'outros'
 type Etapa=1|2|3
 type Modo='busca'|'cadastro'|'consumidor'
@@ -55,6 +55,7 @@ export default function PreviaVenda(){
   const [buscandoProdutos,setBuscandoProdutos]=useState(false)
   const [erroProdutos,setErroProdutos]=useState('')
   const [itens,setItens]=useState<Item[]>([])
+  const sequenciaItens=useRef(0)
   const [quantidadeDigitada,setQuantidadeDigitada]=useState<Record<string,string>>({})
   const [precoDigitado,setPrecoDigitado]=useState<Record<string,string>>({})
   const [erroPreco,setErroPreco]=useState<Record<string,string>>({})
@@ -181,8 +182,36 @@ export default function PreviaVenda(){
     if(modo==='cadastro'){cadastrarEContinuar();return}
     setAviso('');setEtapa(2)
   }
+  function criarLinha(p:Produto):Item{
+    sequenciaItens.current+=1
+    const n=sequenciaItens.current
+    return {id:'linha-'+n,codigoItem:'AV-'+String(n).padStart(3,'0'),produto:p,quantidade:1,precoUnitario:preco(p),largura:'',altura:''}
+  }
   function adicionar(p:Produto){
-    setItens(a=>{const i=a.find(x=>x.produto.id===p.id);return i?a.map(x=>x.produto.id===p.id?{...x,quantidade:x.quantidade+1}:x):[...a,{produto:p,quantidade:1,precoUnitario:preco(p)}]})
+    const existente=itens.find(i=>i.produto.id===p.id)
+    if(existente)setItens(a=>a.map(i=>i.id===existente.id?{...i,quantidade:i.quantidade+1}:i))
+    else {const nova=criarLinha(p);setItens(a=>[...a,nova])}
+  }
+  function duplicarLinha(id:string){
+    const original=itens.find(i=>i.id===id)
+    if(!original)return
+    const nova=criarLinha(original.produto)
+    setItens(a=>{
+      const indice=a.findIndex(i=>i.id===id)
+      if(indice<0)return a
+      const copia={...a[indice],id:nova.id,codigoItem:nova.codigoItem}
+      return [...a.slice(0,indice+1),copia,...a.slice(indice+1)]
+    })
+  }
+  function removerLinha(id:string){
+    setItens(a=>a.filter(i=>i.id!==id))
+    confirmarQuantidade(id)
+    setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
+    setErroPreco(a=>{const b={...a};delete b[id];return b})
+  }
+  function alterarMedida(id:string,campo:'largura'|'altura',valor:string){
+    if(!/^\d{0,5}$/.test(valor))return
+    setItens(a=>a.map(i=>i.id===id?{...i,[campo]:valor}:i))
   }
   function digitarPrecoUnitario(id:string,valor:string){
     if(!/^\d{0,8}([,.]\d{0,2})?$/.test(valor))return
@@ -190,7 +219,7 @@ export default function PreviaVenda(){
     setErroPreco(a=>({...a,[id]:''}))
   }
   function confirmarPrecoUnitario(id:string){
-    const item=itens.find(i=>i.produto.id===id)
+    const item=itens.find(i=>i.id===id)
     const digitado=precoDigitado[id]
     if(!item||digitado===undefined)return
     const base=preco(item.produto)
@@ -198,7 +227,7 @@ export default function PreviaVenda(){
     if(base==null||!digitado.trim()||!Number.isFinite(valor)||cents(valor)<cents(base)){
       setErroPreco(a=>({...a,[id]:'O preço unitário não pode ser menor que o cadastrado. Para reduzir, use Desconto na venda.'}))
     }else{
-      setItens(a=>a.map(i=>i.produto.id===id?{...i,precoUnitario:cents(valor)/100}:i))
+      setItens(a=>a.map(i=>i.id===id?{...i,precoUnitario:cents(valor)/100}:i))
       setErroPreco(a=>({...a,[id]:''}))
     }
     setPrecoDigitado(a=>{const b={...a};delete b[id];return b})
@@ -209,7 +238,7 @@ export default function PreviaVenda(){
     setQuantidadeDigitada(a=>({...a,[id]:valor}))
     const qtd=Number(valor)
     if(valor!=='' && Number.isInteger(qtd)&&qtd>=1&&qtd<=99999)
-      setItens(a=>a.map(i=>i.produto.id===id?{...i,quantidade:qtd}:i))
+      setItens(a=>a.map(i=>i.id===id?{...i,quantidade:qtd}:i))
   }
   function confirmarQuantidade(id:string){
     setQuantidadeDigitada(a=>{const b={...a};delete b[id];return b})
@@ -387,27 +416,37 @@ export default function PreviaVenda(){
         <aside className="rounded-2xl border bg-white p-4 shadow-sm lg:sticky lg:top-4">
           <h3 className="flex items-center gap-2 font-black"><ShoppingCart size={19} className="text-blue-700"/> Itens da venda <span className="ml-auto rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700">{unidades}</span></h3>
           {!itens.length&&<div className="mt-4 grid min-h-32 place-items-center rounded-xl bg-slate-50 p-4 text-center text-xs text-slate-500">Escolha um item à esquerda para começar a venda.</div>}
-          <div className="mt-3 space-y-3">{itens.map(i=><div key={i.produto.id} className="border-b pb-3 last:border-0">
+          <div className="mt-3 space-y-3">{itens.map(i=><div key={i.id} className="border-b pb-3 last:border-0">
             <div className="flex gap-2"><FotoProdutoPreview nome={i.produto.nome} fotoUrl={i.produto.fotoUrl} fotoCandidataUrl={i.produto.fotoCandidataUrl} oculta={!!fotosOcultas[i.produto.id]} onOcultarFoto={valor=>setFotosOcultas(a=>({...a,[i.produto.id]:valor}))} tamanho="pequeno" imagemLocal={fotosLocais[i.produto.id]} onSelecionarImagem={arquivo=>selecionarFoto(i.produto.id,arquivo)}/>
-              <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] text-slate-500">{i.precoUnitario!=null?moeda(i.precoUnitario):'Preço pendente'} /{i.produto.unidade}</p>
+              <div className="min-w-0 flex-1"><b className="block line-clamp-2 text-xs">{i.produto.nome}</b><p className="mt-1 text-[11px] font-bold text-blue-700">{i.codigoItem} · Produto {i.produto.codigo||'Sem código'}</p><p className="mt-1 text-[11px] text-slate-500">{i.precoUnitario!=null?moeda(i.precoUnitario):'Preço pendente'} /{i.produto.unidade}</p>
                 <div className="mt-2 flex items-center gap-2">
-                  <label className="text-[11px] font-semibold text-slate-600" htmlFor={'qtd-'+i.produto.id}>Qtd.</label>
-                  <input id={'qtd-'+i.produto.id} className="w-20 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-sm font-bold tabular-nums focus:border-blue-600 focus:outline-none" inputMode="numeric" pattern="[0-9]*" aria-label={'Quantidade de '+i.produto.nome}
-                    value={quantidadeDigitada[i.produto.id]??String(i.quantidade)}
-                    onChange={e=>digitarQuantidade(i.produto.id,e.target.value)}
-                    onBlur={()=>confirmarQuantidade(i.produto.id)}
+                  <label className="text-[11px] font-semibold text-slate-600" htmlFor={'qtd-'+i.id}>Qtd.</label>
+                  <input id={'qtd-'+i.id} className="w-20 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-sm font-bold tabular-nums focus:border-blue-600 focus:outline-none" inputMode="numeric" pattern="[0-9]*" aria-label={'Quantidade de '+i.produto.nome}
+                    value={quantidadeDigitada[i.id]??String(i.quantidade)}
+                    onChange={e=>digitarQuantidade(i.id,e.target.value)}
+                    onBlur={()=>confirmarQuantidade(i.id)}
                     onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur()}} />
-                  <button type="button" onClick={()=>{setItens(a=>a.filter(x=>x.produto.id!==i.produto.id));confirmarQuantidade(i.produto.id);setPrecoDigitado(a=>{const b={...a};delete b[i.produto.id];return b});setErroPreco(a=>{const b={...a};delete b[i.produto.id];return b})}} className="ml-auto rounded p-1.5 text-red-600 hover:bg-red-50" aria-label="Remover produto"><Trash2 size={15}/></button>
+                  <button type="button" onClick={()=>duplicarLinha(i.id)} className="ml-auto inline-flex items-center gap-1 rounded border border-blue-200 px-2 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-50" aria-label={'Duplicar item '+i.codigoItem}><Copy size={14}/> Duplicar</button>
+                  <button type="button" onClick={()=>removerLinha(i.id)} className="rounded p-1.5 text-red-600 hover:bg-red-50" aria-label={'Remover item '+i.codigoItem}><Trash2 size={15}/></button>
                 </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className="text-[11px] font-semibold text-slate-600">Largura (mm)
+                    <input className="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs" inputMode="numeric" value={i.largura} onChange={e=>alterarMedida(i.id,'largura',e.target.value)} placeholder="Opcional" aria-label={'Largura do item '+i.codigoItem}/>
+                  </label>
+                  <label className="text-[11px] font-semibold text-slate-600">Altura (mm)
+                    <input className="mt-1 w-full rounded-lg border px-2 py-1.5 text-xs" inputMode="numeric" value={i.altura} onChange={e=>alterarMedida(i.id,'altura',e.target.value)} placeholder="Opcional" aria-label={'Altura do item '+i.codigoItem}/>
+                  </label>
+                </div>
+                <p className="mt-1 text-[10px] text-slate-500">Medidas da linha para referência; alterar medidas não recalcula o preço cadastrado.</p>
                 {preco(i.produto)!=null&&<div className="mt-2">
-                  <label htmlFor={'preco-'+i.produto.id} className="block text-[11px] font-semibold text-slate-600">Preço unitário nesta venda (R$)</label>
-                  <input id={'preco-'+i.produto.id} aria-label={'Preço unitário de '+i.produto.nome} inputMode="decimal" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold tabular-nums focus:border-blue-600 focus:outline-none"
-                    value={precoDigitado[i.produto.id]??(i.precoUnitario??0).toFixed(2).replace('.',',')}
-                    onChange={e=>digitarPrecoUnitario(i.produto.id,e.target.value)}
-                    onBlur={()=>confirmarPrecoUnitario(i.produto.id)}
+                  <label htmlFor={'preco-'+i.id} className="block text-[11px] font-semibold text-slate-600">Preço unitário nesta venda (R$)</label>
+                  <input id={'preco-'+i.id} aria-label={'Preço unitário de '+i.produto.nome} inputMode="decimal" className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-bold tabular-nums focus:border-blue-600 focus:outline-none"
+                    value={precoDigitado[i.id]??(i.precoUnitario??0).toFixed(2).replace('.',',')}
+                    onChange={e=>digitarPrecoUnitario(i.id,e.target.value)}
+                    onBlur={()=>confirmarPrecoUnitario(i.id)}
                     onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur()}}/>
                   <p className="mt-1 text-[11px] text-slate-500">Preço cadastrado: {moeda(preco(i.produto)!)}. Pode aumentar; para diminuir, use o desconto.</p>
-                  {erroPreco[i.produto.id]&&<p role="alert" className="mt-1 text-[11px] font-semibold text-red-700">{erroPreco[i.produto.id]}</p>}
+                  {erroPreco[i.id]&&<p role="alert" className="mt-1 text-[11px] font-semibold text-red-700">{erroPreco[i.id]}</p>}
                 </div>}
               </div>
             </div>
@@ -483,8 +522,8 @@ export default function PreviaVenda(){
         <p><span className="block text-xs text-slate-500">Itens / unidades</span><b>{itens.length} produto(s) · {unidades} unidade(s)</b></p>
       </div>
       <h3 className="mb-3 mt-6 text-sm font-black">Descrição dos itens</h3>
-      <div className="space-y-3">{itens.map(i=><div key={i.produto.id} className="flex justify-between gap-3 border-b pb-3 text-sm">
-        <span><b>{i.quantidade} × {i.produto.nome}</b><span className="block text-xs text-slate-500">{i.produto.codigo||'Sem código'} · {i.produto.unidade} · Unitário {moeda(i.precoUnitario||0)}</span>{i.produto.descricao&&<span className="mt-1 block text-xs text-slate-500">{i.produto.descricao}</span>}</span>
+      <div className="space-y-3">{itens.map(i=><div key={i.id} className="flex justify-between gap-3 border-b pb-3 text-sm">
+        <span><b>{i.quantidade} × {i.produto.nome}</b><span className="block text-xs text-slate-500">{i.codigoItem} · Produto {i.produto.codigo||'Sem código'} · {i.produto.unidade} · Unitário {moeda(i.precoUnitario||0)}</span>{(i.largura||i.altura)&&<span className="block text-xs text-slate-500">Medidas: {i.largura||'—'} × {i.altura||'—'} mm</span>}{i.produto.descricao&&<span className="mt-1 block text-xs text-slate-500">{i.produto.descricao}</span>}</span>
         <b className="shrink-0">{moeda((i.precoUnitario||0)*i.quantidade)}</b>
       </div>)}</div>
       <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm">
