@@ -33,5 +33,5 @@ alter table public.financeiro_contas_pagar
  add column if not exists rh_pessoa_id uuid references public.rh_pessoas(id) on delete set null;
 alter table public.financeiro_contas_receber
  add column if not exists rh_pessoa_id uuid references public.rh_pessoas(id) on delete set null;
-create index if not exists idx_fin_pagar_empresa_rh_pessoa on public.financeiro_contas_pagar(empresa_id,rh_pessoa_id) where rh_pessoa_id is not null;
-create index if not exists idx_fin_receber_empresa_rh_pessoa on public.financeiro_contas_receber(empresa_id,rh_pessoa_id) where rh_pessoa_id is not null;
+-- Índices das tabelas financeiras existentes serão avaliados em janela de manutenção,
+-- usando CREATE INDEX CONCURRENTLY se necessário, para evitar bloqueio de gravações.
