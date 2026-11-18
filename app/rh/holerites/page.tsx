@@ -34,8 +34,8 @@ export default function HoleritesRH(){
  const [filtro,setFiltro]=useState('')
  const [mostrarHistorico,setMostrarHistorico]=useState(true)
  const selecionado=pessoas.find(p=>p.id===form.rh_pessoa_id)
- const nomeHolerite=selecionado?.nome||registros.find(r=>r.id===edicao)?.nome_funcionario||nomePreview
- const cpfHolerite=selecionado?.cpf_cnpj||registros.find(r=>r.id===edicao)?.cpf_funcionario||''
+ const nomeHolerite=registros.find(r=>r.id===edicao)?.nome_funcionario||selecionado?.nome||nomePreview
+ const cpfHolerite=registros.find(r=>r.id===edicao)?.cpf_funcionario||selecionado?.cpf_cnpj||''
  const totais=useMemo(()=>calc(form.itens),[form.itens])
  const emitido=form.situacao==='emitido'
  const filtrados=registros.filter(r=>(r.nome_funcionario+' '+r.competencia).toLowerCase().includes(filtro.toLowerCase()))
