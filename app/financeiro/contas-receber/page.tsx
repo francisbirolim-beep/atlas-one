@@ -66,6 +66,25 @@ export default function ContasReceberPage() {
 
   useEffect(() => { void carregar() }, [])
 
+  // Reconsulta os títulos ao voltar à aba, sem mudar a navegação nem gravar no banco.
+  // A leitura já utiliza cache:'no-store'; preserva o botão Atualizar manual.
+  useEffect(() => {
+    let atualizando = false
+    const revalidar = () => {
+      if (document.visibilityState !== 'visible' || atualizando) return
+      atualizando = true
+      void carregar().finally(() => { atualizando = false })
+    }
+    window.addEventListener('focus', revalidar)
+    window.addEventListener('pageshow', revalidar)
+    document.addEventListener('visibilitychange', revalidar)
+    return () => {
+      window.removeEventListener('focus', revalidar)
+      window.removeEventListener('pageshow', revalidar)
+      document.removeEventListener('visibilitychange', revalidar)
+    }
+  }, [])
+
   const hoje = isoLocal(new Date())
   const clientesDisponiveis=[...new Map(contas.filter(c=>c.cliente_id).map(c=>[c.cliente_id!,c.cliente_nome||'Cliente'])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'pt-BR'))
   const obrasDisponiveis=[...new Set(contas.filter(c=>!clienteFiltro||c.cliente_id===clienteFiltro).map(c=>c.obra_id).filter((v):v is string=>!!v))]
