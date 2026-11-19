@@ -72,6 +72,9 @@ jobs:
       - name: Kanban and sale financial and production consistency
         run: npm run test:kanban-conciliacao
 
+      - name: Kanban Geral W.Vetro visibility regression
+        run: node scripts/test-visao-geral-etapas.cjs
+
       - name: Production card measurement mapping
         run: npm run test:producao-medicao
 
