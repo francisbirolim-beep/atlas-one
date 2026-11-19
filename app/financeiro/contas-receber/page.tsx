@@ -40,7 +40,7 @@ export default function ContasReceberPage() {
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
   const [diagnostico, setDiagnostico] = useState<{consultadoEm:string; apiValor:string; id:string; fonte:string; quantidade:number}|null>(null)
-  const [diagnosticoAtivo, setDiagnosticoAtivo] = useState(false)
+  // Diagnóstico exclusivo desta versão de homologação: mostrar mesmo após redirecionamento que remove parâmetros da URL.
   const [periodo,setPeriodo]=useState<PeriodoFinanceiro>(()=>periodoRapido('todos'))
   const [clienteFiltro,setClienteFiltro]=useState('')
   const [obraFiltro,setObraFiltro]=useState('')
@@ -72,7 +72,7 @@ export default function ContasReceberPage() {
     } finally{if (!silencioso) setCarregando(false)}
   }
 
-  useEffect(() => { setDiagnosticoAtivo(new URLSearchParams(window.location.search).get('diagnostico') === '1'); void carregar() }, [])
+  useEffect(() => { void carregar() }, [])
 
   // Reconsulta os títulos ao voltar à aba, sem mudar a navegação nem gravar no banco.
   // A leitura já utiliza cache:'no-store'; preserva o botão Atualizar manual.
@@ -151,7 +151,7 @@ export default function ContasReceberPage() {
           <div className="no-print flex flex-wrap items-center gap-2"><FormLancamentoManual tipo="receber" onSalvo={()=>void carregar()}/><button onClick={() => void carregar()} className="rounded-xl border bg-white p-2.5 text-slate-600" title="Atualizar"><RefreshCw size={18}/></button></div>
         </header>
 
-        {diagnosticoAtivo && <div className="rounded-xl border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700" role="status">Diagnóstico somente leitura — orçamento #442: API: <b>{diagnostico?.apiValor || 'carregando...'}</b> | ID: {diagnostico?.id||'—'} | Banco: {diagnostico?.fonte||'—'} | Consulta: {diagnostico?.consultadoEm||'—'} | Total de títulos na API: {diagnostico?.quantidade??'—'}</div>}
+        {<div className="rounded-xl border border-slate-300 bg-slate-100 p-3 text-xs text-slate-700" role="status">Diagnóstico somente leitura — orçamento #442: API: <b>{diagnostico?.apiValor || 'carregando...'}</b> | ID: {diagnostico?.id||'—'} | Banco: {diagnostico?.fonte||'—'} | Consulta: {diagnostico?.consultadoEm||'—'} | Total de títulos na API: {diagnostico?.quantidade??'—'}</div>}
         {erro && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
 
         <BarraFiltrosPeriodo periodo={periodo} onPeriodo={setPeriodo} onExportar={exportar} adicional={<>
