@@ -54,6 +54,15 @@ export type EvidenciasProjeto = {
   encerramentoConfirmado: boolean
 }
 
+/** Cabeçalho criado automaticamente na venda não significa medição iniciada. */
+export function medicaoJaIniciada(m: {status_operacional?:string|null;iniciado_em?:string|null}):boolean {
+ const status=String(m.status_operacional||'').trim().toLowerCase()
+ return Boolean(m.iniciado_em)||[
+  'em_medicao','com_pendencia','concluido','aguardando_conferencia',
+  'aguardando_revisao','aprovado','liberado_engenharia',
+ ].includes(status)
+}
+
 export function etapaOperacionalAtual(s: EvidenciasProjeto): EtapaOperacional | null {
   if (!s.vendaConfirmada) return null
   if (s.encerramentoConfirmado && s.producao === 'concluida' && s.instalacao === 'concluida') return 'finalizado'
