@@ -45,9 +45,11 @@ export default function ContasReceberPage() {
   const [dataBase,setDataBase]=useState<'vencimento'|'pagamento'>('vencimento')
   const [agrupar,setAgrupar]=useState(false)
 
-  async function carregar() {
-    setCarregando(true)
-    setErro('')
+  async function carregar(silencioso = false) {
+    if (!silencioso) {
+      setCarregando(true)
+      setErro('')
+    }
     try {
       const token=await tokenAtual()
       if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
@@ -59,9 +61,11 @@ export default function ContasReceberPage() {
       setNomesObras(dados.nomesObras||{})
     } catch(e){
       setErro(e instanceof Error?e.message:'Não foi possível carregar as contas a receber.')
-      setContas([])
-      setRecebimentos([])
-    } finally{setCarregando(false)}
+      if (!silencioso) {
+        setContas([])
+        setRecebimentos([])
+      }
+    } finally{if (!silencioso) setCarregando(false)}
   }
 
   useEffect(() => { void carregar() }, [])
@@ -73,7 +77,7 @@ export default function ContasReceberPage() {
     const revalidar = () => {
       if (document.visibilityState !== 'visible' || atualizando) return
       atualizando = true
-      void carregar().finally(() => { atualizando = false })
+      void carregar(true).finally(() => { atualizando = false })
     }
     window.addEventListener('focus', revalidar)
     window.addEventListener('pageshow', revalidar)
