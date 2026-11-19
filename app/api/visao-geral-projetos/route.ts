@@ -2,7 +2,7 @@ import {NextRequest,NextResponse} from 'next/server'
 import {autenticarCompras} from '@/lib/comprasServer'
 import {podeConsultarPainelGeral,podeMoverKanbanGeral} from '@/lib/painelGeralAcessoServer'
 import {supabaseAdmin as db} from '@/lib/supabaseAdmin'
-import {projetarCardGeral,situacaoPrazoEtapa,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
+import {projetarCardGeral,situacaoPrazoEtapa,medicaoJaIniciada,COLUNAS_GERAIS_PADRAO,type EvidenciasProjeto} from '@/lib/visaoGeralProjetos'
 import {permissoesKanbanObra} from '@/lib/kanbanObraPermissoesServer'
 import {colunasKanbanEmpresa,posicionarCardVisual} from '@/lib/kanbanColunasSincronizadas'
 import type {MaterialResumo,PedidoGeralCard,DetalheMaterialCompra} from '@/lib/visaoGeralDemo'
@@ -79,11 +79,11 @@ export async function GET(req:NextRequest){
   const [clientes,obras,orcs,compras,ops,instalacoes,medicoes,itensPedido]=await Promise.all([
    buscar('clientes','id,nome','id',clienteIds),
    buscar('obras','id,nome,previsao_entrega,status,observacoes','id',obraIds),
-   buscar('orcamentos','id,numero,fotos_urls,observacoes','id',orcIds),
+   buscar('orcamentos','id,numero,fotos_urls,observacoes,numero_wvetro:wvetro_fluxo->>numero,numero_wvetro_compat:wvetro_fluxo->>numero_wvetro','id',orcIds),
    buscar('compras_necessidades','id,obra_id,status,recebido_em,categoria,quantidade,unidade','obra_id',obraIds),
    buscar('ordens_producao','id,venda_obra_id,status,bloqueada','venda_obra_id',vendaIds),
    buscar('venda_instalacao_itens','id,venda_obra_id,status,quantidade,quantidade_instalada,pendencia,checklist','venda_obra_id',vendaIds),
-   buscar('medicoes_finais','id,obra_id,orcamento_id,status_operacional','orcamento_id',orcIds),
+   buscar('medicoes_finais','id,obra_id,orcamento_id,status_operacional,iniciado_em','orcamento_id',orcIds),
    buscar('compras_solicitacao_itens','id,solicitacao_id,destino,cliente_id,obra_id,status,descricao,categoria,quantidade_necessaria,unidade,produto_id','solicitacao_id',pedidoIds),
   ])
   const linhasCompra=await buscar('compras_carrinho_itens',
@@ -172,7 +172,7 @@ export async function GET(req:NextRequest){
    }).length
    const falta=necessidades.filter(c=>pedidoFeito(c.status)&&!recebido(c))
    const possuiCompraEmAndamento=necessidades.some(c=>['necessidade','cotacao','aprovado'].includes(txt(c.status)))
-   const medIniciada=med.length>0
+   const medIniciada=med.some(m=>medicaoJaIniciada(m))
    const medAprovada=med.length>0&&med.every(m=>txt(m.status_operacional)==='aprovado')
    const materiaisAtuais=itensAtuais.length?
      semReceberAtuais.length?(recebidosAtuais.length?'recebimento_parcial':'aguardando_recebimento'):
@@ -204,6 +204,7 @@ export async function GET(req:NextRequest){
     colunas,hoje)
    if(!card)return null
    return {...card,clienteId:v.cliente_id,obraId:v.obra_id,numeroOrcamento:porOrc.get(v.orcamento_id)||'não identificado',
+    numeroWvetro:String(orcamento?.numero_wvetro||orcamento?.numero_wvetro_compat||'').trim()||null,
     materiais:itensAtuais.length?resumoItensAtuais(itensAtuais):categorias(necessidades),
     compras:itensAtuais.length?{total:itensAtuais.length,comprados:compradosAtuais.length,recebidos:recebidosAtuais.length}:{total:necessidades.length,comprados:comPedido,recebidos:recebidas},
     producao:{total:ordens.length,concluidas},instalacao:{total:itens.length,concluidas:instaladas},
