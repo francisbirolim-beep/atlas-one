@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarCompras } from '@/lib/comprasServer'
-import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { createClient } from '@supabase/supabase-js'
 import { usuarioPodeAcaoServer } from '@/lib/acessoUsuarioServer'
+// Instância exclusiva desta leitura financeira: impede que o cache de fetch
+// do Next.js retenha snapshots antigos do PostgREST após correções de venda.
+const supabaseAdminSemCache = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SECRET_KEY!,
+  {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
+  },
+)
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 export async function GET(req:NextRequest){
@@ -15,14 +25,14 @@ export async function GET(req:NextRequest){
  if(!caixa&&!financeiro)return NextResponse.json({error:'Sem permissão para consultar Contas a Receber.'},{status:403})
  try{
   const [cr,receb]=await Promise.all([
-   supabaseAdmin.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500),
-   supabaseAdmin.from('financeiro_recebimentos').select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,forma,referencia,observacoes,status,criado_por_nome,created_at').eq('empresa_id',u.empresa_id).neq('status','cancelado').order('data_recebimento',{ascending:false}).order('created_at',{ascending:false}).limit(1000)
+   supabaseAdminSemCache.from('financeiro_contas_receber').select('id,cliente_id,cliente_nome,obra_id,documento,parcela,total_parcelas,data_emissao,vencimento,valor,valor_pago,valor_desconto,status,forma,data_pagamento,observacoes,created_at').eq('empresa_id',u.empresa_id).order('vencimento',{ascending:true,nullsFirst:false}).limit(1500),
+   supabaseAdminSemCache.from('financeiro_recebimentos').select('id,cliente_id,cliente_nome,obra_id,data_recebimento,valor,valor_desconto,forma,referencia,observacoes,status,criado_por_nome,created_at').eq('empresa_id',u.empresa_id).neq('status','cancelado').order('data_recebimento',{ascending:false}).order('created_at',{ascending:false}).limit(1000)
   ])
   if(cr.error||receb.error)throw cr.error||receb.error
   const clienteIds=[...new Set([...(cr.data||[]).map(c=>c.cliente_id),...(receb.data||[]).map(r=>r.cliente_id)].filter((v):v is string=>!!v))]
   const mapaClientes=new Map<string,{cpf_cnpj:string|null;cidade:string|null;telefone:string|null}>()
   for(let i=0;i<clienteIds.length;i+=80){
-   const cadastros=await supabaseAdmin.from('clientes').select('id,cpf_cnpj,cidade,telefone').eq('empresa_id',u.empresa_id).in('id',clienteIds.slice(i,i+80))
+   const cadastros=await supabaseAdminSemCache.from('clientes').select('id,cpf_cnpj,cidade,telefone').eq('empresa_id',u.empresa_id).in('id',clienteIds.slice(i,i+80))
    if(cadastros.error)throw cadastros.error
    for(const c of cadastros.data||[])mapaClientes.set(c.id,c)
   }
@@ -31,21 +41,21 @@ export async function GET(req:NextRequest){
   const ids=[...new Set((cr.data||[]).map(c=>c.obra_id).filter((v):v is string=>!!v))]
   const nomes:Record<string,string>={}
   for(let i=0;i<ids.length;i+=80){
-   const r=await supabaseAdmin.from('obras').select('id,nome,numero').eq('empresa_id',u.empresa_id).in('id',ids.slice(i,i+80))
+   const r=await supabaseAdminSemCache.from('obras').select('id,nome,numero').eq('empresa_id',u.empresa_id).in('id',ids.slice(i,i+80))
    if(r.error)throw r.error
    for(const o of r.data||[])nomes[o.id]=`${o.nome}${o.numero?` #${o.numero}`:''}`
   }
   const descontos:Record<string,number>={}
   const idsRec=(receb.data||[]).map(r=>r.id)
   for(let i=0;i<idsRec.length;i+=80){
-   const r=await supabaseAdmin.from('financeiro_recebimento_alocacoes').select('recebimento_id,tipo,valor').eq('empresa_id',u.empresa_id).in('recebimento_id',idsRec.slice(i,i+80))
+   const r=await supabaseAdminSemCache.from('financeiro_recebimento_alocacoes').select('recebimento_id,tipo,valor').eq('empresa_id',u.empresa_id).in('recebimento_id',idsRec.slice(i,i+80))
    if(r.error)throw r.error
    for(const a of r.data||[])if(a.tipo==='desconto')descontos[a.recebimento_id]=(descontos[a.recebimento_id]||0)+Number(a.valor||0)
   }
   const multiformaIds=(receb.data||[]).filter(r=>r.forma==='multiplo').map(r=>r.id)
   const composicoes:Record<string,Array<{forma:string;valor:number}>>={}
   for(let i=0;i<multiformaIds.length;i+=80){
-    const detalhes=await supabaseAdmin.from('financeiro_recebimento_formas').select('recebimento_id,forma,valor,ordem').eq('empresa_id',u.empresa_id).in('recebimento_id',multiformaIds.slice(i,i+80)).order('ordem')
+    const detalhes=await supabaseAdminSemCache.from('financeiro_recebimento_formas').select('recebimento_id,forma,valor,ordem').eq('empresa_id',u.empresa_id).in('recebimento_id',multiformaIds.slice(i,i+80)).order('ordem')
     if(detalhes.error)throw detalhes.error
     for(const d of detalhes.data||[])(composicoes[d.recebimento_id] ||= []).push({forma:d.forma,valor:Number(d.valor)})
   }

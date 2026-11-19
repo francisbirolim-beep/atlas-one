@@ -45,13 +45,15 @@ export default function ContasReceberPage() {
   const [dataBase,setDataBase]=useState<'vencimento'|'pagamento'>('vencimento')
   const [agrupar,setAgrupar]=useState(false)
 
-  async function carregar() {
-    setCarregando(true)
-    setErro('')
+  async function carregar(silencioso = false) {
+    if (!silencioso) {
+      setCarregando(true)
+      setErro('')
+    }
     try {
       const token=await tokenAtual()
       if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
-      const r=await fetch('/api/financeiro/contas-receber',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
+      const r=await fetch(`/api/financeiro/contas-receber?revalidar=${Date.now()}`,{headers:{Authorization:`Bearer ${token}`,'Cache-Control':'no-cache'},cache:'no-store'})
       const dados=await r.json()
       if(!r.ok)throw new Error(dados.error||'Erro ao consultar os títulos.')
       setContas((dados.contas||[]) as ContaReceberCliente360[])
@@ -59,12 +61,33 @@ export default function ContasReceberPage() {
       setNomesObras(dados.nomesObras||{})
     } catch(e){
       setErro(e instanceof Error?e.message:'Não foi possível carregar as contas a receber.')
-      setContas([])
-      setRecebimentos([])
-    } finally{setCarregando(false)}
+      if (!silencioso) {
+        setContas([])
+        setRecebimentos([])
+      }
+    } finally{if (!silencioso) setCarregando(false)}
   }
 
   useEffect(() => { void carregar() }, [])
+
+  // Reconsulta os títulos ao voltar à aba, sem mudar a navegação nem gravar no banco.
+  // A leitura já utiliza cache:'no-store'; preserva o botão Atualizar manual.
+  useEffect(() => {
+    let atualizando = false
+    const revalidar = () => {
+      if (document.visibilityState !== 'visible' || atualizando) return
+      atualizando = true
+      void carregar(true).finally(() => { atualizando = false })
+    }
+    window.addEventListener('focus', revalidar)
+    window.addEventListener('pageshow', revalidar)
+    document.addEventListener('visibilitychange', revalidar)
+    return () => {
+      window.removeEventListener('focus', revalidar)
+      window.removeEventListener('pageshow', revalidar)
+      document.removeEventListener('visibilitychange', revalidar)
+    }
+  }, [])
 
   const hoje = isoLocal(new Date())
   const clientesDisponiveis=[...new Map(contas.filter(c=>c.cliente_id).map(c=>[c.cliente_id!,c.cliente_nome||'Cliente'])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'pt-BR'))
