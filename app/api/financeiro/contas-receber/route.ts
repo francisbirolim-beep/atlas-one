@@ -59,6 +59,6 @@ export async function GET(req:NextRequest){
     if(detalhes.error)throw detalhes.error
     for(const d of detalhes.data||[])(composicoes[d.recebimento_id] ||= []).push({forma:d.forma,valor:Number(d.valor)})
   }
-  return NextResponse.json({ok:true,contas,recebimentos:(receb.data||[]).map(r=>({...r,...camposCadastro(r.cliente_id),formas:composicoes[r.id]||[],composicaoInconsistente:r.forma==='multiplo'&&Math.abs((composicoes[r.id]||[]).reduce((a,f)=>a+f.valor,0)-Number(r.valor))>0.009,desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})),nomesObras:nomes},{headers:{'Cache-Control':'private, no-store','X-Atlas-Database-Host':new URL(process.env.NEXT_PUBLIC_SUPABASE_URL||'https://unknown.invalid').hostname}})
+  return NextResponse.json({ok:true,contas,recebimentos:(receb.data||[]).map(r=>({...r,...camposCadastro(r.cliente_id),formas:composicoes[r.id]||[],composicaoInconsistente:r.forma==='multiplo'&&Math.abs((composicoes[r.id]||[]).reduce((a,f)=>a+f.valor,0)-Number(r.valor))>0.009,desconto:Math.max(Number(r.valor_desconto||0),descontos[r.id]||0)})),nomesObras:nomes},{headers:{'Cache-Control':'private, no-store'}})
  }catch(e){console.error('contas a receber leitura',e);return NextResponse.json({error:'Falha ao consultar Contas a Receber.'},{status:500})}
 }
