@@ -6,6 +6,14 @@ import { primeiraColunaAssistenciaId } from './assistenciaKanban'
 import { executarAutomacoesAssistencia } from './automacoesAssistencia'
 import { primeiraColunaId } from './kanban'
 import { v4 as uuidv4 } from 'uuid'
+import type { AssistenciaItem } from './tipos'
+
+export interface ItemAssistenciaForm {
+  id: string
+  titulo: string
+  descricao: string
+  fotos: File[]
+}
 
 export interface DadosAssistenciaForm {
   clienteId?: string | null
@@ -18,6 +26,8 @@ export interface DadosAssistenciaForm {
   bairro: string
   descricao: string
   fotos: File[]
+  itens?: ItemAssistenciaForm[]
+  responsavelAberturaNome?: string
   dataAssistencia?: string
 }
 
@@ -37,6 +47,7 @@ export async function criarAssistenciaNoServidor(
   dados: DadosAssistenciaForm
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   const { clienteId: clienteIdInformado, clienteNome, clienteWhatsapp, cidade, endereco, numero, bairro, descricao, fotos, dataAssistencia } = dados
+  const itensValidos = (dados.itens || []).filter(item => item.titulo.trim() || item.descricao.trim() || item.fotos.length > 0)
   const obraId = dados.obraId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('obra') : null)
 
   const [clienteId, usuario, colunaAssistenciaId, colunaOrcamentoId] = await Promise.all([
@@ -54,6 +65,18 @@ export async function criarAssistenciaNoServidor(
     if (url) fotosUrls.push(url)
   }
 
+  const itensSalvos: AssistenciaItem[] = []
+  for (const item of itensValidos) {
+    const urls: string[] = []
+    for (const foto of item.fotos) {
+      const url = await uploadFoto(foto)
+      if (!url) return { ok: false, error: 'Não foi possível enviar uma das fotos dos itens. Tente novamente.' }
+      urls.push(url)
+    }
+    itensSalvos.push({ id: item.id || uuidv4(), titulo: item.titulo.trim() || `Item ${itensSalvos.length + 1}`, descricao: item.descricao.trim(), fotos_urls: urls })
+  }
+  const descricaoResumo = descricao.trim() || itensSalvos.map((item, i) => `${i + 1}. ${item.titulo}${item.descricao ? `: ${item.descricao}` : ''}`).join('\n')
+
   const novaAssistenciaId = uuidv4()
   const criadaEm = dataAssistenciaParaIso(dataAssistencia)
 
@@ -68,7 +91,9 @@ export async function criarAssistenciaNoServidor(
     endereco: endereco || null,
     numero: numero || null,
     bairro: bairro || null,
-    descricao_problema: descricao,
+    descricao_problema: descricaoResumo,
+    itens: itensSalvos,
+    responsavel_abertura_nome: dados.responsavelAberturaNome?.trim() || usuario?.nome || null,
     fotos_urls: fotosUrls,
     status: 'aberto',
     coluna_id: colunaAssistenciaId,
@@ -103,7 +128,7 @@ export async function criarAssistenciaNoServidor(
       acabamento: 'outro',
       contramarco: 'sem',
       itens: [],
-      descricao_livre: descricao,
+      descricao_livre: descricaoResumo,
       valor_estimado: null,
       status: 'rascunho',
       modo_entrada: 'assistencia',
