@@ -403,7 +403,7 @@ export default function Assistencia() {
           <button type="button" onClick={() => setItens(anteriores => [...anteriores, itemEmBranco()])} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-teal px-4 py-3 text-sm font-semibold text-brand-teal hover:bg-brand-tealLight"><Plus size={18}/> Adicionar outra assistência / item</button>
         </section>
 
-        {erro && <p className="text-red-500 text-sm text-center">{erro}</p>
+        {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}
 
         <button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-teal text-white rounded-xl font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"><Send size={18} />{salvando ? 'Enviando...' : 'Abrir assistência e gerar OS'}</button>
       </main>
