@@ -3,10 +3,12 @@
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, FileText, Plus, Pencil, Trash2, X, Phone, MapPin, Search, User, Wrench, CalendarDays, Save, Timer, Navigation } from 'lucide-react'
+import { ArrowLeft, FileText, Plus, Pencil, Trash2, X, Phone, MapPin, Search, User, Wrench, CalendarDays, Save, Timer, Navigation, Camera } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { AssistenciaColuna, Assistencia } from '@/lib/tipos'
+import { AssistenciaColuna, Assistencia, type AssistenciaItem } from '@/lib/tipos'
+import { uploadFoto } from '@/lib/upload'
+import { v4 as uuidv4 } from 'uuid'
 import {
   listarColunasAssistencia,
   criarColunaAssistencia,
@@ -19,6 +21,13 @@ import { usuarioAtual } from '@/lib/auth'
 import { lerHomeUsuarioConfig, type EscopoAssistencias } from '@/lib/homeUsuario'
 import { Usuario } from '@/lib/tipos'
 import AssistenciaExternalAccessPanel from '@/components/system/AssistenciaExternalAccessPanel'
+
+type FotoNovaItem = { id: string; file: File; preview: string }
+type ItemEmEdicao = AssistenciaItem & { fotosNovas: FotoNovaItem[] }
+
+function itemEmEdicao(item?: AssistenciaItem): ItemEmEdicao {
+  return { id: item?.id || uuidv4(), titulo: item?.titulo || '', descricao: item?.descricao || '', fotos_urls: [...(item?.fotos_urls || [])], fotosNovas: [] }
+}
 
 type AssistenciaCampo = Assistencia & {
   tecnico_nome?: string | null
@@ -72,6 +81,10 @@ export default function Assistencias() {
   const [dataSelecionada, setDataSelecionada] = useState('')
   const [salvandoData, setSalvandoData] = useState(false)
   const [erroData, setErroData] = useState('')
+  const [editandoItens, setEditandoItens] = useState(false)
+  const [itensEditando, setItensEditando] = useState<ItemEmEdicao[]>([])
+  const [salvandoItens, setSalvandoItens] = useState(false)
+  const [erroItens, setErroItens] = useState('')
   const [colunaArrastando, setColunaArrastando] = useState<string | null>(null)
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [escopo, setEscopo] = useState<EscopoAssistencias>('proprias')
@@ -128,6 +141,8 @@ export default function Assistencias() {
       (c.endereco || '').toLowerCase().includes(alvo) ||
       (c.bairro || '').toLowerCase().includes(alvo) ||
       (c.descricao_problema || '').toLowerCase().includes(alvo) ||
+      (c.itens || []).some(item => `${item.titulo} ${item.descricao}`.toLowerCase().includes(alvo)) ||
+      (c.responsavel_abertura_nome || '').toLowerCase().includes(alvo) ||
       (c.criado_por_nome || '').toLowerCase().includes(alvo) ||
       (c.tecnico_nome || '').toLowerCase().includes(alvo)
     )
@@ -148,6 +163,81 @@ export default function Assistencias() {
     setSelecionado(card)
     setDataSelecionada(dataParaInput(card.created_at))
     setErroData('')
+    setEditandoItens(false)
+    setItensEditando([])
+    setErroItens('')
+  }
+
+  function iniciarEdicaoItens() {
+    if (!selecionado) return
+    setItensEditando((selecionado.itens || []).map(item => itemEmEdicao(item)))
+    setErroItens('')
+    setEditandoItens(true)
+  }
+
+  function cancelarEdicaoItens() {
+    itensEditando.forEach(item => item.fotosNovas.forEach(foto => URL.revokeObjectURL(foto.preview)))
+    setItensEditando([])
+    setEditandoItens(false)
+    setErroItens('')
+  }
+
+  function atualizarItemEmEdicao(id: string, campo: 'titulo' | 'descricao', valor: string) {
+    setItensEditando(prev => prev.map(item => item.id === id ? { ...item, [campo]: valor } : item))
+  }
+
+  function incluirFotosItem(id: string, arquivos: FileList | null) {
+    if (!arquivos?.length) return
+    const novos: FotoNovaItem[] = Array.from(arquivos).filter(f => f.type.startsWith('image/')).map(file => ({ id: uuidv4(), file, preview: URL.createObjectURL(file) }))
+    setItensEditando(prev => prev.map(item => item.id === id ? { ...item, fotosNovas: [...item.fotosNovas, ...novos] } : item))
+  }
+
+  function retirarFotoNova(id: string, fotoId: string) {
+    const foto = itensEditando.find(item => item.id === id)?.fotosNovas.find(f => f.id === fotoId)
+    if (foto) URL.revokeObjectURL(foto.preview)
+    setItensEditando(prev => prev.map(item => item.id === id ? { ...item, fotosNovas: item.fotosNovas.filter(f => f.id !== fotoId) } : item))
+  }
+
+  function retirarItem(id: string) {
+    itensEditando.find(item => item.id === id)?.fotosNovas.forEach(f => URL.revokeObjectURL(f.preview))
+    setItensEditando(prev => prev.filter(item => item.id !== id))
+  }
+
+  async function salvarItensDaAssistencia() {
+    if (!selecionado || salvandoItens) return
+    const preenchidos = itensEditando.filter(item => item.titulo.trim() || item.descricao.trim() || item.fotos_urls.length || item.fotosNovas.length)
+    if (preenchidos.some(item => !item.titulo.trim())) { setErroItens('Informe a peça ou local de todos os itens.'); return }
+    setSalvandoItens(true)
+    setErroItens('')
+    try {
+      // Evita substituir, sem aviso, itens salvos por outra pessoa durante a edição.
+      const { data: atual, error: erroBusca } = await supabase.from('assistencias').select('itens').eq('id', selecionado.id).single()
+      if (erroBusca) throw erroBusca
+      if (JSON.stringify(atual?.itens || []) !== JSON.stringify(selecionado.itens || [])) {
+        setErroItens('Esta assistência foi atualizada em outro aparelho. Feche e abra o chamado novamente antes de editar.')
+        return
+      }
+      const itensProntos: AssistenciaItem[] = []
+      for (const item of preenchidos) {
+        const urls = [...item.fotos_urls]
+        for (const foto of item.fotosNovas) {
+          const url = await uploadFoto(foto.file)
+          if (!url) throw new Error('Não foi possível enviar uma foto. Confira a conexão e tente novamente.')
+          urls.push(url)
+        }
+        itensProntos.push({ id: item.id, titulo: item.titulo.trim(), descricao: item.descricao.trim(), fotos_urls: urls })
+      }
+      const { error } = await supabase.from('assistencias').update({ itens: itensProntos }).eq('id', selecionado.id)
+      if (error) throw error
+      const atualizado = { ...selecionado, itens: itensProntos }
+      setCards(prev => prev.map(card => card.id === atualizado.id ? atualizado : card))
+      setSelecionado(atualizado)
+      cancelarEdicaoItens()
+    } catch (error) {
+      setErroItens(error instanceof Error ? error.message : 'Não foi possível salvar os itens.')
+    } finally {
+      setSalvandoItens(false)
+    }
   }
 
   async function handleDrop(e: React.DragEvent, colunaId: string) {
@@ -289,6 +379,7 @@ export default function Assistencias() {
                       <div className="flex items-center gap-2 mb-1"><div className="p-1 rounded bg-brand-tealLight"><Wrench size={12} className="text-brand-teal" /></div><p className="font-medium text-sm truncate flex-1 text-slate-800">{card.cliente_nome}</p></div>
                       <p className="text-xs mb-1 text-slate-500 truncate">{card.cidade ? `${card.cidade} — ` : ''}{new Date(card.created_at).toLocaleDateString('pt-BR')}</p>
                       <p className="text-xs line-clamp-2 text-slate-400">{card.descricao_problema || 'Sem descrição informada'}</p>
+                      {!!card.itens?.length && <p className="mt-1 text-[11px] font-semibold text-brand-teal">{card.itens.length} item(ns) de assistência</p>}
                       {card.criado_por_nome && <p className="text-xs flex items-center gap-1 mt-1 text-slate-400"><User size={11} /> {card.criado_por_nome}</p>}
                       {card.atendimento_iniciado_em && (
                         <p className={`mt-2 flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold ${card.atendimento_concluido_em ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>
@@ -318,6 +409,7 @@ export default function Assistencias() {
                 {enderecoCompleto(selecionado) && <span className="flex items-center gap-1.5"><MapPin size={14} className="text-slate-400" /> {enderecoCompleto(selecionado)}</span>}
               </div>
               {selecionado.criado_por_nome && <p className="text-xs text-slate-400 flex items-center gap-1.5"><User size={13} /> Registrado por {selecionado.criado_por_nome}</p>}
+              {selecionado.responsavel_abertura_nome && <p className="text-xs text-slate-600">Usuário responsável: <strong>{selecionado.responsavel_abertura_nome}</strong></p>}
 
               {selecionado.atendimento_iniciado_em && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
@@ -355,6 +447,61 @@ export default function Assistencias() {
               {selecionado.fotos_urls && selecionado.fotos_urls.length > 0 && (
                 <div className="flex flex-wrap gap-2">{selecionado.fotos_urls.map((url, i) => <a key={i} href={url} target="_blank" rel="noopener noreferrer">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={url} alt="Foto do problema" className="w-20 h-20 object-cover rounded-lg border border-slate-200" /></a>)}</div>
               )}
+
+              <section className="space-y-3 rounded-xl border border-slate-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div><h4 className="text-sm font-bold text-slate-800">Itens da assistência</h4><p className="text-[11px] text-slate-500">Cada peça ou local tem suas próprias fotos.</p></div>
+                  {!editandoItens && <button type="button" onClick={iniciarEdicaoItens} className="inline-flex items-center gap-1 rounded-lg border border-brand-teal px-3 py-2 text-xs font-semibold text-brand-teal hover:bg-brand-tealLight"><Pencil size={13}/> Adicionar / editar itens</button>}
+                </div>
+
+                {!editandoItens && (!selecionado.itens || selecionado.itens.length === 0) && <p className="text-xs text-slate-400">Nenhum item separado cadastrado ainda.</p>}
+                {!editandoItens && (selecionado.itens || []).map((item, index) => (
+                  <div key={item.id || index} className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-sm font-semibold text-slate-800">{index + 1}. {item.titulo}</p>
+                    <p className="whitespace-pre-wrap text-xs text-slate-600">{item.descricao || 'Sem descrição adicional.'}</p>
+                    <div className="flex flex-wrap gap-2">{(item.fotos_urls || []).map((url, fotoIndex) => <a key={fotoIndex} href={url} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Foto do item ${index + 1}`} className="h-20 w-20 rounded-lg border border-slate-200 object-cover"/>
+                    </a>)}</div>
+                  </div>
+                ))}
+
+                {editandoItens && (
+                  <div className="space-y-3">
+                    {itensEditando.map((item, index) => (
+                      <div key={item.id} className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-center justify-between"><strong className="text-xs">Item {index + 1}</strong><button type="button" onClick={() => retirarItem(item.id)} className="flex items-center gap-1 text-xs text-red-600"><Trash2 size={12}/> Excluir</button></div>
+                        <input type="text" value={item.titulo} onChange={e => atualizarItemEmEdicao(item.id, 'titulo', e.target.value)} placeholder="Peça / local (ex.: Porta da suíte)" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm"/>
+                        <textarea value={item.descricao} onChange={e => atualizarItemEmEdicao(item.id, 'descricao', e.target.value)} placeholder="O que precisa ser feito?" className="min-h-20 w-full rounded-lg border border-slate-300 p-2.5 text-sm"/>
+                        <div className="flex flex-wrap gap-2">
+                          {item.fotos_urls.map((url, fotoIndex) => <div key={fotoIndex} className="relative h-16 w-16">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="Foto existente" className="h-16 w-16 rounded-lg object-cover"/>
+                            <button type="button" aria-label="Retirar foto do item" onClick={() => setItensEditando(prev => prev.map(i => i.id === item.id ? { ...i, fotos_urls: i.fotos_urls.filter(u => u !== url) } : i))} className="absolute -right-1 -top-1 rounded-full bg-red-500 p-1 text-white"><X size={11}/></button>
+                          </div>)}
+                          {item.fotosNovas.map(foto => <div key={foto.id} className="relative h-16 w-16">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={foto.preview} alt="Nova foto" className="h-16 w-16 rounded-lg object-cover"/>
+                            <button type="button" aria-label="Remover foto nova" onClick={() => retirarFotoNova(item.id, foto.id)} className="absolute -right-1 -top-1 rounded-full bg-red-500 p-1 text-white"><X size={11}/></button>
+                          </div>)}
+                          <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-xs text-slate-500"><Camera size={16}/> Câmera
+                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { incluirFotosItem(item.id, e.target.files); e.target.value = '' }}/>
+                          </label>
+                          <label className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white text-xs text-slate-500"><Plus size={16}/> Galeria
+                            <input type="file" accept="image/*" multiple className="hidden" onChange={e => { incluirFotosItem(item.id, e.target.files); e.target.value = '' }}/>
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setItensEditando(prev => [...prev, itemEmEdicao()])} className="flex w-full items-center justify-center gap-1 rounded-xl border-2 border-dashed border-brand-teal p-3 text-xs font-semibold text-brand-teal"><Plus size={15}/> Adicionar outro item</button>
+                    {erroItens && <p className="text-xs text-red-600">{erroItens}</p>}
+                    <div className="flex gap-2">
+                      <button type="button" onClick={cancelarEdicaoItens} disabled={salvandoItens} className="flex-1 rounded-lg border border-slate-300 p-2.5 text-sm">Cancelar</button>
+                      <button type="button" onClick={() => void salvarItensDaAssistencia()} disabled={salvandoItens} className="flex-1 rounded-lg bg-brand-teal p-2.5 text-sm font-semibold text-white disabled:opacity-50">{salvandoItens ? 'Salvando...' : 'Salvar itens'}</button>
+                    </div>
+                  </div>
+                )}
+              </section>
 
               <div><label className="block text-xs text-slate-500 mb-1">Etapa</label><select value={selecionado.coluna_id || colunas[0]?.id || ''} onChange={e => mudarColunaSelecionado(e.target.value)} className="w-full border border-slate-300 rounded-xl p-3 text-sm">{colunas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></div>
 
