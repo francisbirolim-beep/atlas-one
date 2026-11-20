@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Send, CheckCircle, Camera, X, WifiOff, Search, UserRound, CalendarDays } from 'lucide-react'
+import { ArrowLeft, Send, CheckCircle, Camera, X, WifiOff, Search, UserRound, CalendarDays, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { criarAssistenciaNoServidor, DadosAssistenciaForm } from '@/lib/assistencias'
+import { usuarioAtual } from '@/lib/auth'
 import { salvarPendente } from '@/lib/offlineFila'
 import { supabase } from '@/lib/supabase'
 import { correspondeBuscaAtlas } from '@/lib/buscaAtlas'
@@ -15,6 +16,17 @@ interface FotoItem {
   id: string
   file: File
   preview: string
+}
+
+interface ItemAssistenciaFormulario {
+  id: string
+  titulo: string
+  descricao: string
+  fotos: FotoItem[]
+}
+
+function itemEmBranco(): ItemAssistenciaFormulario {
+  return { id: uuidv4(), titulo: '', descricao: '', fotos: [] }
 }
 
 type ClienteBusca = Cliente & { apelido?: string | null }
@@ -36,6 +48,8 @@ export default function Assistencia() {
   const [bairro, setBairro] = useState('')
   const [descricao, setDescricao] = useState('')
   const [fotos, setFotos] = useState<FotoItem[]>([])
+  const [itens, setItens] = useState<ItemAssistenciaFormulario[]>([itemEmBranco()])
+  const [usuarioNome, setUsuarioNome] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
   const [salvoOffline, setSalvoOffline] = useState(false)
@@ -43,6 +57,14 @@ export default function Assistencia() {
   const [sugestoes, setSugestoes] = useState<ClienteBusca[]>([])
   const [buscandoCliente, setBuscandoCliente] = useState(false)
   const [clienteEscolhido, setClienteEscolhido] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ativo = true
+    usuarioAtual().then(usuario => {
+      if (ativo && usuario?.nome) setUsuarioNome(nome => nome || usuario.nome)
+    }).catch(() => {})
+    return () => { ativo = false }
+  }, [])
 
   useEffect(() => {
     const clienteId = new URLSearchParams(window.location.search).get('cliente')
@@ -130,6 +152,35 @@ export default function Assistencia() {
     setFotos(prev => prev.filter(f => f.id !== id))
   }
 
+  function atualizarItem(id: string, campo: 'titulo' | 'descricao', valor: string) {
+    setItens(anteriores => anteriores.map(item => item.id === id ? { ...item, [campo]: valor } : item))
+  }
+
+  function adicionarFotosItem(id: string, arquivos: FileList | null) {
+    if (!arquivos?.length) return
+    const novas: FotoItem[] = Array.from(arquivos).filter(f => f.type.startsWith('image/')).map(file => ({
+      id: uuidv4(), file, preview: URL.createObjectURL(file),
+    }))
+    setItens(anteriores => anteriores.map(item => item.id === id ? { ...item, fotos: [...item.fotos, ...novas] } : item))
+  }
+
+  function removerFotoItem(itemId: string, fotoId: string) {
+    setItens(anteriores => anteriores.map(item => {
+      if (item.id !== itemId) return item
+      const foto = item.fotos.find(f => f.id === fotoId)
+      if (foto) URL.revokeObjectURL(foto.preview)
+      return { ...item, fotos: item.fotos.filter(f => f.id !== fotoId) }
+    }))
+  }
+
+  function removerItem(id: string) {
+    setItens(anteriores => {
+      const item = anteriores.find(i => i.id === id)
+      item?.fotos.forEach(f => URL.revokeObjectURL(f.preview))
+      return anteriores.filter(i => i.id !== id)
+    })
+  }
+
   async function salvarComoPendente(dadosForm: DadosAssistenciaForm) {
     await salvarPendente({
       id: uuidv4(),
@@ -148,6 +199,10 @@ export default function Assistencia() {
     setErro('')
     setSalvando(true)
 
+    const itensPreenchidos = itens.filter(item => item.titulo.trim() || item.descricao.trim() || item.fotos.length)
+    const itemSemNome = itensPreenchidos.find(item => !item.titulo.trim())
+    if (itemSemNome) { setErro('Informe o nome da peça ou local em cada item da assistência.'); return }
+
     const dadosForm: DadosAssistenciaForm = {
       clienteId: clienteEscolhido,
       dataAssistencia,
@@ -159,6 +214,8 @@ export default function Assistencia() {
       bairro,
       descricao: descricao.trim(),
       fotos: fotos.map(f => f.file),
+      responsavelAberturaNome: usuarioNome.trim(),
+      itens: itensPreenchidos.map(item => ({ id: item.id, titulo: item.titulo.trim(), descricao: item.descricao.trim(), fotos: item.fotos.map(f => f.file) })),
     }
 
     const semInternet = typeof navigator !== 'undefined' && !navigator.onLine
@@ -195,7 +252,10 @@ export default function Assistencia() {
     setNumero('')
     setBairro('')
     setDescricao('')
+    fotos.forEach(f => URL.revokeObjectURL(f.preview))
+    itens.forEach(item => item.fotos.forEach(f => URL.revokeObjectURL(f.preview)))
     setFotos([])
+    setItens([itemEmBranco()])
     setClienteEscolhido(null)
     setSugestoes([])
   }
@@ -251,6 +311,15 @@ export default function Assistencia() {
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+          <h3 className="text-sm font-medium text-slate-700">Usuário responsável pela abertura</h3>
+          <p className="text-xs text-slate-500">Identifique quem registrou a assistência (nome e sobrenome). O usuário conectado continua registrado no histórico do sistema.</p>
+          <div className="relative">
+            <UserRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+            <input type="text" value={usuarioNome} onChange={e => setUsuarioNome(e.target.value)} placeholder="Nome e sobrenome do responsável" className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-3 text-sm" />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
           <h3 className="text-sm font-medium text-slate-700 mb-1">Dados do cliente</h3>
           <div className="relative">
             <div className="relative">
@@ -282,12 +351,12 @@ export default function Assistencia() {
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
-          <h3 className="text-sm font-medium text-slate-700 mb-1">Descrição do problema <span className="font-normal text-slate-400">(opcional)</span></h3>
+          <h3 className="text-sm font-medium text-slate-700 mb-1">Observações gerais <span className="font-normal text-slate-400">(opcional)</span></h3>
           <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: Janela da sala não fecha direito, precisa trocar borracha..." className="w-full h-32 border border-slate-300 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-teal" />
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
-          <h3 className="text-sm font-medium text-slate-700 mb-1">Fotos do problema <span className="font-normal text-slate-400">(opcional)</span></h3>
+          <h3 className="text-sm font-medium text-slate-700 mb-1">Fotos gerais da obra <span className="font-normal text-slate-400">(opcional)</span></h3>
           <div className="flex flex-wrap gap-3">
             {fotos.map(f => (
               <div key={f.id} className="relative w-20 h-20"><img src={f.preview} alt="Foto" className="w-20 h-20 object-cover rounded-lg" /><button onClick={() => removerFoto(f.id)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full"><X size={12} /></button></div>
@@ -296,7 +365,45 @@ export default function Assistencia() {
           </div>
         </div>
 
-        {erro && <p className="text-red-500 text-sm text-center">{erro}</p>}
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+          <div>
+            <h3 className="text-base font-semibold text-slate-800">Itens da assistência</h3>
+            <p className="mt-1 text-xs text-slate-500">Registre cada porta, janela ou outro serviço separadamente, com sua descrição e suas fotos. Todos ficam no mesmo chamado.</p>
+          </div>
+
+          {itens.map((item, index) => (
+            <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-700">Item {index + 1}</p>
+                <button type="button" onClick={() => removerItem(item.id)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-600 hover:bg-red-50"><Trash2 size={13}/> Excluir item</button>
+              </div>
+              <input type="text" value={item.titulo} onChange={e => atualizarItem(item.id, 'titulo', e.target.value)} placeholder="Peça / local: Ex. Porta da suíte" aria-label={`Nome da peça ou local do item ${index + 1}`} className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm" />
+              <textarea value={item.descricao} onChange={e => atualizarItem(item.id, 'descricao', e.target.value)} placeholder="O que precisa ser feito? Ex. Porta raspando no piso, regular roldanas..." aria-label={`Descrição do item ${index + 1}`} className="h-24 w-full resize-y rounded-xl border border-slate-300 bg-white p-3 text-sm" />
+              <p className="text-xs font-medium text-slate-600">Fotos deste item</p>
+              <div className="flex flex-wrap gap-2">
+                {item.fotos.map(foto => (
+                  <div key={foto.id} className="relative h-20 w-20">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={foto.preview} alt={`Foto de ${item.titulo || 'item'}`} className="h-20 w-20 rounded-lg border border-slate-200 object-cover"/>
+                    <button type="button" aria-label="Remover foto" onClick={() => removerFotoItem(item.id, foto.id)} className="absolute -right-1 -top-1 rounded-full bg-red-500 p-1 text-white"><X size={12}/></button>
+                  </div>
+                ))}
+                <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-white text-slate-500 hover:border-brand-teal hover:text-brand-teal">
+                  <Camera size={19}/><span className="mt-1 text-[10px]">Tirar foto</span>
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { adicionarFotosItem(item.id, e.target.files); e.target.value = '' }}/>
+                </label>
+                <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-white text-slate-500 hover:border-brand-teal hover:text-brand-teal">
+                  <Plus size={19}/><span className="mt-1 text-[10px]">Galeria</span>
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={e => { adicionarFotosItem(item.id, e.target.files); e.target.value = '' }}/>
+                </label>
+              </div>
+            </div>
+          ))}
+
+          <button type="button" onClick={() => setItens(anteriores => [...anteriores, itemEmBranco()])} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-teal px-4 py-3 text-sm font-semibold text-brand-teal hover:bg-brand-tealLight"><Plus size={18}/> Adicionar outra assistência / item</button>
+        </section>
+
+        {erro && <p className="text-red-500 text-sm text-center">{erro}</p>
 
         <button onClick={salvar} disabled={salvando} className="w-full py-3.5 bg-brand-teal text-white rounded-xl font-medium hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"><Send size={18} />{salvando ? 'Enviando...' : 'Abrir assistência e gerar OS'}</button>
       </main>
