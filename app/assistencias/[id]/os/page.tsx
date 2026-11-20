@@ -137,6 +137,7 @@ export default function OrdemServicoAssistenciaPage() {
           .os-number-label { font-size: 6.5pt !important; }
           .os-number { margin-top: 0.5mm !important; font-size: 16pt !important; line-height: 1 !important; }
           .os-summary { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 1.5mm !important; margin-top: 2.5mm !important; }
+          .os-item-section.os-section { break-inside: auto !important; }
           .os-box, .os-section { border: 1.45px solid #334155 !important; border-radius: 2mm !important; }
           .os-box { padding: 2mm !important; }
           .os-section { margin-top: 2.2mm !important; padding: 2.2mm !important; break-inside: avoid !important; }
@@ -193,7 +194,7 @@ export default function OrdemServicoAssistenciaPage() {
         <section className="os-summary mt-4 grid gap-2 sm:grid-cols-4">
           <div className="os-box rounded-xl border border-slate-600 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Abertura</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{new Date(assistencia.created_at).toLocaleString('pt-BR')}</p></div>
           <div className="os-box rounded-xl border border-slate-600 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Etapa</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{etapa || assistencia.status || 'Aberto'}</p></div>
-          <div className="os-box rounded-xl border border-slate-600 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Aberto por</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{assistencia.criado_por_nome || 'Não informado'}</p></div>
+          <div className="os-box rounded-xl border border-slate-600 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Aberto por</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{assistencia.responsavel_abertura_nome || assistencia.criado_por_nome || 'Não informado'}</p></div>
           <div className="os-box rounded-xl border border-slate-600 p-2.5"><p className="os-label text-[10px] font-semibold uppercase tracking-wide text-slate-500">Contato</p><p className="os-value mt-1 text-xs font-semibold text-slate-900">{assistencia.cliente_whatsapp || 'Não informado'}</p></div>
         </section>
 
@@ -223,6 +224,26 @@ export default function OrdemServicoAssistenciaPage() {
               ))}
             </div>
           </section>
+        )}
+
+        {!!assistencia.itens?.length && (
+          <div className="mt-3 space-y-3">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">Itens da assistência ({assistencia.itens.length})</h2>
+            {assistencia.itens.map((item, index) => (
+              <section key={item.id || index} className="os-section os-item-section mt-2 rounded-xl border border-slate-600 p-3">
+                <h3 className="os-section-title text-xs font-bold uppercase tracking-wide text-slate-700">Item {index + 1}: {item.titulo}</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{item.descricao || 'Sem descrição adicional.'}</p>
+                {!!item.fotos_urls?.length && (
+                  <div className="os-fotos-grid mt-2 grid grid-cols-3 gap-2">
+                    {item.fotos_urls.map((url, fotoIndex) => <div key={fotoIndex} className="os-foto aspect-[4/3] overflow-hidden rounded-lg border border-slate-600">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Item ${index + 1}, foto ${fotoIndex + 1}`} className="h-full w-full object-cover"/>
+                    </div>)}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
         )}
 
         <section className="os-two-col mt-3 grid gap-3 sm:grid-cols-2 print:break-inside-avoid">

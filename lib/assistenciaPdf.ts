@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import type { AssistenciaItem } from './tipos'
 
 export type AssistenciaPdfData = {
   id: string
@@ -11,6 +12,8 @@ export type AssistenciaPdfData = {
   bairro?: string | null
   descricao_problema?: string | null
   fotos_urls?: string[] | null
+  itens?: AssistenciaItem[] | null
+  responsavel_abertura_nome?: string | null
   status?: string | null
   criado_por_nome?: string | null
   tecnico_nome?: string | null
@@ -122,7 +125,7 @@ export async function salvarPdfOSAssistencia({ assistencia, empresa, etapa }: Op
   const resumo = [
     ['ABERTURA', dataAbertura],
     ['ETAPA', etapa || assistencia.status || 'Aberto'],
-    ['ABERTO POR', assistencia.criado_por_nome || 'Não informado'],
+    ['ABERTO POR', assistencia.responsavel_abertura_nome || assistencia.criado_por_nome || 'Não informado'],
     ['CONTATO', assistencia.cliente_whatsapp || 'Não informado'],
   ]
   resumo.forEach(([titulo, valor], index) => {
@@ -249,6 +252,67 @@ export async function salvarPdfOSAssistencia({ assistencia, empresa, etapa }: Op
     doc.setTextColor(71, 85, 105)
     doc.text(item.titulo, x + assinaturaW / 2, assinaturaY + 18.5, { align: 'center' })
   })
+
+  // Anexo em páginas próprias: mantém o layout e as assinaturas da OS principal.
+  if (assistencia.itens?.length) {
+    doc.addPage()
+    let yItem = 13
+    const iniciarPaginaItens = () => {
+      doc.addPage()
+      yItem = 13
+    }
+    const garantirEspaco = (altura: number) => {
+      if (yItem + altura > 280) iniciarPaginaItens()
+    }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.setTextColor(15, 23, 42)
+    doc.text(`ITENS DA ASSISTÊNCIA — OS ${numeroOS}`, margem, yItem)
+    yItem += 9
+
+    for (const [indice, item] of assistencia.itens.entries()) {
+      const descricaoLinhas = doc.splitTextToSize(item.descricao || 'Sem descrição adicional.', larguraUtil - 10)
+      garantirEspaco(12 + descricaoLinhas.length * 3.5)
+      doc.setDrawColor(148, 163, 184)
+      doc.setLineWidth(0.3)
+      doc.line(margem, yItem - 2, largura - margem, yItem - 2)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(9)
+      doc.setTextColor(15, 23, 42)
+      doc.text(`ITEM ${indice + 1}: ${item.titulo}`, margem, yItem + 3, { maxWidth: larguraUtil })
+      yItem += 8
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(51, 65, 85)
+      for (const linha of descricaoLinhas) {
+        garantirEspaco(5)
+        doc.text(linha, margem + 2, yItem)
+        yItem += 3.6
+      }
+      yItem += 3
+
+      const fotosItem = item.fotos_urls || []
+      const fotosPorLinha = 3
+      const gapItem = 3
+      const fotoWItem = (larguraUtil - gapItem * (fotosPorLinha - 1)) / fotosPorLinha
+      const fotoHItem = 35
+      for (let inicioFoto = 0; inicioFoto < fotosItem.length; inicioFoto += fotosPorLinha) {
+        garantirEspaco(fotoHItem + 6)
+        const grupoFotos = fotosItem.slice(inicioFoto, inicioFoto + fotosPorLinha)
+        const imagens = await Promise.all(grupoFotos.map(urlParaDataUrl))
+        imagens.forEach((dataUrl, fotoIndex) => {
+          const x = margem + fotoIndex * (fotoWItem + gapItem)
+          doc.setDrawColor(148, 163, 184)
+          doc.rect(x, yItem, fotoWItem, fotoHItem)
+          if (dataUrl) {
+            try { doc.addImage(dataUrl, formatoImagem(dataUrl), x, yItem, fotoWItem, fotoHItem, undefined, 'FAST') } catch {}
+          }
+        })
+        yItem += fotoHItem + 4
+      }
+      yItem += 4
+    }
+  }
 
   const arquivo = `OS-${numeroOS}-${nomeArquivoSeguro(assistencia.cliente_nome) || 'cliente'}.pdf`
   doc.save(arquivo)
