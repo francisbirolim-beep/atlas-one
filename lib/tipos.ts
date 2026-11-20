@@ -318,6 +318,13 @@ export interface AssistenciaColuna {
       created_at?: string
 }
 
+export interface AssistenciaItem {
+      id: string
+      titulo: string
+      descricao: string
+      fotos_urls: string[]
+}
+
 export interface Assistencia {
       id: string
       created_at: string
@@ -329,6 +336,8 @@ export interface Assistencia {
       numero?: string | null
       bairro?: string | null
       descricao_problema: string
+      itens?: AssistenciaItem[] | null
+      responsavel_abertura_nome?: string | null
       fotos_urls?: string[] | null
       status: StatusAssistencia
       criado_por_nome?: string | null
