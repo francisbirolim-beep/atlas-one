@@ -137,7 +137,7 @@ export default function OrdemServicoAssistenciaPage() {
           .os-number-label { font-size: 6.5pt !important; }
           .os-number { margin-top: 0.5mm !important; font-size: 16pt !important; line-height: 1 !important; }
           .os-summary { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 1.5mm !important; margin-top: 2.5mm !important; }
-          .os-item-section { break-inside: auto !important; }
+          .os-item-section.os-section { break-inside: auto !important; }
           .os-box, .os-section { border: 1.45px solid #334155 !important; border-radius: 2mm !important; }
           .os-box { padding: 2mm !important; }
           .os-section { margin-top: 2.2mm !important; padding: 2.2mm !important; break-inside: avoid !important; }
