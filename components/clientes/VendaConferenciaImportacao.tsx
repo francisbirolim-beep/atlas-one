@@ -46,6 +46,7 @@ export default function VendaConferenciaImportacao({
  const [conferencia,setConferencia]=useState<Conferencia|null>(null)
  const [carregando,setCarregando]=useState(false)
  const [salvando,setSalvando]=useState(false)
+ const [conciliando,setConciliando]=useState(false)
  const [erro,setErro]=useState('')
  const [sucesso,setSucesso]=useState('')
  const [edicao,setEdicao]=useState<{tipo:TipoEdicao;id?:string}|null>(null)
@@ -130,6 +131,27 @@ export default function VendaConferenciaImportacao({
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao salvar valor da venda.')}
   finally{setSalvando(false)}
  }
+ async function conciliarReceber(){
+  if(!podeEditar||numeroTitulos!==1||totalPago>0.009||atlas==null)return
+  if(Math.abs(Number(atlas)-Number(valorTitulos))<=0.009)return
+  if(!window.confirm('Conciliar Contas a Receber de '+moeda(valorTitulos)+' para '+moeda(atlas)+'? O título será atualizado com auditoria, sem alterar pagamentos.'))return
+  setConciliando(true);setErro('');setSucesso('')
+  try{
+   const token=await tokenAtual()
+   if(!token)throw new Error('Sessão expirada.')
+   const resposta=await fetch('/api/vendas/financeiro/conciliar-titulo',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({vendaId,valorVendaEsperado:atlas,valorTituloEsperado:valorTitulos})
+   })
+   const j=await resposta.json()
+   if(!resposta.ok)throw new Error(j.error||'Não foi possível conciliar Contas a Receber.')
+   onVendaAtualizada?.()
+   await carregar()
+   setSucesso(j.sem_alteracao?'O título já estava conciliado.':'Contas a Receber conciliado com histórico. Nenhum pagamento foi alterado.')
+  }catch(e){setErro(e instanceof Error?e.message:'Falha ao conciliar Contas a Receber.')}
+  finally{setConciliando(false)}
+ }
  async function corrigirPagamentoAtlas(e:FormEvent<HTMLFormElement>,recibo:ReciboAtlas){
   e.preventDefault()
   const novo=normalizarValor(valorDigitado)
@@ -211,6 +233,17 @@ export default function VendaConferenciaImportacao({
      {formulario('atlas_venda',e=>void corrigirAtlas(e))}
     </div>
    </div>
+   {numeroTitulos>0&&atlas!=null&&Math.abs(Number(atlas)-Number(valorTitulos))>0.009&&
+    <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3">
+      <p className="text-xs font-bold text-amber-950">Contas a Receber desatualizado: {moeda(valorTitulos)} · Venda Atlas: {moeda(atlas)}</p>
+      <p className="mt-1 text-xs text-amber-900">A correção comercial já foi feita, mas o título financeiro precisa de conciliação. Recebimentos e descontos existentes não serão alterados.</p>
+      {podeEditar&&numeroTitulos===1&&totalPago<=0.009?
+        <button type="button" disabled={conciliando||salvando} onClick={()=>void conciliarReceber()}
+          className="mt-2 rounded-lg border border-amber-600 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">
+          {conciliando?'Conciliando...':'Conciliar com Contas a Receber'}
+        </button>:
+        <p className="mt-2 text-xs font-semibold text-amber-900">Parcelamentos ou pagamentos existentes exigem conferência no Financeiro.</p>}
+    </div>}
    <p className="mt-3 text-xs text-slate-700">Diferença entre valor conferido W.Vetro e venda Atlas: <b>{wvetro==null||atlas==null?'A conferir':moeda(wvetro-atlas)}</b>. Validar o W.Vetro não muda o Atlas; corrigir o Atlas não reescreve o histórico bruto do W.Vetro.</p>
    {conferencia?.historico?.length? <details className="mt-3 text-xs">
      <summary className="cursor-pointer font-semibold text-slate-700">Histórico de validações e correções ({conferencia.historico.length})</summary>
