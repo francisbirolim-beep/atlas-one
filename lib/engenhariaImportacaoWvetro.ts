@@ -128,7 +128,48 @@ function leituraPosicional(partes: string[]): ComponenteCandidato | null {
   // Aceitamos linha posicional somente com eixo, corte e quantidade explícitos.
   return null
 }
+/**
+ * Leitor deterministico do Orientativo de Montagem do W.Vetro.
+ * O relatorio distribui codigo, quantidade, tamanho, angulo, posicao e peso
+ * em colunas; nunca confundir a coluna Corte (angulo) com Tamanho (mm).
+ * Preserva linhas distintas do mesmo codigo (ex.: baguetes SU102 L/H).
+ */
+function extrairOrientativoMontagem(texto: string): ComponenteCandidato[] {
+  if (!/orientativo de montagem/i.test(texto)) return []
+  const itens: ComponenteCandidato[] = []
+  let secao: 'perfil' | 'acessorio' | '' = ''
+  for (const original of texto.split(/\r?\n/).slice(0, 2500)) {
+    const linha = original.replace(/\t/g, '  ').replace(/\s+/g, ' ').trim()
+    if (/^perfil\s*$/i.test(linha)) { secao = 'perfil'; continue }
+    if (/^acess[oó]rios\s*$/i.test(linha)) { secao = 'acessorio'; continue }
+    if (/^vidro\s*$/i.test(linha) || /^servi[cç]os\s*$/i.test(linha)) { secao = ''; continue }
+
+    if (secao === 'perfil') {
+      // Codigo Descricao Qtde Tamanho Angulo Pos Peso
+      const m = linha.match(/^([A-Z][A-Z0-9._/-]{1,39})\s+(.+?)\s+(\d{1,3})\s+(\d{2,5}(?:[,.]\d+)?)\s+(\d{1,3}\/\d{1,3})\s+([LH])\s+\d+(?:[,.]\d+)?$/i)
+      if (!m) continue
+      const qtde = Number(m[3]), tamanho = Number(m[4].replace(',', '.'))
+      if (!Number.isInteger(qtde) || qtde < 1 || qtde > 500 ||
+        !Number.isFinite(tamanho) || tamanho < 10 || tamanho > 20000) continue
+      itens.push({ codigo: m[1].toUpperCase().replaceAll('/', '-'), descricao: m[2],
+        tipo: 'perfil', quantidade: qtde, comprimento_mm: tamanho, eixo: m[6].toUpperCase() as 'L' | 'H' })
+    } else if (secao === 'acessorio') {
+      // Codigo Descricao Unidade Qtde Observacao. MT/TB/PR nao sao pecas unitarias.
+      const m = linha.match(/^([A-Z][A-Z0-9._/-]{1,39})\s+(.+?)\s+(UN|MT|PR|TB|KG|M2|PC|CJ)\s+(\d{1,5}(?:[,.]\d{1,3})?)(?:\s+(.+))?$/i)
+      if (!m) continue
+      const quantidade = Number(m[4].replace(',', '.'))
+      if (!Number.isFinite(quantidade) || quantidade <= 0 || quantidade > 10000) continue
+      itens.push({ codigo: m[1].toUpperCase().replaceAll('/', '-'), descricao: m[2],
+        tipo: 'acessorio', quantidade, unidade: m[3].toUpperCase(),
+        observacao: (m[5] || '').slice(0, 160), comprimento_mm: null, eixo: '' })
+    }
+  }
+  return normalizarComponentes(itens)
+}
+
 export function extrairComponentesRelatorio(texto: string): ComponenteCandidato[] {
+  const orientativo = extrairOrientativoMontagem(String(texto || ''))
+  if (orientativo.some(c => c.tipo === 'perfil' && c.eixo && c.comprimento_mm != null)) return orientativo
   const linhas = String(texto || '').split(/\r?\n/).slice(0,2000)
   const detectados: ComponenteCandidato[] = []
   let cols: Campos | null = null
@@ -150,6 +191,25 @@ export function extrairComponentesRelatorio(texto: string): ComponenteCandidato[
   }
   return Array.from(unicos.values()).slice(0,200)
 }
+export function extrairDadosOrientativo(texto: string): {
+  largura_mm: number | null; altura_mm: number | null; orcamento: string;
+  folga_largura_mm: number | null; folga_altura_mm: number | null
+} {
+  const fonte = String(texto || '')
+  const dimensoes = fonte.match(/\bLargura\s+(\d{3,5})\s+Altura\s+(\d{3,5})\b/i)
+  const orcamento = fonte.match(/\bOR[ÇC]AMENTO\s+Nro:?\s*(\d+)\b/i)
+  const folgaL = fonte.match(/FOLGA NA LARGURA PARA ENCAIXE DA ESQUADRIA\s+(\d+(?:[,.]\d+)?)/i)
+  const folgaH = fonte.match(/FOLGA NA ALTURA PARA ENCAIXE DA ESQUADRIA\s+(\d+(?:[,.]\d+)?)/i)
+  const valor = (v?: string) => v ? Number(v.replace(',', '.')) : null
+  return {
+    largura_mm: dimensoes ? Number(dimensoes[1]) : null,
+    altura_mm: dimensoes ? Number(dimensoes[2]) : null,
+    orcamento: orcamento?.[1] || '',
+    folga_largura_mm: valor(folgaL?.[1]),
+    folga_altura_mm: valor(folgaH?.[1]),
+  }
+}
+
 export function diagnosticarRelatorio(texto: string, nome = ''): DiagnosticoImportacao {
   const bruto=String(texto || '')
   if (pareceAtalhoWeb(nome,bruto)) return {

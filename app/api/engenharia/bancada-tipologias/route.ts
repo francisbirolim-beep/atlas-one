@@ -185,6 +185,50 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ ok: true, id: data.id, conferencia, comparacaoAcessorios }, { headers: { 'Cache-Control': 'private,no-store' } })
   }
+  if (acao === 'copiar_exemplos') {
+    const destinoId = texto(form.get('destinoFormulaId'), 50)
+    const destino = await formulaPorId(destinoId)
+    if (!destino || destino.id === formulaId || destino.tipologia_id !== formula.tipologia_id ||
+      destino.ativo || (metadata(destino.metadados_editor).laboratorio &&
+        metadata(destino.metadados_editor).empresa_id !== u.empresa_id))
+      return errorJson('Versao de laboratorio de destino invalida.', 409)
+    const { data: fontes, error: erroFontes } = await supabaseAdmin.from('ai_aprendizado_entradas')
+      .select('id,tipo,titulo,descricao,fonte_nome,mime_type,tamanho_bytes,storage_path,texto_extraido,metadados')
+      .eq('empresa_id', u.empresa_id)
+      .contains('metadados', { bancada_tipologias: { formula_id: formulaId } })
+      .limit(100)
+    if (erroFontes) return errorJson('Nao foi possivel ler os exemplos da versao anterior.', 500)
+    const { data: existentes, error: erroExistentes } = await supabaseAdmin.from('ai_aprendizado_entradas')
+      .select('metadados').eq('empresa_id', u.empresa_id)
+      .contains('metadados', { bancada_tipologias: { formula_id: destinoId } }).limit(100)
+    if (erroExistentes) return errorJson('Nao foi possivel verificar os exemplos ja copiados.', 500)
+    const copiados = new Set((existentes || []).map(r =>
+      String(metadata(metadata(r.metadados).bancada_tipologias).copiado_de_id || '')))
+    const entradas = (fontes || []).filter(r => !copiados.has(r.id)).map(r => {
+      const meta = metadata(r.metadados)
+      const anterior = metadata(meta.bancada_tipologias)
+      return {
+        empresa_id: u.empresa_id, tipo: r.tipo || 'regra', titulo: r.titulo,
+        descricao: 'Copia de referencia para nova versao. Exige nova validacao no W.Vetro.',
+        fonte_nome: r.fonte_nome, mime_type: r.mime_type, tamanho_bytes: r.tamanho_bytes,
+        storage_path: r.storage_path, texto_extraido: r.texto_extraido,
+        criado_por_id: u.id, criado_por_nome: u.nome, status: 'aguardando_validacao',
+        metadados: { ...meta, bancada_tipologias: {
+          ...anterior, formula_id: destinoId, formula_assinatura: destino.assinatura,
+          formula_versao: destino.versao, confirmado_em: null,
+          responsavel_validacao: null, copiado_de_id: r.id, conferencia: null,
+          conferencia_acessorios: null,
+        } },
+      }
+    })
+    if (entradas.length) {
+      const { error } = await supabaseAdmin.from('ai_aprendizado_entradas').insert(entradas)
+      if (error) return errorJson('Versao de teste foi criada, mas os exemplos nao foram copiados.', 500)
+    }
+    return NextResponse.json({ ok: true, copiados: entradas.length,
+      mensagem: 'Exemplos preservados para nova conferencia; aprovacoes anteriores nao foram herdadas.' })
+  }
+
   if (acao === 'validar_caso') {
     const casoId = texto(form.get('casoId'), 50)
     if (!uuid.test(casoId)) return errorJson('Exemplo inválido.')

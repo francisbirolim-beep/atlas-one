@@ -13,6 +13,7 @@ import { conferirAcessorios, lerListaAcessorios } from '@/lib/bancadaAcessorios'
 import { calcularAcessoriosTecnicos } from '@/lib/formulasAcessoriosEngine'
 import { listarProdutos } from '@/lib/produtos'
 import ImagemProdutoTecnico from '@/components/engenharia/ImagemProdutoTecnico'
+import { inferirFormulasPorCasos } from '@/lib/bancadaAprendizadoFormulas'
 import type { Produto } from '@/lib/tipos'
 
 type ExemploSalvo = {
@@ -171,6 +172,9 @@ export default function BancadaTipologiasPage() {
   const conferenciaAcessorios = useMemo(() => caso.atual && definicao && rascunho
     ? conferirAcessorios(definicao, rascunho.acessorios || [], caso.atual) : null,
     [caso.atual, definicao, rascunho])
+  const propostas = useMemo(() => inferirFormulasPorCasos(exemplos, opcoes),
+    [exemplos, opcoes])
+  const aplicaveis = useMemo(() => propostas.filter(p => p.formula && p.estado !== 'pendente'), [propostas])
   const modificado = Boolean(rascunho && original && (
     JSON.stringify(rascunho.pecas) !== JSON.stringify(original.pecas) ||
     JSON.stringify(rascunho.acessorios) !== JSON.stringify(original.acessorios) ||
@@ -178,6 +182,34 @@ export default function BancadaTipologiasPage() {
     Number(folgaH) !== original.folgas?.altura_mm
   ))
 
+  function aplicarHipoteses() {
+    if (!rascunho || !original || original.ativo) {
+      setErro('Somente uma receita de laboratorio inativa pode receber hipoteses.')
+      return
+    }
+    let aplicadas = 0
+    setRascunho(atual => {
+      if (!atual) return atual
+      const editado = clone(atual)
+      for (const p of aplicaveis) {
+        const correspondentes = editado.pecas.filter(c =>
+          c.codigo?.toUpperCase() === p.codigo && c.eixo === p.eixo)
+        // Nunca sobrescrever regras condicionais ou pecas duplicadas de mesmo eixo.
+        if (correspondentes.length !== 1) continue
+        const atualPeca = correspondentes[0]
+        if (atualPeca.condicoes?.length || atualPeca.formula_L || atualPeca.formula_H ||
+          atualPeca.mapa_codigo || atualPeca.formula_por_variavel || !p.formula) continue
+        atualPeca.formula = p.formula
+        if (p.formula_quantidade) atualPeca.formula_quantidade = p.formula_quantidade
+        atualPeca.composicao_desconto = 'HIPOTESE POR COMPARACAO: ' + p.amostras +
+          ' exemplos W.Vetro; ' + p.motivo
+        aplicadas++
+      }
+      return editado
+    })
+    setSucesso('Propostas aplicadas somente no rascunho local. Crie uma nova versao de teste e confira no W.Vetro antes da validacao.')
+    setErro('')
+  }
   function adicionarPerfilLaboratorio() {
     setRascunho(atual => atual ? {
       ...atual,
@@ -222,9 +254,17 @@ export default function BancadaTipologiasPage() {
       metadados_editor: { ...rascunho.metadados_editor, origem_bancada_id: original.id },
     })
     if (!salvo) throw Error('Versão de teste criada, mas falhou ao salvar. Confira no Editor Técnico.')
+    let historico = 'Historico ainda nao transferido.'
+    try {
+      const copia = await chamada('copiar_exemplos', { destinoFormulaId: salvo.id })
+      historico = String(copia.copiados || 0) + ' exemplos preservados, aguardando nova conferencia.'
+    } catch (e) {
+      historico = 'Nao foi possivel copiar os exemplos: ' + mensagemErro(e) +
+        ' A nova versao foi preservada e continua inativa.'
+    }
     setFormulas(anteriores => [...anteriores, salvo])
     setId(salvo.id)
-    setSucesso('Nova versão isolada salva. A fórmula original continua intocada.')
+    setSucesso('Nova versao isolada salva. A formula original continua intocada. ' + historico)
   }
   async function extrairPdf() {
     if (!arquivo) throw Error('Selecione um PDF do orçamento ou da lista de corte.')
@@ -233,14 +273,14 @@ export default function BancadaTipologiasPage() {
     setSucesso('PDF extraído para conferência manual. Cole ou ajuste as linhas na lista de referência.')
   }
   async function interpretarPdfComIA() {
-    if (!arquivo || !consentimentoPdfIA) throw Error('Selecione um arquivo e autorize a análise por IA.')
+    if (!arquivo) throw Error('Selecione o PDF tecnico do W.Vetro.')
     if (lista.trim()) throw Error('A lista de cortes já está preenchida. Revise-a antes de substituí-la para não perder correções.')
     const sessao = await supabase.auth.getSession()
     const token = sessao.data.session?.access_token
     if (!token) throw Error('Faça login novamente.')
     const form = new FormData()
     form.set('acao', 'analisar')
-    form.set('consentimentoIA', 'sim')
+    form.set('consentimentoIA', consentimentoPdfIA ? 'sim' : 'nao')
     form.set('arquivo', arquivo)
     form.set('observacoes', 'Comparar a lista de corte desta medida com a receita selecionada.')
     const resp = await fetch('/api/engenharia/bancada-tipologias/nova', {
@@ -254,8 +294,20 @@ export default function BancadaTipologiasPage() {
     if (!cortes.length) throw Error('Nenhuma lista completa foi reconhecida com segurança. Use a extração de texto e preencha manualmente.')
     setLista(cortes.map((p: {codigo:string;eixo:string;comprimento_mm:number;quantidade:number}) =>
       [p.codigo,p.eixo,p.comprimento_mm,p.quantidade].join(';')).join('\n'))
+    const acessorios = (Array.isArray(data.componentes) ? data.componentes : [])
+      .filter((p: {tipo:string}) => p.tipo === 'acessorio')
+    if (acessorios.length) setListaAcessorios(acessorios.map((p: {codigo:string;quantidade:number}) =>
+      [p.codigo,p.quantidade].join(';')).join('\n'))
+    const identificacao = data.dados_orientativo
+    if (identificacao?.largura_mm) setLargura(String(identificacao.largura_mm))
+    if (identificacao?.altura_mm) setAltura(String(identificacao.altura_mm))
+    if (identificacao?.folga_largura_mm != null) setFolgaL(String(identificacao.folga_largura_mm))
+    if (identificacao?.folga_altura_mm != null) setFolgaH(String(identificacao.folga_altura_mm))
+    if (identificacao?.orcamento && !fonte.trim()) setFonte('W.Vetro - orcamento ' + identificacao.orcamento)
     setTextoPdf(data.texto_extraido || '')
-    setSucesso('IA sugeriu ' + cortes.length + ' linhas. Confira código, eixo, comprimento e quantidade antes de registrar.')
+    setSucesso(cortes.length + ' linhas de cortes identificadas (' +
+      (data.status_ia === 'dispensada' ? 'leitura tecnica local' : 'analise assistida') +
+      '). Confira medidas, codigos e acessorios antes de registrar.')
   }
   async function registrarCaso() {
     if (!original || !caso.atual || !conferencia || caso.erro) throw Error(caso.erro || 'Preencha a lista de corte.')
@@ -402,6 +454,42 @@ export default function BancadaTipologiasPage() {
       </section>}
 
       <section className={painel}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 className="text-lg font-bold">Aprendizado por comparação de medidas do W.Vetro</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Registre abaixo dois ou mais PDFs da mesma configuracao. O Atlas compara cada perfil e
+              sugere descontos e fracoes de largura/altura sem modificar a producao.</p>
+          </div>
+          <button type="button" className={botao + ' border border-indigo-200 text-indigo-800'}
+            disabled={!aplicaveis.length || !!original?.ativo || !!ocupado} onClick={aplicarHipoteses}>
+            Aplicar hipoteses no rascunho
+          </button>
+        </div>
+        {!propostas.length && <p className="mt-3 text-sm text-slate-500">
+          Registre abaixo o primeiro PDF, depois importe medidas diferentes da mesma tipologia.
+        </p>}
+        {!!propostas.length && <>
+          <p className="mt-3 text-xs text-amber-800">As formulas sao hipoteses; somente uma versao inativa recebe ajustes.
+            Com duas medidas, uma dimensao ainda pode ser indeterminada. O W.Vetro deve confirmar
+            tres medidas distintas antes da validacao pelo Master.</p>
+          <div className="mt-3 max-h-96 space-y-2 overflow-y-auto">
+            {propostas.map((p,i) => <div key={p.codigo+'|'+p.eixo+'|'+i}
+                className="grid items-center gap-2 rounded-xl border border-slate-200 p-2 text-sm md:grid-cols-[64px_100px_65px_1fr]">
+              <ImagemProdutoTecnico codigo={p.codigo}
+                produto={produtos.find(prod => prod.codigo?.toUpperCase() === p.codigo) || null} pequeno/>
+              <b>{p.codigo} · {p.eixo}</b>
+              <span className="text-xs">{p.amostras} PDFs</span>
+              <div>
+                <p className="font-mono font-semibold">{p.formula || 'Formula ainda indeterminada'}</p>
+                <p className="text-xs text-slate-600">{p.estado === 'pendente' ? 'Pendente' :
+                  p.estado === 'consistente' ? 'Consistente nos exemplos, nao validada' : 'Hipotese inicial'} · {p.motivo}</p>
+              </div>
+            </div>)}
+          </div>
+        </>}
+      </section>
+
+      <section className={painel}>
         <h2 className="text-lg font-bold">Lista de corte e impacto das alterações</h2>
         {simulado.erro && <p className="mt-2 text-sm text-red-700">{simulado.erro}</p>}
         {alternativo.erro && <p className="mt-2 text-sm text-amber-700">Cenário B: {alternativo.erro}</p>}
@@ -448,9 +536,9 @@ export default function BancadaTipologiasPage() {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button className={botao + ' border border-slate-300'} disabled={!arquivo || !!ocupado || !id} onClick={() => executar('extrair', extrairPdf)}><FileText size={16}/> Extrair texto do PDF</button>
-          <button className={botao + ' border border-indigo-200 text-indigo-800'} disabled={!arquivo || !consentimentoPdfIA || !!ocupado || !id || !!lista.trim()} onClick={() => executar('interpretar', interpretarPdfComIA)}><Sparkles size={16}/> Sugerir cortes com IA</button>
-          <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" className="mt-0.5" checked={consentimentoPdfIA} onChange={e => setConsentimentoPdfIA(e.target.checked)}/> Autorizo enviar este PDF à IA configurada no Atlas para interpretação técnica.</label>
-          <span className="w-full text-xs text-slate-500">A IA não valida fórmulas nem substitui cortes conferidos. Revise todas as linhas antes de registrar.</span>
+          <button className={botao + ' border border-indigo-200 text-indigo-800'} disabled={!arquivo || !!ocupado || !id || !!lista.trim()} onClick={() => executar('interpretar', interpretarPdfComIA)}><Sparkles size={16}/> Importar cortes do W.Vetro</button>
+          <label className="flex items-start gap-2 text-xs text-slate-600"><input type="checkbox" className="mt-0.5" checked={consentimentoPdfIA} onChange={e => setConsentimentoPdfIA(e.target.checked)}/> Autorizo IA externa somente se a leitura local nao reconhecer os cortes. PDFs reconhecidos ficam no leitor local.</label>
+          <span className="w-full text-xs text-slate-500">A leitura local nao precisa de IA externa. Revise todas as linhas e fotos dos produtos antes de registrar.</span>
         </div>
         {!!textoPdf && <details className="mt-3 rounded-xl bg-slate-50 p-3"><summary className="cursor-pointer text-sm font-semibold">Texto extraído do PDF para conferência</summary><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap text-xs">{textoPdf}</pre></details>}
         <label className="mt-4 block text-sm font-semibold">Lista de corte de referência — uma peça por linha
