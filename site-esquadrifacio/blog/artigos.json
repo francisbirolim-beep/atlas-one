@@ -1,0 +1,355 @@
+{
+  "schemaVersion": 1,
+  "reviewRule": "Somente artigos com status aprovado e revisaoTecnicaConfirmada true podem ir à produção.",
+  "articles": [
+    {
+      "slug": "como-escolher-porta-de-correr-aluminio",
+      "title": "Porta de correr de alumínio: como escolher a configuração certa?",
+      "description": "Entenda como espaço disponível, circulação e quantidade de folhas influenciam a escolha de portas de correr de alumínio sob medida.",
+      "category": "Portas e aberturas",
+      "date": "2026-10-21",
+      "status": "rascunho",
+      "photo": "assets/porta-correr-integrada.webp",
+      "photoAlt": "Porta de correr instalada em ambiente residencial pela Esquadrifácio",
+      "readMinutes": 4,
+      "intro": "Uma porta de correr pode aproximar a área interna da externa, facilitar a circulação e valorizar um ambiente. Mas nem toda configuração de folhas entrega a mesma abertura útil. Antes de escolher, vale observar como o espaço será utilizado.",
+      "sections": [
+        {
+          "heading": "Comece pela circulação do ambiente",
+          "paragraphs": [
+            "Observe onde passam as pessoas, se haverá móveis próximos aos trilhos e quanto espaço livre é desejado quando a porta estiver aberta. Em salas integradas à varanda, por exemplo, a abertura pretendida pode ser tão importante quanto a largura total do vão.",
+            "As medidas preliminares ajudam no orçamento, mas a fabricação deve considerar a medição técnica final e os detalhes de instalação."
+          ]
+        },
+        {
+          "heading": "A quantidade de folhas não é apenas estética",
+          "paragraphs": [
+            "Portas de duas, três ou mais folhas podem trabalhar com folhas fixas, móveis, sequenciais ou aberturas centrais, dependendo da linha escolhida e do projeto. A quantidade de folhas, a posição de recolhimento e o sistema de trilhos influenciam a passagem livre.",
+            "Não escolha apenas pelo número de folhas visto em uma fotografia. Peça uma explicação sobre a parte do vão que realmente ficará aberta em cada configuração."
+          ]
+        },
+        {
+          "heading": "Trilhos, puxadores e acabamento fazem diferença",
+          "paragraphs": [
+            "Uma solução com trilho convencional pode ter exigências de obra diferentes das opções embutidas. O puxador, a fechadura, os encontros entre folhas e a presença de contramarco precisam ser considerados em conjunto.",
+            "Também vale definir desde cedo a cor do alumínio e o tipo de vidro. Essas escolhas interferem na aparência final e na composição do orçamento."
+          ]
+        },
+        {
+          "heading": "O que mostrar ao orçamentista?",
+          "paragraphs": [
+            "Envie as medidas aproximadas de largura e altura, fotos do local, cidade da obra e, se houver, o projeto arquitetônico. Explique se pretende uma abertura maior, mais privacidade ou integração com jardim, varanda ou área gourmet."
+          ],
+          "bullets": [
+            "Foto do vão e do ambiente ao redor",
+            "Largura e altura aproximadas",
+            "Preferência de cor e acabamento",
+            "Sentido e forma de abertura desejados",
+            "Cidade e fase atual da obra"
+          ]
+        },
+        {
+          "heading": "Decisão técnica antes da fabricação",
+          "paragraphs": [
+            "As dimensões máximas, ferragens, peso do vidro e reforços dependem da linha e da especificação do fabricante. A solução deve ser conferida pelo responsável técnico, especialmente em vãos amplos ou situações de exposição ao vento.",
+            "Na Esquadrifácio®, o atendimento considera as características do ambiente para estudar a configuração que combina com cada projeto."
+          ]
+        }
+      ],
+      "photoWidth": 1280,
+      "photoHeight": 960,
+      "faq": [
+        {
+          "question": "Uma porta com mais folhas sempre abre mais?",
+          "answer": "Não necessariamente. A abertura útil depende de como as folhas correm e se recolhem. Duas portas de mesma largura podem oferecer passagens diferentes."
+        },
+        {
+          "question": "É possível escolher trilho embutido em qualquer obra?",
+          "answer": "Não se deve presumir essa compatibilidade. É preciso avaliar o piso, a drenagem, o modelo de trilho, o contramarco e o estágio da obra."
+        },
+        {
+          "question": "Posso fabricar só com as medidas enviadas pelo WhatsApp?",
+          "answer": "As medidas preliminares ajudam a orçar. A fabricação precisa seguir medidas finais conferidas, tolerâncias e especificações do sistema escolhido."
+        }
+      ],
+      "reviewerRequired": "Projetista / responsável técnico Esquadrifácio®"
+    },
+    {
+      "slug": "o-que-enviar-para-orcamento-esquadrias",
+      "title": "O que enviar para receber um orçamento de esquadrias sob medida?",
+      "description": "Um guia simples para organizar medidas, fotos e informações da obra antes de solicitar portas e janelas de alumínio.",
+      "category": "Planejamento da obra",
+      "date": "2026-10-21",
+      "status": "rascunho",
+      "photo": "assets/fachada-esquadrias-vidro.webp",
+      "photoAlt": "Fachada de residência com esquadrias de vidro em projeto da Esquadrifácio",
+      "readMinutes": 3,
+      "intro": "Um orçamento começa mais rápido quando a empresa recebe informações claras sobre os ambientes e as esquadrias desejadas. Não é necessário saber todos os nomes técnicos dos produtos: fotos e uma descrição do que você precisa já ajudam muito.",
+      "sections": [
+        {
+          "heading": "Identifique cada ambiente",
+          "paragraphs": [
+            "Comece informando onde serão instaladas as peças: sala, quarto, cozinha, lavanderia, fachada, varanda ou outro local. Se a obra tiver muitas esquadrias, organize-as por ambiente para evitar confusão entre medidas e modelos.",
+            "Exemplo: 'Sala — porta de correr para a varanda; quarto — janela com veneziana; cozinha — janela maxim-ar'."
+          ]
+        },
+        {
+          "heading": "Anote as medidas aproximadas",
+          "paragraphs": [
+            "Informe largura e altura de cada vão, preferencialmente em milímetros, e a quantidade de peças. Quando a obra ainda está em execução, avise que as dimensões são estimativas.",
+            "Esses números ajudam a preparar uma primeira proposta. A fabricação depende da conferência de medidas finais e das folgas adequadas à tipologia e à instalação."
+          ]
+        },
+        {
+          "heading": "Fotografe o local e compartilhe o projeto",
+          "paragraphs": [
+            "Uma fotografia ampla revela detalhes que não aparecem em uma medida isolada, como revestimentos, pilares, paredes próximas e o espaço de abertura. Se houver planta, elevação ou memorial do arquiteto, encaminhe também.",
+            "É útil mostrar a vista interna e externa dos vãos, especialmente quando há dúvidas sobre sentido de abertura, peitoril, contramarco ou acabamento."
+          ]
+        },
+        {
+          "heading": "Cor, vidro e necessidades de uso",
+          "paragraphs": [
+            "Informe a cor de alumínio desejada, se tem preferência por acabamento amadeirado e o efeito esperado do vidro: transparência, privacidade, conforto ou proteção. Não precisa especificar a espessura do vidro sem análise técnica.",
+            "Conte também se pretende tela mosquiteira, persiana automatizada ou outra solução complementar."
+          ]
+        },
+        {
+          "heading": "Checklist antes de enviar pelo WhatsApp",
+          "paragraphs": [
+            "Com esse conjunto de informações, a equipe consegue entender melhor o escopo e dizer quais pontos exigem visita ou medição final."
+          ],
+          "bullets": [
+            "Nome e cidade da obra",
+            "Ambiente e tipo de esquadria desejada",
+            "Largura, altura e quantidade aproximadas",
+            "Fotos ou desenhos do local",
+            "Preferência de cor, vidro e acabamento",
+            "Prazo estimado da obra, caso exista"
+          ]
+        }
+      ],
+      "photoWidth": 960,
+      "photoHeight": 1280,
+      "faq": [
+        {
+          "question": "Preciso ter um projeto arquitetônico para pedir orçamento?",
+          "answer": "Não é obrigatório para iniciar a conversa. Fotos, medidas aproximadas e a descrição de cada ambiente permitem levantar o escopo inicial. Um projeto, quando existe, facilita a especificação."
+        },
+        {
+          "question": "O valor do orçamento já define as medidas de produção?",
+          "answer": "Não. A medição técnica final e a conferência de detalhes da obra fazem parte da preparação antes da fabricação."
+        },
+        {
+          "question": "O que muda quando quero comparar dois acabamentos?",
+          "answer": "Informe as opções de cor e de vidro que deseja avaliar. Assim, a proposta pode explicitar as diferenças entre as alternativas sem confundir os ambientes."
+        }
+      ],
+      "reviewerRequired": "Projetista / responsável técnico Esquadrifácio®"
+    },
+    {
+      "slug": "painel-ripado-aluminio-amadeirado",
+      "title": "Painel ripado de alumínio amadeirado: onde usar e o que avaliar?",
+      "description": "Veja possibilidades de uso de painéis ripados de alumínio e quais detalhes de projeto considerar antes de escolher o acabamento.",
+      "category": "Acabamentos e arquitetura",
+      "date": "2026-10-21",
+      "status": "rascunho",
+      "photo": "assets/painel-ripado-amadeirado.webp",
+      "photoAlt": "Painel ripado amadeirado em ambiente com iluminação da Esquadrifácio",
+      "readMinutes": 4,
+      "intro": "Os ripados em alumínio com acabamento amadeirado criam ritmo visual e podem dialogar com portas, fachadas e outros elementos da arquitetura. O resultado depende não só da cor, mas também do desenho, da modulação e da instalação.",
+      "sections": [
+        {
+          "heading": "Onde um painel ripado pode aparecer?",
+          "paragraphs": [
+            "Ele pode compor detalhes de fachada, revestimentos, portas e divisórias, desde que o sistema e sua fixação sejam apropriados para o local. Em uma entrada residencial, por exemplo, o ripado pode dialogar com a porta principal e criar unidade visual.",
+            "Em ambientes internos, a escolha costuma considerar textura, iluminação e integração com pisos, painéis e mobiliário."
+          ]
+        },
+        {
+          "heading": "Amadeirado não significa madeira natural",
+          "paragraphs": [
+            "O acabamento amadeirado reproduz uma referência visual da madeira sobre o alumínio. Por isso, é importante comparar amostras físicas e observar a aparência sob diferentes condições de iluminação.",
+            "Tons como imbuia e outros acabamentos amadeirados podem apresentar diferenças entre linhas e fornecedores. Verifique disponibilidade e acabamento antes de fechar a escolha."
+          ]
+        },
+        {
+          "heading": "Modulação, ventilação e passagem de luz",
+          "paragraphs": [
+            "A distância entre ripas e a configuração do conjunto alteram a transparência visual, a percepção de profundidade e a entrada de luz. Se o objetivo for privacidade, sombreamento ou ventilação, explique a necessidade para que o projeto seja dimensionado adequadamente.",
+            "Não se deve presumir que todo ripado funcione como proteção solar, elemento estrutural ou guarda-corpo. Cada aplicação tem requisitos próprios."
+          ]
+        },
+        {
+          "heading": "Cuidados para uma instalação coerente",
+          "paragraphs": [
+            "O substrato, os pontos de fixação, as dimensões dos perfis e as condições de exposição devem ser avaliados para escolher o sistema correto. Áreas externas podem exigir considerações adicionais de vento, água e manutenção, conforme projeto e fornecedor.",
+            "Na hora de solicitar orçamento, vale enviar foto da superfície, dimensões aproximadas, cor pretendida e um exemplo visual de referência."
+          ]
+        },
+        {
+          "heading": "Como combinar com as esquadrias?",
+          "paragraphs": [
+            "Uma composição equilibrada costuma começar pela repetição consciente de tons, linhas e proporções. O painel não precisa necessariamente ter a mesma cor de todas as esquadrias; o importante é entender a intenção arquitetônica do conjunto.",
+            "A Esquadrifácio® desenvolve soluções personalizadas em alumínio para integrar acabamentos e funcionalidade nos projetos."
+          ]
+        }
+      ],
+      "photoWidth": 1280,
+      "photoHeight": 960,
+      "faq": [
+        {
+          "question": "O ripado amadeirado é madeira natural?",
+          "answer": "Não. É alumínio com acabamento visual inspirado na madeira. A textura, o tom e a disponibilidade dependem do fornecedor e do perfil."
+        },
+        {
+          "question": "Ripado serve automaticamente como proteção solar?",
+          "answer": "Não. Sombreamento e privacidade dependem da orientação solar, espaçamento, geometria, inclinação e especificação do conjunto."
+        },
+        {
+          "question": "Posso instalar o mesmo painel dentro e fora da casa?",
+          "answer": "A aplicação externa exige avaliar exposição, fixação, dimensões, manutenção e limites do sistema. Nem toda solução interna é adequada para uma fachada."
+        }
+      ],
+      "reviewerRequired": "Projetista / responsável técnico Esquadrifácio®"
+    },
+    {
+      "slug": "janela-de-correr-ou-maxim-ar-qual-escolher",
+      "title": "Janela de correr ou maxim-ar: qual usar em cada ambiente?",
+      "description": "Compare formas de abertura, ventilação e espaço disponível para planejar janelas de alumínio sob medida.",
+      "category": "Janelas e ventilação",
+      "date": "2026-10-21",
+      "status": "rascunho",
+      "photo": "assets/obra-fachada-residencial.webp",
+      "photoAlt": "Fachada residencial com diferentes vãos e esquadrias de alumínio da Esquadrifácio",
+      "photoWidth": 960,
+      "photoHeight": 1280,
+      "readMinutes": 4,
+      "reviewerRequired": "Projetista / responsável técnico Esquadrifácio®",
+      "intro": "Uma janela não deve ser escolhida apenas pelo desenho da fachada. A maneira como ela abre afeta ventilação, circulação, acesso para limpeza e a relação com móveis e bancadas. Compare os dois sistemas antes de definir o modelo.",
+      "sections": [
+        {
+          "heading": "Janela de correr: abertura dentro do plano do vão",
+          "paragraphs": [
+            "Na janela de correr, as folhas deslizam horizontalmente nos trilhos. Isso evita que a abertura projete uma folha para dentro ou para fora do ambiente e pode ser útil perto de móveis ou áreas de passagem.",
+            "A área efetivamente aberta depende do número de folhas, dos encontros e do sistema especificado. Nem toda janela de correr deixa a mesma proporção do vão livre."
+          ]
+        },
+        {
+          "heading": "Maxim-ar: folha projetada e atenção ao entorno",
+          "paragraphs": [
+            "A janela maxim-ar utiliza ferragens para projetar a folha durante a abertura. É uma alternativa frequentemente considerada em banheiros, lavabos, lavanderias e outros vãos onde o projeto pede uma solução diferente da abertura lateral.",
+            "Antes de escolher, observe o espaço externo necessário para o movimento da folha, o acesso para limpeza e as condições de instalação. A abertura não deve interferir com circulação, outros elementos da fachada ou necessidades de segurança."
+          ]
+        },
+        {
+          "heading": "Como comparar ventilação e luminosidade",
+          "paragraphs": [
+            "Ventilação e iluminação dependem do tamanho e da localização do vão, da área útil de abertura, da orientação do ambiente e das condições locais. A tipologia sozinha não garante mais ventilação ou conforto.",
+            "Vale conversar com o arquiteto ou responsável técnico sobre os objetivos do espaço antes de determinar tamanho, posição e vidro."
+          ]
+        },
+        {
+          "heading": "O que informar no orçamento",
+          "paragraphs": [
+            "Informe o ambiente, as medidas aproximadas do vão, o sentido pretendido de abertura, as fotos interna e externa e se já existe definição de cor, vidro ou tela mosquiteira.",
+            "O fabricante precisa avaliar também limite de dimensões, ferragens, fixação e folgas de instalação para a linha de alumínio escolhida."
+          ],
+          "bullets": [
+            "Ambiente e uso previsto",
+            "Foto da fachada e do espaço interno",
+            "Largura e altura aproximadas",
+            "Preferência de abertura e acabamento",
+            "Obstruções próximas ao vão"
+          ]
+        },
+        {
+          "heading": "Como tomar uma boa decisão",
+          "paragraphs": [
+            "A melhor escolha é a que atende o uso cotidiano e se adapta ao projeto e às especificações do sistema. A Esquadrifácio® pode estudar as alternativas conforme as dimensões e características de cada obra."
+          ]
+        }
+      ],
+      "faq": [
+        {
+          "question": "Janela maxim-ar abre para fora?",
+          "answer": "Em sua configuração usual, a folha é projetada para o exterior, mas o funcionamento exato depende do sistema de ferragens especificado. É importante conferir o desenho técnico do conjunto."
+        },
+        {
+          "question": "Janela de correr ocupa espaço quando aberta?",
+          "answer": "As folhas se deslocam no próprio plano do vão, mas é preciso prever trilhos, encontros e espaço de recolhimento das folhas."
+        },
+        {
+          "question": "Qual delas deixa passar mais vento?",
+          "answer": "Não existe resposta universal. Área livre de abertura, tamanho do vão, orientação e condições externas pesam mais que o nome da tipologia."
+        }
+      ]
+    },
+    {
+      "slug": "vidro-temperado-ou-laminado-entenda-diferencas",
+      "title": "Vidro temperado ou laminado: o que muda na escolha?",
+      "description": "Entenda as diferenças gerais entre vidro temperado e laminado e por que a aplicação precisa de avaliação técnica.",
+      "category": "Vidros e segurança",
+      "date": "2026-10-21",
+      "status": "rascunho",
+      "photo": "assets/fachada-esquadrias-vidro.webp",
+      "photoAlt": "Fachada com superfícies envidraçadas e esquadrias de alumínio em projeto da Esquadrifácio",
+      "photoWidth": 960,
+      "photoHeight": 1280,
+      "readMinutes": 5,
+      "reviewerRequired": "Projetista / responsável técnico Esquadrifácio®",
+      "intro": "O tipo de vidro influencia o projeto de portas, janelas e fechamentos. Temperado e laminado não são sinônimos: os processos de fabricação e o comportamento após uma quebra são diferentes. A aplicação correta depende de normas, dimensões, suporte e uso do ambiente.",
+      "sections": [
+        {
+          "heading": "O que caracteriza o vidro temperado",
+          "paragraphs": [
+            "O vidro temperado passa por um tratamento térmico que modifica seu comportamento mecânico em comparação com o vidro comum. Quando sofre fratura, geralmente se fragmenta em numerosos pedaços pequenos, conforme as características do produto.",
+            "Isso não significa que qualquer espessura seja adequada a qualquer dimensão ou que o vidro temperado seja a escolha correta para todas as situações de segurança."
+          ]
+        },
+        {
+          "heading": "O que caracteriza o vidro laminado",
+          "paragraphs": [
+            "O vidro laminado é formado por duas ou mais lâminas de vidro unidas por uma camada intermediária apropriada. Em determinadas condições de quebra, essa camada pode contribuir para manter fragmentos aderidos ao conjunto.",
+            "O desempenho depende da composição especificada. As características do laminado não substituem análise estrutural, nem dispensam dimensionamento e verificação das normas aplicáveis."
+          ]
+        },
+        {
+          "heading": "Por que o local de instalação é decisivo",
+          "paragraphs": [
+            "Portas, janelas, fachadas e guarda-corpos podem ter requisitos diferentes. Altura de instalação, riscos de impacto, esforços de vento, dimensões do painel, fixação e condições de uso precisam ser considerados pelo profissional habilitado.",
+            "Em aplicações sujeitas a requisitos especiais de proteção ou retenção, escolha e projeto devem seguir normas técnicas vigentes e orientação do responsável técnico."
+          ]
+        },
+        {
+          "heading": "Espessura e composição: não adivinhe",
+          "paragraphs": [
+            "Não é seguro definir a espessura do vidro apenas pela largura e altura digitadas em uma mensagem, nem por uma comparação visual de fotografias. O sistema de esquadria e as cargas previstas fazem parte do estudo.",
+            "Quando solicitar orçamento, envie o projeto, as medidas estimadas e a função desejada para o fechamento. A equipe poderá esclarecer quais especificações ainda precisam ser definidas."
+          ]
+        },
+        {
+          "heading": "Como conversar com o projetista",
+          "paragraphs": [
+            "Descreva onde o vidro será instalado, se existe circulação de pessoas, que tipo de esquadria está previsto e quais objetivos de privacidade, luminosidade e segurança são importantes.",
+            "A Esquadrifácio® trabalha com soluções sob medida; a seleção do conjunto correto deve ser confirmada conforme a aplicação e a documentação técnica."
+          ]
+        }
+      ],
+      "faq": [
+        {
+          "question": "Vidro temperado é sempre mais seguro que laminado?",
+          "answer": "Não é correto comparar os dois dessa maneira. São soluções com comportamentos diferentes, e a exigência de segurança depende da aplicação, do conjunto e das normas aplicáveis."
+        },
+        {
+          "question": "Posso usar qualquer vidro em um guarda-corpo?",
+          "answer": "Não. Guarda-corpos exigem projeto, sistemas de fixação e especificações adequadas às normas vigentes. O responsável técnico deve definir o conjunto."
+        },
+        {
+          "question": "O laminado é sempre à prova de impacto?",
+          "answer": "Não. A composição, a espessura, o suporte e os ensaios previstos determinam o desempenho. Evite conclusões de proteção absoluta sem especificação comprovada."
+        }
+      ]
+    }
+  ]
+}
