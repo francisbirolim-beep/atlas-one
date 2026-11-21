@@ -93,6 +93,7 @@ function CardProjeto({card,coluna,compacto,abrir,ativo}:{card:ProjetoGeralCard;c
   (ativo?'border-blue-500 ring-1 ring-blue-400':corPrazo)+' '+(compacto?'p-2':'p-2.5')}>
   <p className="line-clamp-2 text-[11px] font-extrabold leading-[14px] text-[#092044]" title={card.cliente}>{card.cliente}</p>
   <p className="mt-0.5 truncate text-[10px] text-[#192c50]">Orçamento: <b>{card.numeroOrcamento||'Não vinculado'}</b></p>
+  {card.numeroWvetro&&<p className="mt-0.5 truncate text-[10px] font-semibold text-blue-700">W.Vetro: #{card.numeroWvetro}</p>}
   <p className="mt-1 line-clamp-2 text-[10px] text-slate-600">Obra: {card.projeto||'Não vinculada'}</p>
   <div className="mt-2 space-y-[5px]" aria-label="Percentuais de materiais">
    {tipos.map(tipo=><Progresso key={tipo} nome={nomes[tipo]} valor={materias[tipo]??null} compacto/>)}
@@ -340,7 +341,7 @@ export default function VisaoGeralProjetos(){
  const abrir=(id:string)=>{setSelecionado(id);setAba('resumo');setFechou(false)}
  const visiveis=useMemo(()=>cards.filter(c=>{
   const q=busca.trim().toLocaleLowerCase('pt-BR')
-  if(q&&![c.cliente,c.projeto,c.numeroOrcamento].some(s=>s?.toLocaleLowerCase('pt-BR').includes(q)))return false
+  if(q&&![c.cliente,c.projeto,c.numeroOrcamento,c.numeroWvetro].some(s=>s?.toLocaleLowerCase('pt-BR').includes(q)))return false
   if(condicao==='atrasados'&&c.cor!=='vermelho')return false
   if(condicao==='atencao'&&c.cor!=='amarelo')return false
   if(condicao==='sem_prazo'&&c.cor!=='sem_prazo')return false
@@ -756,6 +757,7 @@ export default function VisaoGeralProjetos(){
         {cardAtual&&<span className="rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-800">{etapaCard?.nome||'Em acompanhamento'}</span>}
        </div>
        <p className="mt-1 text-xs text-[#294a7c]">Orçamento: <b className="text-sm">{cardAtual?.numeroOrcamento||pedidoAtual?.numeroOrcamento||'Não vinculado'}</b></p>
+       {cardAtual?.numeroWvetro&&<p className="text-xs font-semibold text-blue-700">Número W.Vetro: #{cardAtual.numeroWvetro}</p>}
       </div>
       <button onClick={fechar} aria-label="Fechar painel lateral" className="rounded-md p-1.5 hover:bg-slate-100"><X size={18}/></button>
      </div>

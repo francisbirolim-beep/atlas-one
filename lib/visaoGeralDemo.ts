@@ -6,7 +6,7 @@ export type DetalheMaterialCompra = {
 }
 export type MaterialResumo = {tipo:'perfil'|'vidro'|'acessorio'; total:number|null;comprados:number|null;recebidos:number|null}
 export type ProjetoGeralCard = {
- vendaId:string;clienteId:string;obraId?:string;cliente:string;projeto:string;numeroOrcamento:string;
+ vendaId:string;clienteId:string;obraId?:string;cliente:string;projeto:string;numeroOrcamento:string;numeroWvetro?:string|null;
  colunaId:string;etapaOperacional:string;cor:'verde'|'amarelo'|'vermelho'|'azul'|'sem_prazo';
  pendencias:string[];previsaoEntrega:string|null;vencimentoEtapa?:string|null;diasAtraso:number;
  materiais:MaterialResumo[];compras:{total:number;comprados:number;recebidos:number};

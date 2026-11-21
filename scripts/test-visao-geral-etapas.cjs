@@ -25,6 +25,16 @@ const base = {
   encerramentoConfirmado: false,
 }
 assert.equal(fase({ ...base, vendaConfirmada: false }), null, 'Orçamento não vendido não entra no Kanban geral')
+const { medicaoJaIniciada } = modulo.exports
+assert.equal(medicaoJaIniciada({status_operacional:'aguardando_liberacao',iniciado_em:null}),false,'Cabeçalho automático não inicia medição')
+assert.equal(medicaoJaIniciada({status_operacional:'liberado',iniciado_em:null}),false,'Medida liberada sem execução ainda não foi iniciada')
+assert.equal(medicaoJaIniciada({status_operacional:'em_medicao',iniciado_em:null}),true,'Status operacional comprova início')
+assert.equal(medicaoJaIniciada({status_operacional:'aguardando_liberacao',iniciado_em:'2026-11-19T12:00:00Z'}),true,'Timestamp real comprova início')
+const apiGeral=fs.readFileSync('app/api/visao-geral-projetos/route.ts','utf8')
+const pageGeral=fs.readFileSync('app/visao-geral-projetos/page.tsx','utf8')
+assert.ok(apiGeral.includes('med.some(m=>medicaoJaIniciada(m))'),'API usa evidência de início')
+assert.ok(apiGeral.includes('numero_wvetro:wvetro_fluxo->>numero'),'API busca número externo sem transferir payload completo')
+assert.ok(pageGeral.includes('c.numeroWvetro'),'Busca contempla número W.Vetro')
 assert.equal(fase(base), 'vendido', 'Venda fechada surge na primeira etapa')
 assert.equal(fase({...base,separacaoIniciada:true}), 'separacao_materiais', 'Separação só com evidência')
 assert.equal(fase({ ...base, conferenciaIniciada: true }), 'conferir_projeto')
