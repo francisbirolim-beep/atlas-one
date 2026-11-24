@@ -74,6 +74,19 @@ export default function HomeCalendarBlock() {
     return () => window.removeEventListener('atlas:novo-compromisso', abrir)
   }, [usuario])
 
+  useEffect(() => {
+    if (!usuario) return
+    let ativo = true
+    const atualizarAgenda = async () => {
+      const [lista, concluidas] = await Promise.all([listarEventosDoUsuario(usuario.id), listarConclusoesEventosUsuario(usuario.id)])
+      if (ativo) { setEventos(lista); setConclusoes(concluidas) }
+    }
+    const aoAtualizar = () => { void atualizarAgenda() }
+    window.addEventListener('atlas:eventos-atualizados', aoAtualizar)
+    window.addEventListener('focus', aoAtualizar)
+    return () => { ativo = false; window.removeEventListener('atlas:eventos-atualizados', aoAtualizar); window.removeEventListener('focus', aoAtualizar) }
+  }, [usuario])
+
   const celulas = useMemo(() => {
     const lista: (Date | null)[] = []
     const primeiroDia = mes.getDay()
@@ -129,6 +142,7 @@ export default function HomeCalendarBlock() {
       const novoMes = new Date(primeiraData)
       novoMes.setDate(1)
       setMes(novoMes)
+      window.dispatchEvent(new Event('atlas:eventos-atualizados'))
     }
     if(!criado){setErroAgenda('Não foi possível salvar. Verifique os dados e tente novamente.');setSalvando(false);return}
     setTitulo('')
@@ -155,6 +169,7 @@ export default function HomeCalendarBlock() {
         else copia[evento.id] = typeof resultado === 'string' ? resultado : new Date().toISOString()
         return copia
       })
+      window.dispatchEvent(new Event('atlas:eventos-atualizados'))
     }
     setAlterandoId(null)
   }
