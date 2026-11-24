@@ -5,6 +5,7 @@ import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Plus, Pencil, Trash2, X, Clock, CheckCircle2, AlertTriangle, Calendar, Repeat, Users } from 'lucide-react'
 import Link from 'next/link'
+import HomePersonalKanban from '@/components/system/HomePersonalKanban'
 import { TarefaPessoalColuna, TarefaPessoal, Usuario } from '@/lib/tipos'
 import {
   listarColunasTarefas,
@@ -232,7 +233,9 @@ export default function Tarefas() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="max-w-6xl mx-auto min-w-0 px-4 py-6">
+        <div className="mb-6 min-w-0"><HomePersonalKanban somenteEquipe /></div>
+        <h2 className="mb-2 text-base font-semibold text-slate-800">Gerenciar tarefas pessoais</h2>
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-slate-500">{tarefas.filter((t) => !t.concluida_em).length} tarefa(s) em aberto</p>
           <button onClick={novaColuna} className="flex items-center gap-1.5 text-sm text-brand-navy hover:underline">
@@ -240,7 +243,7 @@ export default function Tarefas() {
           </button>
         </div>
 
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="flex w-full min-w-0 gap-4 overflow-x-auto overscroll-x-contain pb-4">
           {colunas.map((col) => {
             const cardsColuna = tarefasDaColuna(col.id)
             return (

@@ -5,6 +5,7 @@ import { CheckCircle2, Clock3, Columns3, ListTodo, Users } from 'lucide-react'
 import { usuarioAtual, tokenAtual } from '@/lib/auth'
 import { listarColunasTarefas, listarTarefas } from '@/lib/tarefas'
 import { listarEquipe, type EquipeTarefa } from '@/lib/tarefasEquipeCliente'
+import { listarEventosDoUsuario, listarConclusoesEventosUsuario, type EventoComConvite } from '@/lib/eventos'
 import type { TarefaPessoal, TarefaPessoalColuna } from '@/lib/tipos'
 
 function normal(s:string){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')}
@@ -14,6 +15,9 @@ function mesDaData(iso?:string|null){
  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')
 }
 export default function HomeTarefasResumo(){
+  const [usuarioIdAtual,setUsuarioIdAtual]=useState<string|null>(null)
+  const [eventos,setEventos]=useState<EventoComConvite[]>([])
+  const [conclusoesEventos,setConclusoesEventos]=useState<Record<string,string>>({})
   const [tarefas,setTarefas]=useState<TarefaPessoal[]>([])
   const [equipe,setEquipe]=useState<EquipeTarefa[]>([])
   const [colunas,setColunas]=useState<TarefaPessoalColuna[]>([])
@@ -26,27 +30,32 @@ export default function HomeTarefasResumo(){
     async function atualizar(){
       if(!usuarioId||!navigator.onLine)return
       const token=await tokenAtual()
-      const [ts,cs,es,ds]=await Promise.all([
+      const [ts,cs,es,ds,ev,ce]=await Promise.all([
         listarTarefas(usuarioId),listarColunasTarefas(usuarioId),listarEquipe().catch(()=>[]),
         token?fetch('/api/tarefas/delegadas',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
           .then(r=>r.ok?r.json():null).then(r=>r?.tarefas||[]).catch(()=>[]):Promise.resolve([]),
+        listarEventosDoUsuario(usuarioId),listarConclusoesEventosUsuario(usuarioId),
       ])
       if(!ativo)return
-      setTarefas(ts);setColunas(cs);setEquipe(es);setDelegadas(ds);setCarregando(false)
+      setTarefas(ts);setColunas(cs);setEquipe(es);setDelegadas(ds);setEventos(ev);setConclusoesEventos(ce);setCarregando(false)
     }
     void usuarioAtual().then(u=>{
       if(!ativo||!u){setCarregando(false);return}
-      usuarioId=u.id
+      usuarioId=u.id;setUsuarioIdAtual(u.id)
       void atualizar()
       intervalo=setInterval(()=>{if(document.visibilityState==='visible')void atualizar()},45000)
     })
     const ouvir=()=>void atualizar()
     window.addEventListener('atlas:tarefas-atualizadas',ouvir)
     window.addEventListener('atlas:tarefas-equipe-atualizadas',ouvir)
+    window.addEventListener('atlas:eventos-atualizados',ouvir)
+    window.addEventListener('focus',ouvir)
     return()=>{
       ativo=false;if(intervalo)clearInterval(intervalo)
       window.removeEventListener('atlas:tarefas-atualizadas',ouvir)
       window.removeEventListener('atlas:tarefas-equipe-atualizadas',ouvir)
+      window.removeEventListener('atlas:eventos-atualizados',ouvir)
+      window.removeEventListener('focus',ouvir)
     }
   },[])
   const numeros=useMemo(()=>{
@@ -54,18 +63,20 @@ export default function HomeTarefasResumo(){
     const abertas=tarefas.filter(t=>!t.concluida_em)
     const estagios=(nome:string)=>abertas.filter(t=>(colunaPorId.get(t.coluna_id)||'').includes(nome)).length
     const deLegacy=delegadas.filter(t=>!t.concluida_em)
-    const minhasEquipe=equipe.filter(t=>t.responsaveis_ids.some(Boolean))
+    const minhasEquipe=equipe.filter(t=>t.responsaveis_ids.includes(usuarioIdAtual||''))
+    const meusEventos=Array.from(new Map(eventos.filter(e=>e.meuStatus!=='recusado').map(e=>[e.id,e])).values())
     const periodo=mesDaData(new Date().toISOString())
-    const contador=(status:string)=>equipe.filter(t=>t.status===status && t.responsaveis_ids.length>0).length
+    const contador=(status:string)=>minhasEquipe.filter(t=>t.status===status).length
     return {
-      fazer:estagios('fazer')+contador('a_fazer'),
+      fazer:estagios('fazer')+contador('a_fazer')+meusEventos.filter(e=>!conclusoesEventos[e.id]).length,
       andamento:estagios('andamento')+contador('em_andamento'),
       aguardando:estagios('aguard')+contador('aguardando'),
-      pedidos:deLegacy.length+equipe.filter(t=>t.status!=='concluido'&&!t.responsaveis_ids.includes(t.criado_por_id)).length,
+      pedidos:deLegacy.length+equipe.filter(t=>t.criado_por_id===usuarioIdAtual&&t.status!=='concluido'&&!t.responsaveis_ids.includes(t.criado_por_id)).length,
       concluidas:tarefas.filter(t=>t.concluida_em&&mesDaData(t.concluida_em)===periodo).length+
-        equipe.filter(t=>t.status==='concluido'&&mesDaData(t.concluida_em)===periodo).length,
+        minhasEquipe.filter(t=>t.status==='concluido'&&mesDaData(t.concluida_em)===periodo).length+
+        meusEventos.filter(e=>mesDaData(conclusoesEventos[e.id])===periodo).length,
     }
-  },[tarefas,colunas,equipe,delegadas])
+  },[tarefas,colunas,equipe,delegadas,usuarioIdAtual,eventos,conclusoesEventos])
   const itens=[
     {nome:'A fazer',n:numeros.fazer,Icon:ListTodo,cor:'text-slate-500'},
     {nome:'Em andamento',n:numeros.andamento,Icon:Columns3,cor:'text-blue-600'},
