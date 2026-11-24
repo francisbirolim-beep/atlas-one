@@ -9,7 +9,8 @@ import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Searc
 import { usuarioAtual } from '@/lib/auth'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
-import { carregarMapaGeral, type RegistroMapaGeral } from '@/lib/mapaGeral'
+import type { RegistroMapaGeral } from '@/lib/mapaGeral'
+import { listarPinosOrcamentosGPS } from '@/lib/pinosOrcamentosGPS'
 import { buscarMinhaPermissaoProspeccao, listarPermissoesProspeccao, salvarPermissaoProspeccao, type PermissaoProspeccao, type UsuarioPermissaoProspeccao } from '@/lib/prospeccaoPermissoes'
 
 const MapaProspeccoes = dynamic(() => import('@/components/MapaProspeccoes'), { ssr: false })
@@ -65,25 +66,17 @@ export default function ProspeccaoPage() {
   const master = usuario?.role === 'master'
   const podeEditar = (item: Prospeccao) => Boolean(master || (usuario && item.responsavel_id === usuario.id))
 
-  // Os pinos de orçamento já existem no Mapa Geral. A consulta é somente leitura,
-  // carregada apenas ao abrir o mapa e apenas para Master/usuário autorizado.
+  // Os pinos de orçamento já estão gravados nas obras. A consulta é somente leitura,
+  // carregada somente ao abrir o mapa e apenas para Master/usuário autorizado.
   // Não interfere no Kanban, na agenda, nem cria coordenadas estimadas.
   useEffect(() => {
     if (aba !== 'mapa' || !(master || acesso.pode_ver_mapa) || pinosOrcamentoCarregados) return
     let ativo = true
     setCarregandoPinosOrcamento(true)
-    void carregarMapaGeral().then(resultado => {
+    void listarPinosOrcamentosGPS().then(pinos => {
       if (!ativo) return
-      const pinos = resultado.registros.filter(r =>
-        r.origem === 'obra' && r.lat != null && r.lng != null &&
-        r.eventos.some(e => e.tipo === 'orcamento')
-      )
       setPinosOrcamento(pinos)
-      if (resultado.avisos.length) {
-        setErroPinosOrcamento('Algumas fontes do mapa não responderam. Os pinos de orçamento podem estar incompletos. ' + resultado.avisos.join(' '))
-      } else {
-        setErroPinosOrcamento('')
-      }
+      setErroPinosOrcamento('')
       setPinosOrcamentoCarregados(true)
     }).catch(e => {
       if (ativo) setErroPinosOrcamento(e instanceof Error ? e.message : 'Falha ao consultar os pontos dos orçamentos.')
@@ -207,7 +200,7 @@ export default function ProspeccaoPage() {
             <select value={cidade} onChange={e=>{setCidade(e.target.value);setBairro('')}} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Todas as cidades</option>{cidades.map(c=><option key={c}>{c}</option>)}</select>
             <select value={bairro} onChange={e=>setBairro(e.target.value)} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Todos os bairros</option>{bairros.map(b=><option key={b}>{b}</option>)}</select>
           </div>
-          <div className="mt-3 flex gap-2 border-t pt-3"><button onClick={()=>setAba('kanban')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='kanban'?'bg-slate-900 text-white':'text-slate-500'}`}><Filter size={15}/> Kanban</button><button onClick={()=>setAba('agenda')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='agenda'?'bg-slate-900 text-white':'text-slate-500'}`}><CalendarDays size={15}/> Agenda</button><button onClick={()=>setAba('mapa')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='mapa'?'bg-slate-900 text-white':'text-slate-500'}`}><Map size={15}/> Mapa das obras</button></div>
+          <div className="mt-3 flex gap-2 border-t pt-3"><button onClick={()=>setAba('kanban')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='kanban'?'bg-slate-900 text-white':'text-slate-500'}`}><Filter size={15}/> Kanban</button><button onClick={()=>setAba('agenda')} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='agenda'?'bg-slate-900 text-white':'text-slate-500'}`}><CalendarDays size={15}/> Agenda</button><button onClick={()=>{setPinosOrcamentoCarregados(false);setAba('mapa')}} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${aba==='mapa'?'bg-slate-900 text-white':'text-slate-500'}`}><Map size={15}/> Mapa das obras</button></div>
         </section>
 
         {carregando ? <div className="rounded-2xl border bg-white p-10 text-center text-slate-400">Carregando prospecções...</div> : aba === 'kanban' ? (

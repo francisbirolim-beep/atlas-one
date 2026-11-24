@@ -283,6 +283,14 @@ export default function MapaProspeccoes({
     mapaRef.current.flyTo([grupo.latitude, grupo.longitude], 16, { duration: 0.5 })
   }
 
+  function verOrcamentos() {
+    const mapa = mapaRef.current
+    if (!mapa || !pontosOrcamentos.length) return
+    const limites = pontosOrcamentos.map(p => [p.latitude, p.longitude] as [number, number])
+    if (limites.length === 1) mapa.setView(limites[0], 16)
+    else mapa.fitBounds(limites, { padding: [55, 55], maxZoom: 15 })
+  }
+
   function verTudo() {
     const mapa = mapaRef.current
     if (!mapa || todosPontos.length === 0) return
@@ -325,7 +333,7 @@ export default function MapaProspeccoes({
         <div>
           <h2 className="text-base font-bold text-slate-900">Mapa das prospecções e orçamentos com GPS</h2>
           <p className="mt-1 max-w-2xl text-xs text-slate-500">
-            Prospecções agrupadas por bairro e orçamentos identificados em laranja. Aproxime para abrir cada obra no ponto GPS registrado.
+            Prospecções agrupadas por bairro e orçamentos identificados em laranja. Use "Ver orçamentos no mapa" para localizar todos, inclusive em outras cidades.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
@@ -359,6 +367,10 @@ export default function MapaProspeccoes({
           <input type="checkbox" checked={mostrarOrcamentos} onChange={event => setMostrarOrcamentos(event.target.checked)} />
           Orçamentos com GPS: {orcamentos.length}
         </label>
+        <button type="button" onClick={verOrcamentos} disabled={!pontosOrcamentos.length || carregandoOrcamentos}
+          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">
+          {carregandoOrcamentos ? 'Carregando orçamentos...' : 'Ver os ' + pontosOrcamentos.length + ' orçamentos no mapa'}
+        </button>
         <button type="button" onClick={verTudo} disabled={!todosPontos.length}
           className="rounded-lg border px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">Ver todos os bairros</button>
         <button type="button" onClick={() => void alternarTelaCheia()} disabled={!todosPontos.length}
