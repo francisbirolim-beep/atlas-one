@@ -31,6 +31,7 @@ export default function NovaTarefaEquipeModal() {
   const [repeticao,setRepeticao]=useState<RepeticaoEquipe>('uma_vez')
   const [dias,setDias]=useState<number[]>([])
   const [diaMes,setDiaMes]=useState(1)
+  const [diaUtil,setDiaUtil]=useState(5)
   const [salvando,setSalvando]=useState(false)
   const [erro,setErro]=useState('')
 
@@ -63,17 +64,20 @@ export default function NovaTarefaEquipeModal() {
     if(salvando)return
     if(!titulo.trim()||!responsaveis.length){setErro('Informe uma tarefa e pelo menos um responsável.');return}
     if(repeticao!=='uma_vez'&&!data){setErro('Defina data e horário para a repetição.');return}
+    if(repeticao==='mensal'&&(!Number.isInteger(diaMes)||diaMes<1||diaMes>31)){setErro('Informe um dia do mês de 1 a 31.');return}
+    if(repeticao==='dia_util_mes'&&(!Number.isInteger(diaUtil)||diaUtil<1||diaUtil>23)){setErro('Informe um dia útil de 1 a 23.');return}
     setSalvando(true);setErro('')
     try{
       const payload:CriacaoEquipe={
         titulo:titulo.trim(),descricao:descricao.trim(),responsaveisIds:responsaveis,
         prioridade,dataHora:data?new Date(data).toISOString():null,modo,recorrencia:repeticao,
-        recorrenciaValor:repeticao==='mensal'?diaMes:repeticao==='dia_util_mes'?5:undefined,
+        recorrenciaValor:repeticao==='mensal'?diaMes:repeticao==='dia_util_mes'?diaUtil:undefined,
         diasSemana:repeticao==='semanal'?dias:undefined,
       }
       await criarEquipe(payload)
       setAberta(false);setTitulo('');setDescricao('');setBusca('')
       setData('');setPrioridade('normal');setRepeticao('uma_vez');setModo('compartilhada')
+      setDias([]);setDiaMes(1);setDiaUtil(5)
       setResponsaveis(usuario?[usuario.id]:[])
       avisarMudancaEquipe()
     }catch(e){setErro(e instanceof Error?e.message:'Não foi possível salvar.')}
@@ -145,21 +149,21 @@ export default function NovaTarefaEquipeModal() {
           <div>
             <p className="mb-2 text-xs font-semibold text-slate-700">Recorrência</p>
             <div className="flex flex-wrap gap-x-3 gap-y-2 text-xs">
-              {([['uma_vez','Uma vez'],['semanal','Semanal'],['mensal','Mensal'],['dia_util_mes','5º dia útil']] as const).map(([tipo,nome])=>
+              {([['uma_vez','Uma vez'],['semanal','Semanal'],['mensal','Dia fixo do mês'],['dia_util_mes','Dia útil do mês']] as const).map(([tipo,nome])=>
                 <label key={tipo} className="flex cursor-pointer items-center gap-1">
                   <input type="radio" checked={repeticao===tipo} onChange={()=>setRepeticao(tipo)} className="accent-blue-600"/> {nome}
                 </label>
               )}
             </div>
-            {repeticao==='semanal' && <div className="mt-2 flex flex-wrap gap-1.5">{NOMES_DIAS.map((nome,idx)=>
+            {repeticao==='semanal' && <div className="mt-2 space-y-2"><div className="flex flex-wrap gap-2 text-[11px]"><button type="button" className="text-blue-700 underline" onClick={()=>setDias([0,1,2,3,4,5,6])}>Todos os dias</button><button type="button" className="text-blue-700 underline" onClick={()=>setDias([1,2,3,4,5])}>Segunda a sexta</button><button type="button" className="text-blue-700 underline" onClick={()=>setDias([])}>Mesmo dia do vencimento</button></div><div className="flex flex-wrap gap-1.5">{NOMES_DIAS.map((nome,idx)=>
               <button type="button" key={idx} onClick={()=>setDias(atual=>atual.includes(idx)?atual.filter(d=>d!==idx):[...atual,idx])}
                 aria-pressed={dias.includes(idx)}
                 className={'rounded-md border px-2 py-1 text-[11px] '+(dias.includes(idx)?'border-blue-600 bg-blue-50 font-semibold text-blue-700':'border-slate-200')}>{nome}</button>
-            )}</div>}
+            )}</div><p className="text-[11px] text-slate-500">{dias.length? 'Repete nos dias selecionados, a partir do vencimento.':'Repete no dia da semana do vencimento.'}</p></div>}
             {repeticao==='mensal'&&<label className="mt-2 flex items-center gap-2 text-xs text-slate-600">Todo dia
               <input type="number" min={1} max={31} value={diaMes} onChange={e=>setDiaMes(Number(e.target.value))}
                 className="w-16 rounded-lg border border-slate-300 p-1.5 text-xs"/> de cada mês</label>}
-            {repeticao==='dia_util_mes'&&<p className="mt-2 text-[11px] text-amber-700">Dias úteis bancários nacionais. Feriados municipais precisam ser conferidos pelo financeiro.</p>}
+            {repeticao==='dia_util_mes'&&<div className="mt-2 space-y-1"><label className="flex items-center gap-2 text-xs text-slate-600">Todo <input type="number" min={1} max={23} value={diaUtil} onChange={e=>setDiaUtil(Number(e.target.value))} className="w-16 rounded-lg border border-slate-300 p-1.5 text-xs"/>º dia útil do mês</label><p className="text-[11px] text-amber-700">Dias úteis bancários nacionais. Feriados municipais precisam ser conferidos. Se o mês não tiver o dia útil escolhido, ele será pulado.</p></div>}
           </div>
           {erro && <p role="alert" className="rounded-lg bg-red-50 p-2 text-xs text-red-700">{erro}</p>}
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
