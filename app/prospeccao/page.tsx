@@ -5,10 +5,11 @@ import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
+import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Settings2, Snowflake, SunMedium, UserRound } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
+import { buscarMinhaPermissaoProspeccao, listarPermissoesProspeccao, salvarPermissaoProspeccao, type PermissaoProspeccao, type UsuarioPermissaoProspeccao } from '@/lib/prospeccaoPermissoes'
 
 const MapaProspeccoes = dynamic(() => import('@/components/MapaProspeccoes'), { ssr: false })
 
@@ -34,18 +35,57 @@ export default function ProspeccaoPage() {
   const [bairro, setBairro] = useState('')
   const [aba, setAba] = useState<'kanban' | 'agenda' | 'mapa'>('kanban')
   const [arrastando, setArrastando] = useState<string | null>(null)
+  const [acesso, setAcesso] = useState({ pode_ver_mapa: false, pode_assumir: false })
+  const [painelPermissoes, setPainelPermissoes] = useState(false)
+  const [usuariosPermissoes, setUsuariosPermissoes] = useState<UsuarioPermissaoProspeccao[]>([])
+  const [permissoes, setPermissoes] = useState<PermissaoProspeccao[]>([])
+  const [carregandoPermissoes, setCarregandoPermissoes] = useState(false)
+  const [alterandoUsuario, setAlterandoUsuario] = useState<string | null>(null)
+  const [erroPermissoes, setErroPermissoes] = useState('')
+  const [mensagemPermissoes, setMensagemPermissoes] = useState('')
 
   async function carregar() {
     setCarregando(true)
     const me = await usuarioAtual()
     setUsuario(me)
-    const [lista, usuarios] = await Promise.all([listarProspeccoes(), me?.role === 'master' ? listarEquipeProspeccao() : Promise.resolve([])])
+    const [lista, usuarios, autorizacao] = await Promise.all([listarProspeccoes(), listarEquipeProspeccao(), buscarMinhaPermissaoProspeccao().catch(() => ({ pode_ver_mapa: false, pode_assumir: false }))])
     setItens(lista)
     setEquipe(usuarios)
+    setAcesso(autorizacao)
     setCarregando(false)
   }
 
   useEffect(() => { void carregar() }, [])
+
+  const master = usuario?.role === 'master'
+  const podeEditar = (item: Prospeccao) => Boolean(master || (usuario && item.responsavel_id === usuario.id))
+
+  async function abrirPainelPermissoes() {
+    if (!master) return
+    if (painelPermissoes) { setPainelPermissoes(false); return }
+    setPainelPermissoes(true);setCarregandoPermissoes(true);setErroPermissoes('')
+    try {
+      const dados = await listarPermissoesProspeccao()
+      setUsuariosPermissoes(dados.usuarios)
+      setPermissoes(dados.permissoes)
+    } catch(e) { setErroPermissoes(e instanceof Error ? e.message : 'Falha ao consultar as autorizações.') }
+    finally {setCarregandoPermissoes(false)}
+  }
+
+  async function alterarPermissao(usuarioId: string, campo: 'pode_ver_mapa' | 'pode_assumir', marcado: boolean) {
+    if (!master || alterandoUsuario) return
+    const atual = permissoes.find(p => p.usuario_id === usuarioId)
+    const ver = campo === 'pode_ver_mapa' ? marcado : (marcado || Boolean(atual?.pode_ver_mapa))
+    const assumir = campo === 'pode_assumir' ? marcado : (marcado ? Boolean(atual?.pode_assumir) : false)
+    setAlterandoUsuario(usuarioId);setErroPermissoes('');setMensagemPermissoes('')
+    try {
+      const r = await salvarPermissaoProspeccao(usuarioId, ver, assumir)
+      if (!r.ok) throw new Error(r.error || 'Não foi possível salvar a autorização.')
+      setPermissoes(prev => [...prev.filter(p => p.usuario_id !== usuarioId), { usuario_id: usuarioId, pode_ver_mapa: ver, pode_assumir: assumir }])
+      setMensagemPermissoes('Autorização atualizada. O usuário verá a mudança ao reabrir a Prospecção.')
+    } catch(e) {setErroPermissoes(e instanceof Error ? e.message : 'Falha ao salvar autorização.')}
+    finally {setAlterandoUsuario(null)}
+  }
 
   const cidades = useMemo(() => [...new Set(itens.map(i => i.cidade).filter(Boolean) as string[])].sort(), [itens])
   const bairros = useMemo(() => [...new Set(itens.filter(i => !cidade || i.cidade === cidade).map(i => i.bairro).filter(Boolean) as string[])].sort(), [cidade, itens])
@@ -67,7 +107,7 @@ export default function ProspeccaoPage() {
   async function soltar(status: StatusProspeccao) {
     const item = itens.find(i => i.id === arrastando)
     setArrastando(null)
-    if (!item || item.status === status) return
+    if (!item || item.status === status || !podeEditar(item)) return
     const origem=STATUS_PROSPECCAO.find(c=>c.id===item.status)
     const destino=STATUS_PROSPECCAO.find(c=>c.id===status)
     if (!confirmarMovimentoKanban({card:item.nome_cliente||'Prospecção',origem:origem?.label||item.status,destino:destino?.label||status,retrocesso:STATUS_PROSPECCAO.findIndex(c=>c.id===status)<STATUS_PROSPECCAO.findIndex(c=>c.id===item.status)})) return
