@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { Evento, EventoConvidado } from './tipos'
 import { TipoRecorrencia, gerarProximasOcorrencias } from './recorrencia'
+import { camposSaoPaulo, gerarDatasEquipe } from './tarefasEquipeRecorrencia'
 
 export type EventoComConvite = Evento & { meuStatus?: 'proprio' | 'pendente' | 'aceito' | 'recusado' }
 
@@ -120,15 +121,42 @@ export async function criarEventoRecorrente(
   dados: { titulo: string; descricao?: string; local?: string; data_inicio: string; data_fim?: string | null },
   tipo: TipoRecorrencia,
   valor: number,
-  convidadosIds: string[] = []
+  convidadosIds: string[] = [],
+  personalizada?: { diasSemana: number[] }
 ): Promise<Evento | null> {
-  const base = await criarEvento(usuarioId, dados, convidadosIds)
+  const duracaoMs = dados.data_fim ? new Date(dados.data_fim).getTime() - new Date(dados.data_inicio).getTime() : 0
+  // Chamadas anteriores mantêm a lógica original. A nova tela usa a data como limite inicial.
+  const datas = personalizada ? gerarDatasEquipe(dados.data_inicio, tipo==='dia_fixo_mes'?'mensal':tipo, valor, personalizada.diasSemana) : null
+  if (datas && !datas.length) return null
+  const inicioBase = datas?.[0] ?? dados.data_inicio
+  const dadosBase = datas ? {...dados, data_inicio:inicioBase, data_fim:duracaoMs>0?new Date(new Date(inicioBase).getTime()+duracaoMs).toISOString():null} : dados
+  const base = await criarEvento(usuarioId, dadosBase, convidadosIds)
   if (!base) return null
 
-  await supabase.from('eventos').update({ recorrencia_tipo: tipo, recorrencia_valor: valor }).eq('id', base.id)
+  // Semanal personalizado: máscara dos dias (bit 0=domingo), sem mudança de schema.
+  const valorSalvo = personalizada && tipo==='semanal'
+    ? (personalizada.diasSemana.length ? personalizada.diasSemana : [(()=>{const d=camposSaoPaulo(inicioBase);return new Date(Date.UTC(d.ano,d.mes-1,d.dia)).getUTCDay()})()]).reduce((m,d)=>m|(1<<d),0)
+    : valor
+  await supabase.from('eventos').update({ recorrencia_tipo: tipo, recorrencia_valor: valorSalvo }).eq('id', base.id)
 
-  const duracaoMs = dados.data_fim ? new Date(dados.data_fim).getTime() - new Date(dados.data_inicio).getTime() : 0
-  const proximas = gerarProximasOcorrencias(new Date(dados.data_inicio), tipo, valor)
+  const proximas = datas ? datas.slice(1).map(d=>new Date(d)) : gerarProximasOcorrencias(new Date(dados.data_inicio), tipo, valor)
+
+  // Lote para não disparar uma requisição por dia na recorrência diária.
+  if (personalizada && proximas.length) {
+    const linhas=proximas.map(data=>({usuario_id:usuarioId,titulo:dados.titulo,descricao:dados.descricao||null,local:dados.local||null,data_inicio:data.toISOString(),data_fim:duracaoMs>0?new Date(data.getTime()+duracaoMs).toISOString():null,regra_origem_id:base.id}))
+    const {data:novos,error}=await supabase.from('eventos').insert(linhas).select('id')
+    if(error||!novos) {
+      console.error('Erro ao gerar ocorrências de evento:',error)
+      // Não informar sucesso se a série não foi gerada. Remover apenas a raiz recém-criada.
+      await excluirEvento(base.id)
+      return null
+    }
+    if(convidadosIds.length){
+      const {error:erroConvites}=await supabase.from('evento_convidados').insert(novos.flatMap(n=>convidadosIds.map(usuario_id=>({evento_id:n.id,usuario_id}))))
+      if(erroConvites)console.error('Erro ao convidar usuários da série:',erroConvites)
+    }
+    return {...base,recorrencia_tipo:tipo,recorrencia_valor:valorSalvo}
+  }
 
   for (const data of proximas) {
     const { data: novo, error } = await supabase
@@ -156,7 +184,7 @@ export async function criarEventoRecorrente(
     }
   }
 
-  return { ...base, recorrencia_tipo: tipo, recorrencia_valor: valor }
+  return { ...base, recorrencia_tipo: tipo, recorrencia_valor: valorSalvo }
 }
 
 /**
