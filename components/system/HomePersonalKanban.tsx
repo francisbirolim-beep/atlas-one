@@ -99,6 +99,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
   const [eventos, setEventos] = useState<EventoComConvite[]>([])
   const [conclusoesEventos, setConclusoesEventos] = useState<Record<string,string>>({})
   const [aba, setAba] = useState<'minhas'|'delegadas'>('minhas')
+  const [colunaMobile, setColunaMobile] = useState<string | null>(null)
   const [detalheId, setDetalheId] = useState<string|null>(null)
   const [carregando, setCarregando] = useState(true)
   const [personalizando, setPersonalizando] = useState(false)
@@ -169,6 +170,10 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
 
   const final = useMemo(() => colunas.find((c, i) => tipoColuna(c, i) === 'concluido'), [colunas])
   const inicial = colunas.find((c,i)=>tipoColuna(c,i)==='inicial') || colunas[0]
+  const etapasMobile = [...(aba === 'delegadas' ? [{id:'pedidos',nome:'Pedidos de tarefa'}] : []), ...colunas]
+  const etapaMobile = etapasMobile.find(c=>c.id===colunaMobile) || (aba === 'minhas' ? inicial : etapasMobile[0])
+  const indiceMobile = etapasMobile.findIndex(c=>c.id===etapaMobile?.id)
+  const trocarAba = (nova: 'minhas'|'delegadas') => { setAba(nova); setColunaMobile(null) }
   const colunaExibida = (t: TarefaPessoal) => t.concluida_em && final ? final.id : t.coluna_id
   const abertas = (somenteEquipe ? [] : tarefas).filter(t => !t.concluida_em)
   const atrasadas = abertas.filter(t => t.data_hora && new Date(t.data_hora).getTime() < Date.now()).length
@@ -368,19 +373,19 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
 
   return (
     <>
-    <article className="w-full min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+    <article className="atlas-kanban-pessoal w-full min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+      <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-2"><Columns3 size={18} className="text-blue-700"/>
             <h2 className="text-base font-bold text-slate-900" title={`${abertas.length} abertas, ${atrasadas} atrasadas`}>{somenteEquipe ? 'Tarefas de equipe e compromissos' : 'Meu Kanban pessoal'}</h2>
           </div>
           <p className="mt-0.5 text-[11px] text-slate-500">Organize suas demandas, mova os cartões e personalize as colunas conforme sua rotina.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="atlas-kanban-pessoal-filtros flex min-w-0 flex-wrap items-center gap-1.5">
           <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-[11px]">
-            <button type="button" onClick={()=>setAba('minhas')}
+            <button type="button" onClick={()=>trocarAba('minhas')}
               className={'rounded-md px-2.5 py-1.5 font-semibold '+(aba==='minhas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-white')}>Minhas tarefas</button>
-            <button type="button" onClick={()=>setAba('delegadas')}
+            <button type="button" onClick={()=>trocarAba('delegadas')}
               className={'rounded-md px-2.5 py-1.5 font-semibold '+(aba==='delegadas'?'bg-blue-600 text-white':'text-slate-600 hover:bg-white')}>
               Pedidos que fiz
             </button>
@@ -389,7 +394,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
             onClick={()=>setMesSelecionado(m=>mesAdjacente(m,-1))} className="rounded-lg border border-slate-200 p-1.5 text-slate-600 disabled:opacity-40"><ArrowLeft size={13}/></button>
           <input type="month" aria-label="Mês das tarefas" value={mesSelecionado} disabled={todosPeriodos}
             onChange={e=>{if(/^\d{4}-\d{2}$/.test(e.target.value)){setMesSelecionado(e.target.value);setTodosPeriodos(false)}}}
-            className="h-8 w-[125px] rounded-lg border border-slate-200 bg-white px-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"/>
+            className="h-8 min-w-0 w-[125px] rounded-lg border border-slate-200 bg-white px-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"/>
           <button type="button" disabled={todosPeriodos} title="Próximo mês" aria-label="Próximo mês"
             onClick={()=>setMesSelecionado(m=>mesAdjacente(m,1))} className="rounded-lg border border-slate-200 p-1.5 text-slate-600 disabled:opacity-40"><ArrowRight size={13}/></button>
           <input type="search" aria-label="Pesquisar tarefa ou cliente" value={busca} onChange={e=>setBusca(e.target.value)}
@@ -413,7 +418,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
           </details>
         </div>
       </div>
-      <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-slate-600"><label className="flex items-center gap-1.5"><input type="checkbox" checked={todosPeriodos} onChange={e=>setTodosPeriodos(e.target.checked)} className="accent-blue-600"/> Todos os períodos</label><span className="sm:hidden">Deslize para o lado para ver as colunas.</span></div>
+      <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-slate-600"><label className="flex items-center gap-1.5"><input type="checkbox" checked={todosPeriodos} onChange={e=>setTodosPeriodos(e.target.checked)} className="accent-blue-600"/> Todos os períodos</label><span className="md:hidden">Escolha a coluna abaixo.</span></div>
       {filtrosAbertos && <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs">
         <label className="flex cursor-pointer items-center gap-1.5">
           <input type="checkbox" checked={manterPendenciasAnteriores} onChange={e=>setManterPendenciasAnteriores(e.target.checked)} className="accent-blue-600"/> Incluir pendências anteriores
@@ -435,8 +440,15 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
       {carregando ? <p className="py-8 text-center text-sm text-slate-500">Carregando seu Kanban...</p> : colunas.length === 0 ? (
         <div className="py-8 text-center text-sm text-slate-500">As colunas ainda não estão disponíveis. <button type="button" onClick={() => void atualizar()} className="text-blue-700 underline">Tentar novamente</button></div>
       ) : (
-        <div className="flex w-full min-w-0 max-w-full gap-3 overflow-x-auto overscroll-x-contain pb-3" aria-label="Colunas do Kanban pessoal" role="region" tabIndex={0}>
-          <section className="w-[82vw] max-w-[280px] shrink-0 sm:w-[224px] sm:max-w-none sm:flex-1 overflow-hidden rounded-xl border border-violet-200 border-l-4 border-l-violet-600 bg-violet-50/70 p-0 sm:min-w-[235px]">
+        <>
+        <div className="atlas-kanban-pessoal-navegacao mb-3 grid grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 md:hidden">
+          <button type="button" aria-label="Coluna anterior" disabled={indiceMobile<=0} onClick={()=>setColunaMobile(etapasMobile[indiceMobile-1]?.id||null)} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 disabled:opacity-30"><ArrowLeft size={16}/></button>
+          <select aria-label="Coluna do Kanban" value={etapaMobile?.id||''} onChange={e=>setColunaMobile(e.target.value)} className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-sm font-semibold text-slate-700">{etapasMobile.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select>
+          <button type="button" aria-label="Próxima coluna" disabled={indiceMobile<0||indiceMobile>=etapasMobile.length-1} onClick={()=>setColunaMobile(etapasMobile[indiceMobile+1]?.id||null)} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 disabled:opacity-30"><ArrowRight size={16}/></button>
+          <p className="col-span-3 text-center text-[11px] text-slate-500">Coluna {indiceMobile+1} de {etapasMobile.length}</p>
+        </div>
+        <div className="atlas-kanban-pessoal-colunas flex w-full min-w-0 max-w-full gap-3 overflow-x-auto overscroll-x-contain pb-3" aria-label="Colunas do Kanban pessoal" role="region" tabIndex={0}>
+          <section data-mobile-ativa={etapaMobile?.id==='pedidos'} className="atlas-kanban-pessoal-coluna w-[224px] min-w-[224px] flex-1 overflow-hidden rounded-xl border border-violet-200 border-l-4 border-l-violet-600 bg-violet-50/70 p-0 sm:min-w-[235px]">
             <div className="mb-2 flex min-h-10 items-center gap-1.5 bg-violet-200 px-2.5 py-2">
               <span className="h-2 w-2 shrink-0 rounded-full bg-violet-600"/>
               <h3 className="truncate text-xs font-bold text-violet-900">Pedidos de tarefa</h3>
@@ -460,7 +472,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
             const itens = tarefasFiltradas.filter(t => colunaExibida(t) === col.id).sort((a, b) =>
               (a.data_hora ? new Date(a.data_hora).getTime() : Infinity) - (b.data_hora ? new Date(b.data_hora).getTime() : Infinity))
             return (
-              <section key={col.id} onDragOver={e => { e.preventDefault(); setArrastando(col.id) }} onDragLeave={() => setArrastando(null)} onDrop={e => {
+              <section key={col.id} data-mobile-ativa={etapaMobile?.id===col.id} onDragOver={e => { e.preventDefault(); setArrastando(col.id) }} onDragLeave={() => setArrastando(null)} onDrop={e => {
                 e.preventDefault(); setArrastando(null)
                 const id = e.dataTransfer.getData('text/plain')
                 const tarefa = tarefas.find(t => t.id === id)
@@ -468,7 +480,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
                   const compartilhada = equipe.find(t=>t.id===id.slice(7))
                   if(compartilhada)void mudarEquipe(compartilhada,etapa)
                 } else if (tarefa) void mudarColuna(tarefa, col.id)
-              }} className={'w-[82vw] max-w-[280px] shrink-0 sm:w-[224px] sm:max-w-none sm:flex-1 overflow-hidden rounded-xl border border-slate-200 border-l-4 p-0 sm:min-w-[235px] ' + visual.lateral + ' ' + visual.fundo + (arrastando === col.id ? ' ring-2 ring-blue-400' : '')}>
+              }} className={'atlas-kanban-pessoal-coluna w-[224px] min-w-[224px] flex-1 overflow-hidden rounded-xl border border-slate-200 border-l-4 p-0 sm:min-w-[235px] ' + visual.lateral + ' ' + visual.fundo + (arrastando === col.id ? ' ring-2 ring-blue-400' : '')}>
                 <div className={'mb-2 flex min-h-10 items-center justify-between gap-1 px-2.5 py-2 ' + visual.cabecalho}>
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className={'h-2 w-2 shrink-0 rounded-full ' + visual.marcador}/>
@@ -545,6 +557,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
             )
           })}
         </div>
+        </>
       )}
     </article>
     <DetalheTarefaEquipe id={detalheId} onFechar={()=>setDetalheId(null)}/>
