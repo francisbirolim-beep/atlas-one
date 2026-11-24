@@ -84,6 +84,7 @@ export default function ContramarcoFlow({
   const [processandoFluxo, setProcessandoFluxo] = useState(false)
   const [mensagemFluxo, setMensagemFluxo] = useState('')
   const [erroFluxo, setErroFluxo] = useState('')
+  const [planoEmGeracao, setPlanoEmGeracao] = useState<string | null>(null)
 
   const [modalItem, setModalItem] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
@@ -590,6 +591,35 @@ export default function ContramarcoFlow({
     tipo: nomeTipo(item, tipos),
   })), [itens, tipos])
 
+  // Keep each position and quantity intact, even when the same type has
+  // different dimensions. The existing generator retains the technical gate.
+  const gruposPlano = new Map<string, { nome: string; itens: MedicaoItem[] }>()
+  for (const item of itens) {
+    if (item.contramarco === 'nao' && !manual) continue
+    const nome = nomeTipo(item, tipos).trim()
+    const chave = nome.normalize('NFC').toLocaleLowerCase('pt-BR')
+    const grupo = gruposPlano.get(chave) || { nome, itens: [] }
+    grupo.itens.push(item)
+    gruposPlano.set(chave, grupo)
+  }
+
+  async function imprimirPlanoSelecionado(chave: string, selecionados: MedicaoItem[], nome: string) {
+    if (planoEmGeracao || !selecionados.length || !selecionados.every(temMedicaoContramarco)) return
+    setPlanoEmGeracao(chave)
+    setErroFluxo('')
+    try {
+      const doc = await gerarPdfPlanoCorteContramarcos({ ...medicao, status_operacional: statusOperacional as MedicaoFinal['status_operacional'] }, selecionados, false)
+      const slug = (valor: string) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'contramarco'
+      doc.save(`plano-corte-${slug(medicao.cliente_nome || 'cliente')}-${slug(nome)}.pdf`)
+    } catch (e) {
+      console.error('Erro ao gerar plano de corte:', e)
+      setErroFluxo('Não foi possível gerar o plano de corte. Tente novamente.')
+      alert('Não foi possível gerar o plano de corte. Tente novamente.')
+    } finally {
+      setPlanoEmGeracao(null)
+    }
+  }
+
   return (
     <div className={embedded ? 'bg-transparent pb-6' : 'min-h-screen bg-slate-50 pb-24'}>
       {!embedded && (
@@ -760,6 +790,14 @@ export default function ContramarcoFlow({
                         <span className="mt-0.5 block text-xs font-semibold text-emerald-800">Produção: {item.producao_largura_mm} × {item.producao_altura_mm} mm</span>
                       </span>
                       <ChevronRight size={17} className="text-emerald-700" />
+                    </button>
+                  )}
+
+                  {medidoComContramarco && (
+                    <button type="button" onClick={() => void imprimirPlanoSelecionado(item.id, [item], `posicao-${pos + 1}-${item.ambiente || 'ambiente'}-${nomeTipo(item, tipos)}`)}
+                      disabled={planoEmGeracao !== null}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-3 text-xs font-black text-emerald-800 disabled:opacity-50">
+                      {planoEmGeracao === item.id ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} Imprimir plano de corte desta posição (A4)
                     </button>
                   )}
 
@@ -1110,6 +1148,29 @@ export default function ContramarcoFlow({
               <FileText size={16} /> Gerar PDF
             </button>
           </div>
+
+          {gruposPlano.size > 0 && <section className="mt-4 rounded-2xl border border-emerald-200 bg-white p-4">
+            <h3 className="text-sm font-black text-emerald-900">Imprimir plano de corte por tipologia</h3>
+            <p className="mt-1 text-xs text-slate-600">Cada PDF A4 inclui somente as posições da tipologia selecionada. As medidas e quantidades de cada posição permanecem separadas.</p>
+            <div className="mt-3 space-y-2">
+              {[...gruposPlano.entries()].map(([chave, grupo]) => {
+                const prontos = grupo.itens.filter(temMedicaoContramarco).length
+                const id = 'tipo:' + chave
+                return <div key={chave} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 p-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800">{grupo.nome}</p>
+                    <p className="text-xs text-slate-500">{prontos}/{grupo.itens.length} posições medidas{prontos < grupo.itens.length ? ' · conclua as medidas para imprimir' : ''}</p>
+                  </div>
+                  <button type="button" disabled={prontos !== grupo.itens.length || planoEmGeracao !== null}
+                    onClick={() => void imprimirPlanoSelecionado(id, grupo.itens, 'tipologia-' + grupo.nome)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">
+                    {planoEmGeracao === id ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />} Imprimir A4
+                  </button>
+                </div>
+              })}
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">Planos não aprovados são prévias para conferência. Receitas técnicas não validadas permanecem sinalizadas no PDF.</p>
+          </section>}
 
           {comContramarco > 0 && <button type="button"
             onClick={() => void gerarPdfPlanoCorteContramarcos(medicao, itens)}
