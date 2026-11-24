@@ -208,8 +208,15 @@ export default function AbrirMedidaFinalCliente() {
     )),
     [medicoes, orcamentosVendidos, orcamentosAtuais],
   )
+  // A proposta é somente a origem das medidas; não equivale a uma venda.
+  const orcamentosParaMedir = tipo === 'contramarco'
+    ? orcamentos.filter(o => o.revisao_atual !== false && (
+        orcamentosAtuais.some(v => v.id === o.id) ||
+        ['rascunho', 'enviado', 'aprovado'].includes(String(o.status || ''))
+      ))
+    : orcamentosAtuais
   const contramarcoAvulso = medicoes.find(m => !m.orcamento_id && m.tipo_medicao === 'contramarco')
-  const medicoesVisiveis = medicoes.filter(m => medicoesVendidas.some(v => v.id === m.id) || (!m.orcamento_id && m.tipo_medicao === 'contramarco'))
+  const medicoesVisiveis = medicoes.filter(m => medicoesVendidas.some(v => v.id === m.id) || m.tipo_medicao === 'contramarco')
   const candidatosVisiveis = useMemo(
     () => candidatosWVetro.filter(c => c.statusValidacao !== 'rejeitado' && ['V', 'F'].includes(String(c.situacao || '').trim().toUpperCase())),
     [candidatosWVetro]
@@ -380,10 +387,12 @@ export default function AbrirMedidaFinalCliente() {
       return
     }
 
-    const fluxo = await verificarFluxoVendaOrcamento(escolhido)
-    if (!fluxo.ativo && !fluxo.wvetroVendidoValidado) {
-      router.push(`/vendas/confirmar?orcamento=${encodeURIComponent(escolhido)}&origem=medicao-final&tipo=${encodeURIComponent(tipo)}`)
-      return
+    if (tipo !== 'contramarco') {
+      const fluxo = await verificarFluxoVendaOrcamento(escolhido)
+      if (!fluxo.ativo && !fluxo.wvetroVendidoValidado) {
+        router.push(`/vendas/confirmar?orcamento=${encodeURIComponent(escolhido)}&origem=medicao-final&tipo=${encodeURIComponent(tipo)}`)
+        return
+      }
     }
 
     setCriando(true)
@@ -402,7 +411,7 @@ export default function AbrirMedidaFinalCliente() {
     return <div className="min-h-[70vh] grid place-items-center text-slate-500"><Loader2 className="animate-spin" /></div>
   }
 
-  const orcamentoVisualizado = orcamentosAtuais.find(o => o.id === orcamentoAbertoId) || null
+  const orcamentoVisualizado = orcamentosParaMedir.find(o => o.id === orcamentoAbertoId) || null
   const candidatoVisualizado = candidatosVisiveis.find(c => c.historicoId === candidatoAbertoId) || null
 
   return (
@@ -421,7 +430,7 @@ export default function AbrirMedidaFinalCliente() {
                 : orcamentoVisualizado
                   ? 'Confira as tipologias antes de selecionar.'
                   : tipo === 'contramarco'
-                    ? 'Escolha um orçamento vendido ou inicie um contramarco manual.'
+                    ? 'Escolha um orçamento (mesmo sem venda) ou inicie um contramarco manual.'
                     : 'Escolha o orçamento que será usado para a medição.'}
             </p>
           </div>
@@ -542,7 +551,7 @@ export default function AbrirMedidaFinalCliente() {
                     const bloqueado = candidato.statusValidacao === 'outro_cliente'
                     return (
                       <div key={candidato.historicoId} className="rounded-xl border border-violet-100 bg-white p-3">
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
                           <button type="button" onClick={() => setCandidatoAbertoId(candidato.historicoId)} className="min-w-0 flex-1 text-left">
                             <p className="text-sm font-black text-slate-900">W.Vetro #{candidato.numeroWvetro}</p>
                             <p className="truncate text-xs font-semibold text-slate-600">{candidato.clienteNomeWvetro || 'Nome não informado'}</p>
@@ -570,25 +579,26 @@ export default function AbrirMedidaFinalCliente() {
             )}
 
             <div className="mt-4 space-y-3">
-              {orcamentosAtuais.map(o => {
+              {orcamentosParaMedir.map(o => {
                 const itens = itensDoOrcamento(o)
                 const exibicao = numeroExibicao(o)
                 const existente = medicaoExistente(o.id, tipo)
                 return (
                   <div key={o.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-lg font-black text-slate-900">#{exibicao.numero}</p>
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${exibicao.origem === 'W.Vetro' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
                             {exibicao.origem}
                           </span>
+                          {tipo === 'contramarco' && !orcamentosAtuais.some(v => v.id === o.id) && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">SEM VENDA · MEDIÇÃO</span>}
                           {existente && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">JÁ INICIADO</span>}
                         </div>
                         <p className="mt-1 text-xs text-slate-500">{dataBR(o.created_at)} · {itens.length} tipologia(s)</p>
                         {o.descricao_livre && <p className="mt-1 truncate text-xs text-slate-500">{o.descricao_livre}</p>}
                       </div>
-                      <div className="flex shrink-0 flex-col gap-2">
+                      <div className="flex flex-wrap gap-2 sm:shrink-0 sm:flex-col">
                         <button onClick={() => setOrcamentoAbertoId(o.id)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">
                           Ver itens
                         </button>
@@ -612,16 +622,16 @@ export default function AbrirMedidaFinalCliente() {
                 )
               })}
 
-              {orcamentosAtuais.length === 0 && (
+              {orcamentosParaMedir.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center">
-                  <p className="text-sm font-black text-slate-800">Nenhuma venda vinculada encontrada para este cliente.</p>
-                  <p className="mt-1 text-xs text-slate-500">A Medida Final do Cliente 360 mostra apenas orçamentos efetivamente vendidos ou vendas do W.Vetro validadas.</p>
+                  <p className="text-sm font-black text-slate-800">{tipo === 'contramarco' ? 'Nenhum orçamento disponível para este cliente.' : 'Nenhuma venda vinculada encontrada para este cliente.'}</p>
+                  <p className="mt-1 text-xs text-slate-500">{tipo === 'contramarco' ? 'Você pode iniciar uma medição manual.' : 'A Medida Final do Cliente 360 mostra apenas orçamentos efetivamente vendidos ou vendas do W.Vetro validadas.'}</p>
                 </div>
               )}
             </div>
 
             <p className="mt-4 text-center text-[11px] text-slate-500">
-              {tipo === 'contramarco' ? 'Os orçamentos abaixo são somente vendas. Para medição avulsa de contramarcos, use a opção manual acima.' : 'Para medições avulsas, utilize o módulo Produção → Medição Final. Aqui são exibidas somente vendas.'}
+              {tipo === 'contramarco' ? 'Orçamentos sem venda podem servir de referência para medir. A produção não é liberada por esta seleção.' : 'Para medições avulsas, utilize o módulo Produção → Medição Final. Aqui são exibidas somente vendas.'}
             </p>
           </section>
         )}
