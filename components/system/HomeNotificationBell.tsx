@@ -158,7 +158,7 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
         {naoLidas > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{naoLidas > 99 ? '99+' : naoLidas}</span>}
       </button>
 
-      {aberto && <div className="absolute right-0 top-12 z-50 w-[min(94vw,390px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+      {aberto && <div className="fixed inset-x-3 top-[60px] z-50 w-auto sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[min(94vw,390px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
           <div><p className="text-sm font-semibold text-slate-900">Notificações</p><p className="text-[11px] text-slate-400">{naoLidas} não lida{naoLidas === 1 ? '' : 's'}</p></div>
           <div className="flex items-center gap-1">
@@ -172,11 +172,11 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
         {notificacoes.length === 0 ? (
           <div className="px-4 py-6 text-center"><Bell size={20} className="mx-auto mb-2 text-slate-300"/><p className="text-sm text-slate-400">Nenhuma notificação persistente ainda.</p><p className="mt-1 text-[11px] text-slate-300">Tarefas atribuídas e convites de agenda aparecerão aqui.</p></div>
         ) : (
-          <div className="max-h-[420px] divide-y divide-slate-100 overflow-y-auto">{notificacoes.map(n => (
+          <div className="max-h-[min(420px,55dvh)] divide-y divide-slate-100 overflow-y-auto">{notificacoes.map(n => (
             <Link key={n.id} href={n.href || '/'} onClick={() => void abrirNotificacao(n)} className={`block px-4 py-3 transition hover:bg-slate-50 ${!n.lida_em ? 'bg-blue-50/45' : ''}`}>
               <div className="flex items-start gap-3">
                 <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${!n.lida_em ? 'bg-blue-500' : 'bg-slate-200'}`}/>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">{n.titulo}</span>{n.mensagem && <span className="mt-0.5 block truncate text-xs text-slate-500">{n.mensagem}</span>}<span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-300">{n.categoria === 'chat' ? 'WhatsApp / mensagens' : n.categoria} · {tempoRelativo(n.created_at)}</span></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">{n.titulo}</span>{n.mensagem && <span className="mt-0.5 block break-words text-xs text-slate-500">{n.mensagem}</span>}<span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-300">{n.categoria === 'chat' ? 'WhatsApp / mensagens' : n.categoria} · {tempoRelativo(n.created_at)}</span></span>
               </div>
             </Link>
           ))}</div>
