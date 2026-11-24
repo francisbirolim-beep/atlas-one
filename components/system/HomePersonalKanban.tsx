@@ -168,8 +168,9 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
   },[])
 
   const final = useMemo(() => colunas.find((c, i) => tipoColuna(c, i) === 'concluido'), [colunas])
+  const inicial = colunas.find((c,i)=>tipoColuna(c,i)==='inicial') || colunas[0]
   const colunaExibida = (t: TarefaPessoal) => t.concluida_em && final ? final.id : t.coluna_id
-  const abertas = tarefas.filter(t => !t.concluida_em)
+  const abertas = (somenteEquipe ? [] : tarefas).filter(t => !t.concluida_em)
   const atrasadas = abertas.filter(t => t.data_hora && new Date(t.data_hora).getTime() < Date.now()).length
 
   const tarefasFiltradas = useMemo(() => {
@@ -455,7 +456,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
               tipoColuna(col,i)==='andamento'?'em_andamento':
               tipoColuna(col,i)==='aguardando'?'aguardando':'a_fazer'
             const equipesDaEtapa = equipeFiltrada.filter(t=>etapaEquipe(t)===etapa)
-            const eventosDaEtapa = eventosFiltrados.filter(e => conclusoesEventos[e.id] ? col.id === (final?.id || colunas[colunas.length-1]?.id) : col.id === colunas[0]?.id)
+            const eventosDaEtapa = eventosFiltrados.filter(e => conclusoesEventos[e.id] ? col.id === (final?.id || colunas[colunas.length-1]?.id) : col.id === inicial?.id)
             const itens = tarefasFiltradas.filter(t => colunaExibida(t) === col.id).sort((a, b) =>
               (a.data_hora ? new Date(a.data_hora).getTime() : Infinity) - (b.data_hora ? new Date(b.data_hora).getTime() : Infinity))
             return (
