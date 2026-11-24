@@ -5,10 +5,11 @@ import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Snowflake, SunMedium, UserRound } from 'lucide-react'
+import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Search, Settings2, Snowflake, SunMedium, UserRound } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
+import { buscarMinhaPermissaoProspeccao, listarPermissoesProspeccao, salvarPermissaoProspeccao, type PermissaoProspeccao, type UsuarioPermissaoProspeccao } from '@/lib/prospeccaoPermissoes'
 
 const MapaProspeccoes = dynamic(() => import('@/components/MapaProspeccoes'), { ssr: false })
 
@@ -34,18 +35,57 @@ export default function ProspeccaoPage() {
   const [bairro, setBairro] = useState('')
   const [aba, setAba] = useState<'kanban' | 'agenda' | 'mapa'>('kanban')
   const [arrastando, setArrastando] = useState<string | null>(null)
+  const [acesso, setAcesso] = useState({ pode_ver_mapa: false, pode_assumir: false })
+  const [painelPermissoes, setPainelPermissoes] = useState(false)
+  const [usuariosPermissoes, setUsuariosPermissoes] = useState<UsuarioPermissaoProspeccao[]>([])
+  const [permissoes, setPermissoes] = useState<PermissaoProspeccao[]>([])
+  const [carregandoPermissoes, setCarregandoPermissoes] = useState(false)
+  const [alterandoUsuario, setAlterandoUsuario] = useState<string | null>(null)
+  const [erroPermissoes, setErroPermissoes] = useState('')
+  const [mensagemPermissoes, setMensagemPermissoes] = useState('')
 
   async function carregar() {
     setCarregando(true)
     const me = await usuarioAtual()
     setUsuario(me)
-    const [lista, usuarios] = await Promise.all([listarProspeccoes(), me?.role === 'master' ? listarEquipeProspeccao() : Promise.resolve([])])
+    const [lista, usuarios, autorizacao] = await Promise.all([listarProspeccoes(), listarEquipeProspeccao(), buscarMinhaPermissaoProspeccao().catch(() => ({ pode_ver_mapa: false, pode_assumir: false }))])
     setItens(lista)
     setEquipe(usuarios)
+    setAcesso(autorizacao)
     setCarregando(false)
   }
 
   useEffect(() => { void carregar() }, [])
+
+  const master = usuario?.role === 'master'
+  const podeEditar = (item: Prospeccao) => Boolean(master || (usuario && item.responsavel_id === usuario.id))
+
+  async function abrirPainelPermissoes() {
+    if (!master) return
+    if (painelPermissoes) { setPainelPermissoes(false); return }
+    setPainelPermissoes(true);setCarregandoPermissoes(true);setErroPermissoes('')
+    try {
+      const dados = await listarPermissoesProspeccao()
+      setUsuariosPermissoes(dados.usuarios)
+      setPermissoes(dados.permissoes)
+    } catch(e) { setErroPermissoes(e instanceof Error ? e.message : 'Falha ao consultar as autorizações.') }
+    finally {setCarregandoPermissoes(false)}
+  }
+
+  async function alterarPermissao(usuarioId: string, campo: 'pode_ver_mapa' | 'pode_assumir', marcado: boolean) {
+    if (!master || alterandoUsuario) return
+    const atual = permissoes.find(p => p.usuario_id === usuarioId)
+    const ver = campo === 'pode_ver_mapa' ? marcado : (marcado || Boolean(atual?.pode_ver_mapa))
+    const assumir = campo === 'pode_assumir' ? marcado : (marcado ? Boolean(atual?.pode_assumir) : false)
+    setAlterandoUsuario(usuarioId);setErroPermissoes('');setMensagemPermissoes('')
+    try {
+      const r = await salvarPermissaoProspeccao(usuarioId, ver, assumir)
+      if (!r.ok) throw new Error(r.error || 'Não foi possível salvar a autorização.')
+      setPermissoes(prev => [...prev.filter(p => p.usuario_id !== usuarioId), { usuario_id: usuarioId, pode_ver_mapa: ver, pode_assumir: assumir }])
+      setMensagemPermissoes('Autorização atualizada. O usuário verá a mudança ao reabrir a Prospecção.')
+    } catch(e) {setErroPermissoes(e instanceof Error ? e.message : 'Falha ao salvar autorização.')}
+    finally {setAlterandoUsuario(null)}
+  }
 
   const cidades = useMemo(() => [...new Set(itens.map(i => i.cidade).filter(Boolean) as string[])].sort(), [itens])
   const bairros = useMemo(() => [...new Set(itens.filter(i => !cidade || i.cidade === cidade).map(i => i.bairro).filter(Boolean) as string[])].sort(), [cidade, itens])
@@ -67,7 +107,7 @@ export default function ProspeccaoPage() {
   async function soltar(status: StatusProspeccao) {
     const item = itens.find(i => i.id === arrastando)
     setArrastando(null)
-    if (!item || item.status === status) return
+    if (!item || item.status === status || !podeEditar(item)) return
     const origem=STATUS_PROSPECCAO.find(c=>c.id===item.status)
     const destino=STATUS_PROSPECCAO.find(c=>c.id===status)
     if (!confirmarMovimentoKanban({card:item.nome_cliente||'Prospecção',origem:origem?.label||item.status,destino:destino?.label||status,retrocesso:STATUS_PROSPECCAO.findIndex(c=>c.id===status)<STATUS_PROSPECCAO.findIndex(c=>c.id===item.status)})) return
@@ -81,11 +121,33 @@ export default function ProspeccaoPage() {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-6">
           <div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-600">Comercial · Campo</p><h1 className="text-xl font-bold text-slate-900">Prospecção</h1><p className="text-sm text-slate-500">Obras encontradas, contatos e próximos passos.</p></div>
-          <div className="flex flex-wrap items-center gap-2"><Link href="/relatorios/prospeccao" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-bold text-blue-700"><FileText size={16}/> Relatório de prospecção</Link><Link href="/prospeccao/nova" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm"><Plus size={17}/> Nova prospecção</Link></div>
+          <div className="flex flex-wrap items-center gap-2">{master&&<button type="button" onClick={()=>void abrirPainelPermissoes()} className="inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold text-slate-700"><Settings2 size={16}/> Autorizar usuários</button>}<Link href="/relatorios/prospeccao" className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-bold text-blue-700"><FileText size={16}/> Relatório de prospecção</Link><Link href="/prospeccao/nova" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm"><Plus size={17}/> Nova prospecção</Link></div>
         </div>
       </header>
 
       <main className="mx-auto max-w-[1600px] space-y-4 px-4 py-5 md:px-6">
+        {painelPermissoes&&master&&<section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
+          <h2 className="font-bold text-slate-900">Permissões do mapa e da prospecção</h2>
+          <p className="mt-1 text-sm text-slate-500">Somente o Master autoriza. Ver o mapa também permite consultar a ficha, fotos e histórico de outras obras. A permissão de assumir é separada; ao assumir, a obra muda de responsável.</p>
+          {carregandoPermissoes?<p className="mt-4 text-sm text-slate-500">Consultando usuários...</p>:
+          <div className="mt-4 space-y-2">
+            {usuariosPermissoes.map(u=>{
+              const perm=permissoes.find(v=>v.usuario_id===u.id)
+              return <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-3">
+                <div><p className="text-sm font-bold">{u.nome}</p><p className="text-xs text-slate-500">{u.role==='master'?'Master':'Usuário'}</p></div>
+                {u.role==='master'?<span className="text-xs font-semibold text-emerald-700">Acesso completo</span>:<div className="flex flex-wrap gap-x-5 gap-y-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={Boolean(perm?.pode_ver_mapa)} disabled={alterandoUsuario!==null} onChange={e=>void alterarPermissao(u.id,'pode_ver_mapa',e.target.checked)}/> Ver mapa e fichas</label>
+                  <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={Boolean(perm?.pode_assumir)} disabled={alterandoUsuario!==null} onChange={e=>void alterarPermissao(u.id,'pode_assumir',e.target.checked)}/> Pode assumir</label>
+                </div>}
+              </div>
+            })}
+            {usuariosPermissoes.length===0&&<p className="p-4 text-sm text-slate-500">Nenhum usuário encontrado.</p>}
+          </div>}
+          {erroPermissoes&&<p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{erroPermissoes}</p>}
+          {mensagemPermissoes&&<p role="status" className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{mensagemPermissoes}</p>}
+        </section>}
+        {!master&&!acesso.pode_ver_mapa&&!carregando&&<p className="rounded-xl border bg-white px-4 py-3 text-xs text-slate-600">Você visualiza apenas suas próprias prospecções. O Master pode liberar a visão geral do mapa e a opção de assumir outras obras.</p>}
+        {!master&&acesso.pode_ver_mapa&&<p className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-800">Acesso autorizado: você pode visualizar as prospecções da equipe{acesso.pode_assumir?' e assumir oportunidades ativas de outros responsáveis.':'. Para assumir, solicite autorização ao Master.'}</p>}
         <section className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-500">Prospecções visíveis</p><p className="mt-1 text-2xl font-bold">{filtrados.length}</p></div>
           <div className="rounded-2xl border bg-white p-4"><p className="text-xs text-slate-500">Retornos agendados</p><p className="mt-1 text-2xl font-bold text-blue-700">{agenda.length}</p></div>
@@ -95,7 +157,7 @@ export default function ProspeccaoPage() {
         <section className="rounded-2xl border bg-white p-3 shadow-sm">
           <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,220px))]">
             <label className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar cliente, obra, telefone..." className="w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm"/></label>
-            {usuario?.role === 'master' && <select value={vendedor} onChange={e=>setVendedor(e.target.value)} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Todos os vendedores</option>{equipe.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}</select>}
+            {(master || acesso.pode_ver_mapa) && <select value={vendedor} onChange={e=>setVendedor(e.target.value)} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Todos os vendedores</option>{equipe.map(u=><option key={u.id} value={u.id}>{u.nome}</option>)}</select>}
             <select value={cidade} onChange={e=>{setCidade(e.target.value);setBairro('')}} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Todas as cidades</option>{cidades.map(c=><option key={c}>{c}</option>)}</select>
             <select value={bairro} onChange={e=>setBairro(e.target.value)} className="rounded-xl border px-3 py-2.5 text-sm"><option value="">Todos os bairros</option>{bairros.map(b=><option key={b}>{b}</option>)}</select>
           </div>
@@ -108,9 +170,9 @@ export default function ProspeccaoPage() {
               const cards = filtrados.filter(i => i.status === coluna.id)
               return <section key={coluna.id} onDragOver={e=>e.preventDefault()} onDrop={()=>void soltar(coluna.id)} className="w-[290px] shrink-0 rounded-2xl border border-slate-200 bg-slate-100/80 p-3">
                 <header className="mb-3 flex items-center justify-between"><span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-700"><i className={`h-2.5 w-2.5 rounded-full ${coluna.cor}`}/>{coluna.label}</span><span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-500">{cards.length}</span></header>
-                <div className="space-y-2">{cards.map(item=><Link draggable onDragStart={()=>setArrastando(item.id)} href={`/prospeccao/${item.id}`} key={item.id} className="block cursor-grab rounded-xl border bg-white p-3 shadow-sm transition hover:border-blue-300 hover:shadow-md active:cursor-grabbing">
+                <div className="space-y-2">{cards.map(item=><Link draggable={podeEditar(item)} onDragStart={e=>{if(!podeEditar(item)){e.preventDefault();return}setArrastando(item.id)}} href={`/prospeccao/${item.id}`} key={item.id} className="block cursor-grab rounded-xl border bg-white p-3 shadow-sm transition hover:border-blue-300 hover:shadow-md active:cursor-grabbing">
                   <div className="flex items-start justify-between gap-2"><strong className="text-sm text-slate-900">{item.nome_cliente}</strong><Temperatura valor={item.temperatura}/></div>
-                  {item.nome_obra && <p className="mt-1 truncate text-xs text-slate-500">{item.nome_obra}</p>}
+                  {item.nome_obra && <p className="mt-1 truncate text-xs text-slate-500">{item.nome_obra}</p>}{usuario&&item.responsavel_id!==usuario.id&&!master&&<p className="mt-2 text-[11px] font-semibold text-blue-700">{acesso.pode_assumir?"Abra para assumir esta prospecção":"Somente visualização"}</p>}
                   <div className="mt-3 space-y-1.5 text-[11px] text-slate-500">{(item.cidade||item.bairro)&&<p className="flex items-center gap-1"><MapPin size={12}/>{[item.bairro,item.cidade].filter(Boolean).join(' · ')}</p>}<p className="flex items-center gap-1"><UserRound size={12}/>{item.responsavel_nome}</p>{item.proxima_acao_em&&<p className={`flex items-center gap-1 ${new Date(item.proxima_acao_em).getTime()<Date.now()?'font-semibold text-red-600':''}`}><Clock3 size={12}/>{formatarData(item.proxima_acao_em)}</p>}</div>
                 </Link>)}{cards.length===0&&<p className="rounded-xl border border-dashed bg-white/50 px-3 py-8 text-center text-xs text-slate-400">Arraste uma prospecção para cá</p>}</div>
               </section>
