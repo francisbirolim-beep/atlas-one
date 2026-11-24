@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle, ArrowLeft, Check, ChevronLeft, ChevronRight, FileText, Loader2, Menu,
@@ -87,8 +87,8 @@ export default function ContramarcoFlow({
 
   const [modalItem, setModalItem] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
-  const [formTipo, setFormTipo] = useState<TipoEsquadria>('porta_correr')
-  const [formTipoOutro, setFormTipoOutro] = useState('')
+  const [formTipoNome, setFormTipoNome] = useState('')
+  const listaTipologiasId = useId()
   const [formAmbiente, setFormAmbiente] = useState('')
   const [formDescricao, setFormDescricao] = useState('')
   const [formQuantidade, setFormQuantidade] = useState(1)
@@ -217,8 +217,7 @@ export default function ContramarcoFlow({
 
   function abrirNovo() {
     setEditandoId(null)
-    setFormTipo('porta_correr')
-    setFormTipoOutro('')
+    setFormTipoNome('')
     setFormAmbiente('')
     setFormDescricao('')
     setFormQuantidade(1)
@@ -227,8 +226,7 @@ export default function ContramarcoFlow({
 
   function abrirEditar(item: MedicaoItem) {
     setEditandoId(item.id)
-    setFormTipo(item.tipo_esquadria as TipoEsquadria)
-    setFormTipoOutro(item.tipo_outro_texto || '')
+    setFormTipoNome(nomeTipo(item, tipos))
     setFormAmbiente(item.ambiente || '')
     setFormDescricao(item.descricao || '')
     setFormQuantidade(item.quantidade || 1)
@@ -240,16 +238,23 @@ export default function ContramarcoFlow({
       alert('Informe o ambiente.')
       return
     }
-    if (formTipo === 'outro' && !formTipoOutro.trim()) {
+    const nomeLivre = formTipoNome.trim()
+    if (!nomeLivre) {
       alert('Informe qual é a tipologia.')
       return
     }
 
+    // Preserve existing technical keys on edit; match catalog suggestions,
+    // otherwise store the free name in the existing custom-type field.
+    const original = itens.find(i => i.id === editandoId)
+    const normalizar = (valor: string) => valor.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    const catalogada = tipos.find(t => t.chave !== 'outro' &&
+      (normalizar(t.label) === normalizar(nomeLivre) || normalizar(t.chave) === normalizar(nomeLivre)))
+    const preservar = original && nomeTipo(original, tipos) === nomeLivre
+    const formTipo: TipoEsquadria = preservar ? original.tipo_esquadria as TipoEsquadria : (catalogada?.chave || 'outro') as TipoEsquadria
+    const outro = formTipo === 'outro' ? (preservar ? original.tipo_outro_texto || nomeLivre : nomeLivre) : null
+    const descricao = formDescricao.trim() || nomeLivre
     setSalvandoItem(true)
-    const outro = formTipo === 'outro' ? formTipoOutro.trim() : null
-    const descricao = formDescricao.trim() || (formTipo === 'outro'
-      ? formTipoOutro.trim()
-      : tipos.find(t => t.chave === formTipo)?.label || String(formTipo))
 
     if (editandoId) {
       const ok = await editarItemMedicao(editandoId, {
@@ -1082,20 +1087,18 @@ export default function ContramarcoFlow({
               </label>
               <label className="block text-xs font-semibold text-slate-600">
                 Tipologia
-                <select
-                  value={formTipo}
-                  onChange={e => setFormTipo(e.target.value as TipoEsquadria)}
+                <input
+                  value={formTipoNome}
+                  onChange={e => setFormTipoNome(e.target.value)}
+                  list={listaTipologiasId}
+                  placeholder="Ex.: Janela de correr 3 folhas"
                   className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm"
-                >
-                  {tipos.map(t => <option key={t.chave} value={t.chave}>{t.label}</option>)}
-                </select>
+                />
+                <datalist id={listaTipologiasId}>
+                  {tipos.filter(t => t.chave !== 'outro').map(t => <option key={t.chave} value={t.label} />)}
+                </datalist>
+                <span className="mt-1 block text-[11px] font-normal text-slate-500">Digite qualquer tipologia ou escolha uma sugestão. Não é necessário cadastrar antes.</span>
               </label>
-              {formTipo === 'outro' && (
-                <label className="block text-xs font-semibold text-slate-600">
-                  Qual tipologia?
-                  <input value={formTipoOutro} onChange={e => setFormTipoOutro(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-sm" />
-                </label>
-              )}
               <label className="block text-xs font-semibold text-slate-600">
                 Quantidade
                 <input
