@@ -48,7 +48,7 @@ export function quintoDiaUtil(ano: number, mes: number, indice = 5) {
     n++
     if(n===indice) return dia
   }
-  return total
+  return 0 // O mês não possui o n-ésimo dia útil; não agendar em dia incorreto.
 }
 
 export function gerarDatasEquipe(inicioISO: string, tipo: RepeticaoEquipe, valor?: number, diasSemana: number[] = [], meses = 6): string[] {
