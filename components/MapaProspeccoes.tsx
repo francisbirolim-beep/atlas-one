@@ -121,21 +121,13 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
         mapa = map
         mapaRef.current = map
         L.control.zoom({ position: 'topright' }).addTo(map)
-        const ruas = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
+        // Camada padrão sem chave de API. O antigo CARTO/Voyager deixou de
+        // entregar imagens das ruas e exibe "API KEY REQUIRED" em seu lugar.
+        // Mantemos os marcadores, agrupamentos, controles e link para satélite.
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
           maxNativeZoom: 19,
           maxZoom: 19,
-        })
-        const detalhado = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-          subdomains: 'abcd',
-          maxNativeZoom: 19,
-          maxZoom: 19,
-        })
-        detalhado.addTo(map)
-        L.control.layers({ 'Mapa detalhado (ruas)': detalhado, 'OpenStreetMap': ruas }, undefined, {
-          position: 'topright',
-          collapsed: false,
         }).addTo(map)
 
         camada = L.layerGroup().addTo(map)
