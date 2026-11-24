@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building2, CalendarDays, Camera, CheckCircle2, ExternalLink, MapPin, MessageCircle, Navigation, Pencil, Phone, Plus, Save, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, Building2, CalendarDays, Camera, CheckCircle2, ExternalLink, MapPin, MessageCircle, Navigation, Handshake, Pencil, Phone, Plus, Save, UserRound, Users, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import { adicionarContato, atualizarProspeccao, buscarClientesSemelhantes, buscarProspeccao, converterProspeccao, listarEquipeProspeccao, moverProspeccao, PAPEIS_CONTATO, registrarInteracao, STATUS_PROSPECCAO, type ContatoProspeccao, type InteracaoProspeccao, type PapelContatoProspeccao, type Prospeccao, type StatusProspeccao, type TipoInteracaoProspeccao } from '@/lib/prospeccao'
 import type { Cliente, Usuario } from '@/lib/tipos'
 import SeletorFotosLocal from '@/components/prospeccao/SeletorFotosLocal'
 import { enviarFotoProspeccao, listarFotosProspeccao, type FotoProspeccao } from '@/lib/prospeccaoFotos'
+import { assumirProspeccao, buscarMinhaPermissaoProspeccao } from '@/lib/prospeccaoPermissoes'
 
 function dataHora(valor?:string|null){return valor?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(new Date(valor)):'—'}
 const TIPOS:{id:TipoInteracaoProspeccao;label:string}[]=[{id:'ligacao',label:'Ligação'},{id:'whatsapp',label:'WhatsApp'},{id:'visita',label:'Visita'},{id:'nota',label:'Anotação'},{id:'outro',label:'Outro'}]
@@ -27,8 +28,9 @@ export default function ProspeccaoDetalhePage(){
   const [enviandoFotos,setEnviandoFotos]=useState(false)
   const [erroFotos,setErroFotos]=useState('')
   const [avisoFotos,setAvisoFotos]=useState('')
+  const [acesso,setAcesso]=useState({pode_ver_mapa:false,pode_assumir:false})
 
-  async function carregar(){setCarregando(true);const me=await usuarioAtual();setUsuario(me);const d=await buscarProspeccao(id);setP(d.prospeccao);setContatos(d.contatos);setInteracoes(d.interacoes);if(me?.role==='master')setEquipe(await listarEquipeProspeccao());setCarregando(false)}
+  async function carregar(){setCarregando(true);try{const me=await usuarioAtual();setUsuario(me);const [d,permissao]=await Promise.all([buscarProspeccao(id),buscarMinhaPermissaoProspeccao().catch(()=>({pode_ver_mapa:false,pode_assumir:false}))]);setP(d.prospeccao);setContatos(d.contatos);setInteracoes(d.interacoes);setAcesso(permissao);if(me?.role==='master')setEquipe(await listarEquipeProspeccao())}finally{setCarregando(false)}}
   useEffect(()=>{void carregar()},[id])
   useEffect(()=>{void carregarFotos()},[id])
 
@@ -37,7 +39,7 @@ export default function ProspeccaoDetalhePage(){
     catch(e){setErroFotos('Não foi possível carregar as fotos: '+(e instanceof Error?e.message:'erro inesperado'))}
   }
   async function salvarFotos(){
-    if(enviandoFotos||novasFotos.length===0)return
+    if(enviandoFotos||novasFotos.length===0||!p||(!usuario||usuario.role!=='master'&&p.responsavel_id!==usuario.id))return
     setEnviandoFotos(true);setErroFotos('');setAvisoFotos('')
     const pendentes:File[]=[];const falhas:string[]=[]
     try{
@@ -53,13 +55,26 @@ export default function ProspeccaoDetalhePage(){
     finally{setEnviandoFotos(false)}
   }
 
-  async function mudarStatus(valor:StatusProspeccao){if(!p)return;const anterior=p;setP({...p,status:valor});const r=await moverProspeccao(anterior,valor);if(!r.ok){setErro(r.error||'Erro ao mover.');await carregar()}else await carregar()}
-  async function salvarInteracao(){if(!p)return;setErro('');setSalvando(true);const r=await registrarInteracao(p,{tipo,descricao,proxima_acao:proximaAcao,proxima_acao_em:proximaEm?new Date(proximaEm).toISOString():undefined,status_novo:statusNovo||undefined});setSalvando(false);if(!r.ok){setErro(r.error||'Não foi possível registrar.');return}setDescricao('');setProximaAcao('');setProximaEm('');setStatusNovo('');await carregar()}
-  async function salvarContato(){if(!contatoNome.trim())return;setSalvando(true);const r=await adicionarContato(id,{papel,nome:contatoNome,telefone:contatoTelefone,empresa:contatoEmpresa,observacoes:null});setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao salvar contato.');return}setModalContato(false);setContatoNome('');setContatoTelefone('');setContatoEmpresa('');await carregar()}
-  function abrirEdicao(){if(!p)return;setForm({nome_cliente:p.nome_cliente,telefone:p.telefone||'',nome_obra:p.nome_obra||'',cidade:p.cidade||'',bairro:p.bairro||'',cep:p.cep||'',endereco:p.endereco||'',complemento:p.complemento||'',fase_obra:p.fase_obra||'',observacoes:p.observacoes||'',temperatura:p.temperatura,responsavel_id:p.responsavel_id,responsavel_nome:p.responsavel_nome});setEditando(true)}
-  async function salvarEdicao(){if(!p||!form.nome_cliente?.trim())return;setSalvando(true);const patch:any={...form};if(form.responsavel_id!==p.responsavel_id){patch.responsavel_nome=equipe.find(u=>u.id===form.responsavel_id)?.nome||form.responsavel_nome}const r=await atualizarProspeccao(id,patch);setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao atualizar.');return}setEditando(false);await carregar()}
-  async function abrirConversao(){if(!p)return;setSemelhantes(await buscarClientesSemelhantes(p.nome_cliente,p.telefone));setClienteEscolhido('');setModalConverter(true)}
-  async function converter(){setSalvando(true);const r=await converterProspeccao(id,clienteEscolhido||null,criarObra);setSalvando(false);if(!r.ok){setErro(r.error||'Não foi possível converter.');return}setModalConverter(false);router.push(`/clientes/${r.clienteId}`)}
+  async function mudarStatus(valor:StatusProspeccao){if(!p||!usuario||(usuario.role!=='master'&&p.responsavel_id!==usuario.id))return;const anterior=p;setP({...p,status:valor});const r=await moverProspeccao(anterior,valor);if(!r.ok){setErro(r.error||'Erro ao mover.');await carregar()}else await carregar()}
+  async function salvarInteracao(){if(!p||!usuario||(usuario.role!=='master'&&p.responsavel_id!==usuario.id))return;setErro('');setSalvando(true);const r=await registrarInteracao(p,{tipo,descricao,proxima_acao:proximaAcao,proxima_acao_em:proximaEm?new Date(proximaEm).toISOString():undefined,status_novo:statusNovo||undefined});setSalvando(false);if(!r.ok){setErro(r.error||'Não foi possível registrar.');return}setDescricao('');setProximaAcao('');setProximaEm('');setStatusNovo('');await carregar()}
+  async function salvarContato(){if(!contatoNome.trim()||!p||!usuario||(usuario.role!=='master'&&p.responsavel_id!==usuario.id))return;setSalvando(true);const r=await adicionarContato(id,{papel,nome:contatoNome,telefone:contatoTelefone,empresa:contatoEmpresa,observacoes:null});setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao salvar contato.');return}setModalContato(false);setContatoNome('');setContatoTelefone('');setContatoEmpresa('');await carregar()}
+  function abrirEdicao(){if(!p||!usuario||(usuario.role!=='master'&&p.responsavel_id!==usuario.id))return;setForm({nome_cliente:p.nome_cliente,telefone:p.telefone||'',nome_obra:p.nome_obra||'',cidade:p.cidade||'',bairro:p.bairro||'',cep:p.cep||'',endereco:p.endereco||'',complemento:p.complemento||'',fase_obra:p.fase_obra||'',observacoes:p.observacoes||'',temperatura:p.temperatura,responsavel_id:p.responsavel_id,responsavel_nome:p.responsavel_nome});setEditando(true)}
+  async function salvarEdicao(){if(!p||!usuario||(usuario.role!=='master'&&p.responsavel_id!==usuario.id)||!form.nome_cliente?.trim())return;setSalvando(true);const patch:any={...form};if(form.responsavel_id!==p.responsavel_id){patch.responsavel_nome=equipe.find(u=>u.id===form.responsavel_id)?.nome||form.responsavel_nome}const r=await atualizarProspeccao(id,patch);setSalvando(false);if(!r.ok){setErro(r.error||'Erro ao atualizar.');return}setEditando(false);await carregar()}
+  async function abrirConversao(){if(!p||!usuario||(usuario.role!=='master'&&p.responsavel_id!==usuario.id))return;setSemelhantes(await buscarClientesSemelhantes(p.nome_cliente,p.telefone));setClienteEscolhido('');setModalConverter(true)}
+  async function converter(){if(!p||!usuario||(usuario.role!=='master'&&p.responsavel_id!==usuario.id))return;setSalvando(true);const r=await converterProspeccao(id,clienteEscolhido||null,criarObra);setSalvando(false);if(!r.ok){setErro(r.error||'Não foi possível converter.');return}setModalConverter(false);router.push(`/clientes/${r.clienteId}`)}
+
+  async function assumir(){
+    if(!p||!usuario||p.responsavel_id===usuario.id||!acesso.pode_assumir||salvando)return
+    if(['convertido','sem_interesse'].includes(p.status)){setErro('Prospecção encerrada.');return}
+    if(!window.confirm(`Assumir esta prospecção de ${p.responsavel_nome}? O responsável será alterado para você e isso ficará registrado no histórico.`))return
+    setSalvando(true);setErro('')
+    try{
+      const r=await assumirProspeccao(p.id,p.responsavel_id)
+      if(!r.ok)throw new Error(r.error||'Não foi possível assumir esta obra.')
+      await carregar()
+    }catch(e){setErro(e instanceof Error?e.message:'Falha ao assumir a obra.')}
+    finally{setSalvando(false)}
+  }
 
   if(carregando)return <div className="min-h-screen grid place-items-center text-slate-400">Carregando prospecção...</div>
   if(!p)return <div className="min-h-screen grid place-items-center p-6 text-center"><div><p className="text-slate-500">Prospecção não encontrada ou sem acesso.</p><Link href="/prospeccao" className="mt-3 inline-block text-blue-600">Voltar</Link></div></div>
@@ -69,6 +84,8 @@ export default function ProspeccaoDetalhePage(){
   const destinoRota=p.latitude!=null&&p.longitude!=null?`${p.latitude},${p.longitude}`:enderecoRota
   const rota=destinoRota?`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destinoRota)}&travelmode=driving`:null
   const status=STATUS_PROSPECCAO.find(s=>s.id===p.status)
+  const podeEditar=Boolean(usuario&&(usuario.role==='master'||p.responsavel_id===usuario.id))
+  const podeAssumir=Boolean(usuario&&acesso.pode_assumir&&p.responsavel_id!==usuario.id&&!['convertido','sem_interesse'].includes(p.status))
 
   return <div className="min-h-screen bg-slate-50">
     <header className="border-b bg-white"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div className="flex items-center gap-3"><Link href="/prospeccao" className="rounded-xl border p-2"><ArrowLeft size={18}/></Link><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-blue-600">Prospecção</p><h1 className="text-xl font-bold">{p.nome_cliente}</h1><p className="text-xs text-slate-500">Responsável: {p.responsavel_nome}</p></div></div><div className="flex flex-wrap gap-2"><button onClick={abrirEdicao} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold"><Pencil size={15}/>Editar cadastro</button>{p.status!=='convertido'&&<button onClick={()=>void abrirConversao()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white"><CheckCircle2 size={16}/>Converter em cliente</button>}</div></div></header>
