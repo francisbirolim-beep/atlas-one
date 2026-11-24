@@ -1,3 +1,7 @@
+## 2026-11-24 — Conferência de contramarcos (branch local)
+
+Seleção de orçamento não vendido exclusiva para contramarcos no Cliente 360, referência dimensional pré-preenchida, confirmação de medidas e folgas, relatório de conferência A4 separado de corte, ajuste de layout e regra geral de responsividade. Sem publicação ou migração. Próximos incrementos e homologação em NEXT_TASK.md.
+
 ## 2026-11-18 — Módulo Processos da Empresa, primeiro editor documental isolado
 - Rota independente `/processos` com organogramas, fluxogramas, múltiplos processos por setor, quadrinhos arrastáveis, setas rotuladas, procedimentos escritos e imagens comprimidas.
 - Rascunho em `localStorage` por Master com cópia JSON; sem banco, sem automações de produção, com nova entrada aditiva Master na navegação, somente na branch. Branch de desenvolvimento não publicada; detalhes em `docs/processos-empresa-editor-v1.md`.

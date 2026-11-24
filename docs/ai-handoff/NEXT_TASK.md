@@ -1,3 +1,11 @@
+## 2026-11-24 — Homologar conferência de contramarcos e completar fluxo comercial
+
+1. Validar branch `feat/contramarco-conferencia-responsiva-20261124` com proposta enviada sem venda, orçamento vendido, retomada, medida corrigida (2000 x 2000 para 1500 x 2000), folgas totais e relatório A4, sem modificar a proposta nem liberar produção.
+2. Homologar interface em 320/360/390/768/1024/1440 px, retrato/paisagem, Safari/WebKit, Chromium e Edge. Conferir regressões da medição manual, lista de vendas de esquadrias e plano de corte original.
+3. Completar identificação de obra (nome/número, endereço independente, GPS, fotos, observações e múltiplas medições avulsas) com persistência autorizada; avaliar segurança da remoção de medição vinculada a proposta.
+4. Implementar orçamento exclusivo de contramarcos e conversão comercial separada, reutilizando medidas, perfis e acessórios com imagens e sem confirmar a venda de esquadrias original. Validar custos e vínculo da produção com a venda correta. Preservar regras técnicas já aprovadas.
+5. Após validação e autorização de publicação, PR e release controlado sem interromper o Atlas One.
+
 ## 2026-11-18 — HOMOLOGAR editor documental de processos sem publicar
 
 1. Validar a branch `feat/processos-editor-20261118` no CI (TypeScript, build e regressões) e corrigir qualquer erro sem alterar os fluxos atuais.

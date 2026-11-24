@@ -17,6 +17,8 @@ import {
   type DadosMedidaItem,
 } from '@/lib/medicaoFinal'
 import { listarTipologias } from '@/lib/tipologias'
+import { medidaInicialContramarco } from '@/lib/contramarcoConferencia'
+import { gerarPdfRelatorioConferenciaContramarcos } from '@/lib/contramarcoConferenciaPdf'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
 import { gerarPdfPlanoCorteContramarcos } from '@/lib/contramarcoPlanoCortePdf'
 import { listarProdutos } from '@/lib/produtos'
@@ -197,7 +199,7 @@ export default function ContramarcoFlow({
   const producaoLargura = Math.max(0, (Number(vaoLargura) || 0) - (Number(folgaLargura) || 0))
   const producaoAltura = Math.max(0, (Number(vaoAltura) || 0) - (Number(folgaAltura) || 0))
   const origemLabel = orcamentoNumero ? `Orçamento #${orcamentoNumero}` : 'Sem orçamento'
-  const fluxoVendaBloqueado = Boolean(medicao.orcamento_id) && fluxoVendaAtivo === false
+  const fluxoVendaBloqueado = Boolean(medicao.orcamento_id) && fluxoVendaAtivo !== true
   const aguardandoConferencia = statusOperacional === 'aguardando_conferencia' || itens.some(i => i.status_medicao === 'aguardando_conferencia')
   const contramarcoAprovado = statusOperacional === 'contramarco_aprovado'
   const master = usuario?.role === 'master'
@@ -209,12 +211,12 @@ export default function ContramarcoFlow({
     const item = itens[pos]
     if (!item) return
     setIndice(pos)
-    setVaoLargura(item.vao_largura_mm != null ? String(item.vao_largura_mm) : '')
-    setVaoAltura(item.vao_altura_mm != null ? String(item.vao_altura_mm) : '')
+    setVaoLargura(medidaInicialContramarco(item.vao_largura_mm, item.orcamento_largura_mm))
+    setVaoAltura(medidaInicialContramarco(item.vao_altura_mm, item.orcamento_altura_mm))
     setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
     setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
     setObservacoes(item.observacoes_medicao || '')
-    setDecisaoUso(manual ? 'sim' : item.contramarco === 'nao' ? 'nao' : item.contramarco === 'sim' || (item.producao_largura_mm && item.producao_altura_mm) ? 'sim' : '')
+    setDecisaoUso(manual ? 'sim' : item.contramarco === 'nao' ? 'nao' : 'sim')
     setTela('medicao')
   }
 
@@ -246,8 +248,8 @@ export default function ContramarcoFlow({
     setEditandoId(item.id)
     setFormTipoNome(nomeTipo(item, tipos))
     setFormMedidasAtivas(manual && item.status_medicao !== 'aprovada' && item.status_medicao !== 'aguardando_conferencia')
-    setFormVaoL(item.vao_largura_mm != null ? String(item.vao_largura_mm) : '')
-    setFormVaoA(item.vao_altura_mm != null ? String(item.vao_altura_mm) : '')
+    setFormVaoL(medidaInicialContramarco(item.vao_largura_mm, item.orcamento_largura_mm))
+    setFormVaoA(medidaInicialContramarco(item.vao_altura_mm, item.orcamento_altura_mm))
     setFormFolgaL(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
     setFormFolgaA(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
     setFormAmbiente(item.ambiente || '')
@@ -367,12 +369,12 @@ export default function ContramarcoFlow({
       const prox = pos + 1
       const item = novos[prox]
       setIndice(prox)
-      setVaoLargura(item.vao_largura_mm != null ? String(item.vao_largura_mm) : '')
-      setVaoAltura(item.vao_altura_mm != null ? String(item.vao_altura_mm) : '')
+      setVaoLargura(medidaInicialContramarco(item.vao_largura_mm, item.orcamento_largura_mm))
+      setVaoAltura(medidaInicialContramarco(item.vao_altura_mm, item.orcamento_altura_mm))
       setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
       setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
       setObservacoes(item.observacoes_medicao || '')
-      setDecisaoUso(manual ? 'sim' : item.contramarco === 'nao' ? 'nao' : item.contramarco === 'sim' || (item.producao_largura_mm && item.producao_altura_mm) ? 'sim' : '')
+      setDecisaoUso(manual ? 'sim' : item.contramarco === 'nao' ? 'nao' : 'sim')
       setTela('medicao')
     } else {
       setTela('resumo')
@@ -381,6 +383,10 @@ export default function ContramarcoFlow({
 
   async function escolherUso(item: MedicaoItem, pos: number, usar: boolean, avancar = false) {
     if (salvandoUso || (manual && !usar)) return
+    if (['aguardando_conferencia', 'aprovada'].includes(String(item.status_medicao || ''))) {
+      alert('Esta posição já foi enviada ou aprovada. Use o fluxo de revisão existente para alterá-la.')
+      return
+    }
     setSalvandoUso(item.id)
     const ok = await definirUsoContramarco(item.id, usar, usuario)
     setSalvandoUso(null)
@@ -421,8 +427,8 @@ export default function ContramarcoFlow({
     setDecisaoUso(usar ? 'sim' : 'nao')
 
     if (usar) {
-      setVaoLargura(atualizado.vao_largura_mm != null ? String(atualizado.vao_largura_mm) : '')
-      setVaoAltura(atualizado.vao_altura_mm != null ? String(atualizado.vao_altura_mm) : '')
+      setVaoLargura(medidaInicialContramarco(atualizado.vao_largura_mm, atualizado.orcamento_largura_mm))
+      setVaoAltura(medidaInicialContramarco(atualizado.vao_altura_mm, atualizado.orcamento_altura_mm))
       setFolgaLargura(atualizado.folga_largura_mm != null ? String(atualizado.folga_largura_mm) : '')
       setFolgaAltura(atualizado.folga_altura_mm != null ? String(atualizado.folga_altura_mm) : '')
       setObservacoes(atualizado.observacoes_medicao || '')
@@ -434,6 +440,10 @@ export default function ContramarcoFlow({
 
   async function salvarEAvancar() {
     if (!atual || salvandoMedida) return
+    if (['aguardando_conferencia', 'aprovada'].includes(String(atual.status_medicao || ''))) {
+      alert('Esta posição já foi enviada ou aprovada. Use o fluxo de revisão existente para alterá-la.')
+      return
+    }
     if (!manual && decisaoUso !== 'sim') {
       alert('Selecione “Usar contramarco” para informar as medidas, ou “Não usar” para pular este item.')
       return
@@ -473,9 +483,9 @@ export default function ContramarcoFlow({
       contramarco: 'sim',
       cadeirinha: null,
       observacoes_medicao: observacoes.trim() || null,
-      foto_larguras_url: null,
-      foto_alturas_url: null,
-      campos_extras: manual ? atual.campos_extras || {} : {},
+      foto_larguras_url: atual.foto_larguras_url || null,
+      foto_alturas_url: atual.foto_alturas_url || null,
+      campos_extras: atual.campos_extras || {},
     }
 
     setSalvandoMedida(true)
@@ -674,36 +684,25 @@ export default function ContramarcoFlow({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="flex items-center gap-2 text-sm font-black text-amber-900">
-                    <AlertTriangle size={16} /> Fora do fluxo Vendido
+                    <AlertTriangle size={16} /> {fluxoVendaAtivo === null ? "Verificando venda" : "Fora do fluxo Vendido"}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-amber-800">
-                    Este orçamento ainda não possui uma Venda operacional no Atlas
+                    {fluxoVendaAtivo === null ? 'Verificando a situação comercial do orçamento' : 'Este orçamento ainda não possui uma Venda operacional no Atlas'}
                     {colunaComercial ? ` e está em “${colunaComercial}”` : ''}.
-                    A medição fica preservada, mas não libera Produção até a venda ser confirmada.
+                    A medição e os PDFs podem ser preparados sem confirmar a venda de esquadrias. A produção continua bloqueada até a confirmação comercial adequada.
                   </p>
                 </div>
-                <Link
-                  href={`/vendas/confirmar?orcamento=${encodeURIComponent(medicao.orcamento_id)}&origem=medicao-final`}
-                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-black text-white"
-                >
-                  Enviar para o fluxo / Vendido
-                </Link>
+
               </div>
             </div>
           )}
 
           <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
             <b>{manual ? 'Medição direta de contramarcos.' : 'Revise item por item.'}</b>
-            <p className="mt-1 text-xs">{manual ? 'Informe largura, altura e folgas em milímetros. O Atlas calcula as medidas de fabricação automaticamente.' : 'Se usar contramarco, informe as medidas do vão e as folgas. Se não usar, marque “Não usar” e siga para o próximo.'}</p>
+            <p className="mt-1 text-xs">{manual ? 'Informe largura, altura e folgas em milímetros. O Atlas calcula as medidas de fabricação automaticamente.' : 'Confirme ou corrija as medidas importadas e informe as folgas totais em mm. Se uma posição não tiver contramarco, marque “Não usar”.'}</p>
           </div>
 
-          {fluxoVendaBloqueado && medicao.orcamento_id && (
-            <div className="mb-4 rounded-2xl border border-amber-300 bg-amber-50 p-4">
-              <p className="flex items-center gap-2 text-sm font-black text-amber-900"><AlertTriangle size={16} /> Falta confirmar a venda</p>
-              <p className="mt-1 text-xs text-amber-800">As medidas estão salvas. Para enviar ao Kanban de liberação e liberar Produção, coloque este orçamento no fluxo Vendido.</p>
-              <Link href={`/vendas/confirmar?orcamento=${encodeURIComponent(medicao.orcamento_id)}&origem=medicao-final`} className="mt-3 inline-flex rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-black text-white">Enviar para o fluxo / Vendido</Link>
-            </div>
-          )}
+
 
           {mensagemFluxo && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">{mensagemFluxo}</div>}
           {erroFluxo && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700">{erroFluxo}</div>}
@@ -757,8 +756,8 @@ export default function ContramarcoFlow({
                       {pos + 1}
                     </span>
                     <IconeTipologia tipo={item.tipo_esquadria} />
-                    <button onClick={() => carregarPosicao(pos)} className="min-w-0 flex-1 text-left">
-                      <p className="truncate text-sm font-black text-slate-900">{nomeTipo(item, tipos)}</p>
+                    <button onClick={() => carregarPosicao(pos)} className="min-w-0 flex-1 break-words text-left">
+                      <p className="break-words text-sm font-black text-slate-900">{nomeTipo(item, tipos)}</p>
                       <p className="mt-0.5 truncate text-xs text-slate-500">Ambiente: {item.ambiente || '—'}</p>
                       <p className="text-xs text-slate-500">Quantidade: {item.quantidade || 1} unidade{(item.quantidade || 1) > 1 ? 's' : ''}</p>
                     </button>
@@ -778,7 +777,7 @@ export default function ContramarcoFlow({
                   </div>}
 
                   {manual && (
-                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
                       <div>Vão (mm)<p className="font-bold text-slate-800">{item.vao_largura_mm ?? '—'} × {item.vao_altura_mm ?? '—'}</p></div>
                       <div>Folga total (mm)<p className="font-bold text-slate-800">{item.folga_largura_mm ?? '—'} × {item.folga_altura_mm ?? '—'}</p></div>
                     </div>
@@ -813,7 +812,7 @@ export default function ContramarcoFlow({
                       className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs font-black text-blue-700">
                       <Ruler size={16} /> {medidoComContramarco ? 'Editar posição' : 'Informar medidas e folgas'}
                     </button>
-                  ) : <div className="mt-3 grid grid-cols-2 gap-2">
+                  ) : <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <button
                       onClick={() => {
                         carregarPosicao(pos)
@@ -821,7 +820,7 @@ export default function ContramarcoFlow({
                       }}
                       className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-black ${usa && !naoUsa ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600'}`}
                     >
-                      <Check size={14} /> Usar contramarco
+                      <Ruler size={14} /> {medidoComContramarco ? 'Editar medidas' : 'Confirmar medidas'}
                     </button>
                     <button
                       onClick={() => void escolherUso(item, pos, false, false)}
@@ -844,6 +843,12 @@ export default function ContramarcoFlow({
             )}
           </div>
 
+          <button type="button" onClick={() => void gerarPdfRelatorioConferenciaContramarcos(medicao, itens, orcamentoNumero)}
+            disabled={!itens.length}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-3 text-sm font-bold text-blue-700 disabled:opacity-40">
+            <FileText size={16} /> Relatório de conferência na obra (A4)
+          </button>
+
           <button
             onClick={iniciarMedicao}
             disabled={!itens.length}
@@ -860,7 +865,7 @@ export default function ContramarcoFlow({
             <div className="flex min-w-0 items-center gap-3">
               <IconeTipologia tipo={atual.tipo_esquadria} />
               <div className="min-w-0">
-                <p className="truncate text-sm font-black text-slate-900">{nomeTipo(atual, tipos)}</p>
+                <p className="break-words text-sm font-black text-slate-900">{nomeTipo(atual, tipos)}</p>
                 <p className="truncate text-xs text-slate-500">Ambiente: {atual.ambiente || '—'} · Quantidade: {atual.quantidade || 1}</p>
               </div>
             </div>
@@ -906,10 +911,11 @@ export default function ContramarcoFlow({
           {(manual || decisaoUso === 'sim') && (
             <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-black text-slate-900">Medidas do vão e folga</h2>
+              <p className="mt-1 text-xs text-slate-600">Confirme a medida real do vão em mm. A folga é o desconto total da dimensão (não por lado).</p>
 
               <div className="mt-4">
                 <p className="mb-2 text-xs font-black uppercase tracking-[.08em] text-slate-500">Largura</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="text-xs text-slate-500">
                     Largura do vão (mm)
                     <input
@@ -947,7 +953,7 @@ export default function ContramarcoFlow({
 
               <div className="mt-5">
                 <p className="mb-2 text-xs font-black uppercase tracking-[.08em] text-slate-500">Altura</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="text-xs text-slate-500">
                     Altura do vão (mm)
                     <input
@@ -996,7 +1002,7 @@ export default function ContramarcoFlow({
             </section>
           )}
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               onClick={() => {
                 if (indice > 0) carregarPosicao(indice - 1)
@@ -1015,7 +1021,7 @@ export default function ContramarcoFlow({
               className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
             >
               {(salvandoMedida || salvandoUso === atual.id) && <Loader2 size={16} className="animate-spin" />}
-              {indice === itens.length - 1 ? 'Finalizar' : 'Salvar e próximo'} <ChevronRight size={17} />
+              {indice === itens.length - 1 ? 'Salvar e finalizar' : 'Salvar e próximo'} <ChevronRight size={17} />
             </button>
           </div>
         </main>
@@ -1136,7 +1142,7 @@ export default function ContramarcoFlow({
             </div>
           )}
 
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button onClick={() => setTela('lista')} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">
               Voltar
             </button>
@@ -1250,7 +1256,7 @@ export default function ContramarcoFlow({
                 <section className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
                   <h4 className="text-sm font-black text-slate-800">Medidas do vão e folgas (mm)</h4>
                   <p className="mt-1 text-[11px] text-slate-600">Informe a folga total solicitada pelo pedreiro em cada dimensão. Use 0 se não houver folga. Deixe todos os campos vazios para medir depois.</p>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {([
                       ['Largura do vão', formVaoL, setFormVaoL, '1000'],
                       ['Altura do vão', formVaoA, setFormVaoA, '1500'],

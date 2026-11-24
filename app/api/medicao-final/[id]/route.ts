@@ -37,7 +37,7 @@ export async function DELETE(
 
     const { data: medicao, error: buscaError } = await supabaseAdmin
       .from('medicoes_finais')
-      .select('id, cliente_nome, orcamento_id')
+      .select('id, cliente_nome, orcamento_id, tipo_medicao')
       .eq('id', id)
       .eq('empresa_id', usuario.empresa_id)
       .maybeSingle()
@@ -47,6 +47,16 @@ export async function DELETE(
     }
     if (!medicao) {
       return NextResponse.json({ error: 'Medicao Final nao encontrada.' }, { status: 404 })
+    }
+
+    // Uma proposta usada apenas como referência não autoriza excluir seus cards.
+    if (medicao.tipo_medicao === 'contramarco' && medicao.orcamento_id) {
+      const { data: venda, error: erroVenda } = await supabaseAdmin.from('vendas_obras')
+        .select('id').eq('empresa_id', usuario.empresa_id).eq('orcamento_id', medicao.orcamento_id)
+        .eq('status', 'ativa').limit(1).maybeSingle()
+      if (erroVenda || !venda) {
+        return NextResponse.json({ error: 'Esta medição está ligada a uma proposta sem venda ativa. Exclusão bloqueada para preservar os cartões do orçamento.' }, { status: 409 })
+      }
     }
 
     // Regra Master: preserva o orçamento original e remove os cards derivados

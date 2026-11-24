@@ -430,13 +430,13 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     if (action === 'enviar') {
       if (medicao.orcamento_id) {
-        const { data: venda } = await supabaseAdmin
+        const consultaVenda = supabaseAdmin
           .from('vendas_obras')
           .select('id')
           .eq('orcamento_id', medicao.orcamento_id)
           .eq('empresa_id', usuario.empresa_id)
-          .limit(1)
-          .maybeSingle()
+        if (medicao.tipo_medicao === 'contramarco') consultaVenda.eq('status', 'ativa')
+        const { data: venda } = await consultaVenda.limit(1).maybeSingle()
 
         if (!venda?.id) {
           return NextResponse.json({

@@ -1,3 +1,14 @@
+## 2026-11-24 — Candidato de release parcial, sem migração
+
+- Conferência vinculada a proposta ativa, relatório de campo e ajustes responsivos. Exclusão de contramarco ligado a proposta sem venda ativa bloqueada antes de tocar cartões; conferência vinculada requer venda ativa. GPS/fotos e nova estrutura ficaram em branch separada: homologação de banco indisponível. Conversão comercial permanece pendente.
+
+## 2026-11-24 — Conferência de contramarcos vinculada ao orçamento (LOCAL, NÃO PUBLICADA)
+
+- Branch isolada `feat/contramarco-conferencia-responsiva-20261124` a partir de 1d3a436f. Cliente 360 permite selecionar propostas atuais de contramarco mesmo sem venda, sem mudar o filtro de vendas para medição final de esquadrias. Medições vinculadas de contramarco podem ser retomadas.
+- A abertura da posição usa a medida já salva ou, quando ausente, a referência do orçamento. A confirmação continua exigindo as folgas e salvamento explícito; a origem não é reescrita. Relatório A4 de conferência inclui posições pendentes, medidas do orçamento, vão real, folgas, fabricação e observações; não substitui plano de corte.
+- Layout responsivo dos controles de conferência; regra geral de responsividade registrada em CLAUDE.md. Fluxo de produção e receitas de corte preservados; proposta não é convertida automaticamente em venda.
+- PENDENTE: validação de navegador/aparelhos e release completo, homologação de integração com base de teste, identificação independente da obra (nome, GPS, fotos), orçamento/venda exclusiva de contramarcos e vínculo comercial seguro. Não publicado, nenhuma alteração de dados reais.
+
 ## 2026-11-18 — Processos da Empresa (BRANCH ISOLADA, NÃO PUBLICADA)
 
 - Nova rota documental `/processos` disponível somente na branch `feat/processos-editor-20261118`; bloqueio inicial Master, sem API, migração, leitura ou escrita do banco.
