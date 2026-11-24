@@ -208,6 +208,8 @@ export default function AbrirMedidaFinalCliente() {
     )),
     [medicoes, orcamentosVendidos, orcamentosAtuais],
   )
+  const contramarcoAvulso = medicoes.find(m => !m.orcamento_id && m.tipo_medicao === 'contramarco')
+  const medicoesVisiveis = medicoes.filter(m => medicoesVendidas.some(v => v.id === m.id) || (!m.orcamento_id && m.tipo_medicao === 'contramarco'))
   const candidatosVisiveis = useMemo(
     () => candidatosWVetro.filter(c => c.statusValidacao !== 'rejeitado' && ['V', 'F'].includes(String(c.situacao || '').trim().toUpperCase())),
     [candidatosWVetro]
@@ -348,7 +350,7 @@ export default function AbrirMedidaFinalCliente() {
   }
 
   async function iniciarSemOrcamento() {
-    if (!tipo || criando) return
+    if (tipo !== 'contramarco' || criando || !cliente || !usuario) return
     const existente = medicoes.find(m => !m.orcamento_id && (m.tipo_medicao || 'tipologia') === tipo)
     if (existente) {
       try { localStorage.setItem(`atlas-medicao-cliente-${clienteId}`, existente.id) } catch {}
@@ -418,7 +420,9 @@ export default function AbrirMedidaFinalCliente() {
                 ? 'Escolha o tipo de medição para continuar.'
                 : orcamentoVisualizado
                   ? 'Confira as tipologias antes de selecionar.'
-                  : 'Escolha o orçamento que será usado para a medição.'}
+                  : tipo === 'contramarco'
+                    ? 'Escolha um orçamento vendido ou inicie um contramarco manual.'
+                    : 'Escolha o orçamento que será usado para a medição.'}
             </p>
           </div>
         </div>
@@ -467,14 +471,14 @@ export default function AbrirMedidaFinalCliente() {
               <p className="mt-1 text-xs">Primeiro faz o contramarco e depois a medida final das esquadrias.</p>
             </div>
 
-            {medicoesVendidas.length > 0 && (
+            {medicoesVisiveis.length > 0 && (
               <div className="mt-6">
                 <p className="mb-2 text-xs font-black uppercase tracking-[.1em] text-slate-400">Medições já iniciadas</p>
                 <div className="space-y-2">
-                  {medicoesVendidas.map(m => (
+                  {medicoesVisiveis.map(m => (
                     <Link key={m.id} href={`/producao/medicao-final/${m.id}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
                       <div>
-                        <p className="text-sm font-bold text-slate-800">{tipoLabel(m.tipo_medicao)}</p>
+                        <p className="text-sm font-bold text-slate-800">{tipoLabel(m.tipo_medicao)}{!m.orcamento_id ? ' · Manual' : ''}</p>
                         <p className="text-xs text-slate-500">{dataBR(m.created_at)} · {statusLabel(m.status_operacional)}</p>
                       </div>
                       <span className="text-xs font-bold text-blue-700">Continuar</span>
@@ -501,6 +505,24 @@ export default function AbrirMedidaFinalCliente() {
                 {sincronizandoWVetro ? 'Sincronizando...' : 'Sincronizar W.Vetro'}
               </button>
             </div>
+
+            {tipo === 'contramarco' && (
+              <button
+                type="button"
+                onClick={() => void iniciarSemOrcamento()}
+                disabled={criando || !cliente || !usuario}
+                className="mb-5 flex w-full items-center gap-3 rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-4 text-left disabled:opacity-50"
+              >
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white">
+                  {criando ? <Loader2 size={22} className="animate-spin" /> : <Plus size={22} />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-black text-emerald-900">{contramarcoAvulso ? 'Continuar contramarco manual' : 'Iniciar contramarco manualmente'}</span>
+                  <span className="mt-1 block text-xs text-emerald-800">Adicione posições, medidas e folgas sem orçamento ou venda. A produção automática continua condicionada à venda.</span>
+                </span>
+                <ChevronRight size={20} className="shrink-0 text-emerald-700" />
+              </button>
+            )}
 
             <h2 className="text-xl font-black text-slate-900">Selecionar orçamento</h2>
             <p className="mt-1 text-sm text-slate-500">Lista com as tipologias de cada um.</p>
@@ -599,7 +621,7 @@ export default function AbrirMedidaFinalCliente() {
             </div>
 
             <p className="mt-4 text-center text-[11px] text-slate-500">
-              Para medições avulsas, utilize o módulo Produção → Medição Final. Aqui são exibidas somente vendas.
+              {tipo === 'contramarco' ? 'Os orçamentos abaixo são somente vendas. Para medição avulsa de contramarcos, use a opção manual acima.' : 'Para medições avulsas, utilize o módulo Produção → Medição Final. Aqui são exibidas somente vendas.'}
             </p>
           </section>
         )}
