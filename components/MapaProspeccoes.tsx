@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Prospeccao } from '@/lib/prospeccao'
+import type { RegistroMapaGeral } from '@/lib/mapaGeral'
 import { STATUS_PROSPECCAO } from '@/lib/prospeccao'
 import {
   GRUPOS_MAPA, agruparPontosPorBairro, pontosValidos,
@@ -53,6 +54,46 @@ function gerarPopupPonto(ponto: PontoProspeccao) {
   return caixa
 }
 
+function gerarPopupOrcamento(obra: RegistroMapaGeral, latitude: number, longitude: number) {
+  const caixa = document.createElement('div')
+  caixa.style.minWidth = '195px'
+  const titulo = document.createElement('strong')
+  titulo.textContent = obra.nome || 'Obra com orçamento'
+  caixa.append(titulo)
+  const situacao = document.createElement('p')
+  situacao.style.margin = '7px 0'
+  situacao.textContent = 'Orçamento realizado · ' + ({
+    'prospeccao': 'prospecção', 'orcamento': 'em orçamento', 'venda': 'venda',
+    'producao': 'produção', 'concluida': 'concluída', 'perdida': 'perdida',
+  }[obra.etapa] || obra.etapa)
+  caixa.append(situacao)
+  const endereco = document.createElement('p')
+  endereco.style.margin = '7px 0'
+  endereco.textContent = [obra.endereco, obra.bairro, obra.cidade].filter(Boolean).join(' · ') || 'Endereço não informado'
+  caixa.append(endereco)
+  if (obra.cliente) {
+    const cliente = document.createElement('p')
+    cliente.style.margin = '7px 0'
+    cliente.textContent = 'Cliente: ' + obra.cliente
+    caixa.append(cliente)
+  }
+  const ficha = document.createElement('a')
+  ficha.href = obra.href
+  ficha.textContent = 'Abrir obra e orçamentos'
+  ficha.style.display = 'block'
+  ficha.style.margin = '8px 0'
+  ficha.style.color = '#1d4ed8'
+  caixa.append(ficha)
+  const google = document.createElement('a')
+  google.href = 'https://www.google.com/maps/search/?api=1&query=' + latitude + ',' + longitude
+  google.textContent = 'Ver localização no Google Maps'
+  google.target = '_blank'
+  google.rel = 'noopener noreferrer'
+  google.style.color = '#1d4ed8'
+  caixa.append(google)
+  return caixa
+}
+
 function gerarPopupBairro(grupo: GrupoBairro) {
   const caixa = document.createElement('div')
   caixa.style.minWidth = '180px'
@@ -85,15 +126,34 @@ function gerarPopupBairro(grupo: GrupoBairro) {
   return caixa
 }
 
-export default function MapaProspeccoes({ registros }: { registros: Prospeccao[] }) {
+export default function MapaProspeccoes({
+  registros, orcamentos = [], carregandoOrcamentos = false, avisoOrcamentos = '',
+}: {
+  registros: Prospeccao[]
+  orcamentos?: RegistroMapaGeral[]
+  carregandoOrcamentos?: boolean
+  avisoOrcamentos?: string
+}) {
   const elemento = useRef<HTMLDivElement>(null)
   const mapaRef = useRef<import('leaflet').Map | null>(null)
   const [filtroSituacao, setFiltroSituacao] = useState<ClassificacaoMapa | ''>('')
   const [erroMapa, setErroMapa] = useState('')
   const [emTelaCheia, setEmTelaCheia] = useState(false)
+  const [mostrarOrcamentos, setMostrarOrcamentos] = useState(true)
 
   const pontos = useMemo(() => pontosValidos(registros), [registros])
   const pontosVisiveis = useMemo(() => pontos.filter(p => !filtroSituacao || p.classificacao === filtroSituacao), [pontos, filtroSituacao])
+  // Apenas obras com GPS confirmado e evento de orçamento, vindas do Mapa Geral.
+  // Esses pinos complementam a prospecção; não modificam cadastros ou status.
+  const pontosOrcamentos = useMemo(() => (mostrarOrcamentos ? orcamentos : [])
+    .filter(p => p.lat != null && p.lng != null &&
+      Number.isFinite(p.lat) && Number.isFinite(p.lng) &&
+      Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180)
+    .map(p => ({ registro: p, latitude: p.lat!, longitude: p.lng! })), [mostrarOrcamentos, orcamentos])
+  const todosPontos = useMemo(() => [
+    ...pontosVisiveis.map(p => ({ latitude: p.latitude, longitude: p.longitude })),
+    ...pontosOrcamentos.map(p => ({ latitude: p.latitude, longitude: p.longitude })),
+  ], [pontosVisiveis, pontosOrcamentos])
   const gruposBairro = useMemo(() => agruparPontosPorBairro(pontosVisiveis), [pontosVisiveis])
   const semGps = registros.length - pontos.length
   const totalPorSituacao = useMemo(() => GRUPOS_MAPA.map(tipo => ({
@@ -108,7 +168,7 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
     let resize: ResizeObserver | undefined
 
     async function iniciar() {
-      if (!elemento.current || pontosVisiveis.length === 0) return
+      if (!elemento.current || todosPontos.length === 0) return
       try {
         const L = await import('leaflet')
         if (!ativo || !elemento.current) return
@@ -166,10 +226,25 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
               }).bindPopup(gerarPopupPonto(ponto)).addTo(layer)
             }
           }
+          // Pinos laranja individuais para as obras com orçamento e GPS.
+          // São adicionados sem alterar a camada nem os agrupamentos das prospecções.
+          for (const ponto of pontosOrcamentos) {
+            const icone = L.divIcon({
+              html: '<span style="display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#d97706;color:white;font-size:12px;font-weight:800;border:3px solid white;box-shadow:0 2px 8px #0f172a70">O</span>',
+              className: 'atlas-pino-orcamento',
+              iconSize: [24, 24],
+              iconAnchor: [12, 12],
+            })
+            L.marker([ponto.latitude, ponto.longitude], {
+              icon: icone,
+              title: 'Orçamento: ' + ponto.registro.nome,
+              zIndexOffset: -100,
+            }).bindPopup(gerarPopupOrcamento(ponto.registro, ponto.latitude, ponto.longitude)).addTo(layer)
+          }
         }
         map.on('zoomend', desenhar)
-        const limites = L.latLngBounds(pontosVisiveis.map(p => [p.latitude, p.longitude] as [number, number]))
-        if (pontosVisiveis.length === 1) map.setView(limites.getCenter(), 13)
+        const limites = L.latLngBounds(todosPontos.map(p => [p.latitude, p.longitude] as [number, number]))
+        if (todosPontos.length === 1) map.setView(limites.getCenter(), 13)
         else map.fitBounds(limites, { padding: [55, 55], maxZoom: 13 })
         desenhar()
         requestAnimationFrame(() => { if (ativo) map.invalidateSize() })
@@ -190,7 +265,7 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
       if (mapaRef.current === mapa) mapaRef.current = null
       if (mapa) mapa.remove()
     }
-  }, [pontosVisiveis, gruposBairro])
+  }, [pontosVisiveis, pontosOrcamentos, todosPontos, gruposBairro])
 
   useEffect(() => {
     function sincronizarTelaCheia() {
@@ -210,10 +285,10 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
 
   function verTudo() {
     const mapa = mapaRef.current
-    if (!mapa || pontosVisiveis.length === 0) return
-    const latitudes = pontosVisiveis.map(p => p.latitude)
-    const longitudes = pontosVisiveis.map(p => p.longitude)
-    if (pontosVisiveis.length === 1) mapa.setView([latitudes[0], longitudes[0]], 13)
+    if (!mapa || todosPontos.length === 0) return
+    const latitudes = todosPontos.map(p => p.latitude)
+    const longitudes = todosPontos.map(p => p.longitude)
+    if (todosPontos.length === 1) mapa.setView([latitudes[0], longitudes[0]], 13)
     else mapa.fitBounds([[Math.min(...latitudes), Math.min(...longitudes)], [Math.max(...latitudes), Math.max(...longitudes)]], { padding: [55, 55], maxZoom: 13 })
   }
 
@@ -236,7 +311,7 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
   function abrirGoogleMaps() {
     const mapa = mapaRef.current
     const centro = mapa?.getCenter()
-    const ponto = pontosVisiveis[0]
+    const ponto = todosPontos[0]
     if (!centro && !ponto) return
     const latitude = centro?.lat ?? ponto.latitude
     const longitude = centro?.lng ?? ponto.longitude
@@ -248,14 +323,14 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
     <section className="space-y-3 rounded-2xl border bg-white p-3 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3 px-1 pt-1">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Mapa real das obras prospectadas</h2>
+          <h2 className="text-base font-bold text-slate-900">Mapa das prospecções e orçamentos com GPS</h2>
           <p className="mt-1 max-w-2xl text-xs text-slate-500">
-            Na visão da cidade, os pinos são agrupados por bairro. Aproxime para ver cada obra na rua e abra a ficha pelo pino.
+            Prospecções agrupadas por bairro e orçamentos identificados em laranja. Aproxime para abrir cada obra no ponto GPS registrado.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
-          <strong className="block text-lg font-bold text-slate-900">{pontosVisiveis.length}</strong>
-          obras com GPS no filtro atual
+          <strong className="block text-lg font-bold text-slate-900">{todosPontos.length}</strong>
+          locais com GPS no filtro atual
         </div>
       </div>
 
@@ -280,23 +355,29 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
             {grupo.nome} · {grupo.cidade} ({grupo.pontos.length})
           </option>)}
         </select>
-        <button type="button" onClick={verTudo} disabled={!pontosVisiveis.length}
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+          <input type="checkbox" checked={mostrarOrcamentos} onChange={event => setMostrarOrcamentos(event.target.checked)} />
+          Orçamentos com GPS: {orcamentos.length}
+        </label>
+        <button type="button" onClick={verTudo} disabled={!todosPontos.length}
           className="rounded-lg border px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">Ver todos os bairros</button>
-        <button type="button" onClick={() => void alternarTelaCheia()} disabled={!pontosVisiveis.length}
+        <button type="button" onClick={() => void alternarTelaCheia()} disabled={!todosPontos.length}
           className="rounded-lg border px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">{emTelaCheia ? 'Sair da tela cheia' : 'Tela cheia'}</button>
-        <button type="button" onClick={abrirGoogleMaps} disabled={!pontosVisiveis.length}
+        <button type="button" onClick={abrirGoogleMaps} disabled={!todosPontos.length}
           className="rounded-lg border px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-50">Google Maps / Satélite ↗</button>
       </div>
 
-      {pontosVisiveis.length > 0 ? (
+      {todosPontos.length > 0 ? (
         <div ref={elemento} className="relative isolate h-[540px] w-full overflow-hidden rounded-xl border bg-slate-100 md:h-[620px]"
-          aria-label="Mapa interativo com ruas, bairros e pinos das prospecções"
+          aria-label="Mapa interativo com ruas e pinos de prospecções e orçamentos com GPS"
           style={{ zIndex: 0 }} />
       ) : (
         <div className="grid min-h-52 place-items-center rounded-xl border border-dashed bg-slate-50 p-6 text-center text-sm text-slate-500">
-          {pontos.length ? 'Nenhuma obra nesta situação. Selecione outro filtro.' : 'Nenhuma obra com coordenadas GPS nos filtros escolhidos.'}
+          {pontos.length || orcamentos.length ? 'Nenhuma obra nas situações selecionadas. Ajuste os filtros ou habilite os orçamentos.' : 'Nenhuma obra ou orçamento com coordenadas GPS nos filtros escolhidos.'}
         </div>
       )}
+      {carregandoOrcamentos && <p role="status" className="px-2 text-xs text-slate-500">Consultando locais de orçamentos com GPS...</p>}
+      {avisoOrcamentos && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">{avisoOrcamentos}</p>}
       {erroMapa && <p role="alert" className="px-2 text-xs text-amber-800">{erroMapa}</p>}
 
       <div className="flex flex-wrap gap-x-5 gap-y-3 border-t px-1 pt-3">
@@ -328,7 +409,7 @@ export default function MapaProspeccoes({ registros }: { registros: Prospeccao[]
         {semGps} registro(s) fora do mapa por falta de coordenadas GPS.
       </p>}
       <p className="px-1 text-[11px] text-slate-500">
-        Mapa online de ruas: © OpenStreetMap contributors e © CARTO. Os bairros são agrupados pelo cadastro do CRM, não por limites oficiais do município. A localização do pino depende da precisão do GPS.
+        Mapa online de ruas: © OpenStreetMap contributors. Os bairros são agrupados pelo cadastro do CRM, não por limites oficiais do município. A localização do pino depende da precisão do GPS.
       </p>
     </section>
   )

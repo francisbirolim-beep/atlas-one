@@ -9,6 +9,7 @@ import { CalendarDays, Clock3, FileText, Filter, Flame, Map, MapPin, Plus, Searc
 import { usuarioAtual } from '@/lib/auth'
 import { listarEquipeProspeccao, listarProspeccoes, moverProspeccao, STATUS_PROSPECCAO, type Prospeccao, type StatusProspeccao } from '@/lib/prospeccao'
 import type { Usuario } from '@/lib/tipos'
+import { carregarMapaGeral, type RegistroMapaGeral } from '@/lib/mapaGeral'
 import { buscarMinhaPermissaoProspeccao, listarPermissoesProspeccao, salvarPermissaoProspeccao, type PermissaoProspeccao, type UsuarioPermissaoProspeccao } from '@/lib/prospeccaoPermissoes'
 
 const MapaProspeccoes = dynamic(() => import('@/components/MapaProspeccoes'), { ssr: false })
@@ -43,6 +44,10 @@ export default function ProspeccaoPage() {
   const [alterandoUsuario, setAlterandoUsuario] = useState<string | null>(null)
   const [erroPermissoes, setErroPermissoes] = useState('')
   const [mensagemPermissoes, setMensagemPermissoes] = useState('')
+  const [pinosOrcamento, setPinosOrcamento] = useState<RegistroMapaGeral[]>([])
+  const [pinosOrcamentoCarregados, setPinosOrcamentoCarregados] = useState(false)
+  const [carregandoPinosOrcamento, setCarregandoPinosOrcamento] = useState(false)
+  const [erroPinosOrcamento, setErroPinosOrcamento] = useState('')
 
   async function carregar() {
     setCarregando(true)
@@ -59,6 +64,34 @@ export default function ProspeccaoPage() {
 
   const master = usuario?.role === 'master'
   const podeEditar = (item: Prospeccao) => Boolean(master || (usuario && item.responsavel_id === usuario.id))
+
+  // Os pinos de orçamento já existem no Mapa Geral. A consulta é somente leitura,
+  // carregada apenas ao abrir o mapa e apenas para Master/usuário autorizado.
+  // Não interfere no Kanban, na agenda, nem cria coordenadas estimadas.
+  useEffect(() => {
+    if (aba !== 'mapa' || !(master || acesso.pode_ver_mapa) || pinosOrcamentoCarregados) return
+    let ativo = true
+    setCarregandoPinosOrcamento(true)
+    void carregarMapaGeral().then(resultado => {
+      if (!ativo) return
+      const pinos = resultado.registros.filter(r =>
+        r.origem === 'obra' && r.lat != null && r.lng != null &&
+        r.eventos.some(e => e.tipo === 'orcamento')
+      )
+      setPinosOrcamento(pinos)
+      if (resultado.avisos.length) {
+        setErroPinosOrcamento('Algumas fontes do mapa não responderam. Os pinos de orçamento podem estar incompletos. ' + resultado.avisos.join(' '))
+      } else {
+        setErroPinosOrcamento('')
+      }
+      setPinosOrcamentoCarregados(true)
+    }).catch(e => {
+      if (ativo) setErroPinosOrcamento(e instanceof Error ? e.message : 'Falha ao consultar os pontos dos orçamentos.')
+    }).finally(() => {
+      if (ativo) setCarregandoPinosOrcamento(false)
+    })
+    return () => { ativo = false }
+  }, [aba, master, acesso.pode_ver_mapa, pinosOrcamentoCarregados])
 
   async function abrirPainelPermissoes() {
     if (!master) return
@@ -87,8 +120,8 @@ export default function ProspeccaoPage() {
     finally {setAlterandoUsuario(null)}
   }
 
-  const cidades = useMemo(() => [...new Set(itens.map(i => i.cidade).filter(Boolean) as string[])].sort(), [itens])
-  const bairros = useMemo(() => [...new Set(itens.filter(i => !cidade || i.cidade === cidade).map(i => i.bairro).filter(Boolean) as string[])].sort(), [cidade, itens])
+  const cidades = useMemo(() => [...new Set([...itens.map(i => i.cidade), ...pinosOrcamento.map(i => i.cidade)].filter(Boolean) as string[])].sort(), [itens, pinosOrcamento])
+  const bairros = useMemo(() => [...new Set([...itens.filter(i => !cidade || i.cidade === cidade).map(i => i.bairro), ...pinosOrcamento.filter(i => !cidade || i.cidade === cidade).map(i => i.bairro)].filter(Boolean) as string[])].sort(), [cidade, itens, pinosOrcamento])
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase('pt-BR')
     return itens.filter(item => {
@@ -100,6 +133,19 @@ export default function ProspeccaoPage() {
         .some(v => (v || '').toLocaleLowerCase('pt-BR').includes(termo))
     })
   }, [bairro, busca, cidade, itens, vendedor])
+
+  const orcamentosFiltrados = useMemo(() => {
+    const termo = busca.trim().toLocaleLowerCase('pt-BR')
+    const nomeVendedor = equipe.find(u => u.id === vendedor)?.nome
+    return pinosOrcamento.filter(item => {
+      if (vendedor && item.vendedor !== nomeVendedor) return false
+      if (cidade && item.cidade !== cidade) return false
+      if (bairro && item.bairro !== bairro) return false
+      if (!termo) return true
+      return [item.nome, item.cliente, item.endereco, item.cidade, item.bairro, item.vendedor]
+        .some(v => (v || '').toLocaleLowerCase('pt-BR').includes(termo))
+    })
+  }, [bairro, busca, cidade, equipe, pinosOrcamento, vendedor])
 
   const agenda = useMemo(() => filtrados.filter(i => i.proxima_acao_em && !['convertido','sem_interesse'].includes(i.status)).sort((a,b) => new Date(a.proxima_acao_em!).getTime() - new Date(b.proxima_acao_em!).getTime()), [filtrados])
   const atrasados = agenda.filter(i => new Date(i.proxima_acao_em!).getTime() < Date.now()).length
@@ -179,7 +225,7 @@ export default function ProspeccaoPage() {
             })}
           </div>
         ) : aba === 'mapa' ? (
-          <MapaProspeccoes registros={filtrados} />
+          <MapaProspeccoes registros={filtrados} orcamentos={orcamentosFiltrados} carregandoOrcamentos={carregandoPinosOrcamento} avisoOrcamentos={erroPinosOrcamento} />
         ) : (
           <section className="overflow-hidden rounded-2xl border bg-white">
             <div className="border-b px-5 py-4"><h2 className="font-bold text-slate-900">Próximas ações</h2><p className="text-xs text-slate-500">Os compromissos também aparecem na agenda pessoal do vendedor.</p></div>
