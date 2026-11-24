@@ -93,6 +93,16 @@ export default function ContramarcoFlow({
   const [formDescricao, setFormDescricao] = useState('')
   const [formQuantidade, setFormQuantidade] = useState(1)
   const [salvandoItem, setSalvandoItem] = useState(false)
+  const [formMedidasAtivas, setFormMedidasAtivas] = useState(false)
+  const [formVaoL, setFormVaoL] = useState('')
+  const [formVaoA, setFormVaoA] = useState('')
+  const [formFolgaL, setFormFolgaL] = useState('')
+  const [formFolgaA, setFormFolgaA] = useState('')
+  const formTemMedidas = [formVaoL, formVaoA, formFolgaL, formFolgaA].some(v => v.trim() !== '')
+  const formProducaoL = Number(formVaoL) - Number(formFolgaL)
+  const formProducaoA = Number(formVaoA) - Number(formFolgaA)
+  const formMedidasValidas = [formVaoL, formVaoA, formFolgaL, formFolgaA].every(v => v.trim() !== '' && Number.isFinite(Number(v)))
+    && Number(formFolgaL) >= 0 && Number(formFolgaA) >= 0 && formProducaoL > 0 && formProducaoA > 0
 
   const [vaoLargura, setVaoLargura] = useState('')
   const [vaoAltura, setVaoAltura] = useState('')
@@ -176,10 +186,12 @@ export default function ContramarcoFlow({
       })
   }, [medicao.orcamento_id])
 
+  const manual = !medicao.orcamento_id
   const atual = itens[indice] || null
-  const revisados = itens.filter(i => i.medido).length
-  const comContramarco = itens.filter(i => i.medido && i.contramarco !== 'nao' && i.producao_largura_mm && i.producao_altura_mm).length
-  const semContramarco = itens.filter(i => i.medido && i.contramarco === 'nao').length
+  const temMedicaoContramarco = (i: MedicaoItem) => Boolean(i.medido && i.contramarco === 'sim' && i.producao_largura_mm && i.producao_altura_mm)
+  const revisados = itens.filter(i => manual ? temMedicaoContramarco(i) : i.medido).length
+  const comContramarco = itens.filter(i => manual ? temMedicaoContramarco(i) : i.medido && i.contramarco !== 'nao' && i.producao_largura_mm && i.producao_altura_mm).length
+  const semContramarco = manual ? 0 : itens.filter(i => i.medido && i.contramarco === 'nao').length
   const pendentes = itens.length - revisados
   const producaoLargura = Math.max(0, (Number(vaoLargura) || 0) - (Number(folgaLargura) || 0))
   const producaoAltura = Math.max(0, (Number(vaoAltura) || 0) - (Number(folgaAltura) || 0))
@@ -201,13 +213,13 @@ export default function ContramarcoFlow({
     setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
     setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
     setObservacoes(item.observacoes_medicao || '')
-    setDecisaoUso(item.contramarco === 'nao' ? 'nao' : item.contramarco === 'sim' || (item.producao_largura_mm && item.producao_altura_mm) ? 'sim' : '')
+    setDecisaoUso(manual ? 'sim' : item.contramarco === 'nao' ? 'nao' : item.contramarco === 'sim' || (item.producao_largura_mm && item.producao_altura_mm) ? 'sim' : '')
     setTela('medicao')
   }
 
   function iniciarMedicao() {
     if (!itens.length) return
-    const pendente = itens.findIndex(i => !i.medido)
+    const pendente = itens.findIndex(i => manual ? !temMedicaoContramarco(i) : !i.medido)
     if (pendente < 0) {
       setTela('resumo')
       return
@@ -218,6 +230,11 @@ export default function ContramarcoFlow({
   function abrirNovo() {
     setEditandoId(null)
     setFormTipoNome('')
+    setFormMedidasAtivas(true)
+    setFormVaoL('')
+    setFormVaoA('')
+    setFormFolgaL('')
+    setFormFolgaA('')
     setFormAmbiente('')
     setFormDescricao('')
     setFormQuantidade(1)
@@ -227,6 +244,11 @@ export default function ContramarcoFlow({
   function abrirEditar(item: MedicaoItem) {
     setEditandoId(item.id)
     setFormTipoNome(nomeTipo(item, tipos))
+    setFormMedidasAtivas(manual && item.status_medicao !== 'aprovada' && item.status_medicao !== 'aguardando_conferencia')
+    setFormVaoL(item.vao_largura_mm != null ? String(item.vao_largura_mm) : '')
+    setFormVaoA(item.vao_altura_mm != null ? String(item.vao_altura_mm) : '')
+    setFormFolgaL(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
+    setFormFolgaA(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
     setFormAmbiente(item.ambiente || '')
     setFormDescricao(item.descricao || '')
     setFormQuantidade(item.quantidade || 1)
@@ -234,6 +256,7 @@ export default function ContramarcoFlow({
   }
 
   async function salvarItem() {
+    if (salvandoItem) return
     if (!formAmbiente.trim()) {
       alert('Informe o ambiente.')
       return
@@ -241,6 +264,11 @@ export default function ContramarcoFlow({
     const nomeLivre = formTipoNome.trim()
     if (!nomeLivre) {
       alert('Informe qual é a tipologia.')
+      return
+    }
+
+    if (formMedidasAtivas && formTemMedidas && !formMedidasValidas) {
+      alert('Informe largura e altura do vão e as duas folgas válidas em mm. Use 0 quando não houver folga.')
       return
     }
 
@@ -256,37 +284,74 @@ export default function ContramarcoFlow({
     const descricao = formDescricao.trim() || nomeLivre
     setSalvandoItem(true)
 
-    if (editandoId) {
-      const ok = await editarItemMedicao(editandoId, {
+    try {
+      let item: MedicaoItem | null = null
+      const campos = {
         tipo_esquadria: formTipo,
         tipo_outro_texto: outro,
         ambiente: formAmbiente.trim(),
         descricao,
         quantidade: Math.max(1, formQuantidade),
-      })
-      if (ok) {
-        setItens(prev => prev.map(i => i.id === editandoId ? {
-          ...i,
-          tipo_esquadria: formTipo,
-          tipo_outro_texto: outro,
-          ambiente: formAmbiente.trim(),
-          descricao,
-          quantidade: Math.max(1, formQuantidade),
-        } : i))
       }
-    } else {
-      const criado = await adicionarItemMedicao(
-        medicao.id,
-        formTipo,
-        outro,
-        descricao,
-        Math.max(1, formQuantidade),
-        formAmbiente.trim(),
-      )
-      if (criado) setItens(prev => [...prev, criado])
+      if (editandoId) {
+        if (!original || !await editarItemMedicao(editandoId, campos)) {
+          alert('Não foi possível salvar a posição. Tente novamente.')
+          return
+        }
+        item = { ...original, ...campos }
+        const atualizado = item
+        setItens(prev => prev.map(i => i.id === atualizado.id ? atualizado : i))
+      } else {
+        item = await adicionarItemMedicao(medicao.id, formTipo, outro, descricao, campos.quantidade, campos.ambiente)
+        if (!item) {
+          alert('Não foi possível adicionar a posição. Tente novamente.')
+          return
+        }
+        const criado = item
+        setItens(prev => [...prev, criado])
+        // Retrying a failed measurement must update the created position,
+        // not insert another one.
+        setEditandoId(criado.id)
+      }
+
+      const medidasIguais = item.medido && item.contramarco === 'sim' &&
+        item.vao_largura_mm === Number(formVaoL) && item.vao_altura_mm === Number(formVaoA) &&
+        item.folga_largura_mm === Number(formFolgaL) && item.folga_altura_mm === Number(formFolgaA)
+      if (formMedidasAtivas && formTemMedidas && !medidasIguais) {
+        const dados: DadosMedidaItem = {
+          largura_baixo_mm: null, largura_meio_mm: null, largura_cima_mm: null,
+          altura_direita_mm: null, altura_meio_mm: null, altura_esquerda_mm: null,
+          vao_largura_mm: Number(formVaoL), vao_altura_mm: Number(formVaoA),
+          folga_largura_mm: Number(formFolgaL), folga_altura_mm: Number(formFolgaA),
+          producao_largura_mm: formProducaoL, producao_altura_mm: formProducaoA,
+          referencia_vista: null, contramarco: 'sim', cadeirinha: null,
+          observacoes_medicao: item.observacoes_medicao || null,
+          foto_larguras_url: null, foto_alturas_url: null,
+          campos_extras: item.campos_extras || {},
+        }
+        if (!await salvarMedidaItemApi(item.id, dados, usuario)) {
+          alert('A posição foi cadastrada, mas a medida não foi salva. Tente salvar novamente sem duplicar a posição.')
+          return
+        }
+        const medido: MedicaoItem = { ...item, ...dados, medido: true, status_medicao: 'concluida',
+          medido_em: new Date().toISOString(), medido_por_id: usuario?.id || null, medido_por_nome: usuario?.nome || null }
+        setItens(prev => prev.map(i => i.id === medido.id ? medido : i))
+      }
+      if (manual && !item.medido && !formTemMedidas && item.contramarco !== 'sim') {
+        if (!await definirUsoContramarco(item.id, true, usuario)) {
+          alert('A posição foi cadastrada, mas não foi possível marcar a medição pendente. Tente salvar novamente.')
+          return
+        }
+        const itemId = item.id
+        setItens(prev => prev.map(i => i.id === itemId ? { ...i, contramarco: 'sim', status_medicao: 'rascunho' } : i))
+      }
+      setModalItem(false)
+    } catch (e) {
+      console.error('Erro ao salvar posição de contramarco:', e)
+      alert('Não foi possível concluir o salvamento. Confira a posição e tente novamente.')
+    } finally {
+      setSalvandoItem(false)
     }
-    setSalvandoItem(false)
-    setModalItem(false)
   }
 
   async function excluir(item: MedicaoItem) {
@@ -306,7 +371,7 @@ export default function ContramarcoFlow({
       setFolgaLargura(item.folga_largura_mm != null ? String(item.folga_largura_mm) : '')
       setFolgaAltura(item.folga_altura_mm != null ? String(item.folga_altura_mm) : '')
       setObservacoes(item.observacoes_medicao || '')
-      setDecisaoUso(item.contramarco === 'nao' ? 'nao' : item.contramarco === 'sim' || (item.producao_largura_mm && item.producao_altura_mm) ? 'sim' : '')
+      setDecisaoUso(manual ? 'sim' : item.contramarco === 'nao' ? 'nao' : item.contramarco === 'sim' || (item.producao_largura_mm && item.producao_altura_mm) ? 'sim' : '')
       setTela('medicao')
     } else {
       setTela('resumo')
@@ -314,7 +379,7 @@ export default function ContramarcoFlow({
   }
 
   async function escolherUso(item: MedicaoItem, pos: number, usar: boolean, avancar = false) {
-    if (salvandoUso) return
+    if (salvandoUso || (manual && !usar)) return
     setSalvandoUso(item.id)
     const ok = await definirUsoContramarco(item.id, usar, usuario)
     setSalvandoUso(null)
@@ -368,7 +433,7 @@ export default function ContramarcoFlow({
 
   async function salvarEAvancar() {
     if (!atual || salvandoMedida) return
-    if (decisaoUso !== 'sim') {
+    if (!manual && decisaoUso !== 'sim') {
       alert('Selecione “Usar contramarco” para informar as medidas, ou “Não usar” para pular este item.')
       return
     }
@@ -381,7 +446,7 @@ export default function ContramarcoFlow({
       alert('Informe a largura e a altura do vão.')
       return
     }
-    if (folgaLargura === '' || folgaAltura === '' || folgaL < 0 || folgaA < 0) {
+    if (folgaLargura === '' || folgaAltura === '' || !Number.isFinite(folgaL) || !Number.isFinite(folgaA) || folgaL < 0 || folgaA < 0) {
       alert('Informe a folga da largura e da altura. Use 0 quando não houver folga.')
       return
     }
@@ -409,7 +474,7 @@ export default function ContramarcoFlow({
       observacoes_medicao: observacoes.trim() || null,
       foto_larguras_url: null,
       foto_alturas_url: null,
-      campos_extras: {},
+      campos_extras: manual ? atual.campos_extras || {} : {},
     }
 
     setSalvandoMedida(true)
@@ -569,9 +634,9 @@ export default function ContramarcoFlow({
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-slate-700">{origemLabel}</p>
-              <p className="text-xs text-slate-500">Para cada item, informe se será usado contramarco.</p>
+              <p className="text-xs text-slate-500">{manual ? 'Adicione os contramarcos e informe as medidas dos vãos e as folgas.' : 'Para cada item, informe se será usado contramarco.'}</p>
             </div>
-            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{revisados}/{itens.length} definidos</span>
+            <span className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{revisados}/{itens.length} {manual ? 'medidos' : 'definidos'}</span>
           </div>
 
           {fluxoVendaBloqueado && medicao.orcamento_id && (
@@ -598,8 +663,8 @@ export default function ContramarcoFlow({
           )}
 
           <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
-            <b>Revise item por item.</b>
-            <p className="mt-1 text-xs">Se usar contramarco, informe as medidas do vão e as folgas. Se não usar, marque “Não usar” e siga para o próximo.</p>
+            <b>{manual ? 'Medição direta de contramarcos.' : 'Revise item por item.'}</b>
+            <p className="mt-1 text-xs">{manual ? 'Informe largura, altura e folgas em milímetros. O Atlas calcula as medidas de fabricação automaticamente.' : 'Se usar contramarco, informe as medidas do vão e as folgas. Se não usar, marque “Não usar” e siga para o próximo.'}</p>
           </div>
 
           {fluxoVendaBloqueado && medicao.orcamento_id && (
@@ -627,15 +692,15 @@ export default function ContramarcoFlow({
             </div>
           )}
 
-          <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+          <div className={`mb-4 grid gap-2 text-center ${manual ? "grid-cols-2" : "grid-cols-3"}`}>
             <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-2">
               <p className="text-lg font-black text-emerald-700">{comContramarco}</p>
               <p className="text-[10px] font-bold uppercase text-emerald-700">Medidos</p>
             </div>
-            <div className="rounded-xl border border-red-100 bg-red-50 px-2 py-2">
+            {!manual && <div className="rounded-xl border border-red-100 bg-red-50 px-2 py-2">
               <p className="text-lg font-black text-red-700">{semContramarco}</p>
               <p className="text-[10px] font-bold uppercase text-red-700">Não usam</p>
-            </div>
+            </div>}
             <div className="rounded-xl border border-amber-100 bg-amber-50 px-2 py-2">
               <p className="text-lg font-black text-amber-700">{pendentes}</p>
               <p className="text-[10px] font-bold uppercase text-amber-700">Pendentes</p>
@@ -652,7 +717,7 @@ export default function ContramarcoFlow({
           <div className="space-y-3">
             {itens.map((item, pos) => {
               const usa = item.contramarco === 'sim'
-              const naoUsa = item.contramarco === 'nao'
+              const naoUsa = !manual && item.contramarco === 'nao'
               const medidoComContramarco = Boolean(item.medido && usa && item.producao_largura_mm && item.producao_altura_mm)
               const temMedidaOrcamento = Number(item.orcamento_largura_mm) > 0 || Number(item.orcamento_altura_mm) > 0
               return (
@@ -673,15 +738,21 @@ export default function ContramarcoFlow({
                     </div>
                   </div>
 
-                  <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5">
+                  {!manual && <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5">
                     <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Medidas no orçamento</p>
                     <p className="mt-1 text-xs font-bold text-slate-600">
                       {temMedidaOrcamento
                         ? `Largura: ${item.orcamento_largura_mm || '—'} mm · Altura: ${item.orcamento_altura_mm || '—'} mm`
                         : 'Medida não informada no orçamento'}
                     </p>
-                  </div>
+                  </div>}
 
+                  {manual && (
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+                      <div>Vão (mm)<p className="font-bold text-slate-800">{item.vao_largura_mm ?? '—'} × {item.vao_altura_mm ?? '—'}</p></div>
+                      <div>Folga total (mm)<p className="font-bold text-slate-800">{item.folga_largura_mm ?? '—'} × {item.folga_altura_mm ?? '—'}</p></div>
+                    </div>
+                  )}
                   {medidoComContramarco && (
                     <button onClick={() => carregarPosicao(pos)} className="mt-3 flex w-full items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-left">
                       <span>
@@ -699,7 +770,12 @@ export default function ContramarcoFlow({
                     </div>
                   )}
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  {manual ? (
+                    <button type="button" onClick={() => abrirEditar(item)}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs font-black text-blue-700">
+                      <Ruler size={16} /> {medidoComContramarco ? 'Editar posição' : 'Informar medidas e folgas'}
+                    </button>
+                  ) : <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       onClick={() => {
                         carregarPosicao(pos)
@@ -716,7 +792,7 @@ export default function ContramarcoFlow({
                     >
                       {salvandoUso === item.id ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />} Não usar
                     </button>
-                  </div>
+                  </div>}
                 </div>
               )
             })}
@@ -735,7 +811,7 @@ export default function ContramarcoFlow({
             disabled={!itens.length}
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-black text-white shadow-sm disabled:opacity-40"
           >
-            {pendentes > 0 ? 'Continuar revisão dos itens' : 'Ver resumo e gerar PDF'} <ChevronRight size={17} />
+            {pendentes > 0 ? (manual ? 'Continuar medição' : 'Continuar revisão dos itens') : 'Ver resumo e gerar PDF'} <ChevronRight size={17} />
           </button>
         </main>
       )}
@@ -753,16 +829,16 @@ export default function ContramarcoFlow({
             <span className="shrink-0 text-xs font-bold text-slate-500">{indice + 1} de {itens.length}</span>
           </div>
 
-          <div className="mb-4 rounded-xl bg-slate-100 px-4 py-3">
+          {!manual && <div className="mb-4 rounded-xl bg-slate-100 px-4 py-3">
             <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">Medidas no orçamento</p>
             <p className="mt-1 text-sm font-bold text-slate-700">
               {Number(atual.orcamento_largura_mm) > 0 || Number(atual.orcamento_altura_mm) > 0
                 ? `Largura: ${atual.orcamento_largura_mm || '—'} mm · Altura: ${atual.orcamento_altura_mm || '—'} mm`
                 : 'Medida não informada no orçamento'}
             </p>
-          </div>
+          </div>}
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          {!manual && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-black text-slate-900">Uso de contramarco</h2>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <button
@@ -780,16 +856,16 @@ export default function ContramarcoFlow({
                 <p className="mt-1 text-xs text-slate-500">Esta tipologia não terá contramarco e será pulada nesta medição.</p>
               </button>
             </div>
-          </section>
+          </section>}
 
-          {decisaoUso === 'nao' && (
+          {!manual && decisaoUso === 'nao' && (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-black text-amber-800">A medição de contramarco será pulada para este item.</p>
               <p className="mt-1 text-xs text-amber-700">Ao salvar, essa decisão fica registrada para quando você abrir a medição novamente.</p>
             </div>
           )}
 
-          {decisaoUso === 'sim' && (
+          {(manual || decisaoUso === 'sim') && (
             <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="text-sm font-black text-slate-900">Medidas do vão e folga</h2>
 
@@ -894,10 +970,10 @@ export default function ContramarcoFlow({
             </button>
             <button
               onClick={() => {
-                if (decisaoUso === 'nao') void escolherUso(atual, indice, false, true)
+                if (!manual && decisaoUso === 'nao') void escolherUso(atual, indice, false, true)
                 else void salvarEAvancar()
               }}
-              disabled={!decisaoUso || salvandoMedida || salvandoUso === atual.id}
+              disabled={(!manual && !decisaoUso) || salvandoMedida || salvandoUso === atual.id}
               className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
             >
               {(salvandoMedida || salvandoUso === atual.id) && <Loader2 size={16} className="animate-spin" />}
@@ -916,15 +992,15 @@ export default function ContramarcoFlow({
             </span>
           </div>
 
-          <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+          <div className={`mb-4 grid gap-2 text-center ${manual ? "grid-cols-2" : "grid-cols-3"}`}>
             <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-2">
               <p className="text-lg font-black text-emerald-700">{comContramarco}</p>
               <p className="text-[10px] font-bold uppercase text-emerald-700">Produzir</p>
             </div>
-            <div className="rounded-xl border border-red-100 bg-red-50 px-2 py-2">
+            {!manual && <div className="rounded-xl border border-red-100 bg-red-50 px-2 py-2">
               <p className="text-lg font-black text-red-700">{semContramarco}</p>
               <p className="text-[10px] font-bold uppercase text-red-700">Sem contramarco</p>
-            </div>
+            </div>}
             <div className="rounded-xl border border-amber-100 bg-amber-50 px-2 py-2">
               <p className="text-lg font-black text-amber-700">{pendentes}</p>
               <p className="text-[10px] font-bold uppercase text-amber-700">Pendentes</p>
@@ -940,7 +1016,7 @@ export default function ContramarcoFlow({
               <span>Qtd</span>
             </div>
             {resumo.map(({ item, pos, tipo }) => {
-              const naoUsa = item.contramarco === 'nao'
+              const naoUsa = !manual && item.contramarco === 'nao'
               const medido = Boolean(item.medido && item.producao_largura_mm && item.producao_altura_mm)
               return (
                 <div key={item.id} className="border-b border-slate-100 p-3 last:border-b-0 sm:grid sm:grid-cols-[1.35fr_.8fr_.7fr_1fr_.35fr] sm:items-center sm:gap-2">
@@ -1066,13 +1142,13 @@ export default function ContramarcoFlow({
 
       {modalItem && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
-          <div className="w-full max-w-md rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-2xl">
+          <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-2xl">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.12em] text-blue-600">Contramarco</p>
                 <h3 className="text-lg font-black text-slate-900">{editandoId ? 'Editar posição' : 'Adicionar posição'}</h3>
               </div>
-              <button onClick={() => setModalItem(false)} className="rounded-lg p-2 text-slate-400"><X size={19} /></button>
+              <button onClick={() => setModalItem(false)} disabled={salvandoItem} className="rounded-lg p-2 text-slate-400 disabled:opacity-50"><X size={19} /></button>
             </div>
 
             <div className="mt-4 space-y-3">
@@ -1109,6 +1185,31 @@ export default function ContramarcoFlow({
                   className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-sm"
                 />
               </label>
+              {formMedidasAtivas && (
+                <section className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                  <h4 className="text-sm font-black text-slate-800">Medidas do vão e folgas (mm)</h4>
+                  <p className="mt-1 text-[11px] text-slate-600">Informe a folga total solicitada pelo pedreiro em cada dimensão. Use 0 se não houver folga. Deixe todos os campos vazios para medir depois.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    {([
+                      ['Largura do vão', formVaoL, setFormVaoL, '1000'],
+                      ['Altura do vão', formVaoA, setFormVaoA, '1500'],
+                      ['Folga da largura', formFolgaL, setFormFolgaL, '20'],
+                      ['Folga da altura', formFolgaA, setFormFolgaA, '20'],
+                    ] as const).map(([label, valor, setter, exemplo]) => (
+                      <label key={label} className="block min-w-0 text-xs font-semibold text-slate-600">
+                        {label} (mm)
+                        <input type="number" inputMode="decimal" min={0} step="any" value={valor}
+                          onChange={e => setter(e.target.value)} placeholder={exemplo}
+                          className="mt-1 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-3 text-base" />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-3 rounded-lg bg-white p-3 text-center">
+                    <p className="text-xs font-semibold text-emerald-800">Medida para fabricação</p>
+                    <p className="mt-1 text-xl font-black text-emerald-700">{formMedidasValidas ? `${formProducaoL} × ${formProducaoA} mm` : '—'}</p>
+                  </div>
+                </section>
+              )}
               <label className="block text-xs font-semibold text-slate-600">
                 Descrição (opcional)
                 <input value={formDescricao} onChange={e => setFormDescricao(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-3 text-sm" />
@@ -1120,7 +1221,7 @@ export default function ContramarcoFlow({
               disabled={salvandoItem}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
             >
-              <Check size={17} /> {salvandoItem ? 'Salvando...' : 'Salvar posição'}
+              <Check size={17} /> {salvandoItem ? 'Salvando...' : formMedidasAtivas && formTemMedidas ? 'Salvar posição e medidas' : 'Salvar posição'}
             </button>
           </div>
         </div>
