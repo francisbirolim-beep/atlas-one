@@ -12,39 +12,73 @@ export default function BotaoChatGlobal() {
   const pathname = usePathname()
   const [pendentes,setPendentes]=useState(0)
 
+  const oculto = pathname.startsWith('/whatsapp') || rotaReciboAutenticado(pathname)
+
   useEffect(()=>{
+    if(oculto) return
     let ativo=true
-    let canal:any
+    let canal: ReturnType<typeof supabase.channel> | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let intervalo: ReturnType<typeof setInterval> | undefined
+    let controller: AbortController | undefined
+    let emCurso=false
+    let pendente=false
 
-    void usuarioAtual().then(async eu=>{
-      if(!eu||!ativo)return
+    const agendar=()=>{
+      if(!ativo || document.hidden)return
+      if(timer)clearTimeout(timer)
+      timer=setTimeout(()=>{timer=undefined;void atualizar()},750)
+    }
 
-      const atualizar=async()=>{
-        try {
-          const token=await tokenAtual()
-          if(!token||!ativo)return
-          const resp=await fetch('/api/integracoes/whatsapp/conversas',{
-            headers:{Authorization:`Bearer ${token}`},
-            cache:'no-store',
-          })
-          if(!resp.ok||!ativo)return
-          const json=await resp.json()
-          const conversas=Array.isArray(json?.conversas)?json.conversas:[]
-          setPendentes(conversas.filter((c:any)=>Number(c.nao_lidas||0)>0).length)
-        } catch {}
+    const atualizar=async()=>{
+      if(!ativo || document.hidden)return
+      if(emCurso){pendente=true;return}
+      emCurso=true
+      const pedido=new AbortController()
+      controller=pedido
+      const limite=setTimeout(()=>pedido.abort(),15000)
+      try {
+        const token=await tokenAtual()
+        if(!token||!ativo||pedido.signal.aborted)return
+        const resp=await fetch('/api/integracoes/whatsapp/conversas?resumo=pendentes',{
+          headers:{Authorization:`Bearer ${token}`},
+          cache:'no-store',
+          signal:pedido.signal,
+        })
+        if(!resp.ok||!ativo)return
+        const json=await resp.json()
+        if(ativo && Number.isInteger(json?.pendentes) && json.pendentes>=0)setPendentes(json.pendentes)
+      } catch {} finally {
+        clearTimeout(limite)
+        emCurso=false
+        controller=undefined
+        if(ativo&&pendente){pendente=false;agendar()}
       }
+    }
 
-      await atualizar()
+    const aoVoltar=()=>{if(!document.hidden)agendar()}
+    void usuarioAtual().then(eu=>{
+      if(!eu||!ativo)return
       canal=supabase
         .channel('whatsapp-global-'+eu.id)
-        .on('postgres_changes',{event:'*',schema:'public',table:'atendimento_conversas'},()=>{void atualizar()})
-        .subscribe()
-    })
+        .on('postgres_changes',{event:'*',schema:'public',table:'atendimento_conversas'},agendar)
+        .subscribe(status=>{if(status==='SUBSCRIBED')agendar()})
+      document.addEventListener('visibilitychange',aoVoltar)
+      intervalo=setInterval(agendar,60000)
+      agendar()
+    }).catch(()=>{})
 
-    return()=>{ativo=false;if(canal)void supabase.removeChannel(canal)}
-  },[])
+    return()=>{
+      ativo=false
+      if(timer)clearTimeout(timer)
+      if(intervalo)clearInterval(intervalo)
+      controller?.abort()
+      document.removeEventListener('visibilitychange',aoVoltar)
+      if(canal)void supabase.removeChannel(canal)
+    }
+  },[oculto])
 
-  if(pathname.startsWith('/whatsapp') || rotaReciboAutenticado(pathname))return null
+  if(oculto)return null
 
   return (
     <Link href="/whatsapp" aria-label="Abrir WhatsApp Atlas" title="WhatsApp Atlas"

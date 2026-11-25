@@ -6,15 +6,10 @@ import { camposSaoPaulo, gerarDatasEquipe } from './tarefasEquipeRecorrencia'
 export type EventoComConvite = Evento & { meuStatus?: 'proprio' | 'pendente' | 'aceito' | 'recusado' }
 
 export async function listarEventosDoUsuario(usuarioId: string): Promise<EventoComConvite[]> {
-  const { data: proprios, error: errProprios } = await supabase
-    .from('eventos')
-    .select('*')
-    .eq('usuario_id', usuarioId)
-
-  const { data: convites, error: errConvites } = await supabase
-    .from('evento_convidados')
-    .select('status, eventos(*)')
-    .eq('usuario_id', usuarioId)
+  const [{ data: proprios, error: errProprios }, { data: convites, error: errConvites }] = await Promise.all([
+    supabase.from('eventos').select('*').eq('usuario_id', usuarioId),
+    supabase.from('evento_convidados').select('status, eventos(*)').eq('usuario_id', usuarioId),
+  ])
 
   if (errProprios) console.error('Erro ao listar eventos proprios:', errProprios)
   if (errConvites) console.error('Erro ao listar convites:', errConvites)

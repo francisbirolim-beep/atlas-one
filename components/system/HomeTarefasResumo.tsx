@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CheckCircle2, Clock3, Columns3, ListTodo, Users } from 'lucide-react'
-import { usuarioAtual, tokenAtual } from '@/lib/auth'
+import { usuarioAtual } from '@/lib/auth'
+import { buscarDelegadasHome, carregarTrabalhoHome } from '@/lib/homeLeituras'
 import { listarColunasTarefas, listarTarefas } from '@/lib/tarefas'
 import { listarEquipe, type EquipeTarefa } from '@/lib/tarefasEquipeCliente'
 import { listarEventosDoUsuario, listarConclusoesEventosUsuario, type EventoComConvite } from '@/lib/eventos'
@@ -27,22 +28,21 @@ export default function HomeTarefasResumo(){
     let ativo=true
     let usuarioId:string|null=null
     let intervalo:ReturnType<typeof setInterval>|null=null
-    async function atualizar(){
+    async function atualizar(inicial=false){
       if(!usuarioId||!navigator.onLine)return
-      const token=await tokenAtual()
-      const [ts,cs,es,ds,ev,ce]=await Promise.all([
-        listarTarefas(usuarioId),listarColunasTarefas(usuarioId),listarEquipe().catch(()=>[]),
-        token?fetch('/api/tarefas/delegadas',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
-          .then(r=>r.ok?r.json():null).then(r=>r?.tarefas||[]).catch(()=>[]):Promise.resolve([]),
-        listarEventosDoUsuario(usuarioId),listarConclusoesEventosUsuario(usuarioId),
-      ])
+      const [ts,cs,es,ds,ev,ce] = inicial
+        ? await carregarTrabalhoHome(usuarioId).then(d=>[d.tarefas,d.colunas,d.equipe,d.delegadas,d.eventos,d.conclusoes] as const)
+        : await Promise.all([
+          listarTarefas(usuarioId),listarColunasTarefas(usuarioId),listarEquipe().catch(()=>[]),
+          buscarDelegadasHome(),listarEventosDoUsuario(usuarioId),listarConclusoesEventosUsuario(usuarioId),
+        ])
       if(!ativo)return
       setTarefas(ts);setColunas(cs);setEquipe(es);setDelegadas(ds);setEventos(ev);setConclusoesEventos(ce);setCarregando(false)
     }
     void usuarioAtual().then(u=>{
       if(!ativo||!u){setCarregando(false);return}
       usuarioId=u.id;setUsuarioIdAtual(u.id)
-      void atualizar()
+      void atualizar(true)
       intervalo=setInterval(()=>{if(document.visibilityState==='visible')void atualizar()},45000)
     })
     const ouvir=()=>void atualizar()
