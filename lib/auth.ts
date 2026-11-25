@@ -1,7 +1,10 @@
 import { supabase } from './supabase'
 import { Usuario } from './tipos'
+import { leiturasEmCurso } from './leiturasEmCurso'
+import { comLimiteConsulta } from './limiteConsulta'
 
 const CHAVE_USUARIO_OFFLINE = 'atlas_usuario_offline_v1'
+let geracaoSessao = 0
 
 async function resolverEmail(identificador: string): Promise<{ email: string | null; error: string | null; status: number }> {
   const valor = identificador.trim()
@@ -40,6 +43,7 @@ async function resolverEmail(identificador: string): Promise<{ email: string | n
 
 
 export function prepararLoginLimpo() {
+  geracaoSessao++
   if (typeof window === 'undefined') return
   try { supabase.auth.stopAutoRefresh() } catch {}
   try {
@@ -96,6 +100,7 @@ export async function redefinirMinhaSenha(novaSenha: string) {
 }
 
 export async function logout() {
+  geracaoSessao++
   if (typeof window !== 'undefined') {
     try { window.localStorage.removeItem(CHAVE_USUARIO_OFFLINE) } catch {}
   }
@@ -138,7 +143,7 @@ function tokenAindaPodeSerUsado(session: any) {
   return !expiraEmMs || expiraEmMs > Date.now()
 }
 
-export async function sessaoAtualValida() {
+async function lerSessaoAtualValida() {
   let sessionLocal: any = null
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -171,23 +176,32 @@ export async function sessaoAtualValida() {
   }
 }
 
+const sessoesEmCurso = leiturasEmCurso<Awaited<ReturnType<typeof lerSessaoAtualValida>>>()
+export async function sessaoAtualValida() {
+  const geracao = geracaoSessao
+  const sessao = await comLimiteConsulta(sessoesEmCurso(String(geracao), lerSessaoAtualValida), 10000).catch(() => null)
+  return geracao === geracaoSessao ? sessao : null
+}
+
+const perfisEmCurso = leiturasEmCurso<Usuario | null>()
 export async function usuarioAtual(): Promise<Usuario | null> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return usuarioCacheLocal()
-
+  const geracao = geracaoSessao
   try {
     const session = await sessaoAtualValida()
-    if (!session) return null
-    const { data } = await supabase
-      .from('usuarios')
-      .select('*')
-      .eq('id', session.user.id)
-      .maybeSingle()
-    if (data) {
-      salvarUsuarioOffline(data as Usuario)
-      return data as Usuario
+    if (!session || geracao !== geracaoSessao) return null
+    const id = session.user.id
+    const perfil = await comLimiteConsulta(perfisEmCurso(String(geracao) + ':' + session.access_token, async () => {
+      const { data } = await supabase.from('usuarios').select('*').eq('id', id).maybeSingle()
+      return data ? data as Usuario : null
+    }), 10000).catch(() => null)
+    if (geracao !== geracaoSessao) return null
+    if (perfil) {
+      salvarUsuarioOffline(perfil)
+      return perfil
     }
     const cache = usuarioCacheLocal()
-    return cache?.id === session.user.id ? cache : null
+    return cache?.id === id ? cache : null
   } catch {
     return null
   }

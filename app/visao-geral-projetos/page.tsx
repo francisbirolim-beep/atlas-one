@@ -12,6 +12,7 @@ import {
  Users,Wallet,Search,Bell,GripVertical,
 } from 'lucide-react'
 import {tokenAtual} from '@/lib/auth'
+import {fetchConsulta,comLimiteConsulta} from '@/lib/limiteConsulta'
 import {
  COLUNAS_GERAIS_PADRAO,criarColunaGeral,renomearColunaGeral,excluirColunaGeral,
  associarCriterioColuna,reordenarColunasGerais,validarColunasGerais,
@@ -191,21 +192,28 @@ export default function VisaoGeralProjetos(){
  const [fechou,setFechou]=useState(false)
  const selecionadoInicial=useRef(false)
  const leituraAtual=useRef(0)
+ const consultaEmCurso=useRef<AbortController|null>(null)
+ const falhasConsulta=useRef(0)
+ const proximaConsulta=useRef(0)
  const movimentoEmCurso=useRef(false)
  const arrasteCard=useRef<{id:string;ponto:CoordenadaArraste|null;tratado:boolean}|null>(null)
  const posicoesGravadas=useRef(new Map<string,string>())
  const edicaoColunasPendente=useRef(false)
  const novaColunaRef=useRef<HTMLElement>(null)
  const novoNomeRef=useRef<HTMLInputElement>(null)
- const carregar=useCallback(async()=>{
+ const carregar=useCallback(async(forcar=false)=>{
   if(demo===null)return
   if(demo){setCards(DEMO_PROJETOS);setPedidos(DEMO_PEDIDOS);setAcompanhamentos([]);setPodeMoverCards(false);setCarregando(false);setAtualizado(new Date().toISOString());return}
   if(movimentoEmCurso.current)return // ignorar polling enquanto valida o destino
+  if(!forcar&&(consultaEmCurso.current||Date.now()<proximaConsulta.current))return
+  if(forcar)consultaEmCurso.current?.abort()
+  const controlador=new AbortController()
+  consultaEmCurso.current=controlador
   const geracao=++leituraAtual.current
-  try{const token=await tokenAtual();if(!token)throw Error('Faça login para consultar a visão geral.')
-   const r=await fetch('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store'})
-   const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
-   if(movimentoEmCurso.current||geracao!==leituraAtual.current)return
+  try{const token=await comLimiteConsulta(tokenAtual(),10000);if(controlador.signal.aborted)return;if(!token)throw Error('Faça login para consultar a visão geral.')
+   const r=await fetchConsulta('/api/visao-geral-projetos',{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:controlador.signal},25000)
+   const j=await comLimiteConsulta(r.json());if(!r.ok)throw Error(j.erro||'Falha na consulta da empresa')
+   if(controlador.signal.aborted||movimentoEmCurso.current||geracao!==leituraAtual.current)return
    if(Array.isArray(j.colunas)&&!edicaoColunasPendente.current)setColunas(j.colunas)
    setCards((j.cards||[]).map((c:ProjetoGeralCard)=>{
     const colBanco=j.posicoesPersistidas?.[c.vendaId]
@@ -219,8 +227,17 @@ export default function VisaoGeralProjetos(){
    setPedidos(j.pedidos||[]);setAcompanhamentos(j.acompanhamentos||[]);setUsuarioMaster(j.usuarioMaster===true);setPodeMoverCards(j.podeMoverCards===true)
    setOcultos(j.usuarioMaster===true?j.ocultos||[]:[])
    setAtualizado(j.atualizadoEm||new Date().toISOString());setErro('')
-  }catch(e){if(!movimentoEmCurso.current&&geracao===leituraAtual.current)setErro(e instanceof Error?e.message:'Falha ao consultar a empresa.')}
-  finally{if(geracao===leituraAtual.current)setCarregando(false)}
+   falhasConsulta.current=0;proximaConsulta.current=Date.now()+15000
+  }catch(e){
+   if(!controlador.signal.aborted&&!movimentoEmCurso.current&&geracao===leituraAtual.current){
+    falhasConsulta.current++
+    proximaConsulta.current=Date.now()+Math.min(120000,15000*2**Math.min(falhasConsulta.current,3))
+    setErro(e instanceof Error?e.message:'Falha ao consultar a empresa.')
+   }
+  }finally{
+   if(consultaEmCurso.current===controlador)consultaEmCurso.current=null
+   if(!controlador.signal.aborted&&geracao===leituraAtual.current)setCarregando(false)
+  }
  },[demo])
  useEffect(()=>{setDemo(new URLSearchParams(window.location.search).get('demo')==='1')},[])
  useEffect(()=>{
@@ -239,7 +256,12 @@ export default function VisaoGeralProjetos(){
   }catch{}})()
   return()=>{ativo=false}
  },[demo])
- useEffect(()=>{if(demo===null)return;void carregar();const timer=window.setInterval(()=>void carregar(),15_000);return()=>clearInterval(timer)},[demo,carregar])
+ useEffect(()=>{
+  if(demo===null)return
+  void carregar()
+  const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void carregar()},15_000)
+  return()=>{clearInterval(timer);consultaEmCurso.current?.abort();consultaEmCurso.current=null}
+ },[demo,carregar])
  useEffect(()=>{
   if(!cards.length||selecionadoInicial.current||fechou||typeof window==='undefined')return
   selecionadoInicial.current=true
@@ -275,7 +297,7 @@ export default function VisaoGeralProjetos(){
    const json=await r.json().catch(()=>({}))
    if(!r.ok||!json.ok)throw Error(json.erro||'A ação não foi salva')
    if(acao==='ocultar')setSelecionado(null)
-   await carregar()
+   await carregar(true)
   }catch(e){setErro(e instanceof Error?e.message:'Falha ao alterar o card.')}
   finally{setSalvandoCard(false);setArrastando(null)}
  }
@@ -460,7 +482,7 @@ export default function VisaoGeralProjetos(){
    if(!r.ok||!j.ok)throw Error(j.erro||'Não foi possível registrar o status.')
    setCards(anteriores=>anteriores.map(c=>c.vendaId===vendaId?{...c,statusEtapa:ids}:c))
    setErro('');setAviso('Status da etapa registrado no histórico.')
-   await carregar()
+   await carregar(true)
   }catch(e){setErro(e instanceof Error?e.message:'Erro ao atualizar o status.')}
   finally{setAlterandoStatus(false)}
  }

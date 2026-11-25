@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 // Acompanhamento exclusivamente de tarefas solicitadas pelo usuário autenticado.
 // Nunca retornar registros de outras empresas ou alterar o Kanban do responsável.
+export const maxDuration = 45
+
 export async function GET(req: NextRequest) {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim()
   if (!token) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })

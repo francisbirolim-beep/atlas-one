@@ -29,6 +29,8 @@ function categorias(compras:Necessidade[]):MaterialResumo[]{
   return {tipo,total:qtd(()=>true),comprados:qtd(c=>pedidoFeito(c.status)),recebidos:qtd(c=>recebido(c))}
  })
 }
+export const maxDuration = 45
+
 export async function GET(req:NextRequest){
  try{
   const u=await autenticarCompras(req)

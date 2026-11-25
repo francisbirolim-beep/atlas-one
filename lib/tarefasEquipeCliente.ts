@@ -1,4 +1,6 @@
 import { tokenAtual } from '@/lib/auth'
+import { leiturasEmCurso } from './leiturasEmCurso'
+import { fetchConsulta, comLimiteConsulta } from './limiteConsulta'
 import type { RepeticaoEquipe } from '@/lib/tarefasEquipeRecorrencia'
 
 export type StatusEquipe = 'a_fazer'|'em_andamento'|'aguardando'|'concluido'
@@ -35,9 +37,16 @@ async function requisitar(url:string,init:RequestInit={}) {
   return json
 }
 
+const equipeEmCurso = leiturasEmCurso<EquipeTarefa[]>()
 export async function listarEquipe():Promise<EquipeTarefa[]> {
-  const dados=await requisitar('/api/tarefas/equipe')
-  return Array.isArray(dados.tarefas)?dados.tarefas:[]
+  const token=await tokenAtual()
+  if(!token)throw new Error('Sessão expirada. Entre novamente no Atlas.')
+  return equipeEmCurso(token, async () => {
+    const resposta=await fetchConsulta('/api/tarefas/equipe',{cache:'no-store',headers:{Authorization:'Bearer '+token}},25000)
+    const dados=await comLimiteConsulta(resposta.json())
+    if(!resposta.ok)throw new Error(dados.error||'Não foi possível carregar tarefas compartilhadas.')
+    return Array.isArray(dados.tarefas)?dados.tarefas:[]
+  })
 }
 export async function criarEquipe(payload:CriacaoEquipe) {
   return requisitar('/api/tarefas/equipe',{method:'POST',body:JSON.stringify(payload)})
