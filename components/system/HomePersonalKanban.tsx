@@ -1,13 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ArrowLeft, ArrowRight, Check, Clock3, Columns3, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react'
 import { tokenAtual, usuarioAtual } from '@/lib/auth'
 import {
   concluirTarefa, criarColunaTarefa, listarColunasTarefas, listarTarefas,
   moverTarefa, reabrirTarefa, renomearColunaTarefa, reordenarColunasTarefa,
 } from '@/lib/tarefas'
-import { listarEventosDoUsuario, listarConclusoesEventosUsuario, concluirEventoUsuario, reabrirEventoUsuario, type EventoComConvite } from '@/lib/eventos'
+import { listarEventosDoUsuario, listarConclusoesEventosUsuario, concluirEventoUsuario, reabrirEventoUsuario, listarConvidados, type EventoComConvite } from '@/lib/eventos'
 import { confirmarMovimentoKanban } from '@/lib/kanbanConfirmacao'
 import { listarEquipe, movimentarEquipe, avisarMudancaEquipe, type EquipeTarefa, type StatusEquipe } from '@/lib/tarefasEquipeCliente'
 import CardTarefaEquipe from '@/components/system/CardTarefaEquipe'
@@ -32,14 +32,14 @@ function etapaDelegada(t: Delegada): 'pedido' | 'andamento' | 'aguardando' | 'co
   if (/aguard|espera/.test(nome)) return 'aguardando'
   return 'pedido'
 }
-function CardDelegado({ tarefa }: { tarefa: Delegada }) {
+function CardDelegado({ tarefa, onAbrir }: { tarefa: Delegada; onAbrir: () => void }) {
   return (
-    <div className="rounded-lg border border-violet-200 bg-white px-2 py-2 shadow-sm">
+    <button type="button" onClick={onAbrir} className="block w-full rounded-lg border border-violet-200 bg-white px-2 py-2 text-left shadow-sm" aria-label={'Abrir tarefa ' + tarefa.titulo}>
       <p className="truncate text-xs font-semibold text-slate-800" title={tarefa.titulo}>{tarefa.titulo}</p>
       <p className="mt-0.5 truncate text-[11px] text-violet-700">Responsável: {tarefa.responsavel_nome}</p>
       <p className="mt-0.5 truncate text-[10px] text-slate-600">Prazo: {dataPrazo(tarefa.data_hora)}</p>
       <p className="mt-0.5 truncate text-[10px] text-slate-500">Situação: {tarefa.concluida_em ? 'Concluído' : tarefa.coluna_nome}</p>
-    </div>
+    </button>
   )
 }
 const cores = {
@@ -90,6 +90,70 @@ function periodoExtenso(mes: string) {
   return new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(ano, numero - 1, 1))
 }
 
+type DetalheLocal = { tipo: 'evento' | 'pessoal' | 'delegada'; id: string }
+
+function dataCompleta(iso?: string | null) {
+  if (!iso) return 'Não informado'
+  const data = new Date(iso)
+  return Number.isNaN(data.getTime()) ? 'Não informado' : new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(data)
+}
+
+function JanelaDetalhe({ titulo, onFechar, children }: { titulo: string; onFechar: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = ref.current
+    if (dialog && !dialog.open) dialog.showModal()
+    return () => { if (dialog?.open) dialog.close() }
+  }, [])
+  return <dialog ref={ref} onCancel={e => { e.preventDefault(); onFechar() }}
+    aria-label={titulo} className="m-auto w-[calc(100%-2rem)] max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-xl backdrop:bg-slate-900/40">
+    <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-slate-200 bg-white p-4">
+      <h2 className="min-w-0 break-words text-base font-bold">{titulo}</h2>
+      <button type="button" onClick={onFechar} className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-sm">Fechar</button>
+    </header>
+    <div className="space-y-3 break-words p-4 text-sm">{children}</div>
+  </dialog>
+}
+
+function ConvidadosDetalhe({ id }: { id: string }) {
+  const [nomes, setNomes] = useState<string[] | null>(null)
+  useEffect(() => {
+    let ativo = true
+    setNomes(null)
+    void listarConvidados(id).then(lista => {
+      if (ativo) setNomes(lista.map(c => c.nome ? c.nome + ' (' + c.status + ')' : 'Participante (' + c.status + ')'))
+    }).catch(() => { if (ativo) setNomes([]) })
+    return () => { ativo = false }
+  }, [id])
+  return <p><strong>Convidados:</strong> {nomes === null ? 'Carregando...' : nomes.length ? nomes.join(', ') : 'Nenhum convidado disponível'}</p>
+}
+
+// Alça independente da rolagem: o cartão só muda após soltar e confirmar.
+function AlcaMobile({ onMover, disabled }: { onMover: (direcao: -1 | 1) => void; disabled: boolean }) {
+  const inicio = useRef<{ id: number; x: number; y: number } | null>(null)
+  const [deslocamento, setDeslocamento] = useState(0)
+  function cancelar() { inicio.current = null; setDeslocamento(0) }
+  function iniciar(e: PointerEvent<HTMLButtonElement>) {
+    if (disabled || !e.isPrimary || e.pointerType === 'mouse') return
+    inicio.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  function finalizar(e: PointerEvent<HTMLButtonElement>) {
+    const p = inicio.current
+    cancelar()
+    if (!p || p.id !== e.pointerId || disabled) return
+    const dx = e.clientX - p.x, dy = e.clientY - p.y
+    if (Math.abs(dx) >= 55 && Math.abs(dx) > Math.abs(dy) * 1.3) onMover(dx > 0 ? 1 : -1)
+  }
+  return <button type="button" data-kanban-drag disabled={disabled}
+    onPointerDown={iniciar} onPointerMove={e => { const p = inicio.current; if (p?.id === e.pointerId) setDeslocamento(e.clientX - p.x) }}
+    onPointerUp={finalizar} onPointerCancel={cancelar} onLostPointerCapture={cancelar}
+    aria-label="Arraste para mover à coluna anterior ou seguinte"
+    className="flex w-full touch-none select-none items-center justify-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-semibold text-slate-600 disabled:opacity-40 md:hidden">
+    <GripVertical size={14}/> {deslocamento > 30 ? 'Solte para mover à direita' : deslocamento < -30 ? 'Solte para mover à esquerda' : 'Arraste para mover a tarefa'}
+  </button>
+}
+
 export default function HomePersonalKanban({ somenteEquipe = false }: { somenteEquipe?: boolean } = {}) {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [colunas, setColunas] = useState<TarefaPessoalColuna[]>([])
@@ -101,6 +165,9 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
   const [aba, setAba] = useState<'minhas'|'delegadas'>('minhas')
   const [colunaMobile, setColunaMobile] = useState<string | null>(null)
   const [detalheId, setDetalheId] = useState<string|null>(null)
+  const [detalheLocal, setDetalheLocal] = useState<DetalheLocal | null>(null)
+  const toqueColuna = useRef<{ x: number; y: number; id: number } | null>(null)
+  const bloquearCliqueAte = useRef(0)
   const [carregando, setCarregando] = useState(true)
   const [personalizando, setPersonalizando] = useState(false)
   const [filtrosAbertos,setFiltrosAbertos] = useState(false)
@@ -173,6 +240,20 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
   const etapasMobile = [...(aba === 'delegadas' ? [{id:'pedidos',nome:'Pedidos de tarefa'}] : []), ...colunas]
   const etapaMobile = etapasMobile.find(c=>c.id===colunaMobile) || (aba === 'minhas' ? inicial : etapasMobile[0])
   const indiceMobile = etapasMobile.findIndex(c=>c.id===etapaMobile?.id)
+  const eventoAberto = detalheLocal?.tipo === 'evento' ? eventos.find(e => e.id === detalheLocal.id) : undefined
+  const pessoalAberta = detalheLocal?.tipo === 'pessoal' ? tarefas.find(t => t.id === detalheLocal.id) : undefined
+  const delegadaAberta = detalheLocal?.tipo === 'delegada' ? delegadas.find(t => t.id === detalheLocal.id) : undefined
+  const tarefaAberta = pessoalAberta || delegadaAberta
+  function navegarMobile(direcao: -1 | 1) {
+    const destino = etapasMobile[indiceMobile + direcao]
+    if (destino) setColunaMobile(destino.id)
+  }
+  function destinoEquipeMobile(indice: number, direcao: -1 | 1): StatusEquipe | null {
+    const destino = colunas[indice + direcao]
+    if (!destino) return null
+    const tipo = tipoColuna(destino, indice + direcao)
+    return tipo === 'concluido' ? 'concluido' : tipo === 'andamento' ? 'em_andamento' : tipo === 'aguardando' ? 'aguardando' : 'a_fazer'
+  }
   const trocarAba = (nova: 'minhas'|'delegadas') => { setAba(nova); setColunaMobile(null) }
   const colunaExibida = (t: TarefaPessoal) => t.concluida_em && final ? final.id : t.coluna_id
   const abertas = (somenteEquipe ? [] : tarefas).filter(t => !t.concluida_em)
@@ -418,7 +499,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
           </details>
         </div>
       </div>
-      <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-slate-600"><label className="flex items-center gap-1.5"><input type="checkbox" checked={todosPeriodos} onChange={e=>setTodosPeriodos(e.target.checked)} className="accent-blue-600"/> Todos os períodos</label><span className="md:hidden">Escolha a coluna abaixo.</span></div>
+      <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-slate-600"><label className="flex items-center gap-1.5"><input type="checkbox" checked={todosPeriodos} onChange={e=>setTodosPeriodos(e.target.checked)} className="accent-blue-600"/> Todos os períodos</label><span className="md:hidden">Deslize para trocar de coluna ou use as setas.</span></div>
       {filtrosAbertos && <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs">
         <label className="flex cursor-pointer items-center gap-1.5">
           <input type="checkbox" checked={manterPendenciasAnteriores} onChange={e=>setManterPendenciasAnteriores(e.target.checked)} className="accent-blue-600"/> Incluir pendências anteriores
@@ -447,7 +528,28 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
           <button type="button" aria-label="Próxima coluna" disabled={indiceMobile<0||indiceMobile>=etapasMobile.length-1} onClick={()=>setColunaMobile(etapasMobile[indiceMobile+1]?.id||null)} className="flex h-9 items-center justify-center rounded-lg border border-slate-200 disabled:opacity-30"><ArrowRight size={16}/></button>
           <p className="col-span-3 text-center text-[11px] text-slate-500">Coluna {indiceMobile+1} de {etapasMobile.length}</p>
         </div>
-        <div className="atlas-kanban-pessoal-colunas flex w-full min-w-0 max-w-full gap-3 overflow-x-auto overscroll-x-contain pb-3" aria-label="Colunas do Kanban pessoal" role="region" tabIndex={0}>
+        <div className="atlas-kanban-pessoal-colunas flex w-full min-w-0 max-w-full touch-pan-y gap-3 overflow-x-auto overscroll-x-contain pb-3 md:touch-auto" aria-label="Colunas do Kanban pessoal" role="region" tabIndex={0}
+          onTouchStart={e => {
+            toqueColuna.current = null
+            if (window.matchMedia('(min-width: 768px)').matches || e.touches.length !== 1 ||
+              (e.target instanceof Element && e.target.closest('[data-kanban-drag],select,input,textarea'))) return
+            const t = e.touches[0]
+            toqueColuna.current = { x: t.clientX, y: t.clientY, id: t.identifier }
+          }}
+          onTouchEnd={e => {
+            const inicio = toqueColuna.current
+            toqueColuna.current = null
+            if (!inicio || e.touches.length) return
+            const t = Array.from(e.changedTouches).find(t => t.identifier === inicio.id)
+            if (!t) return
+            const dx = t.clientX - inicio.x, dy = t.clientY - inicio.y
+            if (Math.abs(dx) >= 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+              bloquearCliqueAte.current = Date.now() + 350
+              navegarMobile(dx < 0 ? 1 : -1)
+            }
+          }}
+          onTouchCancel={() => { toqueColuna.current = null }}
+          onClickCapture={e => { if (Date.now() < bloquearCliqueAte.current) { e.preventDefault(); e.stopPropagation() } }}>
           <section data-mobile-ativa={etapaMobile?.id==='pedidos'} className="atlas-kanban-pessoal-coluna w-[224px] min-w-[224px] flex-1 overflow-hidden rounded-xl border border-violet-200 border-l-4 border-l-violet-600 bg-violet-50/70 p-0 sm:min-w-[235px]">
             <div className="mb-2 flex min-h-10 items-center gap-1.5 bg-violet-200 px-2.5 py-2">
               <span className="h-2 w-2 shrink-0 rounded-full bg-violet-600"/>
@@ -457,7 +559,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
             <div className="max-h-[260px] min-h-[220px] space-y-1.5 overflow-y-auto px-2 pb-2">
               {(aba!=='delegadas'||delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').length === 0) && equipeFiltrada.filter(t=>etapaEquipe(t)==='pedido').length === 0 &&
                 <p className="rounded-lg border border-dashed border-violet-200 bg-white/70 px-2 py-5 text-center text-[11px] text-violet-400">Nenhum pedido aguardando início</p>}
-              {aba==='delegadas'&&delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').map(t => <CardDelegado key={t.id} tarefa={t}/>)}
+              {aba==='delegadas'&&delegadasFiltradas.filter(t => etapaDelegada(t) === 'pedido').map(t => <CardDelegado key={t.id} tarefa={t} onAbrir={()=>setDetalheLocal({tipo:'delegada',id:t.id})}/>)}
               {equipeFiltrada.filter(t=>etapaEquipe(t)==='pedido').map(t=><CardTarefaEquipe key={t.id} tarefa={t} onAbrir={()=>setDetalheId(t.id)}/>)}
             </div>
           </section>
@@ -497,17 +599,26 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
                   {itens.length === 0 && delegadasDaEtapa.length === 0 && equipesDaEtapa.length === 0 && eventosDaEtapa.length === 0 && <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 px-2 py-5 text-center text-[11px] text-slate-400">Nenhuma tarefa neste período</p>}
                   {eventosDaEtapa.map(e => (
                     <div key={'evento:'+e.id} className="rounded-lg border border-slate-200 border-l-4 border-l-violet-500 bg-white p-2 shadow-sm">
+                      <button type="button" onClick={()=>setDetalheLocal({tipo:'evento',id:e.id})} className="block w-full text-left" aria-label={'Abrir compromisso '+e.titulo}>
                       <p className="text-[10px] font-semibold uppercase text-violet-700">Compromisso · {e.meuStatus === 'proprio' ? 'Agenda própria' : 'Convite recebido'}</p>
                       <p className="break-words text-xs font-semibold text-slate-900">{e.titulo}</p>
                       <p className="mt-1 text-[11px] text-slate-600">{dataPrazo(e.data_inicio)}{e.data_fim ? ' – '+dataPrazo(e.data_fim) : ''}</p>
                       {e.local && <p className="break-words text-[11px] text-slate-500">{e.local}</p>}
                       <p className="text-[11px] text-slate-500">Responsável: {usuario?.nome}</p>
+                      <span className="mt-1 block text-[11px] font-semibold text-blue-700">Ver detalhes</span>
+                      </button>
                       <button type="button" disabled={salvando} onClick={()=>void alternarEvento(e)} className="mt-2 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50">{conclusoesEventos[e.id] ? 'Reabrir' : 'Concluir compromisso'}</button>
                     </div>
                   ))}
-                  {delegadasDaEtapa.map(t => <CardDelegado key={t.id} tarefa={t}/>)}
-                  {equipesDaEtapa.map(t=><CardTarefaEquipe key={t.id} tarefa={t} onAbrir={()=>setDetalheId(t.id)}
-                    podeArrastar={Boolean(usuario&&t.responsaveis_ids.includes(usuario.id))}/> )}
+                  {delegadasDaEtapa.map(t => <CardDelegado key={t.id} tarefa={t} onAbrir={()=>setDetalheLocal({tipo:'delegada',id:t.id})}/>)}
+                  {equipesDaEtapa.map(t=><div key={t.id}>
+                    <CardTarefaEquipe tarefa={t} onAbrir={()=>setDetalheId(t.id)}
+                      podeArrastar={Boolean(usuario&&t.responsaveis_ids.includes(usuario.id))}/>
+                    {usuario&&t.responsaveis_ids.includes(usuario.id)&&<AlcaMobile disabled={salvando} onMover={direcao=>{
+                      const destino = destinoEquipeMobile(i, direcao)
+                      if (destino) void mudarEquipe(t, destino)
+                    }}/>}
+                  </div>)}
                   {itens.map(t => {
                     const atrasada = !t.concluida_em && t.data_hora && new Date(t.data_hora).getTime() < Date.now()
                     const menuAberto = menuTarefaAberto === t.id
@@ -516,10 +627,10 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
                         className={'rounded-lg border bg-white px-2 py-2 shadow-sm ' + (atrasada ? 'border-red-300' : 'border-slate-200')}>
                         <div className="flex min-w-0 items-center gap-1.5">
                           <GripVertical size={13} className="shrink-0 cursor-grab text-slate-400" aria-hidden="true" />
-                          <div className="min-w-0 flex-1">
+                          <button type="button" onClick={()=>setDetalheLocal({tipo:'pessoal',id:t.id})} className="min-w-0 flex-1 text-left" aria-label={'Abrir tarefa '+t.titulo}>
                             <p className="truncate text-xs font-semibold leading-4 text-slate-800" title={t.titulo}>{t.titulo}</p>
                             {t.descricao && <p className="mt-0.5 truncate text-[11px] leading-4 text-slate-500" title={t.descricao}>{t.descricao}</p>}
-                          </div>
+                          </button>
                           <span className={'flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-1 text-[9px] whitespace-nowrap ' +
                             (atrasada ? 'bg-red-50 font-semibold text-red-700' : 'bg-slate-100 text-slate-600')}>
                             <Clock3 size={10} />{dataPrazo(t.data_hora)}
@@ -530,6 +641,10 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
                             <MoreHorizontal size={14} />
                           </button>
                         </div>
+                        <div className="mt-1 md:hidden"><AlcaMobile disabled={salvando} onMover={direcao=>{
+                          const destino = colunas[i + direcao]
+                          if (destino) void mudarColuna(t, destino.id)
+                        }}/></div>
                         {menuAberto && (
                           <div className="mt-2 space-y-1.5 border-t border-slate-100 pt-2" aria-label={'Ações da tarefa ' + t.titulo}>
                             {t.solicitante_nome && <p className="text-[10px] text-slate-500">De: {t.solicitante_nome}</p>}
@@ -561,6 +676,35 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
       )}
     </article>
     <DetalheTarefaEquipe id={detalheId} onFechar={()=>setDetalheId(null)}/>
+    {detalheLocal && (eventoAberto || tarefaAberta) && <JanelaDetalhe key={detalheLocal.tipo+':'+detalheLocal.id} titulo={eventoAberto?.titulo || tarefaAberta?.titulo || 'Detalhes'} onFechar={()=>setDetalheLocal(null)}>
+      {eventoAberto && <>
+        <p className="font-semibold text-violet-700">Compromisso · {eventoAberto.meuStatus === 'proprio' ? 'Agenda própria' : 'Convite recebido'}</p>
+        <p><strong>Início:</strong> {dataCompleta(eventoAberto.data_inicio)}</p>
+        <p><strong>Fim:</strong> {dataCompleta(eventoAberto.data_fim)}</p>
+        <p><strong>Local:</strong> {eventoAberto.local || 'Não informado'}</p>
+        <p><strong>Situação:</strong> {conclusoesEventos[eventoAberto.id] ? 'Concluído por você' : 'A fazer'}</p>
+        <ConvidadosDetalhe id={eventoAberto.id}/>
+        <div className="rounded-lg bg-slate-50 p-3"><strong>Descrição</strong><p className="mt-1 whitespace-pre-wrap">{eventoAberto.descricao || 'Sem descrição'}</p></div>
+        <button type="button" disabled={salvando} onClick={()=>void alternarEvento(eventoAberto)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-semibold disabled:opacity-50">{conclusoesEventos[eventoAberto.id] ? 'Reabrir compromisso' : 'Concluir compromisso'}</button>
+      </>}
+      {tarefaAberta && <>
+        <p><strong>Responsável:</strong> {delegadaAberta?.responsavel_nome || usuario?.nome || 'Não informado'}</p>
+        {tarefaAberta.solicitante_nome && <p><strong>Solicitante:</strong> {tarefaAberta.solicitante_nome}</p>}
+        <p><strong>Prazo:</strong> {dataCompleta(tarefaAberta.data_hora)}</p>
+        <p><strong>Prioridade:</strong> {tarefaAberta.prioridade || 'normal'}</p>
+        <p><strong>Situação:</strong> {tarefaAberta.concluida_em ? 'Concluída' : delegadaAberta?.coluna_nome || colunas.find(c=>c.id===tarefaAberta.coluna_id)?.nome || 'A fazer'}</p>
+        <div className="rounded-lg bg-slate-50 p-3"><strong>Descrição</strong><p className="mt-1 whitespace-pre-wrap">{tarefaAberta.descricao || 'Sem descrição'}</p></div>
+        {pessoalAberta && <>
+          <label className="block font-semibold">Mover tarefa
+            <select value={colunaExibida(pessoalAberta)} disabled={salvando} onChange={e=>void mudarColuna(pessoalAberta,e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+              {colunas.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </label>
+          <button type="button" disabled={salvando} onClick={()=>void alternarConclusao(pessoalAberta)} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-semibold disabled:opacity-50">{pessoalAberta.concluida_em ? 'Reabrir tarefa' : 'Concluir tarefa'}</button>
+        </>}
+      </>}
+      {erro && <p role="alert" className="rounded-lg bg-red-50 p-2 text-red-700">{erro}</p>}
+    </JanelaDetalhe>}
     </>
   )
 }
