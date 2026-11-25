@@ -7,6 +7,9 @@ import { Bell, CheckCheck, MessageCircle, Settings, Volume2, VolumeX } from 'luc
 import { usuarioAtual } from '@/lib/auth'
 import {
   PREFERENCIAS_PADRAO,
+  prepararSomNotificacao,
+  tocarSomNotificacao,
+  emHorarioSilencioso,
   assinarNovasNotificacoes,
   carregarPreferenciasNotificacao,
   listarNotificacoes,
@@ -48,7 +51,7 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
     const href = n.href || ''
     if (href.startsWith('/chat')) return 'Conversa interna'
     if (href.startsWith('/whatsapp')) return 'WhatsApp'
-    return n.categoria === 'chat' ? 'Mensagem' : 'Atlas One'
+    return n.categoria === 'tarefas' ? 'Tarefa' : n.categoria === 'agenda' ? 'Compromisso' : n.categoria === 'chat' ? 'Mensagem' : 'Atlas One'
   }
 
   function mostrarToast(n: Notificacao) {
@@ -60,26 +63,8 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
     }, 5000)
   }
 
-  function tocarSom(volume?: number) {
-    try {
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext
-      if (!Ctx) return
-      const ctx = new Ctx()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(880, ctx.currentTime)
-      gain.gain.setValueAtTime(Math.max(0.02, Math.min(0.2, (volume ?? 0.6) * 0.18)), ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22)
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.start()
-      osc.stop(ctx.currentTime + 0.22)
-      setTimeout(() => void ctx.close(), 400)
-    } catch {
-      // Browser pode bloquear áudio até existir interação do usuário.
-    }
-  }
+  const tocarSom = tocarSomNotificacao
+  useEffect(() => prepararSomNotificacao(), [])
 
   useEffect(() => {
     let ativo = true
@@ -99,9 +84,14 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
         setNotificacoes(prev => [nova, ...prev.filter(n => n.id !== nova.id)].slice(0, 30))
         const atual = preferenciasRef.current
         const ativa = categoriaAtiva(nova, atual)
-        if (nova.categoria === 'chat' && ativa) mostrarToast(nova)
-        if (atual?.som_ativo && ativa) tocarSom(atual.som_volume)
-      })
+        if (ativa && (nova.categoria === 'chat' || nova.categoria === 'tarefas' || nova.categoria === 'agenda') && !nova.lida_em) mostrarToast(nova)
+        if (atual?.som_ativo && ativa && !nova.lida_em && !emHorarioSilencioso(atual)) tocarSom(atual.som_volume)
+        if (nova.categoria === 'tarefas') {
+          window.dispatchEvent(new Event('atlas:tarefas-atualizadas'))
+          window.dispatchEvent(new Event('atlas:tarefas-equipe-atualizadas'))
+        }
+        if (nova.categoria === 'agenda') window.dispatchEvent(new Event('atlas:eventos-atualizados'))
+      }, true)
     })
     return () => { ativo = false; limpar?.() }
   }, [])
@@ -126,7 +116,9 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
     toastTimerRef.current = null
     setToast(null)
     await abrirNotificacao(n)
-    router.push(n.href || '/')
+    if (n.origem_tipo === 'atlas_tarefas_equipe' && n.origem_id && window.location.pathname === '/') {
+      window.dispatchEvent(new CustomEvent('atlas:abrir-tarefa-equipe', { detail: { id: n.origem_id } }))
+    } else router.push(n.href || '/')
   }
 
   async function marcarTodas() {
@@ -173,7 +165,7 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
           <div className="px-4 py-6 text-center"><Bell size={20} className="mx-auto mb-2 text-slate-300"/><p className="text-sm text-slate-400">Nenhuma notificação persistente ainda.</p><p className="mt-1 text-[11px] text-slate-300">Tarefas atribuídas e convites de agenda aparecerão aqui.</p></div>
         ) : (
           <div className="max-h-[min(420px,55dvh)] divide-y divide-slate-100 overflow-y-auto">{notificacoes.map(n => (
-            <Link key={n.id} href={n.href || '/'} onClick={() => void abrirNotificacao(n)} className={`block px-4 py-3 transition hover:bg-slate-50 ${!n.lida_em ? 'bg-blue-50/45' : ''}`}>
+            <Link key={n.id} href={n.href || '/'} onClick={e => { if (n.origem_tipo === 'atlas_tarefas_equipe' && n.origem_id && window.location.pathname === '/') { e.preventDefault(); window.dispatchEvent(new CustomEvent('atlas:abrir-tarefa-equipe', { detail: { id: n.origem_id } })) } void abrirNotificacao(n) }} className={`block px-4 py-3 transition hover:bg-slate-50 ${!n.lida_em ? 'bg-blue-50/45' : ''}`}>
               <div className="flex items-start gap-3">
                 <span className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${!n.lida_em ? 'bg-blue-500' : 'bg-slate-200'}`}/>
                 <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">{n.titulo}</span>{n.mensagem && <span className="mt-0.5 block break-words text-xs text-slate-500">{n.mensagem}</span>}<span className="mt-1 block text-[10px] uppercase tracking-wide text-slate-300">{n.categoria === 'chat' ? 'WhatsApp / mensagens' : n.categoria} · {tempoRelativo(n.created_at)}</span></span>
@@ -199,7 +191,7 @@ export default function HomeNotificationBell({ toastOnly = false }: { toastOnly?
       >
         <span className="flex items-start gap-3">
           <span className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600">
-            <MessageCircle size={18}/>
+            {toast.categoria === 'chat' ? <MessageCircle size={18}/> : <Bell size={18}/>}
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-[11px] font-bold uppercase tracking-wide text-blue-600">{origemToast(toast)}</span>
