@@ -18,6 +18,7 @@ import MedicaoExternalAccessPanel from '@/components/system/MedicaoExternalAcces
 import ChatNotificationToast from '@/components/system/ChatNotificationToast'
 import TaskReminderToast from '@/components/system/TaskReminderToast'
 import TarefaEquipeToast from '@/components/system/TarefaEquipeToast'
+import NotificacaoDispositivoAviso from '@/components/system/NotificacaoDispositivoAviso'
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -48,6 +49,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <TaskReminderToast />
         <TarefaEquipeToast />
         <main className={`atlas-app-main atlas-main-surface w-full max-w-full overflow-x-hidden ${ehWhatsAppAtendimento ? 'min-h-screen bg-white pb-0' : 'min-h-[calc(100vh-68px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] pb-24 md:pb-0'} ${ehHome ? 'atlas-home-v2' : ''}`}>
+          {ehHome && <NotificacaoDispositivoAviso />}
           {ehHome && <HomeDashboard />}
           {!ehWhatsAppAtendimento && <MobileFavorites mostrarAcessoRapido={ehHome} />}
 

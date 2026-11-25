@@ -10,6 +10,7 @@ import { usuarioAtual } from '@/lib/auth'
 import {
   PREFERENCIAS_PADRAO,
   ativarPushNesteDispositivo,
+  precisaInstalarAtlasNoIOS,
   carregarPreferenciasNotificacao,
   desativarPushNesteDispositivo,
   salvarPreferenciasNotificacao,
@@ -26,7 +27,7 @@ const categorias: Array<{
   descricao: string
   icon: typeof Bell
 }> = [
-  { chave: 'chat', titulo: 'WhatsApp e mensagens', descricao: 'Novas mensagens, fila e transferências de atendimento.', icon: MessageCircle },
+  { chave: 'chat', titulo: 'Atlas Chat e WhatsApp', descricao: 'Mensagens internas, novas mensagens de atendimento e transferências.', icon: MessageCircle },
   { chave: 'tarefas', titulo: 'Tarefas', descricao: 'Tarefas atribuídas, cobranças e lembretes.', icon: ListTodo },
   { chave: 'agenda', titulo: 'Agenda', descricao: 'Convites, compromissos e avisos da agenda.', icon: CalendarDays },
   { chave: 'operacao', titulo: 'Operação', descricao: 'Produção, medição, engenharia e demais avisos do ERP.', icon: Factory },
@@ -96,11 +97,12 @@ export default function ConfiguracoesNotificacoesPage() {
       return
     }
     if (usuario) {
-      const salvo = await salvarPreferenciasNotificacao(usuario.id, { push_ativo: true })
+      const salvo = await salvarPreferenciasNotificacao(usuario.id, { push_ativo: true, som_ativo: true })
       if (salvo) setPrefs(salvo)
+      else { await recarregarPush(); setErro('Notificações ativadas; confira a opção Som abaixo.'); return }
     }
     await recarregarPush()
-    setMensagem('Notificações ativadas neste dispositivo.')
+    setMensagem('Notificações com som ativadas neste dispositivo.')
   }
 
   async function testarNotificacao() {
@@ -175,7 +177,7 @@ export default function ConfiguracoesNotificacoesPage() {
               </div>
 
               {!push?.suportado ? (
-                <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Este navegador não oferece Web Push.</div>
+                <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{precisaInstalarAtlasNoIOS() ? 'No iPhone ou iPad, abra o Atlas no Safari, toque em Compartilhar → Adicionar à Tela de Início, abra pelo ícone instalado e ative as notificações aqui (iOS/iPadOS 16.4 ou superior).' : 'Este navegador não oferece Web Push. Abra o Atlas em um navegador compatível.'}</div>
               ) : bloqueado ? (
                 <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
                   As notificações estão bloqueadas nas permissões do navegador/sistema. Libere o Atlas nas configurações do dispositivo e volte aqui.
@@ -197,7 +199,7 @@ export default function ConfiguracoesNotificacoesPage() {
                     </>
                   ) : (
                     <button onClick={()=>void ativarNesteDispositivo()} className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700">
-                      Ativar notificações
+                      Ativar notificações com som
                     </button>
                   )}
                 </div>

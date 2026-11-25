@@ -59,7 +59,7 @@ export default function ChatNotificationToast() {
         const prefs = preferenciasRef.current || PREFERENCIAS_PADRAO
         if (nova.lida_em || !categoriaAtiva(nova, prefs)) return
         if (nova.categoria === 'chat' || nova.categoria === 'tarefas' || nova.categoria === 'agenda') mostrar(nova)
-        if ((nova.categoria === 'tarefas' || nova.categoria === 'agenda') && prefs.som_ativo && !emHorarioSilencioso(prefs)) tocarSomNotificacao(prefs.som_volume)
+        if ((nova.categoria === 'chat' || nova.categoria === 'tarefas' || nova.categoria === 'agenda') && prefs.som_ativo && !emHorarioSilencioso(prefs)) tocarSomNotificacao(prefs.som_volume)
       }, true)
     })
     return () => {
