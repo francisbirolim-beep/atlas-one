@@ -95,7 +95,7 @@ export function assinarNovasNotificacoes(
     try {
       const { data } = await supabase.from('notificacoes').select('*')
         .eq('usuario_id', usuarioId).gte('created_at', inicio)
-        .in('categoria', ['tarefas', 'agenda'])
+        .in('categoria', ['tarefas', 'agenda', 'chat'])
         .order('created_at', { ascending: false }).limit(100)
       if (data) for (const n of [...data].reverse()) entregar(n as Notificacao)
     } catch { /* Realtime e próxima consulta continuam disponíveis. */ }
@@ -213,11 +213,18 @@ async function headersPush() {
   }
 }
 
+export function precisaInstalarAtlasNoIOS() {
+  if (typeof window === 'undefined') return false
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const instalado = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
+  return ios && !instalado
+}
+
 function nomeDispositivoAtual() {
   if (typeof navigator === 'undefined') return 'Dispositivo'
   const ua = navigator.userAgent
   if (/iPhone/i.test(ua)) return 'iPhone'
-  if (/iPad/i.test(ua)) return 'iPad'
+  if (/iPad/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'iPad'
   if (/Android/i.test(ua)) return 'Android'
   if (/Macintosh|Mac OS X/i.test(ua)) return 'Mac'
   if (/Windows/i.test(ua)) return 'Windows'
@@ -232,16 +239,20 @@ export async function statusPushNesteDispositivo(): Promise<StatusPushDispositiv
   const registration = await navigator.serviceWorker.ready
   const subscription = await registration.pushManager.getSubscription()
   let dispositivosAtivos = 0
+  let inscrito = false
   try {
-    const resp = await fetch('/api/notificacoes/push', { headers: await headersPush() })
+    const resp = await fetch('/api/notificacoes/push', { method: 'POST', headers: await headersPush(),
+      body: JSON.stringify({ acao: 'status', endpoint: subscription?.endpoint || '' }) })
     const json = await resp.json()
-    if (resp.ok) dispositivosAtivos = Number(json.dispositivosAtivos || 0)
-  } catch {}
+    if (!resp.ok) throw new Error('Não foi possível verificar o cadastro do dispositivo.')
+    dispositivosAtivos = Number(json.dispositivosAtivos || 0)
+    inscrito = Boolean(subscription && json.inscrito)
+  } catch { /* Não afirmar que este dispositivo está inscrito sem confirmação do servidor. */ }
 
   return {
     suportado: true,
     permissao: Notification.permission,
-    inscrito: Boolean(subscription),
+    inscrito: Notification.permission === 'granted' && inscrito,
     dispositivosAtivos,
   }
 }
