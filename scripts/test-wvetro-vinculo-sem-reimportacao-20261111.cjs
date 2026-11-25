@@ -10,15 +10,15 @@ const context = {
   obj: x => x && typeof x === 'object' ? x : {},
   txt: (...v) => v.map(x=>String(x??'').trim()).find(Boolean) || '',
 }
-const snippet = 'function montar(orcR: any) {\n' + src.slice(ini,fim) + '\nreturn { existentes, vinculados }\n}\nthis.montar = montar;'
+const snippet = 'function montar(orcamentosExistentes: any[]) {\n' + src.slice(ini,fim) + '\nreturn { existentes, vinculados }\n}\nthis.montar = montar;'
 vm.runInNewContext(ts.transpileModule(snippet,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context)
 const arquivado={id:'importado-366',modo_entrada:'wvetro_api_vinculado',wvetro_fluxo:{numero:'1007',oculto_por_vinculo:true}}
 const ativo={id:'outro',modo_entrada:'wvetro_api',wvetro_fluxo:{numero:'1007'}}
-let m=context.montar({data:[arquivado]})
+let m=context.montar([arquivado])
 assert.equal(m.vinculados.get('1007').id,'importado-366')
 assert.equal(m.existentes.has('1007'),false)
 for(const registros of [[arquivado,ativo],[ativo,arquivado]]){
- m=context.montar({data:registros})
+ m=context.montar(registros)
  assert.equal(m.vinculados.get('1007').id,'importado-366','Vinculado é reconhecido em qualquer ordem')
  assert.equal(m.existentes.get('1007').id,'outro','Índice ativo não é alterado')
 }
