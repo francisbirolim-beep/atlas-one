@@ -342,6 +342,7 @@ export default function MapaProspeccoes({
     const mapa = mapaRef.current
     if (!mapa) return
     mapa.flyTo([ponto.latitude, ponto.longitude], 17, { duration: 0.65 })
+    elemento.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   function verOrcamentos() {
