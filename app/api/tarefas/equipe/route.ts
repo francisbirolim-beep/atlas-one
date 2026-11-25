@@ -105,7 +105,7 @@ export async function POST(req:NextRequest) {
     await notificarEnvolvidos({
       id:primeira.id,empresa_id:usuario.empresa_id,criado_por_id:usuario.id,
       responsaveis_ids:primeira.responsaveis_ids,titulo,
-    },usuario.id,'Você recebeu uma nova tarefa',titulo)
+    },usuario.id,'Você recebeu uma nova tarefa',usuario.nome + ': ' + titulo)
   }
   return NextResponse.json({ok:true,quantidade:criadas.length,loteId},
     {status:201,headers:{'Cache-Control':'no-store'}})
