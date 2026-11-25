@@ -6,6 +6,9 @@ import { MessageCircle } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
 import {
   PREFERENCIAS_PADRAO,
+  prepararSomNotificacao,
+  tocarSomNotificacao,
+  emHorarioSilencioso,
   assinarNovasNotificacoes,
   carregarPreferenciasNotificacao,
   marcarNotificacaoLida,
@@ -24,7 +27,7 @@ function origemToast(n: Notificacao) {
   const href = n.href || ''
   if (href.startsWith('/chat')) return 'Conversa interna'
   if (href.startsWith('/whatsapp')) return 'WhatsApp'
-  return 'Mensagem'
+  return n.categoria === 'tarefas' ? 'Tarefa' : n.categoria === 'agenda' ? 'Compromisso' : 'Mensagem'
 }
 
 export default function ChatNotificationToast() {
@@ -42,6 +45,8 @@ export default function ChatNotificationToast() {
     }, 5000)
   }
 
+  useEffect(() => prepararSomNotificacao(), [])
+
   useEffect(() => {
     let ativo = true
     let limpar: (() => void) | undefined
@@ -51,8 +56,11 @@ export default function ChatNotificationToast() {
       if (!ativo) return
       preferenciasRef.current = prefs
       limpar = assinarNovasNotificacoes(usuario.id, nova => {
-        if (nova.categoria === 'chat' && categoriaAtiva(nova, preferenciasRef.current)) mostrar(nova)
-      })
+        const prefs = preferenciasRef.current || PREFERENCIAS_PADRAO
+        if (nova.lida_em || !categoriaAtiva(nova, prefs)) return
+        if (nova.categoria === 'chat' || nova.categoria === 'tarefas' || nova.categoria === 'agenda') mostrar(nova)
+        if ((nova.categoria === 'tarefas' || nova.categoria === 'agenda') && prefs.som_ativo && !emHorarioSilencioso(prefs)) tocarSomNotificacao(prefs.som_volume)
+      }, true)
     })
     return () => {
       ativo = false

@@ -4,7 +4,7 @@ import type { Notificacao, NotificacaoPreferencias } from './tipos'
 
 export const PREFERENCIAS_PADRAO: NotificacaoPreferencias = {
   usuario_id: '',
-  som_ativo: false,
+  som_ativo: true,
   som_volume: 0.6,
   tarefas: true,
   agenda: true,
@@ -78,16 +78,115 @@ export async function salvarPreferenciasNotificacao(
 export function assinarNovasNotificacoes(
   usuarioId: string,
   callback: (notificacao: Notificacao) => void,
+  comRecuperacao = false,
 ) {
+  const inicio = new Date().toISOString()
+  const recebidas = new Set<string>()
+  let ativo = true
+  let consultando = false
+  function entregar(n: Notificacao) {
+    if (!ativo || n.usuario_id !== usuarioId || recebidas.has(n.id)) return
+    recebidas.add(n.id)
+    callback(n)
+  }
+  async function recuperar() {
+    if (!ativo || consultando || document.visibilityState !== 'visible') return
+    consultando = true
+    try {
+      const { data } = await supabase.from('notificacoes').select('*')
+        .eq('usuario_id', usuarioId).gte('created_at', inicio)
+        .in('categoria', ['tarefas', 'agenda'])
+        .order('created_at', { ascending: false }).limit(100)
+      if (data) for (const n of [...data].reverse()) entregar(n as Notificacao)
+    } catch { /* Realtime e próxima consulta continuam disponíveis. */ }
+    finally { consultando = false }
+  }
   const canal = supabase
     .channel(`notificacoes-${usuarioId}-${Math.random().toString(36).slice(2)}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'notificacoes', filter: `usuario_id=eq.${usuarioId}` },
-      payload => callback(payload.new as Notificacao),
+      payload => entregar(payload.new as Notificacao),
     )
     .subscribe()
-  return () => { void supabase.removeChannel(canal) }
+  const intervalo = comRecuperacao ? window.setInterval(() => void recuperar(), 15000) : null
+  const aoFocar = () => { void recuperar() }
+  const aoPush = (event: MessageEvent) => {
+    if (event.data?.type === 'ATLAS_PUSH_RECEBIDO') void recuperar()
+  }
+  if (comRecuperacao) {
+    window.addEventListener('focus', aoFocar)
+    document.addEventListener('visibilitychange', aoFocar)
+    navigator.serviceWorker?.addEventListener('message', aoPush)
+  }
+  return () => {
+    ativo = false
+    if (intervalo !== null) window.clearInterval(intervalo)
+    if (comRecuperacao) {
+      window.removeEventListener('focus', aoFocar)
+      document.removeEventListener('visibilitychange', aoFocar)
+      navigator.serviceWorker?.removeEventListener('message', aoPush)
+    }
+    void supabase.removeChannel(canal)
+  }
+}
+
+// O navegador exige uma interação para liberar o áudio, inclusive no iPhone.
+let contextoNotificacao: AudioContext | null = null
+function obterContextoNotificacao() {
+  if (typeof window === 'undefined') return null
+  const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!Ctx) return null
+  if (!contextoNotificacao || contextoNotificacao.state === 'closed') contextoNotificacao = new Ctx()
+  return contextoNotificacao
+}
+export function prepararSomNotificacao() {
+  const liberar = () => {
+    try {
+      const ctx = obterContextoNotificacao()
+      if (ctx?.state === 'suspended') void ctx.resume().catch(() => {})
+    } catch {}
+  }
+  window.addEventListener('pointerdown', liberar)
+  window.addEventListener('keydown', liberar)
+  return () => {
+    window.removeEventListener('pointerdown', liberar)
+    window.removeEventListener('keydown', liberar)
+  }
+}
+export function tocarSomNotificacao(volume = 0.6) {
+  try {
+    if (volume <= 0) return
+    const ctx = obterContextoNotificacao()
+    if (!ctx) return
+    const tocar = () => {
+      if (ctx.state !== 'running') return
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(880, ctx.currentTime)
+      gain.gain.setValueAtTime(Math.max(0.02, Math.min(0.2, volume * 0.18)), ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.22)
+      osc.onended = () => { osc.disconnect(); gain.disconnect() }
+    }
+    if (ctx.state === 'running') tocar()
+    else if (navigator.userActivation?.isActive) void ctx.resume().then(tocar).catch(() => {})
+  } catch {}
+}
+export function emHorarioSilencioso(prefs: NotificacaoPreferencias) {
+  if (!prefs.nao_perturbe_ativo) return false
+  try {
+    const horario = new Intl.DateTimeFormat('en-GB', {
+      timeZone: prefs.timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(new Date())
+    const inicio = prefs.nao_perturbe_inicio.slice(0, 5)
+    const fim = prefs.nao_perturbe_fim.slice(0, 5)
+    return inicio <= fim ? horario >= inicio && horario < fim : horario >= inicio || horario < fim
+  } catch { return true }
 }
 
 export type StatusPushDispositivo = {

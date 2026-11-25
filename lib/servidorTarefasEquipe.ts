@@ -52,6 +52,8 @@ export async function notificarEnvolvidos(tarefa: {
     titulo, mensagem, href: '/?tarefa=' + tarefa.id,
     origem_tipo: 'atlas_tarefas_equipe', origem_id: tarefa.id,
     criado_por_id: autorId,
+    push_status: 'pendente',
   }))
-  await supabaseAdmin.from('notificacoes').insert(rows)
+  const { error } = await supabaseAdmin.from('notificacoes').insert(rows)
+  if (error) console.error('Falha ao registrar notificações de tarefas:', error.message)
 }
