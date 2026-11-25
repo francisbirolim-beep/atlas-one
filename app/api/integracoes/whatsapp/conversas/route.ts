@@ -29,8 +29,14 @@ export async function GET(req: NextRequest) {
     if (supervisionar && usuario.role !== 'master') {
       return NextResponse.json({ error: 'Acesso à supervisão não autorizado.' }, { status: 403 })
     }
+    const somentePendentes = req.nextUrl.searchParams.get('resumo') === 'pendentes'
+    if (somentePendentes && !supervisionar) {
+      const pendentes = await listarConversasAtendimento(usuario, { modo: 'minhas', somentePendentes: true, acessos })
+      return NextResponse.json({ ok: true, pendentes: pendentes.length })
+    }
     const resultado = await listarConversasAtendimento(usuario, {
       modo: supervisionar ? 'monitoramento' : 'minhas',
+      acessos,
     })
     // Em supervisão, cada gestor recebe somente os canais para os quais tem
     // autorização de acompanhar; ter permissão em um canal não libera outros.
@@ -43,27 +49,27 @@ export async function GET(req: NextRequest) {
     // A lista de usuários internos serve também para o chat da equipe dentro
     // do WhatsApp Atlas. Por isso ela deve estar disponível para qualquer
     // usuário autenticado do mesmo tenant, não apenas para quem transfere atendimento.
-    const { data: usuariosRaw } = await supabaseAdmin
-      .from('usuarios')
-      .select('id,nome,role,cargo')
-      .eq('empresa_id', usuario.empresa_id)
-      .order('nome')
+    const [{ data: usuariosRaw }, { data: config }, { data: canaisRaw }] = await Promise.all([
+      supabaseAdmin
+        .from('usuarios')
+        .select('id,nome,role,cargo')
+        .eq('empresa_id', usuario.empresa_id)
+        .order('nome'),
+      supabaseAdmin
+        .from('atendimento_configuracoes')
+        .select('numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao')
+        .eq('empresa_id', usuario.empresa_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('atendimento_whatsapp_canais')
+        .select('id,nome,numero_declarado,numero_conectado,tipo_conta,principal,usuario_id,usuario_nome,ativo,gateway_status,gateway_last_seen_at')
+        .eq('empresa_id', usuario.empresa_id)
+        .eq('ativo', true)
+        .eq('gateway_status', 'connected')
+        .order('principal', { ascending: false })
+        .order('created_at', { ascending: true }),
+    ])
     const usuarios = (usuariosRaw || []) as { id: string; nome: string; role?: string | null; cargo?: string | null }[]
-
-    const { data: config } = await supabaseAdmin
-      .from('atendimento_configuracoes')
-      .select('numero_principal,setor_padrao,usuario_padrao_id,ativo,modo_integracao')
-      .eq('empresa_id', usuario.empresa_id)
-      .maybeSingle()
-
-    const { data: canaisRaw } = await supabaseAdmin
-      .from('atendimento_whatsapp_canais')
-      .select('id,nome,numero_declarado,numero_conectado,tipo_conta,principal,usuario_id,usuario_nome,ativo,gateway_status,gateway_last_seen_at')
-      .eq('empresa_id', usuario.empresa_id)
-      .eq('ativo', true)
-      .eq('gateway_status', 'connected')
-      .order('principal', { ascending: false })
-      .order('created_at', { ascending: true })
 
     const canaisPermitidos = new Set(acessos.map(acesso => acesso.canal_id))
     const canais = (canaisRaw || []).filter((canal: any) =>

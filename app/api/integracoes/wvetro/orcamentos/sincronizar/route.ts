@@ -12,6 +12,7 @@ import { nomeCadastroIncompleto, registrarPendenciaCadastro } from '@/lib/cadast
 import { normalizarCidadeMargem, resolverMargemOrcamentoPorCidade } from '@/lib/orcamentoMargensCidadeServer'
 import { nomesClientesCompativeis, normalizarNomeClienteWVetro } from '@/lib/wvetroClienteIdentidade'
 import { reconciliarSincronizacaoWVetro } from '@/lib/wvetroPreservacaoSincronizacao'
+import { carregarOrcamentosContextoWVetro } from '@/lib/wvetroContextoOrcamentos'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -162,16 +163,16 @@ function itemWVetro(
   }
 }
 
-async function carregarContexto(empresaId: string) {
-  const [refsR, linhasR, tipsR, clientesR, colunasR, orcR] = await Promise.all([
+async function carregarContexto(empresaId: string, numeros: ReadonlySet<string>) {
+  const [refsR, linhasR, tipsR, clientesR, colunasR, orcamentosExistentes] = await Promise.all([
     supabaseAdmin.from('wvetro_referencias_tipologias').select('id,linha_raw,modelo_raw,tipologia_atlas_id,imagem_url'),
     supabaseAdmin.from('wvetro_referencias_linhas').select('linha_raw,linha_tecnica_id'),
     supabaseAdmin.from('tipologias').select('id,chave,label'),
     supabaseAdmin.from('clientes').select('id,nome,cpf_cnpj,whatsapp,telefone,email,cidade,endereco,bairro,cep,origem').eq('empresa_id', empresaId),
     supabaseAdmin.from('kanban_colunas').select('id,nome,ordem').eq('empresa_id', empresaId).order('ordem'),
-    supabaseAdmin.from('orcamentos').select('id,cliente_id,obra_id,cidade,valor_estimado,itens,anexos,wvetro_fluxo,updated_at,margem_padrao_pct,margem_padrao_origem,margem_regra_cidade_id,modo_entrada,coluna_id').eq('empresa_id', empresaId),
+    carregarOrcamentosContextoWVetro(empresaId, numeros),
   ])
-  for (const r of [refsR, linhasR, tipsR, clientesR, colunasR, orcR]) if (r.error) throw r.error
+  for (const r of [refsR, linhasR, tipsR, clientesR, colunasR]) if (r.error) throw r.error
 
   const refs = new Map<string, RefTipologia>()
   for (const r of refsR.data || []) refs.set(`${norm(r.linha_raw)}|${norm(r.modelo_raw)}`, r as RefTipologia)
@@ -199,7 +200,7 @@ async function carregarContexto(empresaId: string) {
   const colunaFeito = colunas.find(c => norm(c.nome) === 'ORCAMENTO FEITO') || null
   const existentes = new Map<string, any>()
   const vinculados = new Map<string, any>()
-  for (const o of orcR.data || []) {
+  for (const o of orcamentosExistentes) {
     const fluxo = obj(o.wvetro_fluxo)
     const numero = txt(fluxo?.numero, fluxo?.numero_wvetro)
     if (!numero) continue
@@ -458,7 +459,8 @@ export async function sincronizar(req: NextRequest, usuarioForcado?: UsuarioWVet
       .filter(([numero]) => numerosSolicitados.size === 0 || numerosSolicitados.has(numero))
       .map(([, valor]) => valor)
 
-    const ctx = await carregarContexto(usuario.empresa_id)
+    const numerosDaJanela = new Set(registros.map(({ registro }) => txt(registro.payload?.Nro, registro.payload?.OrcamentoId, registro.payload?.Orcamentoid)).filter(Boolean))
+    const ctx = await carregarContexto(usuario.empresa_id, numerosDaJanela)
     const clienteAlvo = clienteAlvoId ? ctx.clientes.find((c: any) => String(c.id) === clienteAlvoId) || null : null
     if (clienteAlvoId && !clienteAlvo) return NextResponse.json({ error: 'Cliente alvo não encontrado nesta empresa.' }, { status: 404 })
     const margensCidade = new Map<string, Awaited<ReturnType<typeof resolverMargemOrcamentoPorCidade>>>()

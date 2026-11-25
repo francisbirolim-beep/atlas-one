@@ -1264,10 +1264,10 @@ async function conversasComRespostaDoUsuario(usuario: UsuarioTenant, ids: string
 
 export async function listarConversasAtendimento(
   usuario: UsuarioTenant,
-  opcoes: { modo?: 'minhas' | 'monitoramento' } = {},
+  opcoes: { modo?: 'minhas' | 'monitoramento'; somentePendentes?: boolean; acessos?: Awaited<ReturnType<typeof listarAcessosCanaisAtendimento>> } = {},
 ) {
   const [acessos, distribuicao] = await Promise.all([
-    listarAcessosCanaisAtendimento(usuario), obterDistribuicaoWhatsApp(usuario.empresa_id),
+    opcoes.acessos ?? listarAcessosCanaisAtendimento(usuario), obterDistribuicaoWhatsApp(usuario.empresa_id),
   ])
   const canaisConectados = acessos.map(acesso => acesso.canal_id)
   if (!canaisConectados.length) return []
@@ -1283,7 +1283,10 @@ export async function listarConversasAtendimento(
   if (error) throw error
 
   const acessoPorCanal = new Map(acessos.map(acesso => [acesso.canal_id, acesso]))
-  const avaliadas = await Promise.all(((data || []) as AtendimentoConversa[]).map(async conversa => {
+  const candidatas = ((data || []) as AtendimentoConversa[]).filter(conversa =>
+    !opcoes.somentePendentes || Number(conversa.nao_lidas || 0) > 0,
+  )
+  const avaliar = async (conversa: AtendimentoConversa) => {
     if (!conversa.whatsapp_canal_id) return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
     const acesso = acessoPorCanal.get(conversa.whatsapp_canal_id)
     if (!acesso) return { conversa, permitido: false, grupo: null as AcessoGrupo | null }
@@ -1329,20 +1332,22 @@ export async function listarConversasAtendimento(
         conversa.responsavel_id === grupo.delegacaoExpiradaDestinoId
       ) {
         const agora = new Date().toISOString()
-        await supabaseAdmin.from('atendimento_conversas').update({
-          responsavel_id: grupo.responsavelEfetivoId,
-          responsavel_nome: grupo.responsavelEfetivoNome,
-          updated_at: agora,
-        }).eq('id', conversa.id)
-        if (grupo.grupoId) {
-          await supabaseAdmin.from('atendimento_whatsapp_grupo_delegacoes').update({
-            ativo: false,
-            encerrado_em: agora,
-          })
-            .eq('empresa_id', usuario.empresa_id)
-            .eq('grupo_id', grupo.grupoId)
-            .eq('ativo', true)
-            .lte('fim_em', agora)
+        if (!opcoes.somentePendentes) {
+          await supabaseAdmin.from('atendimento_conversas').update({
+            responsavel_id: grupo.responsavelEfetivoId,
+            responsavel_nome: grupo.responsavelEfetivoNome,
+            updated_at: agora,
+          }).eq('id', conversa.id)
+          if (grupo.grupoId) {
+            await supabaseAdmin.from('atendimento_whatsapp_grupo_delegacoes').update({
+              ativo: false,
+              encerrado_em: agora,
+            })
+              .eq('empresa_id', usuario.empresa_id)
+              .eq('grupo_id', grupo.grupoId)
+              .eq('ativo', true)
+              .lte('fim_em', agora)
+          }
         }
         conversa = {
           ...conversa,
@@ -1361,7 +1366,19 @@ export async function listarConversasAtendimento(
       conversa, distribuicao, usuario.id, acesso?.principal === true,
     )
     return { conversa, permitido: atrasada || (!conversa.responsavel_id && Boolean(acesso?.atender)), grupo: null }
-  }))
+  }
+  // Limita a concorrência das consultas por grupo sem mudar ordem ou permissões.
+  // Contatos não consultam ACLs individuais; só grupos entram em lotes.
+  const avaliacoes = new Map<string, Awaited<ReturnType<typeof avaliar>>>()
+  const grupos = candidatas.filter(c => c.whatsapp_chat_tipo === 'grupo')
+  const contatos = candidatas.filter(c => c.whatsapp_chat_tipo !== 'grupo')
+  for (const item of await Promise.all(contatos.map(avaliar))) avaliacoes.set(item.conversa.id, item)
+  for (let inicio = 0; inicio < grupos.length; inicio += 8) {
+    for (const item of await Promise.all(grupos.slice(inicio, inicio + 8).map(avaliar))) {
+      avaliacoes.set(item.conversa.id, item)
+    }
+  }
+  const avaliadas = candidatas.map(c => avaliacoes.get(c.id)!)
   const autorizadas = avaliadas.filter(item => item.permitido)
   // A supervisão é solicitada por rota separada, nunca embutida na caixa
   // pessoal. Apenas mensagens de saída com o ID do usuário comprovam autoria.
@@ -1395,6 +1412,9 @@ export async function listarConversasAtendimento(
         return elegivelAoSecundario(conversa, distribuicao, usuario.id, acesso?.principal === true)
       })
   const permitidas = permitidasComGrupo.map(item => item.conversa)
+  // O contador usa exatamente a mesma autorização, mas não precisa de nomes,
+  // diretório, clientes, transferências ou acompanhamento.
+  if (opcoes.somentePendentes) return permitidas
 
   const ids = permitidas.map(conversa => conversa.id)
   if (!ids.length) return permitidas

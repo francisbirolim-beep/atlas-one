@@ -41,7 +41,7 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
     usuarioAtual().then(async u => {
       if (!ativo) return
       setUsuario(u)
-      if (!u) { setCarregando(false); return }
+      if (!u || ocultarPainel) { setCarregando(false); return }
       const [lista, cls] = await Promise.all([listarTarefas(u.id), listarColunasTarefas(u.id)])
       if (!ativo) return
       setTarefas(lista)
@@ -49,7 +49,7 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
       setCarregando(false)
     })
     return () => { ativo = false }
-  }, [])
+  }, [ocultarPainel])
 
   useEffect(() => {
     const abrir = () => void abrirModal()
@@ -59,11 +59,11 @@ export default function HomeTasksBlock({ ocultarPainel = false }: { ocultarPaine
 
   // O aviso global pode concluir uma tarefa; manter o painel sincronizado.
   useEffect(() => {
-    if (!usuario) return
+    if (!usuario || ocultarPainel) return
     const atualizar = () => { void listarTarefas(usuario.id).then(setTarefas) }
     window.addEventListener('atlas:tarefas-atualizadas', atualizar)
     return () => window.removeEventListener('atlas:tarefas-atualizadas', atualizar)
-  }, [usuario])
+  }, [usuario, ocultarPainel])
 
   const abertas = useMemo(() => tarefas
     .filter(t => !t.concluida_em)
