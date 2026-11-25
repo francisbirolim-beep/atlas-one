@@ -8,7 +8,7 @@ import { atlasChatHabilitado } from '@/lib/atlasChatAcessosServer'
 import { NextRequest, NextResponse } from 'next/server'
 import { autenticarTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { pilotoAtivo,pilotoSomenteLeitura,pilotoTesteEnvio,equipePilotoEmpresa,escopoPilotoLeitura } from '@/lib/atlasChatPiloto'
+import { entradaProducaoAtiva,pilotoAtivo,pilotoSomenteLeitura,pilotoTesteEnvio,equipePilotoEmpresa,escopoPilotoLeitura } from '@/lib/atlasChatPiloto'
 import { conversaDoAtlasChat, aberturaContatoAtlasChat, telefoneAtlasChat, telefoneLiberadoNoPiloto } from '@/lib/atlasChatIndividual'
 import { enviarTextoWhatsApp, iniciarConversaWhatsApp, prepararUploadMidiaAtendimento, enviarMidiaWhatsApp, reagirMensagemWhatsApp, assumirConversa } from '@/lib/whatsappServer'
 import { mimeAtlasChat,tamanhoAtlasChat,caminhoAtlasChat } from '@/lib/atlasChatMidia'
@@ -20,11 +20,16 @@ async function contexto(req: NextRequest) {
   // Desativado por padrão. Não conectar ambiente de homologação à produção.
   if (!pilotoAtivo()) return null
   const u = await autenticarTenant(req)
-  if (!u || (pilotoSomenteLeitura()&&!equipePilotoEmpresa(u.empresa_id)&&u.role!=='master') || !await atlasChatHabilitado(u.empresa_id,u.id)) return null
-  const { data, error } = await supabaseAdmin.from('atendimento_whatsapp_canais').select('id,gateway_status,conexao_pausada')
+  if (!u || (entradaProducaoAtiva()&&!equipePilotoEmpresa(u.empresa_id)) || (pilotoSomenteLeitura()&&!equipePilotoEmpresa(u.empresa_id)&&u.role!=='master') || !await atlasChatHabilitado(u.empresa_id,u.id)) return null
+  const { data, error } = await supabaseAdmin.from('atendimento_whatsapp_canais').select('id,gateway_status,conexao_pausada,usuario_id')
     .eq('empresa_id', u.empresa_id).eq('principal', true).eq('ativo', true).maybeSingle()
   if (error || !data) return null
-  return { u, principal: data.id as string, conectado: estadoConexaoAtlas(data), testeManual:pilotoTesteEnvio()&&u.role==='master'&&escopoPilotoLeitura(u.empresa_id,u.id) }
+  const individual=entradaProducaoAtiva()&&equipePilotoEmpresa(u.empresa_id)
+  const {data:permissao,error:erroPermissao}=individual&&u.role!=='master'&&data.usuario_id!==u.id
+    ? await supabaseAdmin.from('atendimento_whatsapp_permissoes').select('pode_atender').eq('empresa_id',u.empresa_id).eq('canal_id',data.id).eq('usuario_id',u.id).maybeSingle()
+    : {data:null,error:null}
+  const envioEquipe=individual&&process.env.ATLAS_CHAT_ENVIO_EQUIPE==='true'&&!erroPermissao&&(u.role==='master'||data.usuario_id===u.id||permissao?.pode_atender===true)
+  return { individual,envioEquipe,u, principal: data.id as string, conectado: estadoConexaoAtlas(data), testeManual:pilotoTesteEnvio()&&u.role==='master'&&escopoPilotoLeitura(u.empresa_id,u.id) }
 }
 function testeAtual(req:NextRequest,ctx:NonNullable<Awaited<ReturnType<typeof contexto>>>){
   if(!ctx.testeManual)return null
@@ -35,6 +40,19 @@ async function propria(id: string, ctx: NonNullable<Awaited<ReturnType<typeof co
     .eq('id', id).eq('empresa_id', ctx.u.empresa_id).eq('responsavel_id', ctx.u.id).maybeSingle()
   return !error && data && conversaDoAtlasChat(data, ctx.u, ctx.principal) ? data : null
 }
+async function historicoProprio(id:string,ctx:NonNullable<Awaited<ReturnType<typeof contexto>>>){
+  if(await propria(id,ctx))return true
+  if(!ctx.individual)return false
+  const {data:c,error}=await supabaseAdmin.from('atendimento_conversas').select('id').eq('id',id).eq('empresa_id',ctx.u.empresa_id).eq('whatsapp_canal_id',ctx.principal).eq('whatsapp_chat_tipo','contato').eq('ocultar_da_caixa',false).maybeSingle()
+  if(error||!c)return false
+  const {data:r,error:e}=await supabaseAdmin.from('atlas_chat_mensagem_responsavel').select('mensagem_id').eq('empresa_id',ctx.u.empresa_id).eq('usuario_id',ctx.u.id).eq('conversa_id',id).limit(1)
+  return !e&&Boolean(r?.length)
+}
+async function mensagemPropria(id:string,mensagemId:string,ctx:NonNullable<Awaited<ReturnType<typeof contexto>>>){
+  const query=ctx.individual?supabaseAdmin.from('atlas_chat_mensagem_responsavel').select('mensagem_id').eq('usuario_id',ctx.u.id).eq('mensagem_id',mensagemId):supabaseAdmin.from('atendimento_mensagens').select('id').eq('id',mensagemId)
+  const {data,error}=await query.eq('empresa_id',ctx.u.empresa_id).eq('conversa_id',id).maybeSingle()
+  return !error&&Boolean(data)
+}
 export async function GET(req: NextRequest) {
   try {
     const ctx = await contexto(req)
@@ -43,14 +61,19 @@ export async function GET(req: NextRequest) {
     if (expected && expected !== ctx.u.id) return reply({ error: 'Este atalho pertence a outro usuário.' }, 403)
     const id = req.nextUrl.searchParams.get('conversaId')
     if (id) {
-      if (!await propria(id, ctx)) return reply({ error: 'Conversa indisponível.' }, 403)
+      if (!await historicoProprio(id, ctx)) return reply({ error: 'Conversa indisponível.' }, 403)
       const em=req.nextUrl.searchParams.get('antesEm'),anteriorId=req.nextUrl.searchParams.get('antesId')
       const antes=cursorLeituraAtlas(em,anteriorId)
       if((em!==null||anteriorId!==null)&&!antes)return reply({error:'Página inválida.'},400)
-      const result = await lerMensagensAtlas(ctx.u.empresa_id,id,antes)
-      if (!result || !await propria(id, ctx)) return reply({ error: 'Conversa indisponível.' }, 403)
+      const result = await lerMensagensAtlas(ctx.u.empresa_id,id,antes,ctx.individual?ctx.u.id:undefined)
+      if (!result || !await historicoProprio(id, ctx)) return reply({ error: 'Conversa indisponível.' }, 403)
       const ocultas=await ocultacoesAtlas(ctx.u.empresa_id,ctx.u.id)
       return reply({...result,mensagens:result.mensagens.filter(m=>mensagemVisivelAtlas(m,ocultas,id))})
+    }
+    if(ctx.individual){
+      const {data,error}=await supabaseAdmin.rpc('atlas_chat_caixa_individual',{p_empresa:ctx.u.empresa_id,p_usuario:ctx.u.id,p_canal:ctx.principal})
+      if(error)throw error
+      return reply({nomesAtivos:false,testeManual:false,testeConversaId:null,somenteLeitura:!ctx.envioEquipe,historicoAtivo:false,conectado:ctx.conectado,envioAtivo:ctx.envioEquipe&&ctx.conectado,inicioAutomatico:ctx.envioEquipe,leituraIndividual:true,cadastroAtivo:false,usuario:{id:ctx.u.id,nome:ctx.u.nome},conversas:data||[]})
     }
     // Consulta restrita no banco; não executar rotinas da caixa geral ou de grupos.
     const { data: rows, error } = await supabaseAdmin.from('atendimento_conversas')
@@ -71,14 +94,23 @@ export async function GET(req: NextRequest) {
   } catch { return reply({ error: 'Não foi possível consultar o Atlas Chat.' }, 500) }
 }
 export async function POST(req: NextRequest) {
-  if(pilotoSomenteLeitura()&&!pilotoTesteEnvio())return reply({error:'Piloto somente para consulta.'},403)
+  if(pilotoSomenteLeitura()&&!pilotoTesteEnvio()&&!entradaProducaoAtiva())return reply({error:'Piloto somente para consulta.'},403)
   try {
     const ctx = await contexto(req)
     // Segundo bloqueio: piloto pode ser somente leitura. Nunca envia por padrão.
-    if (!ctx||(pilotoSomenteLeitura()&&!ctx.testeManual)) return reply({ error: 'Envio real ainda não liberado.' }, 403)
+    if (!ctx) return reply({ error: 'Atlas Chat não liberado para esta sessão.' }, 403)
     const expected = req.nextUrl.searchParams.get('usuario')
     if (expected && expected !== ctx.u.id) return reply({ error: 'Este atalho pertence a outro usuário.' }, 403)
     const body = await req.json()
+    if(ctx.individual&&body.acao==='marcar_lida'){
+      const id=typeof body.conversaId==='string'?body.conversaId:''
+      const mensagemId=typeof body.mensagemId==='string'?body.mensagemId:''
+      if(!await historicoProprio(id,ctx)||!await mensagemPropria(id,mensagemId,ctx))return reply({error:'Mensagem indisponível.'},403)
+      const {data,error}=await supabaseAdmin.rpc('atlas_chat_marcar_lida',{p_empresa:ctx.u.empresa_id,p_usuario:ctx.u.id,p_conversa:id,p_mensagem:mensagemId})
+      if(error||data!==true)return reply({error:'Não foi possível registrar a leitura.'},409)
+      return reply({ok:true})
+    }
+    if (!ctx||(pilotoSomenteLeitura()&&!ctx.testeManual&&!ctx.envioEquipe)) return reply({ error: 'Envio real ainda não liberado.' }, 403)
     if(body.acao==='editar_nome'){
       if(!pilotoTesteEnvio()||process.env.ATLAS_CHAT_NOMES_PESSOAIS!=='true')return reply({error:'Edição não liberada.'},403)
       const c=await propria(typeof body.conversaId==='string'?body.conversaId:'',ctx)
@@ -105,10 +137,10 @@ export async function POST(req: NextRequest) {
       return reply({ok:true})
     }
     if(!ctx.conectado)return reply({error:'WhatsApp desconectado. O histórico permanece disponível.'},409)
-    if(process.env.ATLAS_CHAT_ENVIO_PILOTO !== 'true')return reply({error:'Envio real ainda não liberado.'},403)
+    if(!ctx.envioEquipe&&process.env.ATLAS_CHAT_ENVIO_PILOTO !== 'true')return reply({error:'Envio real ainda não liberado.'},403)
     if (body.acao === 'novo_contato') {
       // Somente números expressamente autorizados no ambiente isolado.
-      if (process.env.ATLAS_CHAT_CADASTRO_PILOTO !== 'true') return reply({error:'Cadastro real não liberado. Utilize a homologação.'},403)
+      if (ctx.individual||process.env.ATLAS_CHAT_CADASTRO_PILOTO !== 'true') return reply({error:'Cadastro real não liberado. Utilize a homologação.'},403)
       const telefone = typeof body.telefone === 'string' ? telefoneAtlasChat(body.telefone) : ''
       const nome = typeof body.nome === 'string' ? body.nome.trim() : ''
       if (!telefone || !nome || nome.length > 120) return reply({error:'Informe nome e telefone com DDD.'},400)
@@ -137,12 +169,11 @@ export async function POST(req: NextRequest) {
     if(pilotoTesteEnvio()){
       const teste=testeAtual(req,ctx)
       if(!teste||teste.conversa!==c.id||teste.telefone!==c.telefone||c.whatsapp_chat_jid!==teste.telefone+'@s.whatsapp.net')return reply({error:'Selecione um contato autorizado pelo botão +.'},403)
-    }else if (!telefoneLiberadoNoPiloto(c.telefone,process.env.ATLAS_CHAT_NUMEROS_TESTE || '')) return reply({error:'Número não autorizado para envio no piloto.'},403)
-    if(pilotoTesteEnvio()&&(body.acao==='reagir'||body.respostaMensagemId)){
+    }else if (!ctx.envioEquipe&&!telefoneLiberadoNoPiloto(c.telefone,process.env.ATLAS_CHAT_NUMEROS_TESTE || '')) return reply({error:'Número não autorizado para envio no piloto.'},403)
+    if((ctx.individual||pilotoTesteEnvio())&&(body.acao==='reagir'||body.respostaMensagemId)){
       const mensagemId=body.acao==='reagir'?body.mensagemId:body.respostaMensagemId
       if(typeof mensagemId!=='string')return reply({error:'Mensagem inválida.'},400)
-      const {data,error}=await supabaseAdmin.from('atendimento_mensagens').select('id').eq('empresa_id',ctx.u.empresa_id).eq('conversa_id',c.id).eq('id',mensagemId).maybeSingle()
-      if(error||!data)return reply({error:'Mensagem fora da conversa de teste.'},403)
+      if(!await mensagemPropria(c.id,mensagemId,ctx))return reply({error:'Mensagem fora do seu histórico individual.'},403)
     }
     if(body.acao==='assumir_proprio'){
       if(c.status==='em_atendimento')return reply({ok:true})
@@ -151,7 +182,15 @@ export async function POST(req: NextRequest) {
       await assumirConversa(id,ctx.u,{somentePropria:true})
       return reply({ok:true})
     }
-    if (c.status !== 'em_atendimento') return reply({ error: 'Atendimento ainda não iniciado. Solicite à central.' }, 409)
+    // A caixa individual pode responder sem clicar em "iniciar"; a função
+    // legada confirma o responsável atual e faz a atribuição por compare-and-set.
+    const garantirAtendimentoProprio=async()=>{
+      const atual=await propria(id,ctx!)
+      if(!atual)throw Error('Conversa transferida.')
+      if(atual.status==='aguardando'&&ctx!.envioEquipe)await assumirConversa(id,ctx!.u,{somentePropria:true})
+      else if(atual.status!=='em_atendimento')throw Error('Atendimento indisponível.')
+    }
+    if(c.status!=='em_atendimento'&&!(ctx.envioEquipe&&c.status==='aguardando'))return reply({error:'Atendimento ainda não iniciado. Solicite à central.'},409)
     if (body.acao === 'preparar_midia' || body.acao === 'enviar_midia') {
       const nome=typeof body.nome==='string'?body.nome.trim():''
       const mime=typeof body.mimeType==='string'?mimeAtlasChat(nome,body.mimeType):''
@@ -159,6 +198,7 @@ export async function POST(req: NextRequest) {
       if(!nome||nome.length>240||!mime||!tamanhoAtlasChat(bytes))return reply({error:'Arquivo inválido ou não suportado (até 50 MB).'},400)
       const secret=process.env.SUPABASE_SECRET_KEY||''
       if(body.acao==='preparar_midia'){
+        await garantirAtendimentoProprio()
         const prep=await prepararUploadMidiaAtendimento(id,{nome,mimeType:mime,tamanho:bytes},ctx.u)
         const ticket=assinarUploadAtlas({usuario:ctx.u.id,empresa:ctx.u.empresa_id,conversa:id,path:prep.path,mime,bytes,nome,exp:Date.now()+10*60*1000},secret)
         return reply({...prep,ticket})
@@ -170,11 +210,13 @@ export async function POST(req: NextRequest) {
       const {data:objetos,error:erroObjetos}=await supabaseAdmin.storage.from('whatsapp-midia').list(partes.join('/'),{search:arquivo,limit:100})
       if(erroObjetos||!objetos?.some(o=>o.name===arquivo&&Number(o.metadata?.size)===bytes))return reply({error:'Arquivo não encontrado ou tamanho divergente.'},409)
       if(!await propria(id,ctx))return reply({error:'Conversa indisponível.'},403)
+      await garantirAtendimentoProprio()
       await enviarMidiaWhatsApp(id,{mediaPath:path,mimeType:mime,fileName:nome,tamanho:bytes,legenda:typeof body.legenda==='string'?body.legenda.slice(0,1024):null,ptt:body.ptt===true},ctx.u)
       return reply({ok:true})
     }
     if(body.acao==='reagir'){
       if(!EMOJIS_REACAO.includes(body.emoji))return reply({error:'Reação inválida.'},400)
+      await garantirAtendimentoProprio()
       await reagirMensagemWhatsApp(id,String(body.mensagemId||''),body.emoji,ctx.u)
       return reply({ok:true})
     }
@@ -183,7 +225,7 @@ export async function POST(req: NextRequest) {
     if (!texto || texto.length > 4096) return reply({ error: 'Mensagem inválida.' }, 400)
     // Não assumir fila nem reabrir automaticamente nesta fase. A API existente
     // também valida responsável e status antes de enviar pelo gateway.
-    if (c.status !== 'em_atendimento') return reply({ error: 'Atendimento ainda não iniciado. Solicite à central.' }, 409)
+    await garantirAtendimentoProprio()
     await enviarTextoWhatsApp(id, texto, ctx.u, typeof body.respostaMensagemId==='string'?body.respostaMensagemId:null)
     return reply({ ok: true })
   } catch { return reply({ error: 'Não foi possível enviar a mensagem.' }, 400) }

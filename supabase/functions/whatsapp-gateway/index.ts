@@ -261,7 +261,7 @@ async function destinatariosWhatsApp(config: any, channel: any, conversation: an
   return [...ids];
 }
 
-async function notificarMensagemWhatsApp(config: any, channel: any, conversation: any, body: any, text: string) {
+async function notificarMensagemWhatsApp(config: any, channel: any, conversation: any, body: any, text: string, atlasDireto = false) {
   const grupo = conversation.whatsapp_chat_tipo === "grupo";
   // Nos grupos, avisar no início de cada pendência, sem inundar o responsável.
   if (grupo && Number(conversation.nao_lidas || 0) > 0) return;
@@ -302,7 +302,7 @@ async function notificarMensagemWhatsApp(config: any, channel: any, conversation
     tipo: grupo ? "whatsapp_grupo_mensagem" : "whatsapp_mensagem",
     titulo,
     mensagem,
-    href: `/whatsapp?conversaId=${conversation.id}`,
+    href: atlasDireto ? `/atlas-chat?conversaId=${conversation.id}` : `/whatsapp?conversaId=${conversation.id}`,
     origem_tipo: grupo ? "whatsapp_grupo_mensagem" : "whatsapp_mensagem",
     origem_id: originId,
     push_status: "pendente",
@@ -2449,7 +2449,31 @@ Deno.serve(async (req) => {
         .eq("id", conversation.id);
       if (convError) throw convError;
 
-      if (gatewayToken) {
+      // Apenas comando inicial em texto recebido pelo canal principal.
+      // O RPC confere mensagem persistida, empresa, identidade, autorização,
+      // destino, propriedade atual e idempotência; o legado fica intacto.
+      let atlasDireto = false;
+      if (!fromMe && chatTipo === "contato" && channel.principal === true &&
+          atlasMessageType(body.messageType) === "texto" &&
+          /^@[a-z][a-z0-9_]{1,29}(?:\s|$)/i.test(String(text).trim())) {
+        try {
+          const { data: destino, error: erroDireto } = await db.rpc("atlas_chat_direcionar_arroba", {
+            p_empresa: config.empresa_id, p_canal: channel.id,
+            p_mensagem: messageRow.id, p_anterior: conversation.responsavel_id || null,
+          });
+          if (erroDireto) {
+            console.warn("Atlas Chat: direcionamento indisponível; fluxo legado mantido.");
+          } else if (destino && typeof destino.id === "string" && typeof destino.nome === "string") {
+            conversation.responsavel_id = destino.id;
+            conversation.responsavel_nome = destino.nome;
+            atlasDireto = true;
+          }
+        } catch {
+          console.warn("Atlas Chat: direcionamento indisponível; fluxo legado mantido.");
+        }
+      }
+
+      if (gatewayToken && !atlasDireto) {
         executarEmBackground(processarAssistenteWhatsapp({
           config, channel, conversation, body,
           messageRowId: messageRow.id,
@@ -2469,7 +2493,7 @@ Deno.serve(async (req) => {
       );
 
       if (!fromMe) {
-        await notificarMensagemWhatsApp(config, channel, conversation, body, text);
+        await notificarMensagemWhatsApp(config, channel, conversation, body, text, atlasDireto);
       }
 
       await appendEvent(
