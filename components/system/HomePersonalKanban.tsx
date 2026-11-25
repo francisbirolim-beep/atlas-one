@@ -200,8 +200,20 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
 
   useEffect(() => {
     if (!usuario) return
-    const aoAtualizar = () => { void atualizar() }
-    const aoFocar = () => { if (document.visibilityState === 'visible') aoAtualizar() }
+    let ativo=true
+    let consultando=false
+    let pendente=false
+    const consultar = (porEvento=false) => {
+      if(!ativo)return
+      if(consultando){if(porEvento)pendente=true;return}
+      consultando=true
+      void atualizar().catch(e=>console.error('Falha ao atualizar Kanban:',e)).finally(()=>{
+        consultando=false
+        if(ativo&&pendente){pendente=false;consultar()}
+      })
+    }
+    const aoAtualizar = () => consultar(true)
+    const aoFocar = () => { if (document.visibilityState === 'visible') consultar() }
     window.addEventListener('atlas:tarefas-atualizadas', aoAtualizar)
     window.addEventListener('atlas:tarefas-equipe-atualizadas', aoAtualizar)
     window.addEventListener('atlas:eventos-atualizados', aoAtualizar)
@@ -209,6 +221,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
     window.addEventListener('focus', aoFocar)
     const intervalo = window.setInterval(aoFocar, 45000)
     return () => {
+      ativo=false
       window.removeEventListener('atlas:tarefas-atualizadas', aoAtualizar)
       window.removeEventListener('atlas:tarefas-equipe-atualizadas', aoAtualizar)
       window.removeEventListener('atlas:eventos-atualizados', aoAtualizar)

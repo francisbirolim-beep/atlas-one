@@ -28,8 +28,13 @@ export default function HomeTarefasResumo(){
     let ativo=true
     let usuarioId:string|null=null
     let intervalo:ReturnType<typeof setInterval>|null=null
-    async function atualizar(inicial=false){
-      if(!usuarioId||!navigator.onLine)return
+    let emCurso=false
+    let pendente=false
+    async function atualizar(inicial=false, porEvento=false){
+      if(!ativo||!usuarioId||!navigator.onLine)return
+      if(emCurso){if(porEvento)pendente=true;return}
+      emCurso=true
+      try{
       const [ts,cs,es,ds,ev,ce] = inicial
         ? await carregarTrabalhoHome(usuarioId).then(d=>[d.tarefas,d.colunas,d.equipe,d.delegadas,d.eventos,d.conclusoes] as const)
         : await Promise.all([
@@ -38,6 +43,8 @@ export default function HomeTarefasResumo(){
         ])
       if(!ativo)return
       setTarefas(ts);setColunas(cs);setEquipe(es);setDelegadas(ds);setEventos(ev);setConclusoesEventos(ce);setCarregando(false)
+      }catch(e){if(ativo)console.error('Falha ao atualizar resumo de tarefas:',e)}
+      finally{emCurso=false;if(ativo&&pendente){pendente=false;void atualizar()}}
     }
     void usuarioAtual().then(u=>{
       if(!ativo||!u){setCarregando(false);return}
@@ -45,17 +52,18 @@ export default function HomeTarefasResumo(){
       void atualizar(true)
       intervalo=setInterval(()=>{if(document.visibilityState==='visible')void atualizar()},45000)
     })
-    const ouvir=()=>void atualizar()
+    const ouvir=()=>void atualizar(false,true)
+    const foco=()=>void atualizar()
     window.addEventListener('atlas:tarefas-atualizadas',ouvir)
     window.addEventListener('atlas:tarefas-equipe-atualizadas',ouvir)
     window.addEventListener('atlas:eventos-atualizados',ouvir)
-    window.addEventListener('focus',ouvir)
+    window.addEventListener('focus',foco)
     return()=>{
       ativo=false;if(intervalo)clearInterval(intervalo)
       window.removeEventListener('atlas:tarefas-atualizadas',ouvir)
       window.removeEventListener('atlas:tarefas-equipe-atualizadas',ouvir)
       window.removeEventListener('atlas:eventos-atualizados',ouvir)
-      window.removeEventListener('focus',ouvir)
+      window.removeEventListener('focus',foco)
     }
   },[])
   const numeros=useMemo(()=>{

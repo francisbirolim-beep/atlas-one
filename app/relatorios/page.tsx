@@ -1,10 +1,11 @@
 'use client'
 import { useRelatoriosAcesso, autorizarExportacaoRelatorio } from '@/components/relatorios/RelatoriosAcesso'
 
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { BarChart3, Building2, ChevronDown, ChevronRight, ClipboardList, Download, FileText, Factory, Landmark, PackageSearch, Printer, Ruler, Search, ShoppingCart, WalletCards, Wrench } from 'lucide-react'
 import { tokenAtual } from '@/lib/auth'
+import { comLimiteConsulta, fetchConsulta } from '@/lib/limiteConsulta'
 import FinanceiroRelatorio, { FinanceiroRelatorioDados } from '@/components/relatorios/FinanceiroRelatorio'
 import PlanoContasGerencial from '@/components/relatorios/PlanoContasGerencial'
 import { baixarCsv, carregarResumoComercial, carregarResumoMedicao, ResumoComercial, ResumoMedicao } from '@/lib/relatorios'
@@ -57,35 +58,43 @@ export default function RelatoriosPage(){
  const [erro,setErro]=useState('')
  const [dados,setDados]=useState<RelatorioObras|null>(null)
  const [comercial,setComercial]=useState<ResumoComercial>(vazioComercial)
+ const [comercialPronto,setComercialPronto]=useState(false)
  const [medicao,setMedicao]=useState<ResumoMedicao>(vazioMedicao)
+ const [medicaoPronta,setMedicaoPronta]=useState(false)
  const [financeiro,setFinanceiro]=useState<FinanceiroRelatorioDados|null>(null)
  const [aberto,setAberto]=useState<string|null>(null)
+ const consultaAtual=useRef<AbortController|null>(null)
+ useEffect(()=>()=>consultaAtual.current?.abort(),[])
  async function carregar(s:Setor=setor){
   if(!podeSetor(s)){setErro('Relatório não autorizado.');return}
   if(inicio>fim){setErro('Confira as datas do período.');return}
+  consultaAtual.current?.abort()
+  const controlador=new AbortController()
+  consultaAtual.current=controlador
+  const atual=()=>consultaAtual.current===controlador&&!controlador.signal.aborted
   setErro('');setCarregando(true)
   try{
    if(s==='obras'){
-    const token=await tokenAtual();if(!token)throw new Error('Entre novamente no Atlas.')
-    const resp=await fetch(`/api/relatorios/obras-cmv?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
-    const json=await resp.json()
+    const token=await comLimiteConsulta(tokenAtual());if(!atual())return;if(!token)throw new Error('Entre novamente no Atlas.')
+    const resp=await fetchConsulta(`/api/relatorios/obras-cmv?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:controlador.signal})
+    const json=await comLimiteConsulta(resp.json())
     if(!resp.ok)throw new Error(json.error||'Não foi possível carregar as obras.')
-    setDados(json as RelatorioObras)
+    if(atual())setDados(json as RelatorioObras)
    }
    if(s==='financeiro'&&acessos.financeiro.consultar){
-    const token=await tokenAtual();if(!token)throw new Error('Entre novamente no Atlas.')
-    const resp=await fetch(`/api/relatorios/financeiro?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store'})
-    const json=await resp.json()
+    const token=await comLimiteConsulta(tokenAtual());if(!atual())return;if(!token)throw new Error('Entre novamente no Atlas.')
+    const resp=await fetchConsulta(`/api/relatorios/financeiro?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:controlador.signal})
+    const json=await comLimiteConsulta(resp.json())
     if(!resp.ok)throw new Error(json.error||'Não foi possível carregar os relatórios financeiros.')
-    setFinanceiro(json as FinanceiroRelatorioDados)
+    if(atual())setFinanceiro(json as FinanceiroRelatorioDados)
    }
-   if(s==='comercial')setComercial(await carregarResumoComercial({inicio,fim}))
-   if(s==='producao')setMedicao(await carregarResumoMedicao({inicio,fim}))
-  }catch(e){setDados(null);setFinanceiro(null);setComercial(vazioComercial);setMedicao(vazioMedicao);setErro(e instanceof Error?e.message:'Erro ao carregar relatório.')}
-  finally{setCarregando(false)}
+   if(s==='comercial'){const resultado=await carregarResumoComercial({inicio,fim},controlador.signal);if(atual()){setComercial(resultado);setComercialPronto(true)}}
+   if(s==='producao'){const resultado=await carregarResumoMedicao({inicio,fim},controlador.signal);if(atual()){setMedicao(resultado);setMedicaoPronta(true)}}
+  }catch(e){if(!atual())return;setDados(null);setFinanceiro(null);setComercial(vazioComercial);setMedicao(vazioMedicao);setComercialPronto(false);setMedicaoPronta(false);setErro(e instanceof Error?e.message:'Erro ao carregar relatório.')}
+  finally{if(atual())setCarregando(false)}
  }
  useEffect(()=>{const proximo=podeSetor(setor)?setor:inicial;setSetor(proximo);void carregar(proximo)},[acessos])
- function selecionar(s:Setor){if(!podeSetor(s))return;setSetor(s);setBusca('');if(s==='comercial'||s==='producao'||s==='financeiro'||(s==='obras'&&!dados))void carregar(s)}
+ function selecionar(s:Setor){if(!podeSetor(s))return;consultaAtual.current?.abort();setCarregando(false);setErro('');setSetor(s);setBusca('');if(s==='comercial'||s==='producao'||s==='financeiro'||(s==='obras'&&!dados))void carregar(s)}
  const obras=(dados?.obras||[]).filter(o=>[o.cliente,o.cidade,String(o.orcamento),String(o.numero)].join(' ').toLowerCase().includes(busca.toLowerCase()))
  const escala=Math.max(1,...obras.slice(0,8).flatMap(x=>[x.previsto||0,x.realizado]))
  async function exportar(){
@@ -152,7 +161,7 @@ export default function RelatoriosPage(){
      <label className="text-xs font-semibold text-slate-600">Até<input type="date" value={fim} onChange={e=>setFim(e.target.value)} className="mt-1 block rounded-lg border p-2 text-sm"/></label>
      <button onClick={()=>void carregar()} disabled={carregando} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{carregando?'Carregando...':'Aplicar período'}</button>
     </div>
-    <div className="flex gap-2 print:hidden">{acessos[setor].exportar&&['obras','comercial','producao','financeiro'].includes(setor)&&<button disabled={carregando||setor==='obras'&&!dados} onClick={exportar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Download size={15}/> CSV / Excel</button>}<button disabled={!acessos[setor].exportar} onClick={()=>void imprimir()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Printer size={15}/> Imprimir / PDF</button></div>
+    <div className="flex gap-2 print:hidden">{acessos[setor].exportar&&['obras','comercial','producao','financeiro'].includes(setor)&&<button disabled={carregando||!!erro||setor==='obras'&&!dados||setor==='comercial'&&!comercialPronto||setor==='producao'&&!medicaoPronta||setor==='financeiro'&&!financeiro} onClick={exportar} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Download size={15}/> CSV / Excel</button>}<button disabled={carregando||!!erro||!acessos[setor].exportar||setor==='obras'&&!dados||setor==='comercial'&&!comercialPronto||setor==='producao'&&!medicaoPronta} onClick={()=>void imprimir()} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold"><Printer size={15}/> Imprimir / PDF</button></div>
     <p className="hidden text-sm text-slate-600 print:block">Período: {inicio} a {fim} · Data de confirmação da venda (Obras)</p>
    </div>
    {erro&&<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>}
@@ -168,8 +177,8 @@ export default function RelatoriosPage(){
       </Fragment>)}{!obras.length&&<tr><td colSpan={7} className="p-8 text-center text-slate-500">Nenhuma obra encontrada.</td></tr>}</tbody></table></div>
      <p className="text-xs text-slate-500">A diferença positiva não é economia confirmada: pode haver material ou serviço ainda não lançado. Custos previstos ausentes não são tratados como zero na linha individual.</p></>}
    </section>}
-   {setor==='comercial'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios Comerciais</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Orçamentos" valor={formatarNumero(comercial.totalOrcamentos)}/><Kpi nome="Valor orçado" valor={formatarMoeda(comercial.valorOrcado)}/><Kpi nome="Vendidos" valor={formatarNumero(comercial.vendidos)}/><Kpi nome="Conversão" valor={formatarPercentual(comercial.taxaConversao,1)}/><Kpi nome="Aprovados" valor={formatarNumero(comercial.aprovados)}/><Kpi nome="Recusados" valor={formatarNumero(comercial.recusados)}/><Kpi nome="Ticket médio" valor={formatarMoeda(comercial.ticketMedio)}/></div><Modulo nome="Orçamentos e funil" texto="Consultar os orçamentos e o andamento comercial." href="/orcamento/pesquisar"/><Modulo nome="Prospecção de obras" texto="Acompanhar obras por cidade, bairro, responsável, situação e emitir PDF ou CSV." href="/relatorios/prospeccao"/></section>}
-   {setor==='producao'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios de Produção</h2><p className="text-xs text-slate-500">Resumo existente de Medição Final</p><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Medições" valor={formatarNumero(medicao.totalMedicoes)}/><Kpi nome="Medições com itens" valor={formatarNumero(medicao.medicoesComItens)}/><Kpi nome="Itens para medir" valor={formatarNumero(medicao.itensTotal)}/><Kpi nome="Itens medidos" valor={formatarNumero(medicao.itensMedidos)}/><Kpi nome="Conclusão de itens" valor={formatarPercentual(medicao.percentualItensMedidos,1)}/></div><Modulo nome="Quadro de Produção" texto="Acompanhar os cards, etapas e liberações." href="/producao"/></section>}
+   {setor==='comercial'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios Comerciais</h2>{comercialPronto&&<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Orçamentos" valor={formatarNumero(comercial.totalOrcamentos)}/><Kpi nome="Valor orçado" valor={formatarMoeda(comercial.valorOrcado)}/><Kpi nome="Vendidos" valor={formatarNumero(comercial.vendidos)}/><Kpi nome="Conversão" valor={formatarPercentual(comercial.taxaConversao,1)}/><Kpi nome="Aprovados" valor={formatarNumero(comercial.aprovados)}/><Kpi nome="Recusados" valor={formatarNumero(comercial.recusados)}/><Kpi nome="Ticket médio" valor={formatarMoeda(comercial.ticketMedio)}/></div>}<Modulo nome="Orçamentos e funil" texto="Consultar os orçamentos e o andamento comercial." href="/orcamento/pesquisar"/><Modulo nome="Prospecção de obras" texto="Acompanhar obras por cidade, bairro, responsável, situação e emitir PDF ou CSV." href="/relatorios/prospeccao"/></section>}
+   {setor==='producao'&&<section className="space-y-4"><h2 className="text-lg font-bold">Relatórios de Produção</h2><p className="text-xs text-slate-500">Resumo existente de Medição Final</p>{medicaoPronta&&<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Kpi nome="Medições" valor={formatarNumero(medicao.totalMedicoes)}/><Kpi nome="Medições com itens" valor={formatarNumero(medicao.medicoesComItens)}/><Kpi nome="Itens para medir" valor={formatarNumero(medicao.itensTotal)}/><Kpi nome="Itens medidos" valor={formatarNumero(medicao.itensMedidos)}/><Kpi nome="Conclusão de itens" valor={formatarPercentual(medicao.percentualItensMedidos,1)}/></div>}<Modulo nome="Quadro de Produção" texto="Acompanhar os cards, etapas e liberações." href="/producao"/></section>}
    {setor==='financeiro'&&<>{acessos.financeiro.consultar&&<FinanceiroRelatorio dados={financeiro} carregando={carregando}/>}{acessos.plano_contas.consultar&&<PlanoContasGerencial podeEditar={acessos.plano_contas.editar} inicio={inicio} fim={fim} onClassificado={()=>void carregar("financeiro")}/>}<div className="grid gap-3 md:grid-cols-3 print:hidden"><Modulo nome="Contas a receber" texto="Acessar títulos e recebimentos detalhados" href="/financeiro/contas-receber"/><Modulo nome="Contas a pagar" texto="Acessar obrigações e pagamentos detalhados" href="/financeiro/contas-pagar"/><Modulo nome="Caixa" texto="Acessar os movimentos do balcão" href="/balcao/caixa"/></div></>}
    {setor==='compras'&&<Catalogo setor="Compras / Estoque" itens={[['Compras','Consultar os pedidos e materiais','/compras'],['Notas fiscais','Consultar os documentos de compra','/compras/notas'],['Estoque','Consultar o estoque disponível','/estoque']]}/>}
    {setor==='engenharia'&&<Catalogo setor="Engenharia" itens={[['Engenharia','Consultar receitas, materiais e plano de corte','/engenharia']]}/>}

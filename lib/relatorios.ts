@@ -1,4 +1,5 @@
 import { tokenAtual } from './auth'
+import { comLimiteConsulta, fetchConsulta } from './limiteConsulta'
 
 export type FiltroPeriodoRelatorio = {
   inicio?: string
@@ -24,17 +25,17 @@ export type ResumoMedicao = {
 }
 
 
-async function resumo(tipo:'comercial'|'producao',filtro:FiltroPeriodoRelatorio){
- const token=await tokenAtual()
+async function resumo(tipo:'comercial'|'producao',filtro:FiltroPeriodoRelatorio,signal?:AbortSignal){
+ const token=await comLimiteConsulta(tokenAtual())
  if(!token)throw Error('Entre novamente no Atlas.')
  const params=new URLSearchParams({tipo,...filtro})
- const resp=await fetch('/api/relatorios/resumos?'+params,{headers:{Authorization:'Bearer '+token},cache:'no-store'})
- const json=await resp.json()
+ const resp=await fetchConsulta('/api/relatorios/resumos?'+params,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal})
+ const json=await comLimiteConsulta(resp.json())
  if(!resp.ok)throw Error(json.error||'Não foi possível carregar o relatório.')
  return json
 }
-export async function carregarResumoComercial(filtro:FiltroPeriodoRelatorio):Promise<ResumoComercial>{return resumo('comercial',filtro)}
-export async function carregarResumoMedicao(filtro:FiltroPeriodoRelatorio):Promise<ResumoMedicao>{return resumo('producao',filtro)}
+export async function carregarResumoComercial(filtro:FiltroPeriodoRelatorio,signal?:AbortSignal):Promise<ResumoComercial>{return resumo('comercial',filtro,signal)}
+export async function carregarResumoMedicao(filtro:FiltroPeriodoRelatorio,signal?:AbortSignal):Promise<ResumoMedicao>{return resumo('producao',filtro,signal)}
 
 export function baixarCsv(nome: string, linhas: (string | number)[][]) {
   const escapar = (v: string | number) => {
