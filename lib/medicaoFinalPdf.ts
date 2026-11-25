@@ -4,7 +4,7 @@ import { carregarChecklistMedicaoV2, camposDoItemV2, valorRespostaItemV2, status
 import { tokenAtual } from './auth'
 import { carregarLayoutMedicaoA4, LAYOUT_MEDICAO_A4_PADRAO, type LayoutMedicaoA4 } from './medicaoFinalLayoutA4'
 
-type IdentificacaoPdf = { cliente_nome?: string | null; nome_obra?: string | null; numero_orcamento?: string | null }
+type IdentificacaoPdf = { cliente_nome?: string | null; nome_obra?: string | null; numero_orcamento?: string | null; local_contramarco?: import('./contramarcoLocal').LocalContramarco }
 
 function texto(valor: unknown): string {
   if (valor === null || valor === undefined || valor === '') return '-'

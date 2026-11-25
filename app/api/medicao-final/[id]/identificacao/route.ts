@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
+import { acessoLocalContramarco, lerLocalContramarco } from '@/lib/contramarcoLocalServer'
 import { anexoEhPdf, anexoTemArquivo, baixarAnexoPrivadoOuLegado, type AnexoStorage } from '@/lib/anexoPrivadoServer'
 
 export const runtime = 'nodejs'
@@ -111,13 +112,24 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data: medicao, error: erroMedicao } = await supabaseAdmin
     .from('medicoes_finais')
-    .select('id, cliente_nome, orcamento_id, obra_id')
+    .select('id, cliente_nome, orcamento_id, obra_id, tipo_medicao')
     .eq('id', params.id)
     .eq('empresa_id', usuario.empresa_id)
     .maybeSingle()
 
   if (erroMedicao || !medicao) {
     return NextResponse.json({ error: 'Medicao Final nao encontrada.' }, { status: 404 })
+  }
+
+  let localContramarco: Awaited<ReturnType<typeof lerLocalContramarco>> | null = null
+  if (medicao.tipo_medicao === 'contramarco') {
+    try {
+      const acesso = await acessoLocalContramarco(req, medicao.id)
+      if (acesso) {
+        const local = await lerLocalContramarco(acesso)
+        if (local.updated_at) localContramarco = local
+      }
+    } catch { /* preserve the existing PDF identification if the new module is unavailable */ }
   }
 
   const { data: obra } = medicao.obra_id
@@ -127,7 +139,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (!medicao.orcamento_id) {
     return NextResponse.json({
       cliente_nome: medicao.cliente_nome || null,
-      nome_obra: obra?.nome || null,
+      nome_obra: localContramarco?.nome_obra || obra?.nome || null,
+      ...(localContramarco ? { local_contramarco: localContramarco } : {}),
       numero_orcamento: null,
     })
   }
@@ -152,7 +165,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   return NextResponse.json({
     cliente_nome: medicao.cliente_nome || null,
-    nome_obra: nomeObra,
+    nome_obra: localContramarco?.nome_obra || nomeObra,
+    ...(localContramarco ? { local_contramarco: localContramarco } : {}),
     numero_orcamento: numeroWVetro || (orcamento?.numero != null ? String(orcamento.numero) : null),
   })
 }

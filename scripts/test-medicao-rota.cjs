@@ -19,7 +19,7 @@ assert.equal(medicaoIdDaRota(`/producao/medicao-final/${measurementId}/`), measu
 assert.equal(medicaoIdDaRota(`/producao/medicao-final/${measurementId}/extra`), null)
 async function scenario({ data, error, online = true, storageFails = false, cached = null, reject = false }) {
   const navigations = [], states = [], filters = []
-  let effect
+  const effects = []
   function resultFor(table) {
     if (reject) throw Error('network')
     if (error) return { data: null, error }
@@ -42,7 +42,7 @@ async function scenario({ data, error, online = true, storageFails = false, cach
   const page = load('app/producao/medicao-final/cliente/[clienteId]/page.tsx', name => {
     if (name === 'react') return {
       useState: v => [v, value => states.push(value)],
-      useEffect: fn => { effect = fn },
+      useEffect: fn => { effects.push(fn) },
       useMemo: fn => fn(),
     }
     if (name === 'react/jsx-runtime') return { jsx: () => null, jsxs: () => null }
@@ -58,7 +58,7 @@ async function scenario({ data, error, online = true, storageFails = false, cach
     if (name === '@/lib/auth') return { tokenAtual: async () => '', usuarioAtual: async () => null }
     throw Error(name)
   }, { navigator: { onLine: online }, localStorage: { setItem: () => { if (storageFails) throw Error('storage') }, getItem: () => cached } })
-  page.default(); effect()
+  page.default(); effects.forEach(fn => fn())
   await new Promise(resolve => setImmediate(resolve))
   return {navigations, states, filters}
 }

@@ -115,6 +115,7 @@ export default function AbrirMedidaFinalCliente() {
   const [orcamentos, setOrcamentos] = useState<OrcamentoResumo[]>([])
   const [orcamentosVendidos, setOrcamentosVendidos] = useState<string[]>([])
   const [medicoes, setMedicoes] = useState<MedicaoResumo[]>([])
+  const [nomesObrasMedicoes,setNomesObrasMedicoes]=useState<Record<string,string>>({})
   const [historicosWVetro, setHistoricosWVetro] = useState<HistoricoWVetroResumo[]>([])
   const [candidatosWVetro, setCandidatosWVetro] = useState<CandidatoWVetro[]>([])
   const [sincronizandoWVetro, setSincronizandoWVetro] = useState(false)
@@ -191,6 +192,20 @@ export default function AbrirMedidaFinalCliente() {
     }
   }
 
+  useEffect(()=>{
+    let ativo=true
+    setNomesObrasMedicoes({})
+    if(!clienteId)return
+    void (async()=>{
+      try{
+        const token=await tokenAtual()
+        if(!token)return
+        const resp=await fetch('/api/medicao-final/locais-contramarco?cliente='+encodeURIComponent(clienteId),{headers:{Authorization:'Bearer '+token},cache:'no-store'})
+        if(resp.ok){const d=await resp.json();if(ativo)setNomesObrasMedicoes(d.nomes||{})}
+      }catch{ /* The existing measurement history remains available. */ }
+    })()
+    return()=>{ativo=false}
+  },[clienteId])
   const orcamentosAtuais = useMemo(() => orcamentos.filter(o => {
     if (o.revisao_atual === false) return false
     if (orcamentosVendidos.includes(o.id)) return true
@@ -356,10 +371,10 @@ export default function AbrirMedidaFinalCliente() {
     }
   }
 
-  async function iniciarSemOrcamento() {
+  async function iniciarSemOrcamento(nova = false) {
     if (tipo !== 'contramarco' || criando || !cliente || !usuario) return
     const existente = medicoes.find(m => !m.orcamento_id && (m.tipo_medicao || 'tipologia') === tipo)
-    if (existente) {
+    if (existente && !nova) {
       try { localStorage.setItem(`atlas-medicao-cliente-${clienteId}`, existente.id) } catch {}
       router.push(`/producao/medicao-final/${existente.id}`)
       return
@@ -488,6 +503,7 @@ export default function AbrirMedidaFinalCliente() {
                     <Link key={m.id} href={`/producao/medicao-final/${m.id}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
                       <div>
                         <p className="text-sm font-bold text-slate-800">{tipoLabel(m.tipo_medicao)}{!m.orcamento_id ? ' · Manual' : ''}</p>
+                        {nomesObrasMedicoes[m.id]&&<p className="break-words text-xs font-semibold text-slate-700">{nomesObrasMedicoes[m.id]}</p>}
                         <p className="text-xs text-slate-500">{dataBR(m.created_at)} · {statusLabel(m.status_operacional)}</p>
                       </div>
                       <span className="text-xs font-bold text-blue-700">Continuar</span>
@@ -533,6 +549,13 @@ export default function AbrirMedidaFinalCliente() {
               </button>
             )}
 
+            {tipo === 'contramarco' && contramarcoAvulso && (
+              <button type="button" disabled={criando || !cliente || !usuario} onClick={() => {
+                if (window.confirm('Criar uma nova medição independente para outra obra deste cliente? A anterior será preservada.')) void iniciarSemOrcamento(true)
+              }} className="mb-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-3 text-sm font-bold text-emerald-800 disabled:opacity-50">
+                <Plus size={18}/> Nova medição em outra obra
+              </button>
+            )}
             <h2 className="text-xl font-black text-slate-900">Selecionar orçamento</h2>
             <p className="mt-1 text-sm text-slate-500">Lista com as tipologias de cada um.</p>
 

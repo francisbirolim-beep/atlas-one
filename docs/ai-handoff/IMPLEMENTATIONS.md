@@ -1,3 +1,11 @@
+## 2026-11-25 — Orçamento e registro de venda exclusiva de contramarcos (LOCAL)
+
+Criar/importar posições, reutilizar rascunho ao conferir a medição, receita técnica e consumo líquido, catálogo com fotos, preço unitário informado, proposta A4, aceite, registro comercial e cancelamento motivado; isolamento/versão, testes PGlite e Chromium simulados. Migrations não aplicadas. Integração nativa de financeiro/produção e homologação Supabase real pendentes.
+
+## 2026-11-24 — Dados independentes da obra (contramarcos, branch local)
+
+Identificação por visita, GPS, fotos privadas, nova medição independente, histórico com nome da obra, integração aos relatórios e regras de autorização/versionamento. Migration candidata aditiva, não aplicada. Conversão comercial e validação em homologação pendentes.
+
 ## 2026-11-24 — Conferência de contramarcos (branch local)
 
 Seleção de orçamento não vendido exclusiva para contramarcos no Cliente 360, referência dimensional pré-preenchida, confirmação de medidas e folgas, relatório de conferência A4 separado de corte, ajuste de layout e regra geral de responsividade. Sem publicação ou migração. Próximos incrementos e homologação em NEXT_TASK.md.
