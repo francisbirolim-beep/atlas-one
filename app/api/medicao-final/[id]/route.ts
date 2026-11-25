@@ -49,6 +49,17 @@ export async function DELETE(
       return NextResponse.json({ error: 'Medicao Final nao encontrada.' }, { status: 404 })
     }
 
+    // Novos registros técnicos/comerciais não podem ser apagados por uma exclusão legada.
+    if (medicao.tipo_medicao === 'contramarco') {
+      const [local,fotos,comercial]=await Promise.all([
+        supabaseAdmin.from('medicao_contramarco_local').select('medicao_id').eq('empresa_id',usuario.empresa_id).eq('medicao_id',id).limit(1),
+        supabaseAdmin.from('medicao_contramarco_fotos').select('id').eq('empresa_id',usuario.empresa_id).eq('medicao_id',id).limit(1),
+        supabaseAdmin.from('orcamentos_contramarco').select('id').eq('empresa_id',usuario.empresa_id).eq('origem_medicao_id',id).limit(1),
+      ])
+      if(local.error||fotos.error||comercial.error)return NextResponse.json({error:'Não foi possível conferir os vínculos. Exclusão não realizada.'},{status:503})
+      if(local.data?.length||fotos.data?.length||comercial.data?.length)return NextResponse.json({error:'Esta medição tem identificação, fotos ou orçamento exclusivo. Preserve seu histórico.'},{status:409})
+    }
+
     // Uma proposta usada apenas como referência não autoriza excluir seus cards.
     if (medicao.tipo_medicao === 'contramarco' && medicao.orcamento_id) {
       const { data: venda, error: erroVenda } = await supabaseAdmin.from('vendas_obras')

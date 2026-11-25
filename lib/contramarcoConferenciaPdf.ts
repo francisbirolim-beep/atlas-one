@@ -19,7 +19,10 @@ export async function gerarPdfRelatorioConferenciaContramarcos(medicao: MedicaoF
   linha('CONTRAMARCOS • MEDIÇÃO NA OBRA — NÃO É ORDEM DE CORTE', 9, true)
   linha('Cliente: ' + (id.cliente_nome || medicao.cliente_nome))
   linha('Obra: ' + (id.nome_obra || 'Não vinculada') + ' | Orçamento: ' + (id.numero_orcamento || numero || 'Avulso'))
-  linha('Endereço: ' + [medicao.endereco, medicao.bairro, medicao.cidade, medicao.cep].filter(Boolean).join(' - '))
+  const local = id.local_contramarco
+  linha('Endereço da obra: ' + (local ? [local.endereco,local.cidade].filter(Boolean).join(' - ') || 'Não informado' : 'A confirmar na obra'))
+  if(local?.gps)linha('GPS: '+local.gps)
+  if(local?.observacoes)linha('Observações da obra: '+local.observacoes,9)
   linha('Data: ' + new Date().toLocaleDateString('pt-BR'))
   linha('Todas as medidas em mm (largura × altura); folgas totais por dimensão.', 9)
   const par = (l: unknown, a: unknown) => (l ?? '_____') + ' × ' + (a ?? '_____')

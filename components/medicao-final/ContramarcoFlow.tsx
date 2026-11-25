@@ -17,6 +17,7 @@ import {
   type DadosMedidaItem,
 } from '@/lib/medicaoFinal'
 import { listarTipologias } from '@/lib/tipologias'
+import ContramarcoLocalObra from './ContramarcoLocalObra'
 import { medidaInicialContramarco } from '@/lib/contramarcoConferencia'
 import { gerarPdfRelatorioConferenciaContramarcos } from '@/lib/contramarcoConferenciaPdf'
 import { gerarPdfMedicaoFinal } from '@/lib/medicaoFinalPdf'
@@ -669,6 +670,9 @@ export default function ContramarcoFlow({
         </div>
       )}
 
+      <div className={tela === 'medicao' ? 'hidden' : 'mx-auto w-full max-w-3xl px-4 pt-4'}>
+        <ContramarcoLocalObra key={medicao.id} medicaoId={medicao.id} cliente={medicao.cliente_nome}/>
+      </div>
       {tela === 'lista' && (
         <main className="mx-auto max-w-3xl px-4 py-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -1178,6 +1182,9 @@ export default function ContramarcoFlow({
             <p className="mt-2 text-[11px] text-slate-500">Planos não aprovados são prévias para conferência. Receitas técnicas não validadas permanecem sinalizadas no PDF.</p>
           </section>}
 
+          {medicao.cliente_id && pendentes === 0 && comContramarco > 0 && <Link
+            href={`/clientes/${medicao.cliente_id}/contramarcos?medicao=${encodeURIComponent(medicao.id)}`}
+            className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-700 bg-white px-4 py-3 text-center text-sm font-black text-emerald-800"><FileText size={16}/> Gerar orçamento exclusivo de contramarcos</Link>}
           {comContramarco > 0 && <button type="button"
             onClick={() => void gerarPdfPlanoCorteContramarcos(medicao, itens)}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-black text-white"

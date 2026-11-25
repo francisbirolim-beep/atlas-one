@@ -121,6 +121,7 @@ export default function ComposicaoOrcamentoPage(){
       </div>
       <div className="flex flex-wrap gap-2">
         {wv&&pdf?<a href={pdf} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-semibold"><ExternalLink size={15}/> Ver PDF original W.Vetro</a>:wv?<button disabled title="A API do W.Vetro não informou uma URL de PDF para este orçamento." className="inline-flex items-center gap-2 rounded-xl border bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-400"><ExternalLink size={15}/> PDF original W.Vetro</button>:null}
+        {orc.cliente_id&&itens.length>0&&<Link href={`/clientes/${orc.cliente_id}/contramarcos?orcamento=${encodeURIComponent(orcamentoId)}`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-bold text-emerald-800"><FileText size={15}/> Gerar orçamento de contramarcos</Link>}
         <Link href={`/orcamento/${orcamentoId}/imprimir`} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white"><Printer size={15}/> Orçamento Atlas (PDF)</Link>
         <button onClick={()=>void recalcular()} disabled={ocupado} className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-semibold disabled:opacity-50">{ocupado?<Loader2 size={15} className="animate-spin"/>:<RefreshCw size={15}/>} Recalcular</button>
       </div>

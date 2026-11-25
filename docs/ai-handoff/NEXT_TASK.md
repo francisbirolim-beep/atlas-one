@@ -1,3 +1,17 @@
+## 2026-11-25 — Validar e integrar comercial exclusivo de contramarcos
+
+1. Branch feat/contramarco-comercial-20261125: atualizar com main, revisar diff e executar release check; homologação PostgreSQL local e interface Chromium simulada já executadas. Criar/recuperar ambiente Supabase completo para validar migrations, API, storage, permissões e catálogo real sem escrever na produção.
+2. Conferir a experiência física em iPhone/Android, iPad, Safari, Mac e PC. Confirmar disponibilidade das fotos e dos códigos CM060/CM200 e dos acessórios efetivos. Preços unitários atualmente são informados pelo vendedor; custo/otimização e margens exigem regras de compra validadas.
+3. Definir vínculo de venda exclusiva com financeiro, compra e OP: separar origem dimensional e referência comercial, não criar venda de esquadrias, não liberar produção pela simples emissão/aceite. Vincular medição exclusiva e snapshot, conferir regra de aprovação, revisão/cancelamento e não duplicação. O registro exclusivo não está integrado a vendas_obras/financeiro/OP.
+4. Release com migração aditiva, plano de rollback, revisão de permissões, aprovação expressa, PR e publicação em segundo plano. Não aplicar migrations reais antes dos testes.
+
+## 2026-11-24 — Próximo incremento: comercial e homologação de contramarcos
+
+1. Homologar identificação da obra em ambiente separado, com migration aditiva, GPS mediante autorização, fotos privadas (limite 3 MB; compactação dependente do navegador), retomada e concorrência entre aparelhos; testar iPhone, Android, iPad, MacBook e PC. Verificar que cliente/orçamento/obra preexistentes não mudam.
+2. Conferir todos os gates de produção e a exclusão de medições vinculadas: a rota legada de exclusão pode remover cards de todo o orçamento. Corrigir de maneira isolada e testar antes de disponibilizar a seleção de propostas não vendidas.
+3. Orçamento exclusivo: separar origem dimensional e vínculo comercial; usar snapshot das medidas e receitas de corte, selecionar custos/preços conforme o cadastro real e incluir imagem de cada perfil/acessório. Não inferir custos nem criar venda automática. Integrar confirmação e OP ao orçamento exclusivo, não à proposta de esquadrias. Validar duplicação, cancelamento, revisão, permissões e financeiro.
+4. Testes de integração, layout real, release preflight, PR e publicação controlada somente após homologação. Não aplicar migration em produção nesta etapa.
+
 ## 2026-11-24 — Homologar conferência de contramarcos e completar fluxo comercial
 
 1. Validar branch `feat/contramarco-conferencia-responsiva-20261124` com proposta enviada sem venda, orçamento vendido, retomada, medida corrigida (2000 x 2000 para 1500 x 2000), folgas totais e relatório A4, sem modificar a proposta nem liberar produção.
