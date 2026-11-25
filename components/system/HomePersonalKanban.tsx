@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ArrowLeft, ArrowRight, Check, Clock3, Columns3, GripVertical, MoreHorizontal, Pencil, Plus } from 'lucide-react'
-import { tokenAtual, usuarioAtual } from '@/lib/auth'
+import { usuarioAtual } from '@/lib/auth'
+import { buscarDelegadasHome, carregarTrabalhoHome } from '@/lib/homeLeituras'
 import {
   concluirTarefa, criarColunaTarefa, listarColunasTarefas, listarTarefas,
   moverTarefa, reabrirTarefa, renomearColunaTarefa, reordenarColunasTarefa,
@@ -15,16 +16,6 @@ import DetalheTarefaEquipe from '@/components/system/DetalheTarefaEquipe'
 import type { TarefaPessoal, TarefaPessoalColuna, Usuario } from '@/lib/tipos'
 
 type Delegada = TarefaPessoal & { responsavel_nome: string; coluna_nome: string }
-async function buscarDelegadas(): Promise<Delegada[]> {
-  const token = await tokenAtual()
-  if (!token) return []
-  try {
-    const r = await fetch('/api/tarefas/delegadas', { cache: 'no-store', headers: { Authorization: 'Bearer ' + token } })
-    if (!r.ok) return []
-    const json = await r.json()
-    return Array.isArray(json.tarefas) ? json.tarefas : []
-  } catch { return [] }
-}
 function etapaDelegada(t: Delegada): 'pedido' | 'andamento' | 'aguardando' | 'concluido' {
   if (t.concluida_em) return 'concluido'
   const nome = semAcentos(t.coluna_nome || '')
@@ -188,7 +179,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
       if (!ativo) return
       setUsuario(u)
       if (u) {
-        const [cls, ts, ds, es, ev, ce] = await Promise.all([listarColunasTarefas(u.id), listarTarefas(u.id), buscarDelegadas(), listarEquipe().catch(()=>[]), listarEventosDoUsuario(u.id), listarConclusoesEventosUsuario(u.id)])
+        const {colunas:cls,tarefas:ts,delegadas:ds,equipe:es,eventos:ev,conclusoes:ce} = await carregarTrabalhoHome(u.id)
         if (ativo) { setColunas(cls); setTarefas(ts); setDelegadas(ds); setEquipe(es); setEventos(ev); setConclusoesEventos(ce) }
       }
       if (ativo) setCarregando(false)
@@ -198,7 +189,7 @@ export default function HomePersonalKanban({ somenteEquipe = false }: { somenteE
 
   const atualizar = useCallback(async () => {
     if (!usuario) return
-    const [cls, ts, ds, es, ev, ce] = await Promise.all([listarColunasTarefas(usuario.id), listarTarefas(usuario.id), buscarDelegadas(), listarEquipe().catch(()=>[]), listarEventosDoUsuario(usuario.id), listarConclusoesEventosUsuario(usuario.id)])
+    const [cls, ts, ds, es, ev, ce] = await Promise.all([listarColunasTarefas(usuario.id), listarTarefas(usuario.id), buscarDelegadasHome(), listarEquipe().catch(()=>[]), listarEventosDoUsuario(usuario.id), listarConclusoesEventosUsuario(usuario.id)])
     setColunas(cls)
     setTarefas(ts)
     setDelegadas(ds)

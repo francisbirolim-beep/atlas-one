@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, MapPin, Plus, RotateCcw, X } from 'lucide-react'
 import { usuarioAtual } from '@/lib/auth'
+import { carregarAgendaHome } from '@/lib/homeLeituras'
 import { concluirEventoUsuario, criarEvento, criarEventoRecorrente, listarConclusoesEventosUsuario, listarEventosDoUsuario, listarUsuariosConvidaveis, reabrirEventoUsuario, type EventoComConvite } from '@/lib/eventos'
 import type { TipoRecorrencia } from '@/lib/recorrencia'
 import BotaoMicrofone from '@/components/BotaoMicrofone'
@@ -59,7 +60,7 @@ export default function HomeCalendarBlock() {
       if (!ativo) return
       setUsuario(u)
       if (!u) { setCarregando(false); return }
-      const [lista, concluidas] = await Promise.all([listarEventosDoUsuario(u.id), listarConclusoesEventosUsuario(u.id)])
+      const [lista, concluidas] = await carregarAgendaHome(u.id)
       if (!ativo) return
       setEventos(lista)
       setConclusoes(concluidas)

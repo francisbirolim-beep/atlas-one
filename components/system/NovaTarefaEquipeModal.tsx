@@ -37,12 +37,9 @@ export default function NovaTarefaEquipeModal() {
 
   useEffect(()=>{
     let ativo=true
-    usuarioAtual().then(async u=>{
+    usuarioAtual().then(u=>{
       if(!ativo||!u)return
       setUsuario(u)
-      const outros=await listarUsuariosConvidaveis(u.id)
-      if(!ativo)return
-      setNomes([{id:u.id,nome:u.nome},...outros])
     })
     const abrir=()=>setAberta(true)
     window.addEventListener('atlas:tarefa-equipe-nova',abrir)
@@ -52,6 +49,16 @@ export default function NovaTarefaEquipeModal() {
     if(!aberta)return
     setResponsaveis(u=>u.length?u:(usuario?[usuario.id]:[]))
     setErro('')
+  },[aberta,usuario])
+  // O diretório de pessoas é necessário só quando o formulário é aberto.
+  useEffect(()=>{
+    if(!aberta||!usuario)return
+    let ativo=true
+    setNomes([{id:usuario.id,nome:usuario.nome}])
+    void listarUsuariosConvidaveis(usuario.id).then(outros=>{
+      if(ativo)setNomes([{id:usuario.id,nome:usuario.nome},...outros])
+    }).catch(()=>{})
+    return()=>{ativo=false}
   },[aberta,usuario])
   const buscaLista=useMemo(()=>nomes.filter(n=>normalizar(n.nome).includes(normalizar(busca))),[nomes,busca])
   function alternarPessoa(id:string){setResponsaveis(atual=>atual.includes(id)?atual.filter(x=>x!==id):[...atual,id])}
