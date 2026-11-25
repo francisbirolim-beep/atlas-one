@@ -33,6 +33,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const acao = String(body?.acao || '')
 
+    if (acao === 'status') {
+      const endpoint = typeof body?.endpoint === 'string' ? body.endpoint : ''
+      const base = () => supabaseAdmin.from('notificacao_push_assinaturas')
+        .select('id', { count: 'exact', head: true })
+        .eq('empresa_id', usuario.empresa_id).eq('usuario_id', usuario.id).eq('ativo', true)
+      const [total, atual] = await Promise.all([base(), endpoint ? base().eq('endpoint', endpoint) : Promise.resolve({ count: 0, error: null })])
+      if (total.error || atual.error) throw new Error('Não foi possível verificar as notificações.')
+      return NextResponse.json({ ok: true, dispositivosAtivos: total.count || 0, inscrito: Boolean(atual.count) })
+    }
+
     if (acao === 'assinar') {
       const assinatura = body?.assinatura || {}
       const endpoint = String(assinatura?.endpoint || '').trim()
