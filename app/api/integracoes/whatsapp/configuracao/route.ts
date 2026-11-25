@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { autenticarTenant } from '@/lib/tenantServer'
+import { autenticarTenantCentral as autenticarTenant } from '@/lib/atlasChatEntradaServer'
 import { filtrarConfiguracoesDeGruposVisiveis, filtrarGruposDosCanaisConectados, idsCanaisWhatsAppConectados } from '@/lib/whatsappGruposSessaoAtiva'
 
 export const dynamic = 'force-dynamic'

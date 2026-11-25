@@ -1,4 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { aplicarVinculoEncerrado } from "../_shared/atlasChatAplicarVinculo.ts";
+import { avaliarArrobaEntrada } from "../_shared/atlasChatArrobaEntrada.ts";
+import { avaliarRoteamentoAtlas } from "../_shared/atlasChatRoteamento.ts";
+import { atlasChatNotificacao } from "../_shared/atlasChatNotificacao.ts";
 
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -261,7 +265,7 @@ async function notificarMensagemWhatsApp(config: any, channel: any, conversation
   const grupo = conversation.whatsapp_chat_tipo === "grupo";
   // Nos grupos, avisar no início de cada pendência, sem inundar o responsável.
   if (grupo && Number(conversation.nao_lidas || 0) > 0) return;
-  const recipients = await destinatariosWhatsApp(config, channel, conversation);
+  let recipients = await destinatariosWhatsApp(config, channel, conversation);
   if (!recipients.length) return;
 
   const originId = `${channel.id}:${body.whatsappMessageId || crypto.randomUUID()}`;
@@ -272,8 +276,27 @@ async function notificarMensagemWhatsApp(config: any, channel: any, conversation
     ? "Há uma mensagem aguardando sua atenção nesse grupo."
     : String(text || "Nova mensagem").slice(0, 500);
 
-  const rows = recipients.map((usuarioId) => ({
-    empresa_id: config.empresa_id,
+  // Não consultar nem alterar a rota de notificações legadas com o piloto desligado.
+  const piloto = Deno.env.get("ATLAS_CHAT_NOTIFICACOES_PILOTO") === "true";
+  const usuariosPiloto = Deno.env.get("ATLAS_CHAT_USUARIOS") || "";
+  let atual = conversation;
+  if (piloto && !grupo && channel.principal === true) {
+    const { data, error } = await db.from("atendimento_conversas")
+      .select("id,empresa_id,whatsapp_canal_id,whatsapp_chat_tipo,responsavel_id,ocultar_da_caixa")
+      .eq("id", conversation.id).eq("empresa_id", config.empresa_id).maybeSingle();
+    // Não redirecionar um aviso se a propriedade atual não puder ser confirmada.
+    atual = !error && data ? data : null;
+    if (atual && atual.responsavel_id !== conversation.responsavel_id) {
+      recipients = await destinatariosWhatsApp(config, channel, atual);
+    }
+  }
+  const rows = recipients.map((usuarioId) => {
+    const individual = atual ? atlasChatNotificacao({
+      ativo: piloto, usuarios: usuariosPiloto, empresa: config.empresa_id,
+      canal: channel, conversa: atual, destinatario: usuarioId,
+    }) : null;
+    return {
+      empresa_id: config.empresa_id,
     usuario_id: usuarioId,
     categoria: "chat",
     tipo: grupo ? "whatsapp_grupo_mensagem" : "whatsapp_mensagem",
@@ -283,7 +306,9 @@ async function notificarMensagemWhatsApp(config: any, channel: any, conversation
     origem_tipo: grupo ? "whatsapp_grupo_mensagem" : "whatsapp_mensagem",
     origem_id: originId,
     push_status: "pendente",
-  }));
+    ...(individual || {}),
+    };
+  });
 
   for (const row of rows) {
     const { error } = await db.from("notificacoes").insert(row);
@@ -2003,6 +2028,7 @@ async function conversationForInbound(
   chatTipo = "contato",
   chatJid: string | null = null,
   grupoNome: string | null = null,
+  fromMe = false,
 ) {
   let query = db.from("atendimento_conversas")
     .select("*")
@@ -2020,6 +2046,43 @@ async function conversationForInbound(
     .maybeSingle();
 
   const isGroup = chatTipo === "grupo";
+  // Modo sombra: não altera responsável, não grava conteúdo/identidade em logs.
+  // O fluxo legado permanece exatamente igual com a flag desligada.
+  if (Deno.env.get("ATLAS_CHAT_ROTEAMENTO_SOMBRA") === "true") {
+    const shadow = await avaliarRoteamentoAtlas(db,{
+      ativo:true,empresa:config.empresa_id,canal:channel,telefone,jid:chatJid,
+      grupo:isGroup,fromMe,existente:existing || null,
+      usuarios:Deno.env.get("ATLAS_CHAT_USUARIOS") || "",
+      numeros:Deno.env.get("ATLAS_CHAT_NUMEROS_TESTE") || "",
+    });
+    console.info("Atlas Chat roteamento sombra:",shadow.motivo);
+  }
+
+  // Avaliação de comandos @, sem enviar menu, confirmar ou transferir.
+  if (Deno.env.get("ATLAS_CHAT_ARROBAS_SOMBRA") === "true") {
+    const resultado = await avaliarArrobaEntrada(db,{
+      ativo:true,empresa:config.empresa_id,canal:channel,telefone,jid:chatJid,
+      grupo:isGroup,fromMe,texto,
+      usuarios:Deno.env.get("ATLAS_CHAT_USUARIOS") || "",
+      numeros:Deno.env.get("ATLAS_CHAT_NUMEROS_TESTE") || "",
+    });
+    console.info("Atlas Chat arrobas sombra:",resultado.tipo);
+  }
+
+  // Execução experimental restrita a uma origem de homologação explícita.
+  // O projeto principal é bloqueado mesmo com configuração indevida.
+  if (Deno.env.get("ATLAS_CHAT_ATRIBUICAO_HOMOLOGACAO") === "true") {
+    const atribuida = await aplicarVinculoEncerrado(db,{
+      ativo:true,empresa:config.empresa_id,canal:channel,telefone,jid:chatJid,
+      grupo:isGroup,fromMe,existente:existing || null,
+      usuarios:Deno.env.get("ATLAS_CHAT_USUARIOS") || "",
+      numeros:Deno.env.get("ATLAS_CHAT_NUMEROS_TESTE") || "",
+    },{
+      ativo:true,url:Deno.env.get("SUPABASE_URL") || "",
+      ref:Deno.env.get("ATLAS_CHAT_REF_HOMOLOGACAO") || "",
+    });
+    if(atribuida)return atribuida;
+  }
   const customer = isGroup ? null : await customerByPhone(config.empresa_id, telefone);
 
   let ownerId = channel.usuario_id || null;
@@ -2337,6 +2400,7 @@ Deno.serve(async (req) => {
         chatTipo,
         chatJid,
         body.grupoNome || null,
+        body.fromMe === true,
       );
       const session = await openSession(conversation);
       const now = body.timestamp || new Date().toISOString();

@@ -1,5 +1,7 @@
 'use client'
 
+import { parametrosAtlasChat } from '@/supabase/functions/_shared/atlasChatNotificacao'
+
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -22,6 +24,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     || pathname === '/redefinir-senha'
     || pathname.startsWith('/medicao-final/acesso/')
     || pathname.startsWith('/assistencia/acesso/')
+  const loginDestino = pathname === '/atlas-chat'
+    ? '/login?destino=atlas-chat' + (typeof window !== 'undefined' ? '&'+parametrosAtlasChat(new URLSearchParams(window.location.search)) : '')
+    : '/login'
   const rotaBalcao = pathname === '/balcao'
     || pathname.startsWith('/balcao/')
     || pathname.startsWith('/orcamento/balcao/')
@@ -48,7 +53,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         setAutenticado(true)
       } else {
         setAutenticado(false)
-        if (!rotaPublica) window.location.assign('/login?motivo=sessao')
+        if (!rotaPublica) window.location.assign(loginDestino + (loginDestino.includes('?') ? '&' : '?') + 'motivo=sessao')
       }
     }, 5000)
 
@@ -60,7 +65,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         setAutenticado(true)
       } else if (!usuarioEmCache) {
         setAutenticado(false)
-        if (!rotaPublica && navigator.onLine) router.replace('/login?motivo=sessao')
+        if (!rotaPublica && navigator.onLine) router.replace(loginDestino + (loginDestino.includes('?') ? '&' : '?') + 'motivo=sessao')
       }
     }).catch(() => {
       if (!ativo) return
@@ -70,7 +75,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         setAutenticado(true)
       } else if (!rotaPublica) {
         setAutenticado(false)
-        router.replace('/login?motivo=sessao')
+        router.replace(loginDestino + (loginDestino.includes('?') ? '&' : '?') + 'motivo=sessao')
       }
     })
 
@@ -84,7 +89,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       // refresh não deve expulsar o usuário para a tela de login.
       if (event === 'SIGNED_OUT' && !rotaPublica && navigator.onLine) {
         setAutenticado(false)
-        router.replace('/login')
+        router.replace(loginDestino)
       }
     })
 
@@ -93,7 +98,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       window.clearTimeout(timeout)
       listener.subscription.unsubscribe()
     }
-  }, [rotaPublica, router])
+  }, [rotaPublica, router, loginDestino])
 
   if (rotaPublica) return <>{children}</>
   if (checking) return (
@@ -103,7 +108,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         <p className="mt-4 text-sm font-semibold text-slate-600">Abrindo o Atlas...</p>
         <p className="mt-1 text-xs text-slate-400">Se a sessão demorar para responder, use o acesso abaixo.</p>
         <a
-          href="/login?motivo=carregamento"
+          href={loginDestino + (loginDestino.includes('?') ? '&' : '?') + 'motivo=carregamento'}
           className="mt-4 inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-brand-navy shadow-sm"
         >
           Entrar novamente
@@ -112,6 +117,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     </div>
   )
   if (!autenticado) return null
+  if (pathname === '/atlas-chat') return <>{children}</>
   // Recibos são documentos independentes: não colocar dentro do AppShell,
   // pois o cabeçalho, sidebar e dados do usuário apareciam na impressão A4.
   // A sessão continua obrigatória e o mesmo SetorRouteGuard é mantido.

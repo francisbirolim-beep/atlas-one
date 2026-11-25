@@ -1,0 +1,31 @@
+const {test}=require('node:test')
+const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),Module=require('node:module')
+function load(file){const m=new Module(file);m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,file);return m.exports}
+const {destinoEntradaWhatsApp:d,centralPermitida:c,permissoesEntradaAtlas:p}=load('lib/atlasChatEntrada.ts')
+test('quatro combinações de acesso',()=>{assert.equal(d(true,true),'escolher');assert.equal(d(true,false),'chat');assert.equal(d(false,true),'central');assert.equal(d(false,false),'bloqueado')})
+test('configuração ausente conserva entrada anterior e escolha explícita vale para todos',()=>{assert.equal(c(null),true);assert.equal(c(undefined),true);assert.equal(c(false),false);assert.equal(c(false),false)})
+test('equipe exclusivamente no preview e na empresa autorizada',()=>{
+ const {equipePilotoEmpresa}=load('lib/atlasChatPiloto.ts')
+ const k=['ATLAS_CHAT_PILOTO','ATLAS_CHAT_SOMENTE_LEITURA','VERCEL_ENV','ATLAS_CHAT_ACESSO_EQUIPE','ATLAS_CHAT_EMPRESA_PILOTO'],old=Object.fromEntries(k.map(x=>[x,process.env[x]]))
+ try{Object.assign(process.env,{ATLAS_CHAT_PILOTO:'true',ATLAS_CHAT_SOMENTE_LEITURA:'true',VERCEL_ENV:'preview',ATLAS_CHAT_ACESSO_EQUIPE:'true',ATLAS_CHAT_EMPRESA_PILOTO:'e1'});assert.equal(equipePilotoEmpresa('e1'),true);assert.equal(equipePilotoEmpresa('e2'),false);process.env.VERCEL_ENV='production';assert.equal(equipePilotoEmpresa('e1'),false);process.env.VERCEL_ENV='preview';delete process.env.ATLAS_CHAT_ACESSO_EQUIPE;assert.equal(equipePilotoEmpresa('e1'),false)}finally{for(const x of k){if(old[x]===undefined)delete process.env[x];else process.env[x]=old[x]}}
+})
+test('Master grava escopo por empresa e não altera permissão dos canais',()=>{const s=fs.readFileSync('app/api/atlas-chat/admin/entrada/route.ts','utf8');assert.match(s,/u\?\.role==='master'/);assert.match(s,/eq\('empresa_id',u.empresa_id\)/);assert.doesNotMatch(s,/alvo.role==='master'/);assert.match(s,/central_habilitado:b.central/);assert.doesNotMatch(s,/atendimento_whatsapp_permissoes/)})
+test('funcionário do piloto não ganha autorização de envio do Master',()=>{const s=fs.readFileSync('app/api/atlas-chat/route.ts','utf8');assert.match(s,/testeManual:pilotoTesteEnvio\(\)&&u.role==='master'/);assert.match(s,/!ctx\|\|\(pilotoSomenteLeitura\(\)&&!ctx.testeManual\)/)})
+test('central valida acesso no servidor, mantém gateway e webhook intactos',()=>{for(const f of ['conversas','mensagens','midia','contatos','canais','canais/permissoes','grupos/permissoes','grupos/delegacoes','apoio','configuracao','distribuicao','conversa-direta','cadastrar-contato','ia','orcamento-notas','usuarios/permissoes','vincular-cliente'])assert.match(fs.readFileSync('app/api/integracoes/whatsapp/'+f+'/route.ts','utf8'),/autenticarTenantCentral as autenticarTenant/);for(const f of ['gateway','webhook'])assert.doesNotMatch(fs.readFileSync('app/api/integracoes/whatsapp/'+f+'/route.ts','utf8'),/autenticarTenantCentral/)})
+test('seletor e guard não mudam o comportamento com flag desligada',()=>{const b=fs.readFileSync('components/BotaoChatGlobal.tsx','utf8'),l=fs.readFileSync('app/whatsapp/layout.tsx','utf8');assert.match(b,/if\(seletorAtivo\)\{e.preventDefault/);assert.match(l,/if\(!ativo\|\|estado==='liberado'\)/)})
+
+test('Master original conserva acesso padrão até escolher; decisão explícita prevalece',()=>{assert.deepEqual(p(null,true),{chat:true,central:true});assert.deepEqual(p({habilitado:false,central_habilitado:false},true),{chat:false,central:false});assert.deepEqual(p({habilitado:true,central_habilitado:false},false),{chat:true,central:false});assert.deepEqual(p(null,false),{chat:false,central:true})})
+test('painel permite editar qualquer cargo e mantém autorização administrativa separada',()=>{const ui=fs.readFileSync('app/atlas-chat/admin/entrada/page.tsx','utf8'),api=fs.readFileSync('app/api/atlas-chat/admin/entrada/route.ts','utf8');assert.doesNotMatch(ui,/disabled=\{[^}]*role/);assert.match(api,/u\?\.role==='master'/);assert.match(api,/permissoesEntradaAtlas\(a,escopoPilotoLeitura/);assert.doesNotMatch(api,/alvo.role==='master'/)})
+test('acesso individual e central respeitam a escolha explícita também para Master inicial',()=>{const a=fs.readFileSync('lib/atlasChatAcessosServer.ts','utf8'),b=fs.readFileSync('lib/atlasChatEntradaServer.ts','utf8');assert.match(a,/if\(equipePilotoEmpresa\(empresa\)\)/);assert.match(a,/permissoesEntradaAtlas\(data,escopoPilotoLeitura\(empresa,usuario\)\).chat/);assert.match(b,/permissoesEntradaAtlas\(data,escopoPilotoLeitura/);assert.doesNotMatch(b,/centralPermitida\([^)]*role/)})
+
+test('produção é ativada explicitamente apenas na empresa selecionada, sem liberar envio',()=>{
+ const {entradaProducaoAtiva,equipePilotoEmpresa,pilotoSomenteLeitura,pilotoAtivo,pilotoTesteEnvio}=load('lib/atlasChatPiloto.ts')
+ const keys=['VERCEL_ENV','ATLAS_CHAT_ENTRADA_PRODUCAO','ATLAS_CHAT_EMPRESA_PILOTO','ATLAS_CHAT_TESTE_MANUAL','ATLAS_CHAT_PILOTO','ATLAS_CHAT_SOMENTE_LEITURA']
+ const old=Object.fromEntries(keys.map(k=>[k,process.env[k]]))
+ try{Object.assign(process.env,{VERCEL_ENV:'production',ATLAS_CHAT_ENTRADA_PRODUCAO:'true',ATLAS_CHAT_EMPRESA_PILOTO:'e1',ATLAS_CHAT_TESTE_MANUAL:'true'})
+ assert.equal(entradaProducaoAtiva(),true);assert.equal(equipePilotoEmpresa('e1'),true);assert.equal(equipePilotoEmpresa('e2'),false)
+ assert.equal(pilotoAtivo(),true);assert.equal(pilotoSomenteLeitura(),true);assert.equal(pilotoTesteEnvio(),false)
+ delete process.env.ATLAS_CHAT_ENTRADA_PRODUCAO;assert.equal(entradaProducaoAtiva(),false);assert.equal(equipePilotoEmpresa('e1'),false)
+ }finally{for(const k of keys){if(old[k]===undefined)delete process.env[k];else process.env[k]=old[k]}}
+})
+test('atalho antigo redireciona ao chat e mantém consulta leve da central autorizada',()=>{const l=fs.readFileSync('app/whatsapp/layout.tsx','utf8'),b=fs.readFileSync('components/BotaoChatGlobal.tsx','utf8');assert.match(l,/j.central===false&&destino\)router.replace\(destino\)/);assert.match(b,/resumo=pendentes/);assert.match(b,/j.seletor&&j.central!==true/);assert.match(b,/controller\?\.abort\(\)/)})

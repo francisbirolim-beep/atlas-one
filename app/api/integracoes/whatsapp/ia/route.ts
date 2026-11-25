@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { autenticarTenant, type UsuarioTenant } from '@/lib/tenantServer'
+import { autenticarTenantCentral as autenticarTenant } from '@/lib/atlasChatEntradaServer'
+import type { UsuarioTenant } from '@/lib/tenantServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 
 export const dynamic = 'force-dynamic'

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { autenticarTenant } from '@/lib/tenantServer'
+import { autenticarTenantCentral as autenticarTenant } from '@/lib/atlasChatEntradaServer'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { obterDistribuicaoWhatsApp } from '@/lib/whatsappEscalonamento'
 

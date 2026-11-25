@@ -1,3 +1,4 @@
+import { atlasChatNotificacao } from '@/supabase/functions/_shared/atlasChatNotificacao'
 import crypto from 'crypto'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
 import { elegivelAoSecundario, obterDistribuicaoWhatsApp } from '@/lib/whatsappEscalonamento'
@@ -1713,6 +1714,7 @@ export async function iniciarConversaWhatsApp(
     jid: string
     telefone?: string | null
     nome?: string | null
+    somenteNovoAtlas?: boolean
   },
 ) {
   const acesso = await acessoCanalWhatsApp(usuario, dados.canalId)
@@ -1759,7 +1761,7 @@ export async function iniciarConversaWhatsApp(
   if (!telefone) throw new Error('Contato sem telefone válido.')
 
   if (tipo === 'contato') {
-    const { data: bloqueio } = await supabaseAdmin
+    const { data: bloqueio, error: erroBloqueio } = await supabaseAdmin
       .from('atendimento_whatsapp_bloqueios')
       .select('id,bloqueado_em,bloqueado_por_nome')
       .eq('empresa_id', usuario.empresa_id)
@@ -1767,12 +1769,13 @@ export async function iniciarConversaWhatsApp(
       .eq('chat_jid', jid)
       .eq('ativo', true)
       .maybeSingle()
+    if(dados.somenteNovoAtlas&&erroBloqueio)throw erroBloqueio
     if (bloqueio) {
       throw new Error(`Este contato está bloqueado neste WhatsApp${bloqueio.bloqueado_por_nome ? ` por ${bloqueio.bloqueado_por_nome}` : ''}. Desbloqueie antes de iniciar uma nova conversa.`)
     }
   }
 
-  const { data: existente } = await supabaseAdmin
+  const { data: existente, error: erroExistente } = await supabaseAdmin
     .from('atendimento_conversas')
     .select('*')
     .eq('empresa_id', usuario.empresa_id)
@@ -1783,6 +1786,7 @@ export async function iniciarConversaWhatsApp(
     .limit(1)
     .maybeSingle()
 
+  if(dados.somenteNovoAtlas&&erroExistente)throw erroExistente
   const cliente = tipo === 'contato'
     ? await clientePorTelefone(usuario.empresa_id, telefone)
     : null
@@ -1797,6 +1801,7 @@ export async function iniciarConversaWhatsApp(
   const status = tipo === 'contato' ? 'em_atendimento' : 'finalizado'
 
   if (existente) {
+    if(dados.somenteNovoAtlas)throw new Error('Contato existente. Nenhuma conversa foi alterada.')
     const reabrindo = tipo === 'contato' && existente.status === 'finalizado'
     if (
       tipo === 'contato' &&
@@ -2782,9 +2787,12 @@ export async function definirBloqueioContatoWhatsApp(
   })
 }
 
-export async function assumirConversa(conversaId: string, usuario: UsuarioTenant) {
+export async function assumirConversa(conversaId: string, usuario: UsuarioTenant, opcoes?: { somentePropria?: boolean }) {
   const conversa = await conversaAcessivel(conversaId, usuario, true)
   if (!conversa) throw new Error('Conversa não disponível.')
+  if(opcoes?.somentePropria && (conversa.responsavel_id!==usuario.id || conversa.status!=='aguardando' || conversa.whatsapp_chat_tipo!=='contato')) {
+    throw new Error('O atendimento não está mais na sua caixa individual.')
+  }
   const acessoCanal = await acessoCanalWhatsApp(usuario, conversa.whatsapp_canal_id)
   const [{ data: canal }, distribuicao] = await Promise.all([
     supabaseAdmin.from('atendimento_whatsapp_canais').select('principal')
@@ -2893,6 +2901,22 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
     usuarioNome: usuario.nome,
     dados: { destino_id: destino.id, destino_nome: destino.nome, setor: setor || null },
   })
+  // O piloto não modifica notificações de outros usuários ou grupos.
+  let alertaIndividual: ReturnType<typeof atlasChatNotificacao> = null
+  if (process.env.ATLAS_CHAT_PILOTO === 'true' && process.env.ATLAS_CHAT_NOTIFICACOES_PILOTO === 'true' && conversa.whatsapp_chat_tipo === 'contato') {
+    try {
+      const [{ data: canal }, { data: atual }] = await Promise.all([
+        supabaseAdmin.from('atendimento_whatsapp_canais').select('id,empresa_id,principal,ativo')
+          .eq('empresa_id', usuario.empresa_id).eq('id', conversa.whatsapp_canal_id).maybeSingle(),
+        supabaseAdmin.from('atendimento_conversas').select('id,empresa_id,whatsapp_canal_id,whatsapp_chat_tipo,responsavel_id,ocultar_da_caixa')
+          .eq('empresa_id', usuario.empresa_id).eq('id', conversaId).maybeSingle(),
+      ])
+      if (canal && atual) alertaIndividual = atlasChatNotificacao({
+        ativo: true, usuarios: process.env.ATLAS_CHAT_USUARIOS || '', empresa: usuario.empresa_id,
+        canal, conversa: atual, destinatario: destino.id,
+      })
+    } catch { /* preserva a notificação existente */ }
+  }
   await supabaseAdmin.from('notificacoes').insert({
     empresa_id: usuario.empresa_id,
     usuario_id: destino.id,
@@ -2904,6 +2928,7 @@ export async function transferirConversa(conversaId: string, destinoId: string, 
     origem_tipo: 'whatsapp_transferencia',
     origem_id: `${conversaId}:${agora}`,
     push_status: 'pendente',
+    ...(alertaIndividual ? {...alertaIndividual, titulo: 'Atlas Chat · Atendimento transferido'} : {}),
   })
 }
 

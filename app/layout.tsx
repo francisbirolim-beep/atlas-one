@@ -15,6 +15,7 @@ import AuthGate from '@/components/AuthGate'
 import SincronizadorOffline from '@/components/SincronizadorOffline'
 import UppercaseInputProvider from '@/components/system/UppercaseInputProvider'
 import BotaoChatGlobal from '@/components/BotaoChatGlobal'
+import AtlasChatAtalhoPiloto from '@/components/AtlasChatAtalhoPiloto'
 
 export const metadata: Metadata = {
   title: 'Atlas One - Esquadrifácio',
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthGate>{children}</AuthGate>
         </UppercaseInputProvider>
         <BotaoChatGlobal />
+        <AtlasChatAtalhoPiloto />
         <SincronizadorOffline />
         <script
           dangerouslySetInnerHTML={{

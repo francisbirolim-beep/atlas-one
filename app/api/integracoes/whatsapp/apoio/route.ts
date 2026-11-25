@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabaseAdmin'
-import { autenticarTenant } from '@/lib/tenantServer'
+import { autenticarTenantCentral as autenticarTenant } from '@/lib/atlasChatEntradaServer'
 import { listarMensagensAtendimento } from '@/lib/whatsappServer'
 
 export const dynamic = 'force-dynamic'

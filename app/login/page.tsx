@@ -1,5 +1,7 @@
 'use client'
 
+import { parametrosAtlasChat } from '@/supabase/functions/_shared/atlasChatNotificacao'
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Eye, EyeOff, LogIn, Mail, KeyRound } from 'lucide-react'
@@ -45,7 +47,11 @@ export default function Login() {
       )
       return
     }
-    router.replace('/')
+    const params = new URLSearchParams(window.location.search)
+    const destinoChat = parametrosAtlasChat(params)
+    router.replace(params.get('destino') === 'atlas-chat'
+      ? '/atlas-chat' + (destinoChat ? '?'+destinoChat : '')
+      : '/')
   }
 
   async function enviarRecuperacao(e: React.FormEvent) {
