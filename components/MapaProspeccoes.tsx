@@ -267,17 +267,16 @@ export default function MapaProspeccoes({
             const multiplo = grupo.pontos.length > 1
             const visaoRegional = map.getZoom() < 14
             const cidade = ponto.registro.cidade || 'Localização registrada'
-            const label = multiplo
-              ? String(grupo.pontos.length) + ' orçamentos'
-              : 'Orçamento'
-            const html = multiplo || visaoRegional
-              ? '<div style="display:flex;align-items:center;gap:7px;min-height:34px;padding:6px 10px;white-space:nowrap;border-radius:999px;border:2px solid white;background:#c2410c;color:white;box-shadow:0 4px 13px #7c2d1255;font:700 12px Arial,sans-serif"><span style="font-size:16px">📍</span><span>' + escaparHtml(label) + '</span><span style="opacity:.9;font-size:11px">' + escaparHtml(cidade) + '</span></div>'
-              : '<span style="display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#c2410c;color:white;font:800 15px Arial;border:3px solid white;box-shadow:0 3px 9px #7c2d1270">O</span>'
+            // Ícones compactos: as etiquetas extensas escondiam os demais
+            // marcadores ao afastar o zoom (ex.: José Bonifácio e Planalto).
+            const tamanho = multiplo || visaoRegional ? 42 : 30
+            const conteudo = multiplo ? String(grupo.pontos.length) : 'O'
+            const html = '<span style="display:grid;place-items:center;width:' + tamanho + 'px;height:' + tamanho + 'px;border-radius:50%;background:#c2410c;color:white;font:800 15px Arial,sans-serif;border:3px solid white;box-shadow:0 3px 10px #7c2d1280">' + conteudo + '</span>'
             const icone = L.divIcon({
               html,
               className: 'atlas-pino-orcamento',
-              iconSize: multiplo || visaoRegional ? [205, 44] : [30, 30],
-              iconAnchor: multiplo || visaoRegional ? [18, 22] : [15, 15],
+              iconSize: [tamanho, tamanho],
+              iconAnchor: [tamanho / 2, tamanho / 2],
             })
             const marcador = L.marker([ponto.latitude, ponto.longitude], {
               icon: icone,
@@ -291,8 +290,9 @@ export default function MapaProspeccoes({
                 if (limites.getNorthEast().equals(limites.getSouthWest())) map.flyTo([ponto.latitude, ponto.longitude], 17)
                 else map.flyToBounds(limites, { padding: [65, 65], maxZoom: 17 })
               })
-              marcador.bindTooltip(grupo.pontos.map(p => p.registro.nome).join(' · '))
+              marcador.bindTooltip(grupo.pontos.length + ' orçamentos em ' + cidade + ' · clique para aproximar', { direction: 'top' })
             } else {
+              marcador.bindTooltip('Orçamento · ' + cidade, { direction: 'top' })
               marcador.bindPopup(gerarPopupOrcamento(ponto.registro, ponto.latitude, ponto.longitude))
             }
           }
