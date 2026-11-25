@@ -94,6 +94,34 @@ function gerarPopupOrcamento(obra: RegistroMapaGeral, latitude: number, longitud
   return caixa
 }
 
+type MarcadorOrcamento = { registro: RegistroMapaGeral; latitude: number; longitude: number }
+
+type GrupoOrcamentosMapa = { pontos: MarcadorOrcamento[]; x: number; y: number }
+
+/** Aproxima pontos visualmente sem perder as coordenadas originais.
+ * Um grupo abre a região em zoom alto; só os pinos individuais indicam a posição exata.
+ */
+function agruparOrcamentosVisuais(
+  pontos: MarcadorOrcamento[],
+  projetar: (latitude: number, longitude: number) => { x: number; y: number },
+  limitePixels: number,
+): GrupoOrcamentosMapa[] {
+  const grupos: GrupoOrcamentosMapa[] = []
+  for (const ponto of pontos) {
+    const pixel = projetar(ponto.latitude, ponto.longitude)
+    const grupo = grupos.find(g => Math.hypot(g.x - pixel.x, g.y - pixel.y) < limitePixels)
+    if (grupo) {
+      const total = grupo.pontos.length
+      grupo.x = (grupo.x * total + pixel.x) / (total + 1)
+      grupo.y = (grupo.y * total + pixel.y) / (total + 1)
+      grupo.pontos.push(ponto)
+    } else {
+      grupos.push({ pontos: [ponto], x: pixel.x, y: pixel.y })
+    }
+  }
+  return grupos
+}
+
 function gerarPopupBairro(grupo: GrupoBairro) {
   const caixa = document.createElement('div')
   caixa.style.minWidth = '180px'
@@ -226,20 +254,47 @@ export default function MapaProspeccoes({
               }).bindPopup(gerarPopupPonto(ponto)).addTo(layer)
             }
           }
-          // Pinos laranja individuais para as obras com orçamento e GPS.
-          // São adicionados sem alterar a camada nem os agrupamentos das prospecções.
-          for (const ponto of pontosOrcamentos) {
+          // Em zoom de cidade, os pinos de orçamento se sobrepunham entre si
+          // e ficavam atrás das etiquetas de prospecção. Agrupamos apenas no
+          // desenho, sem alterar coordenadas ou registros originais.
+          const gruposOrcamento = agruparOrcamentosVisuais(
+            pontosOrcamentos,
+            (latitude, longitude) => map.project([latitude, longitude], map.getZoom()),
+            map.getZoom() < 14 ? 68 : 34,
+          )
+          for (const grupo of gruposOrcamento) {
+            const ponto = grupo.pontos[0]
+            const multiplo = grupo.pontos.length > 1
+            const visaoRegional = map.getZoom() < 14
+            const cidade = ponto.registro.cidade || 'Localização registrada'
+            // Ícones compactos: as etiquetas extensas escondiam os demais
+            // marcadores ao afastar o zoom (ex.: José Bonifácio e Planalto).
+            const tamanho = multiplo || visaoRegional ? 42 : 30
+            const conteudo = multiplo ? String(grupo.pontos.length) : 'O'
+            const html = '<span style="display:grid;place-items:center;width:' + tamanho + 'px;height:' + tamanho + 'px;border-radius:50%;background:#c2410c;color:white;font:800 15px Arial,sans-serif;border:3px solid white;box-shadow:0 3px 10px #7c2d1280">' + conteudo + '</span>'
             const icone = L.divIcon({
-              html: '<span style="display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#d97706;color:white;font-size:12px;font-weight:800;border:3px solid white;box-shadow:0 2px 8px #0f172a70">O</span>',
+              html,
               className: 'atlas-pino-orcamento',
-              iconSize: [24, 24],
-              iconAnchor: [12, 12],
+              iconSize: [tamanho, tamanho],
+              iconAnchor: [tamanho / 2, tamanho / 2],
             })
-            L.marker([ponto.latitude, ponto.longitude], {
+            const marcador = L.marker([ponto.latitude, ponto.longitude], {
               icon: icone,
-              title: 'Orçamento: ' + ponto.registro.nome,
-              zIndexOffset: -100,
-            }).bindPopup(gerarPopupOrcamento(ponto.registro, ponto.latitude, ponto.longitude)).addTo(layer)
+              title: multiplo ? grupo.pontos.length + ' orçamentos próximos' : 'Orçamento: ' + ponto.registro.nome,
+              // Mantém os orçamentos VISÍVEIS por cima das etiquetas de bairros.
+              zIndexOffset: 2000,
+            }).addTo(layer)
+            if (multiplo) {
+              marcador.on('click', () => {
+                const limites = L.latLngBounds(grupo.pontos.map(p => [p.latitude, p.longitude] as [number, number]))
+                if (limites.getNorthEast().equals(limites.getSouthWest())) map.flyTo([ponto.latitude, ponto.longitude], 17)
+                else map.flyToBounds(limites, { padding: [65, 65], maxZoom: 17 })
+              })
+              marcador.bindTooltip(grupo.pontos.length + ' orçamentos em ' + cidade + ' · clique para aproximar', { direction: 'top' })
+            } else {
+              marcador.bindTooltip('Orçamento · ' + cidade, { direction: 'top' })
+              marcador.bindPopup(gerarPopupOrcamento(ponto.registro, ponto.latitude, ponto.longitude))
+            }
           }
         }
         map.on('zoomend', desenhar)
@@ -281,6 +336,13 @@ export default function MapaProspeccoes({
     const grupo = gruposBairro.find(grupo => grupo.chave === chave)
     if (!grupo || !mapaRef.current) return
     mapaRef.current.flyTo([grupo.latitude, grupo.longitude], 16, { duration: 0.5 })
+  }
+
+  function focarOrcamento(ponto: MarcadorOrcamento) {
+    const mapa = mapaRef.current
+    if (!mapa) return
+    mapa.flyTo([ponto.latitude, ponto.longitude], 17, { duration: 0.65 })
+    elemento.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   function verOrcamentos() {
@@ -402,6 +464,24 @@ export default function MapaProspeccoes({
         ))}
       </div>
 
+      {pontosOrcamentos.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+          <h3 className="font-bold text-sm text-amber-950">Orçamentos com localização GPS — {pontosOrcamentos.length} locais</h3>
+          <p className="mt-1 text-xs text-amber-900">Os orçamentos podem ficar agrupados no mapa quando estão próximos. Use “Ver no mapa” para chegar ao pino exato e “Abrir obra” para consultar a ficha.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {pontosOrcamentos.map(ponto => (
+              <div key={ponto.registro.id} className="rounded-xl border border-amber-200 bg-white p-3">
+                <p className="flex items-start gap-2 text-sm font-bold text-slate-900"><span className="text-orange-700">📍</span><span className="min-w-0 break-words">{ponto.registro.nome}</span></p>
+                <p className="mt-1 text-xs text-slate-600">{[ponto.registro.bairro, ponto.registro.cidade].filter(Boolean).join(' · ') || 'Endereço não informado'}</p>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button type="button" className="text-xs font-bold text-orange-800 underline" onClick={() => focarOrcamento(ponto)}>Ver no mapa</button>
+                  <a className="text-xs font-bold text-blue-700 underline" href={ponto.registro.href}>Abrir obra</a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {gruposBairro.length > 0 && (
         <div className="border-t px-1 pt-3">
           <h3 className="text-sm font-bold text-slate-900">Obras por bairro</h3>
